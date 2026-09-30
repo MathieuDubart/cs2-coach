@@ -1177,7 +1177,8 @@ async function gsiPoll(){clearTimeout(gsiTimer);if(!D.local||S.view!=="partie")r
     const before=sig(gsiLast);gsiLast=g&&Object.keys(g).length?g:null;if(sig(gsiLast)!==before&&S.view==="partie"&&S.player&&D.players[S.player])renderPartie()}catch(e){}
   gsiTimer=setTimeout(gsiPoll,2000)}
 function renderPartie(){
-  const p=P(),v=$("#v-partie"),maps=mapsOf(p),PL=p.advice.plan||{},live=gsiFresh();
+  const p=P(),v=$("#v-partie"),PL=p.advice.plan||{},live=gsiFresh(),refs=PL.map_refs||{},mine=mapsOf(p);
+  const maps=[...mine,...Object.keys(refs).filter(k=>!mine.some(x=>x.map===k)).sort().map(k=>({map:k,n:0}))];
   if(live&&!partieManual){S.map=gsiLast.map;if(gsiLast.side)S.side=gsiLast.side}
   if(!S.map||(!maps.some(m=>m.map===S.map)&&!(live&&!partieManual)))S.map=maps[0]?.map||null;
   const m=S.map?crossMap(p,S.map):null;
@@ -1190,21 +1191,34 @@ function renderPartie(){
   const rot=S.side==="CT"?Object.entries((PL.routes||{})[S.map]||{}).sort().map(([s,r])=>{const b=r.pro.best||r.base.best;return b?{site:s,route:b.route,travel:b.travel,died:b.died,who:r.pro.best?"pros":"joueurs de la base"}:null}).filter(Boolean):[];
   const exps=((PL.experiments||{}).experiments||[]).filter(e=>e.status==="active"),recs=((PL.context||{}).recs||[]).filter(r=>r.kind==="stop"||r.kind==="tilt");
   const Sd=m?m.sides[S.side]:null,focus=document.body.classList.contains("focus");
+  const R0=!m?refs[S.map]:null,pos=R0?((R0.positions||{})[S.side]||{}):{};
+  const rifle=((pos.rifle||{}).zones||[]).filter(z=>z.duel_win!=null&&z.share>=4);
+  const goodZ=rifle.filter(z=>z.duel_win>=53).sort((a,b)=>b.duel_win-a.duel_win).slice(0,3),badZ=rifle.filter(z=>z.duel_win<=47).sort((a,b)=>a.duel_win-b.duel_win).slice(0,2);
+  const awpZ=((pos.awp||{}).zones||[]).filter(z=>z.duel_win!=null&&(z.duels||0)>=15).sort((a,b)=>b.duel_win-a.duel_win)[0],proAwp=((pos.pro_awp||{}).zones||[]).slice(0,2);
+  const pl=(R0&&R0.plants)||{},baseGood=[],baseBad=[];
+  if(R0){
+    if(pl.A&&pl.B){const hi=pl.A.t_win>=pl.B.t_win?"A":"B",lo=hi==="A"?"B":"A",most=pl.A.share>=pl.B.share?"A":"B";
+      baseGood.push(S.side==="T"?`<b>Pose plutôt ${hi}</b> : les T gagnent ${pl[hi].t_win} % des rounds où ils posent ${hi}, ${pl[lo].t_win} % sur ${lo}. Pose médiane vers ${Math.round(pl[hi].plant_t)} s.`
+        :`<b>Site le plus attaqué : ${most}</b> (${pl[most].share} % des poses dans la base) : c'est là que va le renfort.`)}
+    goodZ.forEach(z=>baseGood.push(`<b>${esc(z.name)}</b> : ${z.duel_win} % de duels gagnés par les ${S.side} de la base (${z.share} % d'entre eux y jouent).`));
+    if(awpZ)baseGood.push(`<b>Avec l'AWP : ${esc(awpZ.name)}</b> (${awpZ.duel_win} % de duels gagnés)${proAwp.length?`. Les AWPers pros : ${proAwp.map(z=>esc(z.name)).join(", ")}`:""}.`);
+    badZ.forEach(z=>baseBad.push(`<b>${esc(z.name)}</b> : seulement ${z.duel_win} % de duels gagnés dans la base (${z.share} % des ${S.side} y jouent). Pas à sec : avec une flash ou à deux.`))}
   v.innerHTML=`${liveStrip(p)}
    <div class="pg-top">
-    <div class="chips" role="group" aria-label="Carte">${maps.map(x=>`<button type="button" data-map="${x.map}" aria-pressed="${x.map===S.map}">${MAPN(x.map)}<small>${x.n}</small></button>`).join("")}${S.map&&!maps.some(x=>x.map===S.map)?`<button type="button" aria-pressed="true">${MAPN(S.map)}<small>0</small></button>`:""}</div>
+    <div class="chips" role="group" aria-label="Carte">${maps.map(x=>`<button type="button" data-map="${x.map}" aria-pressed="${x.map===S.map}">${MAPN(x.map)}<small>${x.n||"base"}</small></button>`).join("")}${S.map&&!maps.some(x=>x.map===S.map)?`<button type="button" aria-pressed="true">${MAPN(S.map)}<small>0</small></button>`:""}</div>
     <div class="btns side big" role="group" aria-label="Camp"><button type="button" data-side="T" aria-pressed="${S.side==="T"}">T · ${S.map?roleOf(S.map,"T"):"attaque"}</button><button type="button" data-side="CT" aria-pressed="${S.side==="CT"}">CT · ${S.map?roleOf(S.map,"CT"):"défense"}</button></div>
     <button type="button" class="close" id="focus">${focus?"Quitter le mode 2e écran":"Mode 2e écran"}</button>
    </div>
+   ${R0?`<p class="note">Pas encore de match à toi sur ${MAPN(S.map)} : cette fiche vient de ${R0.rounds||"—"} rounds de la base et des démos pros. Elle deviendra personnelle après tes premiers matchs ici.</p>`:""}
    <div class="ig">
     <div class="igcol"><h3 class="good">Tes forces ici</h3>
-     <ul class="big-list">${[...cGood.map(t=>`<li class="coach">${t}</li>`),...good.map(b=>`<li class="exploit">${b.text}</li>`),
+     <ul class="big-list">${[...baseGood.map(t=>`<li class="exploit">${t}</li>`),...cGood.map(t=>`<li class="coach">${t}</li>`),...good.map(b=>`<li class="exploit">${b.text}</li>`),
        ...tries.slice(0,1).map(b=>`<li class="try">${b.text}</li>`),...times.slice(0,2).map(b=>`<li class="timing">${b.text}</li>`),...strong.map(s=>`<li class="good">${esc(s.text)}</li>`)].join("")
        ||`<li>Pas encore assez de matchs ${S.map?`sur ${MAPN(S.map)} `:""}en ${S.side} : appuie-toi sur tes rappels ci-dessous.</li>`}</ul></div>
-    <div class="igcol ig-radar">${m?radarShell(levelBtns(m,S.level)):`<div class="empty">Pas encore de radar pour cette carte.</div>`}
+    <div class="igcol ig-radar">${m?radarShell(levelBtns(m,S.level)):R0?radarShell((R0.levels||[]).length>1?`<div class="btns" role="group" aria-label="Étage">${R0.levels.map(l=>`<button type="button" data-blevel="${l.key}">${esc(l.name)}</button>`).join("")}</div>`:""):`<div class="empty">Pas encore de radar pour cette carte.</div>`}
      ${Sd&&plan&&plan.key_nades.length?`<ul class="big-list">${plan.key_nades.slice(0,3).map(i=>{const l=Sd.lineups[i];return `<li class="ct"><b>${TYPE[l.type]}</b> ${esc(l.from_zone)} → ${esc(l.to_zone||"?")} · ${esc(l.how)}${l.t!=null?` · vers ${Math.round(l.t)} s`:""}</li>`}).join("")}</ul>`:""}</div>
     <div class="igcol"><h3 class="bad">À éviter</h3>
-     <ul class="big-list">${[...cAvoid.map(t=>`<li class="avoid">${t}</li>`),...bad.map(b=>`<li class="avoid">${b.text}</li>`),...rules.map(r=>`<li class="bad"><b>${esc(r.short)}</b>${r.standing?`<br><span class="note">${esc(r.standing)}</span>`:""}</li>`)].join("")}</ul>
+     <ul class="big-list">${[...baseBad.map(t=>`<li class="avoid">${t}</li>`),...cAvoid.map(t=>`<li class="avoid">${t}</li>`),...bad.map(b=>`<li class="avoid">${b.text}</li>`),...rules.map(r=>`<li class="bad"><b>${esc(r.short)}</b>${r.standing?`<br><span class="note">${esc(r.standing)}</span>`:""}</li>`)].join("")}</ul>
      ${reflex.length?`<h3 class="warn">Réflexes</h3><ul class="big-list">${reflex.map(x=>`<li class="timing"><b>Si ${esc(lc(x.if))}</b> → ${esc(x.then)}</li>`).join("")}</ul>`:""}
      ${rot.length?`<h3>Rotations</h3><ul class="big-list">${rot.map(r=>`<li class="ct">Vers ${r.site} : <b>${esc(r.route)}</b> (${String(r.travel).replace(".",",")} s, ${r.died} % de morts en route chez les ${r.who})</li>`).join("")}</ul>`:""}</div>
    </div>
@@ -1221,6 +1235,13 @@ function renderPartie(){
   $("#focus",v).onclick=()=>{document.body.classList.toggle("focus");store("focus",document.body.classList.contains("focus"));renderPartie()};
   const fl=$("#follow",v);if(fl)fl.onclick=()=>{partieManual=false;renderPartie()};
   if(m){const st={level:S.level,layers:["zones","best","nades"],nades:plan?plan.key_nades:[],sel:null};crossRadar($(".radar-box",v),m,S.side,st)}
+  if(R0){const items=[...rifle.map(z=>({px:z.px,level:z.level,label:`${z.name} ${z.duel_win} %`,color:z.duel_win>=53?"var(--good)":z.duel_win<=47?"var(--bad)":"#8a96a3",title:`${z.name} : ${z.duel_win} % de duels gagnés`})),
+      ...proAwp.map(z=>({px:z.px,level:z.level,label:`AWP pro · ${z.name}`,color:"var(--ct)",title:"Position des AWPers pros"}))].filter(x=>x.px);
+    const cnt={};items.forEach(x=>{if(x.level)cnt[x.level]=(cnt[x.level]||0)+1});
+    const lv=(S.blevel&&cnt[S.blevel]?S.blevel:null)||Object.keys(cnt).sort((a,b)=>cnt[b]-cnt[a])[0]||((R0.levels||[])[0]||{}).key;
+    loadRadar(S.map).then(()=>{const box=$(".radar-box",v);if(!box||S.view!=="partie")return;teamRadarDraw(box,S.map,lv,items);
+      $(".caption",box).innerHTML=`<span>Positions des ${S.side} de la base : vert = duels souvent gagnés, rouge = souvent perdus. Bleu : AWPers pros.</span>`;
+      $$("[data-blevel]",box).forEach(b=>{b.setAttribute("aria-pressed",b.dataset.blevel===lv);b.onclick=()=>{S.blevel=b.dataset.blevel;renderPartie()}})})}
 }
 
 // ---------- view: bilan à froid ----------

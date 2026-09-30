@@ -240,6 +240,77 @@ def kpis(sid, stats, mid_rows):
     return out
 
 
+PREMIER = ["de_ancient", "de_anubis", "de_cache", "de_dust2", "de_inferno", "de_mirage", "de_nuke"]
+ZONE_PX = os.path.join(config.OUT, "population", "zone_px.json")
+
+
+def zone_refs():
+    """Radar position of every zone and the floors of each map, from the analyzed player with the most data there."""
+    import weapons
+    n = weapons._n_demos()
+    if os.path.exists(ZONE_PX):
+        cur = json.load(open(ZONE_PX, encoding="utf-8"))
+        if cur.get("_n") == n:
+            return cur
+    best = {}
+    for sid in os.listdir(config.PLAYERS):
+        f = os.path.join(config.player_dir(sid), "cross.json")
+        if not os.path.exists(f):
+            continue
+        try:
+            c = json.load(open(f, encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        for m in c.get("maps", []):
+            if m["map"] not in best or m.get("pool", 0) > best[m["map"]]["pool"]:
+                best[m["map"]] = {"pool": m.get("pool", 0), "levels": m.get("levels"),
+                                  "zones": [{"name": z["name"], "px": z["px"], "level": z.get("level")} for z in m.get("zones_meta", [])]}
+    best["_n"] = n
+    json.dump(best, open(ZONE_PX, "w", encoding="utf-8"), ensure_ascii=False)
+    return best
+
+
+def map_refs(maps):
+    """What works on a map for everyone (base and pros): positions by weapon and side, where the Ts plant, safest
+    rotations. Used by the in-game sheet when the player has no match of his own on that map yet."""
+    import midround
+    import team
+    import weapons
+    meta, wz, rr, zr = team.map_meta(), weapons.weapon_zones(), midround.route_refs(), zone_refs()
+    out = {}
+    for mp in maps:
+        z = zr.get(mp) or {}
+        px = {x["name"]: x for x in z.get("zones", [])}
+        ent = {"plants": (meta.get(mp) or {}).get("plants"), "rounds": (meta.get(mp) or {}).get("rounds"), "levels": z.get("levels"),
+               "positions": {}, "rotations": {}, "videos": K.src(*K.MAP_VIDEOS.get(mp, []))}
+        for side in ("T", "CT"):
+            for wc in ("rifle", "awp", "pro_awp", "smg"):
+                v = ((wz.get(mp) or {}).get(side) or {}).get(wc)
+                if not v:
+                    continue
+                zs = []
+                for zz in v["zones"][:6]:
+                    name = _zone(zz["zone"])
+                    p = px.get(name) or {}
+                    zs.append({"name": name, "share": zz["share"], "duel_win": zz.get("duel_win"), "duels": zz.get("duels"),
+                               "round_win": zz.get("round_win"), "px": p.get("px"), "level": p.get("level")})
+                ent["positions"].setdefault(side, {})[wc] = {"rounds": v["rounds"], "zones": zs}
+        for site, d in (rr.get(mp) or {}).items():
+            best = None
+            for who in ("pro", "base"):
+                x = d.get(who) or {}
+                avg = (x.get("timing") or {}).get("died_way") or 25
+                rs = [r for r in x.get("routes", []) if r.get("travel") is not None and r["n"] >= (5 if who == "pro" else 8)]
+                if rs:
+                    b = min(rs, key=lambda r: ((r["died"] * r["n"] + avg * 5) / (r["n"] + 5), r["travel"]))
+                    best = {"route": _route(b["route"]), "travel": b["travel"], "died": b["died"], "n": b["n"], "who": who}
+                    break
+            if best:
+                ent["rotations"][site] = best
+        out[mp] = ent
+    return out
+
+
 def build(steamid, adv, cross=None, deep=None, light=False):
     import context
     import experiments
@@ -254,6 +325,10 @@ def build(steamid, adv, cross=None, deep=None, light=False):
                      if role in K.ROLE_TIPS else None)}
     if light:
         plan["playbook"] = playbook([])
+        try:
+            plan["map_refs"] = map_refs(PREMIER)
+        except Exception as e:
+            print("références des cartes indisponibles :", e)
         return plan
     import cs2coach
     import midround
@@ -266,6 +341,10 @@ def build(steamid, adv, cross=None, deep=None, light=False):
     maps = sorted({m["map"] for m in (cross or {}).get("maps", [])})
     plan["routes"] = routes_view(midround.player_routes(sid), maps)
     plan["weapon_positions"] = weapon_positions(weapons.weapon_zones(), maps)
+    try:
+        plan["map_refs"] = map_refs(sorted(set(PREMIER) | set(maps)))
+    except Exception as e:
+        print("références des cartes indisponibles :", e)
     wp = weapons.player(sid, mids)
     plan["weapons"] = wp
     ctx = context.analyze(sid)
