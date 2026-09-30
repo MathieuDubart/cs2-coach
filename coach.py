@@ -21,7 +21,7 @@ CACHE = os.path.join(HERE, "cache")
 MATCHES = os.path.join(HERE, "out", "matches")
 import config
 ME = config.logged_in_account()[0]
-RANK_TYPES = {11: "Premier", 12: "Compétitif", 7: "Wingman", 10: "Wingman"}
+RANK_TYPES = {11: "Premier", 12: "Competitive", 7: "Wingman", 10: "Wingman"}
 
 
 def log(*a):
@@ -65,7 +65,7 @@ def download(url, dest, tries=8):
             os.replace(tmp, dest)
             return
         time.sleep(min(30, 2 ** attempt))
-    raise IOError(f"téléchargement incomplet après {tries} essais ({size // 1_000_000} / {(total or 0) // 1_000_000} Mo){f' : {err}' if err else ''}")
+    raise IOError(f"incomplete download after {tries} tries ({size // 1_000_000} / {(total or 0) // 1_000_000} MB){f': {err}' if err else ''}")
 
 
 def decompress(src, dest):
@@ -91,25 +91,25 @@ def game_mode(path, n_players):
                 return RANK_TYPES[t]
     except Exception:
         pass
-    return {4: "Wingman", 6: "3v3"}.get(n_players, "Compétitif / Premier")
+    return {4: "Wingman", 6: "3v3"}.get(n_players, "Competitive / Premier")
 
 
 def process(m, keep=False):
     mid = m["match_id"]
     folder = os.path.join(MATCHES, mid)
     if os.path.exists(os.path.join(folder, "stats.json")):
-        log(f"[{mid}] déjà analysé")
+        log(f"[{mid}] already analyzed")
         return
     os.makedirs(folder, exist_ok=True)
     bz = os.path.join(CACHE, f"{mid}.dem.bz2")
     dem = os.path.join(CACHE, f"{mid}.dem")
     if not os.path.exists(dem):
-        log(f"[{mid}] téléchargement {m['url']}")
+        log(f"[{mid}] downloading {m['url']}")
         download(m["url"], bz)
-        log(f"[{mid}] décompression")
+        log(f"[{mid}] decompressing")
         decompress(bz, dem)
         os.remove(bz)
-    log(f"[{mid}] analyse")
+    log(f"[{mid}] analyzing")
     stats = analyze.analyze(dem, ME)
     stats["match"] = {k: m[k] for k in ("match_id", "time", "team_scores", "duration_s")}
     stats["mode"] = game_mode(dem, m.get("players", 10))
@@ -133,15 +133,15 @@ def main():
         ms = matchlist.fetch()
     with open(os.path.join(CACHE, "matchlist.json"), "w") as f:
         json.dump(ms, f, indent=1)
-    log(f"{len(ms)} matchs récents")
+    log(f"{len(ms)} recent matches")
     for m in ms:
         if not m.get("url"):
-            log(f"[{m['match_id']}] pas de démo disponible")
+            log(f"[{m['match_id']}] no demo available")
             continue
         try:
             process(m, keep="--keep-demos" in sys.argv)
         except Exception as e:
-            log(f"[{m['match_id']}] ERREUR {e}")
+            log(f"[{m['match_id']}] ERROR {e}")
             traceback.print_exc()
 
 

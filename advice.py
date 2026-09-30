@@ -12,7 +12,7 @@ MAPN = lambda m: m.split("_", 1)[-1].capitalize()
 
 def pl(n, word, plural=None):
     n = int(n)
-    return f"{n} {word if n <= 1 else (plural or word + 's')}"
+    return f"{n} {word if n == 1 else (plural or word + 's')}"
 
 
 def pct(a, b):
@@ -111,91 +111,91 @@ def rules(M, cross, per_match=False):
 
     tp = M.get("trade_pct")
     if tp is not None and M.get("deaths", 0) >= (8 if per_match else 20) and tp < 22:
-        add("trade", 40 - tp + M.get("untraded_3", 0) / n, f"Seulement {tp} % de tes morts sont vengées",
-            "Joue à 2 secondes d'un coéquipier",
-            [f"{int(M['traded'])} morts vengées sur {int(M['deaths'])}.",
-             f"{int(M.get('untraded_3', 0))} morts sans trade alors qu'il restait 3 coéquipiers ou plus.",
-             f"{pl(M.get('last_alive_deaths', 0), 'mort')} en dernier en vie, {int(M.get('clutch_w', 0))} clutch gagné{'s' if M.get('clutch_w', 0) > 1 else ''} sur {int(M.get('clutch', 0))}."],
-            ["Avant un duel, vérifie qu'un coéquipier est à moins de 500 unités et voit l'angle.",
-             "En attaque, entre en 2e position derrière une flash.", "En défense, joue en tir croisé."])
+        add("trade", 40 - tp + M.get("untraded_3", 0) / n, f"Only {tp}% of your deaths get traded",
+            "Play within 2 seconds of a teammate",
+            [f"{int(M['traded'])} deaths traded out of {int(M['deaths'])}.",
+             f"{int(M.get('untraded_3', 0))} deaths without a trade while 3 or more teammates were still alive.",
+             f"{pl(M.get('last_alive_deaths', 0), 'death')} as the last one alive, {int(M.get('clutch_w', 0))} clutch{'es' if M.get('clutch_w', 0) != 1 else ''} won out of {int(M.get('clutch', 0))}."],
+            ["Before a duel, check that a teammate is within 500 units and sees the angle.",
+             "On attack, go in second behind a flash.", "On defense, play crossfires."])
     un = M.get("nades_unused", 0)
     if un / n >= (4 if per_match else 6):
-        add("nades", un / n * 2.2, f"{int(un)} grenades mortes avec toi ({int(M.get('nades_value', 0)):,} $)".replace(",", " "),
-            "Vide ta poche avant 40 s",
-            [f"{int(un)} grenades non lancées à ta mort, sur {int(M.get('nades_bought', 0))} en inventaire ({pct(un, M.get('nades_bought', 0))} %).",
-             f"{pl(M.get('flash_thrown', 0), 'flash lancée', 'flashs lancées')} : {pl(M.get('flash_en', 0), 'ennemi aveuglé', 'ennemis aveuglés')}, {pl(M.get('flash_mates', 0), 'coéquipier aveuglé', 'coéquipiers aveuglés')}."],
-            ["En attaque, lance tout avant 40 s de round.", "En défense, molotov ou HE dès le premier bruit de rush.",
-             "Flashe pour un coéquipier qui entre."])
+        add("nades", un / n * 2.2, f"{int(un)} grenades died with you (${int(M.get('nades_value', 0)):,})".replace(",", " "),
+            "Empty your pockets before 40 s",
+            [f"{int(un)} grenades not thrown when you died, out of {int(M.get('nades_bought', 0))} in your inventory ({pct(un, M.get('nades_bought', 0))}%).",
+             f"{pl(M.get('flash_thrown', 0), 'flash thrown', 'flashes thrown')}: {pl(M.get('flash_en', 0), 'enemy flashed', 'enemies flashed')}, {pl(M.get('flash_mates', 0), 'teammate flashed', 'teammates flashed')}."],
+            ["On attack, throw everything before 40 s into the round.", "On defense, molotov or HE at the first sound of a rush.",
+             "Flash for a teammate who goes in."])
     if cross and not per_match:
-        h, pk = ctx_row(cross, "Mouvement au début du duel", 0), ctx_row(cross, "Mouvement au début du duel", 1)
+        h, pk = ctx_row(cross, "Movement at the start of the duel", 0), ctx_row(cross, "Movement at the start of the duel", 1)
         if h.get("n", 0) >= 15 and pk.get("n", 0) >= 15 and h["win"] - pk["win"] >= 15:
-            add("hold", h["win"] - pk["win"], f"Tu gagnes {h['win']} % en tenant l'angle, {pk['win']} % en peekant",
-                "Tiens l'angle, ne peeke pas à sec",
-                [f"{pk['n']} de tes {cross['totals']['my_duels']} duels commencent en mouvement.",
-                 f"Les autres joueurs : {h['others_win']} % posés, {pk['others_win']} % en peek."],
-                ["Fais venir l'adversaire.", "Pour l'info : grenade ou jiggle-peek (un pas, retour).",
-                 "Si tu dois peeker : flash d'abord."])
+            add("hold", h["win"] - pk["win"], f"You win {h['win']}% when holding the angle, {pk['win']}% when peeking",
+                "Hold the angle, don't dry-peek",
+                [f"{pk['n']} of your {cross['totals']['my_duels']} duels start while moving.",
+                 f"Other players: {h['others_win']}% when holding, {pk['others_win']}% when peeking."],
+                ["Fais venir l'adversaire.", "For info: a grenade or a jiggle-peek (one step, back).",
+                 "If you have to peek: flash first."])
         fl = ctx_row(cross, "Flashs", 0)
         tot = cross["totals"]["my_duels"]
         if tot >= 40 and fl.get("n", 0) / tot < 0.05:
-            add("flash", 14, f"Seulement {fl.get('n', 0)} duels sur {tot} contre un adversaire aveuglé",
-                "Flash avant chaque peek",
-                ["Tes duels se jouent presque toujours sans flash de ton équipe."],
-                ["Popflash avant de peeker un angle connu.", "Demande une flash à un coéquipier (« flash-moi X »)."])
-        hp = ctx_row(cross, "Points de vie au début du duel", 1)
+            add("flash", 14, f"Only {fl.get('n', 0)} duels out of {tot} against a flashed enemy",
+                "Flash before every peek",
+                ["Your duels almost always happen without a flash from your team."],
+                ["Popflash before peeking a known angle.", "Ask a teammate for a flash ('flash me X')."])
+        hp = ctx_row(cross, "Health at the start of the duel", 1)
         if hp.get("n", 0) >= 10 and hp["win"] < 42:
-            add("hp", 12 + (42 - hp["win"]) / 3, f"Sous 50 PV, tu gagnes {hp['win']} % de tes duels",
-                "Blessé : recule, laisse le duel",
-                [f"{hp['n']} duels pris avec moins de 50 PV."],
-                ["Recule d'un angle, annonce tes PV, couvre le trade d'un coéquipier."])
+            add("hp", 12 + (42 - hp["win"]) / 3, f"Under 50 HP, you win {hp['win']}% of your duels",
+                "Hurt: fall back, leave the duel",
+                [f"{hp['n']} duels taken with less than 50 HP."],
+                ["Fall back one angle, call your HP, cover a teammate's trade."])
         lo, sh = ctx_row(cross, "Distance", 2), ctx_row(cross, "Distance", 0)
         if lo.get("n", 0) >= 15 and sh.get("n", 0) >= 15 and lo["win"] - sh["win"] >= 10:
-            add("range", 8 + (lo["win"] - sh["win"]) / 3, f"Tu gagnes {lo['win']} % de loin, {sh['win']} % de près",
-                "Joue les angles longs",
-                ["Tes duels à moins de 10 m sont les plus risqués."],
-                ["Choisis des positions profondes (fond de site, angle long).", "Évite les coins où l'ennemi arrive à 3 m."])
+            add("range", 8 + (lo["win"] - sh["win"]) / 3, f"You win {lo['win']}% at range, {sh['win']}% up close",
+                "Play long angles",
+                ["Your duels under 10 m are the riskiest."],
+                ["Pick deep positions (back of site, long angle).", "Avoid corners where the enemy arrives 3 m away."])
     pm = M.get("pistol_moving")
     if pm is not None and pm >= 40:
-        add("pistol", pm - 22, f"{pm} % de tes tirs au pistolet partent en mouvement",
-            "Contre-strafe au pistolet",
-            [f"Sur {int(M['pistol_shots'])} tirs au pistolet." + (f" Au rifle : {M['rifle_moving']} % seulement." if M.get("rifle_moving") is not None else "")],
-            ["Arrêt net, 1 à 3 balles, décalage.", "Échauffement : Aim Botz au Glock/USP, arrêt obligatoire avant chaque tir."])
+        add("pistol", pm - 22, f"{pm}% of your pistol shots are fired while moving",
+            "Counter-strafe with pistols",
+            [f"Out of {int(M['pistol_shots'])} pistol shots." + (f" With rifles: only {M['rifle_moving']}%." if M.get("rifle_moving") is not None else "")],
+            ["Full stop, 1 to 3 bullets, strafe.", "Warm-up: Aim Botz with the Glock/USP, a full stop before every shot."])
     sp = M.get("spray", {})
     b1, b9 = sp.get("bullet_1", (0, None)), sp.get("bullets_9+", (0, None))
     if b9[0] >= (15 if per_match else 40) and b9[1] is not None and b9[1] < 12:
-        add("spray", 14 + b9[0] / (10 * n), f"Au-delà de la 9e balle, tu touches {b9[1]:.0f} %".replace(".", ","),
-            "Rafales de 3 à 5 balles",
-            [f"1re balle : {b1[1]:.0f} % de touches. Balles 9 et plus : {b9[1]:.0f} % ({int(b9[0])} balles)."],
-            ["Rafale courte, décalage, reprise.", "Recoil Master : 10 premières balles de l'AK et de la M4."])
+        add("spray", 14 + b9[0] / (10 * n), f"After the 9th bullet, you hit {b9[1]:.0f}%".replace(".", ","),
+            "Bursts of 3 to 5 bullets",
+            [f"1st bullet: {b1[1]:.0f}% hits. Bullets 9 and up: {b9[1]:.0f}% ({int(b9[0])} bullets)."],
+            ["Short burst, strafe, repeat.", "Recoil Master: the first 10 bullets of the AK and the M4."])
     dm = M.get("drops_missed", 0)
     bm = M.get("buy_mismatch", 0)
     if dm >= (2 if per_match else 3) or bm / n >= 5:
-        add("eco", 8 + dm * 1.2 + bm / n * 0.5, "Ton argent et celui de l'équipe ne sont pas synchronisés",
-            "Tab avant d'acheter, drop au-delà de 5 000 $",
-            [f"{pl(dm, 'round')} où il te restait plus de 3 000 $ alors qu'un coéquipier ne pouvait pas acheter.",
-             f"{pl(bm, 'round')} où ton type d'achat différait de celui de l'équipe."],
-            ["Achète comme l'équipe (full, force ou eco).", "Drop une arme à un coéquipier pauvre dès que tu as plus de 5 000 $."])
+        add("eco", 8 + dm * 1.2 + bm / n * 0.5, "Your money and your team's are out of sync",
+            "Tab before buying, drop above $5,000",
+            [f"{pl(dm, 'round')} where you had more than $3,000 left while a teammate couldn't buy.",
+             f"{pl(bm, 'round')} where your type of buy differed from the team's."],
+            ["Buy like the team (full, force or eco).", "Drop a weapon to a poor teammate as soon as you have more than $5,000."])
     ed = M.get("early_deaths", 0)
     if M.get("deaths", 0) and ed / M["deaths"] >= 0.2 and ed >= (3 if per_match else 8):
-        add("early", 8 + 30 * ed / M["deaths"], f"{int(ed)} morts dans les 20 premières secondes",
-            "Pas de duel gratuit avant 20 s",
-            [f"{pct(ed, M['deaths'])} % de tes morts arrivent avant 20 s de round."],
-            ["Début de round : prends l'info, garde ta position, n'ouvre pas le round seul."])
+        add("early", 8 + 30 * ed / M["deaths"], f"{int(ed)} deaths in the first 20 seconds",
+            "No free duel before 20 s",
+            [f"{pct(ed, M['deaths'])}% of your deaths happen before 20 s into the round."],
+            ["Start of the round: take info, keep your position, don't open the round alone."])
     return sorted(R, key=lambda r: -r["score"])
 
 
 def strengths(M, cross):
     S = []
     if M.get("xh") is not None and M["xh"] <= 4:
-        S.append(f"Viseur bien placé ({str(M['xh']).replace('.', ',')}° d'écart médian avant tes duels)")
+        S.append(f"Good crosshair placement ({M['xh']}° median offset before your duels)")
     if M.get("hs") and M["hs"] >= 50:
-        S.append(f"{M['hs']} % de kills à la tête")
+        S.append(f"{M['hs']}% of kills are headshots")
     if M.get("adr") and M["adr"] >= 80:
-        S.append(f"{str(M['adr']).replace('.', ',')} dégâts par round")
+        S.append(f"{M['adr']} damage per round")
     if cross:
-        h = ctx_row(cross, "Mouvement au début du duel", 0)
+        h = ctx_row(cross, "Movement at the start of the duel", 0)
         if h.get("n", 0) >= 15 and h["win"] >= 60:
-            S.append(f"{h['win']} % de duels gagnés en tenant l'angle")
+            S.append(f"{h['win']}% of duels won when holding the angle")
     return S
 
 
@@ -211,29 +211,29 @@ def map_plans(stats, cross):
         hostage = m["map"].startswith("cs_")
         plans[m["map"]] = {}
         for side, S in m["sides"].items():
-            role = ("défense" if side == "T" else "attaque") if hostage else ("attaque" if side == "T" else "défense")
+            role = ("defense" if side == "T" else "attack") if hostage else ("attack" if side == "T" else "defense")
             ex = sorted([z for z in S["zones"] if z["verdict"] == "exploit"], key=lambda z: -(z["k"] - z["d"]))[:3]
             av = sorted([z for z in S["zones"] if z["verdict"] == "avoid"], key=lambda z: -(z["d"] - z["k"]))[:3]
             freq = S["zones"][:3]
             bullets = []
             for z in ex:
-                bullets.append({"kind": "exploit", "text": f"<b>Joue plus {z['name']}</b> : {z['k']}-{z['d']} pour toi, les autres y gagnent {z['others_win']} %."})
+                bullets.append({"kind": "exploit", "text": f"<b>Play {z['name']} more</b>: {z['k']}-{z['d']} for you, other players win {z['others_win']}% there."})
             for z in av:
-                kf = f", tué depuis {', '.join(k['zone'] for k in z['killed_from'])}" if z["killed_from"] else ""
-                bullets.append({"kind": "avoid", "text": f"<b>{z['name']} : évite-le ou change d'approche</b> ({z['k']}-{z['d']}{kf})."})
+                kf = f", killed from {', '.join(k['zone'] for k in z['killed_from'])}" if z["killed_from"] else ""
+                bullets.append({"kind": "avoid", "text": f"<b>{z['name']}: avoid it or change your approach</b> ({z['k']}-{z['d']}{kf})."})
             pz = S.get("pool_zones", [])
             opp = [z for z in pz if (z["win"] or 0) >= 56 and z["k"] + z["d"] >= 12 and z["my_presence"] < 4
                    and "spawn" not in z["key"].lower() and z["t_med"] <= 45][:2]
             for z in opp:
-                bullets.append({"kind": "try", "text": f"<b>À essayer : {z['name']}</b>. Les {side} de la base y gagnent {z['win']} % de leurs duels ({z['k'] + z['d']} duels{', surtout en tenant l angle' if (z['hold_pct'] or 0) >= 55 else ''}, vers {z['t_med']} s). Tu n'y passes que {z['my_presence']:.0f} % de ton temps.".replace("l angle", "l'angle")})
+                bullets.append({"kind": "try", "text": f"<b>Worth a try: {z['name']}</b>. {side}s in the base win {z['win']}% of their duels there ({z['k'] + z['d']} duels{', mostly holding the angle' if (z['hold_pct'] or 0) >= 55 else ''}, around {z['t_med']} s). You only spend {z['my_presence']:.0f}% of your time there.".replace("l angle", "l'angle")})
             mine_ok = {z["key"] for z in S["zones"] if z["k"] + z["d"] >= 3 and (z["win"] or 0) >= 55}
             trap = [z for z in pz[::-1] if (z["win"] or 100) <= 40 and z["k"] + z["d"] >= 12 and z["my_presence"] >= 4
                     and z["key"] not in {a["key"] for a in av} and z["key"] not in mine_ok][:1]
             for z in trap:
-                bullets.append({"kind": "avoid", "text": f"<b>{z['name']} : zone piège</b>. Les {side} de la base n'y gagnent que {z['win']} % de leurs duels ({z['k'] + z['d']} duels), et tu y passes {z['my_presence']:.0f} % de ton temps."})
+                bullets.append({"kind": "avoid", "text": f"<b>{z['name']}: trap zone</b>. {side}s in the base only win {z['win']}% of their duels there ({z['k'] + z['d']} duels), and you spend {z['my_presence']:.0f}% of your time there."})
             for z in freq:
                 if z["early_contact_s"] is not None and z["early_contact_s"] < 60:
-                    bullets.append({"kind": "timing", "text": f"<b>{z['name']}</b> ({round(z['presence'])} % de ton temps) : premiers contacts vers {z['early_contact_s']:.0f} s, grenade prête avant."})
+                    bullets.append({"kind": "timing", "text": f"<b>{z['name']}</b> ({round(z['presence'])}% of your time): first contacts around {z['early_contact_s']:.0f} s, have a grenade ready before."})
             # key grenades: one per type, favouring reproducible throws with evidence
             key, seen = [], set()
             for i, l in enumerate(S["lineups"]):
@@ -267,10 +267,10 @@ def build(pdir):
         m1 = metrics([st])
         r1 = rules(m1, None, per_match=True)[:3]
         o = st["overview"]
-        res = {"win": "Victoire", "loss": "Défaite", "draw": "Nul"}[st["result"]]
+        res = {"win": "Win", "loss": "Loss", "draw": "Draw"}[st["result"]]
         per_match[st["match"]["match_id"]] = {
-            "summary": f"{res} {st['final_score']['me']}-{st['final_score']['them']} sur {MAPN(st['map'])} : "
-                       f"{o['kills']} kills, {o['deaths']} morts, {str(o['adr']).replace('.', ',')} dégâts par round, KAST {str(o['kast_pct']).replace('.', ',')} %.",
+            "summary": f"{res} {st['final_score']['me']}-{st['final_score']['them']} on {MAPN(st['map'])}: "
+                       f"{o['kills']} kills, {o['deaths']} deaths, {o['adr']} damage per round, KAST {o['kast_pct']}%.",
             "priorities": [{"level": "high" if i == 0 else "mid", "tags": [], "title": r["title"], "evidence": r["why"], "fix": r["do"]} for i, r in enumerate(r1)]}
     st_ = advice_ref.strengths_from_bench(bench) or strengths(M, cross)
     try:

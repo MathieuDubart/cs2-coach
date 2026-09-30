@@ -224,7 +224,7 @@ def run_all(force=False):
             done += 1
             print(f"[{mid}] population OK", flush=True)
         except Exception as e:
-            print(f"[{mid}] population ERREUR {e}", flush=True)
+            print(f"[{mid}] population ERROR {e}", flush=True)
     return done
 
 
@@ -237,4 +237,4 @@ if __name__ == "__main__":
     sys.stdout.reconfigure(encoding="utf-8")
     run_all("--force" in sys.argv)
     df = load()
-    print(len(df), "lignes joueur-match,", df.steamid.nunique() if len(df) else 0, "joueurs")
+    print(len(df), "player-match rows,", df.steamid.nunique() if len(df) else 0, "players")

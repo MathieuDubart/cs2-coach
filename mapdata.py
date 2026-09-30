@@ -40,10 +40,10 @@ def get(map_name):
         split = [float(x) for x in ov.get("split", [])]
         if len(split) == 4:  # default max/min, lower max/min
             z = split[1]
-            cfg["levels"] = [{"key": "upper", "name": "Étage principal", "image": _download(map_name), "z_min": z},
-                             {"key": "lower", "name": "Étage inférieur", "image": _download(f"{map_name}_lower"), "z_max": z}]
+            cfg["levels"] = [{"key": "upper", "name": "Main level", "image": _download(map_name), "z_min": z},
+                             {"key": "lower", "name": "Lower level", "image": _download(f"{map_name}_lower"), "z_max": z}]
         else:
-            cfg["levels"] = [{"key": "main", "name": "Carte", "image": _download(map_name)}]
+            cfg["levels"] = [{"key": "main", "name": "Map", "image": _download(map_name)}]
         with open(path, "w", encoding="utf-8") as f:
             json.dump(cfg, f, ensure_ascii=False, indent=1)
     for lv in cfg["levels"]:

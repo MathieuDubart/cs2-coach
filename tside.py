@@ -19,9 +19,9 @@ OUT = os.path.join(config.OUT, "population", "tside")
 RUSH = 30.0          # site taken in the first 30 s (timer above 1:25): a rush
 ROUND_TIME = 115.0
 CONTEXTS = ["pistol", "r2_win", "r2_loss", "eco", "force", "full"]
-CTX_FR = {"pistol": "Pistol round", "r2_win": "Round 2, les T ont gagné le pistol", "r2_loss": "Round 2, les T ont perdu le pistol",
-          "eco": "Éco des T", "force": "Force-buy des T", "full": "Full buy des T"}
-BUY_FR = {"eco": "éco", "force": "force-buy", "full": "full buy"}
+CTX_FR = {"pistol": "Pistol round", "r2_win": "Round 2, Ts won the pistol", "r2_loss": "Round 2, Ts lost the pistol",
+          "eco": "T eco", "force": "T force-buy", "full": "T full buy"}
+BUY_FR = {"eco": "eco", "force": "force-buy", "full": "full buy"}
 
 
 def humanize(z):
@@ -145,7 +145,7 @@ def run_all(log=print, force=False):
             analyze(d).to_parquet(f)
             n += 1
         except Exception as e:
-            log(f"[{mid}] côté T : {e}")
+            log(f"[{mid}] T side: {e}")
     return n
 
 
@@ -284,10 +284,10 @@ def _switch_table(df):
     """After a hit on one site, how often the next hit is on the other one, by result and streak."""
     h = df[df.site.isin(["A", "B"]) & df.prev_site.isin(["A", "B"])]
     out = []
-    for label, sel in (("après une prise de site gagnée", h.prev_won == True),
-                       ("après une prise de site perdue", h.prev_won == False),
-                       ("après 2 prises du même site ou plus, la dernière perdue", (h.streak >= 2) & (h.prev_won == False)),
-                       ("après 2 prises du même site ou plus, la dernière gagnée", (h.streak >= 2) & (h.prev_won == True))):
+    for label, sel in (("after a site take they won", h.prev_won == True),
+                       ("after a site take they lost", h.prev_won == False),
+                       ("after 2+ takes of the same site, the last one lost", (h.streak >= 2) & (h.prev_won == False)),
+                       ("after 2+ takes of the same site, the last one won", (h.streak >= 2) & (h.prev_won == True))):
         x = h[sel]
         if len(x) >= 15:
             out.append({"label": label, "n": int(len(x)), "switch": _pct((x.site != x.prev_site).mean())})
@@ -326,8 +326,8 @@ def _fit(X, y, off, l2=1.0, it=30):
 
 
 FEATURES = ["repeat_won", "repeat_lost", "streak2", "pref"]
-FEATURES_FR = {"repeat_won": "le même site après une prise gagnée", "repeat_lost": "le même site après une prise perdue",
-               "streak2": "le même site après 2 prises de suite ou plus", "pref": "le site qu'ils ont le plus pris dans la mi-temps"}
+FEATURES_FR = {"repeat_won": "the same site after a take they won", "repeat_lost": "the same site after a take they lost",
+               "streak2": "the same site after 2 takes in a row or more", "pref": "the site they took most this half"}
 
 
 def _features(d):
@@ -373,11 +373,12 @@ def econ_table(df):
 
 
 SUMMARY = os.path.join(config.OUT, "population", "tside_summary.json")
+VERSION = 2   # bump when the summary changes shape: the cache is rebuilt
 
 
 def _stamp():
     fs = [f for f in os.listdir(OUT) if f.endswith(".parquet")] if os.path.exists(OUT) else []
-    return f"{len(fs)}-{int(max((os.path.getmtime(os.path.join(OUT, f)) for f in fs), default=0))}"
+    return f"v{VERSION}-{len(fs)}-{int(max((os.path.getmtime(os.path.join(OUT, f)) for f in fs), default=0))}"
 
 
 def tendencies(maps, df=None):
@@ -402,6 +403,8 @@ def _tendencies(maps, df):
         return None
     res = {"model": model(df), "econ": econ_table(df), "switch_all": _switch_table(df), "rush_s": RUSH, "maps": {},
            "ctx_fr": CTX_FR}
+    dirs = _map_dirs()
+    pool = []
     for mp in maps:
         g = df[df["map"] == mp]
         if len(g) < 60:
@@ -417,9 +420,186 @@ def _tendencies(maps, df):
                 ctx[c]["pA_hit"] = round(float(((hx.site == "A").sum() + 3 * allA) / (len(hx) + 3)), 3)
         res["maps"][mp] = {"n_rounds": int(len(g)), "n_matches": int(g.match.nunique()), "all": _profile(g), "ctx": ctx,
                            "after": _after_table(g), "pA_hit": round(float(allA), 3)}
+        try:
+            res["maps"][mp]["evidence"] = evidence(mp, g, dirs.get(mp, []), pool)
+        except Exception as e:  # the rest of the reading stays usable
+            print(f"{mp}: in-round evidence unavailable ({e})")
+    res["retake_all"] = retake_table(pool)
     return res
+
+# ---------- evidence during the round: what the CT side sees, and what it says about the site ----------
+WINDOWS = [("early", 0, 20), ("setup", 20, 40), ("hit", 40, 70), ("late", 70, 999)]
+STEP = 5
+
+
+def _map_dirs():
+    by = {}
+    for mid in os.listdir(config.DEEP):
+        d = os.path.join(config.DEEP, mid)
+        m = midround._meta(d).get("map")
+        if m:
+            by.setdefault(m, []).append(d)
+    return by
+
+
+def _survival(g):
+    """Chance that no site has been taken yet at t seconds, for each place the attack ends up going.
+    The longer a round goes quiet, the more the late option becomes likely: this is the likelihood of 'still nothing'."""
+    ts = list(range(0, 101, STEP))
+    out = {"t": ts}
+    for site in ("A", "B", "-"):
+        x = g[g.site == site]
+        if len(x) < 10:
+            continue
+        if site == "-":
+            c = x.end_t.fillna(ROUND_TIME).to_numpy(dtype=float)
+        else:
+            c = np.where(x.entered.to_numpy(dtype=bool), x.hit_t.to_numpy(dtype=float), x.stop_t.to_numpy(dtype=float))
+            c = np.where(np.isnan(c), ROUND_TIME, c)
+        out["none" if site == "-" else site] = [round(float((c > t).mean()) + 1e-3, 4) for t in ts]
+    return out
+
+
+def _contact(g, top=8):
+    """Where the first duel of the round happens, for each place the attack ends up going (smoothed)."""
+    f = g[g.first_zone.notna()]
+    if len(f) < 30:
+        return None
+    zones = f.first_zone.value_counts().head(top).index.tolist()
+    res = {"zones": zones, "lik": {}, "t": {}}
+    for site in ("A", "B", "-"):
+        x = f[f.site == site]
+        if len(x) < 10:
+            continue
+        vc = x.first_zone.where(x.first_zone.isin(zones), "other").value_counts()
+        tot = len(x) + len(zones) + 1
+        res["lik"]["none" if site == "-" else site] = {z: round(float((vc.get(z, 0) + 1) / tot), 4) for z in zones + ["other"]}
+    for z in zones:
+        res["t"][z] = _timer(f[f.first_zone == z].first_t.median())
+    return res
+
+
+def _compass(dx, dy):
+    if (dx * dx + dy * dy) ** 0.5 < 14:
+        return "center"
+    a = np.degrees(np.arctan2(-dy, dx)) % 360   # radar: y goes down
+    return ["east", "north-east", "north", "north-west", "west", "south-west", "south", "south-east"][int(((a + 22.5) % 360) // 45)]
+
+
+def _plants_and_retakes(mp, dirs):
+    """Where the bomb goes down on each site (spots on the radar), how the round ends from there, and how often the
+    CT side wins the retake by the number of players alive on each side when the bomb is planted."""
+    from sklearn.cluster import DBSCAN
+    from map_analysis import ZoneMap
+    try:
+        zm = ZoneMap(mp)
+    except Exception:
+        return None, None, None
+    sites = midround.site_centers().get(mp) or {}
+    rows = []
+    for d in dirs:
+        fr = os.path.join(d, "rounds.parquet")
+        if not os.path.exists(fr):
+            continue
+        R = pd.read_parquet(fr)
+        if not five_v_five(R) or "plant_X" not in R:
+            continue
+        P = R[R.plant_site.isin(["A", "B"]) & R.plant_X.notna() & R.plant_t.notna()]
+        if not len(P):
+            continue
+        fd = os.path.join(d, "duels.parquet")
+        D = pd.read_parquet(fd, columns=["round", "t", "victim_side"]) if os.path.exists(fd) else pd.DataFrame(columns=["round", "t", "victim_side"])
+        for _, r in P.iterrows():
+            dd = D[(D["round"] == r["round"]) & (D.t < r.plant_t)]
+            rows.append({"site": r.plant_site, "x": float(r.plant_X), "y": float(r.plant_Y), "t": float(r.plant_t), "win_t": r.winner == "T",
+                         "ct": int(r.CT_n) - int((dd.victim_side == "CT").sum()), "tt": int(r.T_n) - int((dd.victim_side == "T").sum())})
+    if len(rows) < 20:
+        return None, None, None
+    df = pd.DataFrame(rows)
+    px, py = zm.px(df.x.to_numpy(), df.y.to_numpy())
+    df["px"], df["py"] = np.asarray(px, dtype=float), np.asarray(py, dtype=float)
+    plants, retakes = {}, {}
+    for site, g in df.groupby("site"):
+        c = sites.get(site, {}).get("c")
+        level = zm.level(c[2])[0] if c else None
+        cx, cy = (np.asarray(zm.px([c[0]], [c[1]])[0])[0], np.asarray(zm.px([c[0]], [c[1]])[1])[0]) if c else (g.px.median(), g.py.median())
+        lab = DBSCAN(eps=16, min_samples=max(3, int(0.04 * len(g)))).fit(g[["px", "py"]].to_numpy()).labels_
+        g = g.assign(cl=lab)
+        spots = []
+        for k, s in g[g.cl >= 0].groupby("cl"):
+            mx, my = float(s.px.mean()), float(s.py.mean())
+            spots.append({"n": int(len(s)), "share": round(100 * len(s) / len(g)), "px": [round(mx), round(my)], "level": level,
+                          "where": _compass(mx - cx, my - cy), "timer": _timer(s.t.median()), "t_win": round(100 * float(s.win_t.mean()))})
+        spots.sort(key=lambda x: -x["n"])
+        plants[site] = {"n": int(len(g)), "timer": _timer(g.t.median()), "t_win": round(100 * float(g.win_t.mean())), "spots": spots[:3]}
+        rt = []
+        for (ct, tt), s in g.groupby(["ct", "tt"]):
+            if len(s) >= 6 and ct >= 1 and tt >= 1:
+                rt.append({"ct": int(ct), "t": int(tt), "n": int(len(s)), "ct_win": round(100 * (1 - float(s.win_t.mean())))})
+        retakes[site] = sorted(rt, key=lambda x: (-x["ct"], x["t"]))
+    return plants, retakes, df[["ct", "tt", "win_t"]]
+
+
+def _deaths(mp, dirs, site_of):
+    """Where the players of each side die, by moment of the round, overall and when the attack goes A or B."""
+    rows = []
+    for d in dirs:
+        fd = os.path.join(d, "duels.parquet")
+        fr = os.path.join(d, "rounds.parquet")
+        if not os.path.exists(fd) or not os.path.exists(fr):
+            continue
+        R = pd.read_parquet(fr, columns=["T_n", "CT_n"])
+        if not five_v_five(R):
+            continue
+        mid = os.path.basename(d)
+        D = pd.read_parquet(fd, columns=["round", "t", "victim_side", "victim_zone"])
+        D = D.assign(site=[site_of.get((mid, int(r)), "-") for r in D["round"]])
+        rows.append(D)
+    if not rows:
+        return None
+    df = pd.concat(rows, ignore_index=True)
+    df = df[df.victim_zone.notna() & (df.victim_zone != "?")]
+    df["w"] = pd.cut(df.t, [lo for _, lo, _ in WINDOWS] + [999], labels=[k for k, _, _ in WINDOWS], right=False)
+    out = {}
+    for side, g in df.groupby("victim_side"):
+        if side not in ("T", "CT"):
+            continue
+        res = {}
+        for key, sel in (("all", slice(None)), ("A", g.site == "A"), ("B", g.site == "B")):
+            x = g[sel] if key != "all" else g
+            wins = {}
+            for w, xw in x.groupby("w", observed=True):
+                if len(xw) < 15:
+                    continue
+                vc = xw.victim_zone.value_counts(normalize=True).head(3)
+                wins[str(w)] = {"n": int(len(xw)), "zones": [{"zone": humanize(z), "pct": _pct(p)} for z, p in vc.items()]}
+            res[key] = wins
+        out[side] = res
+    return out
+
+
+def evidence(mp, g, dirs, pool=None):
+    site_of = {(m, int(r)): s for m, r, s in zip(g.match, g["round"], g.site)}
+    plants, retakes, rows = _plants_and_retakes(mp, dirs)
+    if pool is not None and rows is not None:
+        pool.append(rows)
+    return {"survival": _survival(g), "contact": _contact(g), "plants": plants, "retakes": retakes,
+            "deaths": _deaths(mp, dirs, site_of), "windows": {k: [lo, hi] for k, lo, hi in WINDOWS}}
+
+
+def retake_table(pool):
+    """Retakes on every map together: the CT side's chances by players alive on each side when the bomb goes down."""
+    if not pool:
+        return []
+    df = pd.concat(pool, ignore_index=True)
+    out = []
+    for (ct, tt), s in df.groupby(["ct", "tt"]):
+        if len(s) >= 15 and ct >= 1 and tt >= 1:
+            out.append({"ct": int(ct), "t": int(tt), "n": int(len(s)), "ct_win": round(100 * (1 - float(s.win_t.mean())))})
+    return sorted(out, key=lambda x: (-x["ct"], x["t"]))
+
 
 
 if __name__ == "__main__":
     sys.stdout.reconfigure(encoding="utf-8")
-    print(run_all(force="--force" in sys.argv), "démos analysées")
+    print(run_all(force="--force" in sys.argv), "demos analyzed")

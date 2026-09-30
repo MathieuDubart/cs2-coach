@@ -107,7 +107,7 @@ def main(out_path):
             "player": "Patro ✌"}
     html = open(TEMPLATE, encoding="utf-8").read().replace("__DATA__", json.dumps(data, ensure_ascii=False, separators=(",", ":")))
     open(out_path, "w", encoding="utf-8").write(html)
-    print(out_path, len(html) // 1024, "KB,", len(matches), "matchs")
+    print(out_path, len(html) // 1024, "KB,", len(matches), "matches")
 
 
 if __name__ == "__main__":

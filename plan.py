@@ -18,20 +18,20 @@ MID_TAGS = {  # mid-round metric -> playbook tags / phase items it points to
     "isolated": ["lurk", "duel"], "steps_alone": ["lurk"], "steps_clutch": ["clutch"], "pp_surv": ["postplant"], "pp_kpr": ["postplant"],
 }
 MID_FIX = {
-    "rot_died": "Pars sur une info sûre et prends la route qui te garde couvert. Si le site est déjà tombé, attends tes coéquipiers à l'entrée.",
-    "rot_react": "Dès que la bombe est vue ou que 3 joueurs sont annoncés, pars : chaque seconde compte pour le retake.",
-    "anchor_hold": "En ancre, ton job est de survivre 10 s et d'annoncer le nombre : recule d'un angle au lieu de mourir en premier.",
-    "lurk_died": "Ton lurk meurt trop souvent : attends que les CT tournent avant de te montrer, et marche.",
-    "t_late": "Colle à l'exécution : arrive avec la dernière flash, pas 10 s après.",
-    "rt_solo": "Bombe posée : pas de retake seul. Attends tes coéquipiers, entrez sur la même flash.",
-    "adv_throw": "Quand ton équipe a un joueur de plus : plus de duel seul, joue le trade et le temps.",
-    "adv_conv": "En avantage, regroupe-toi et joue en tirs croisés : c'est la structure qui convertit, pas un kill de plus.",
-    "lost_died": "Seul contre 3 ou plus avec peu de temps : sauve ton arme.",
-    "isolated": "Trop de morts sans personne à côté pour te venger : rapproche-toi d'un coéquipier avant de prendre un duel.",
-    "steps_alone": "Tu cours quand tu es seul près des ennemis : Shift, et recharge en maintenant R.",
-    "steps_clutch": "En clutch, marche : chaque pas te trahit.",
-    "pp_surv": "Après la pose : ne cherche pas le duel, fais venir les CT dans tes tirs croisés.",
-    "pp_kpr": "Après la pose, place-toi pour punir le défuseur plutôt que de peeker.",
+    "rot_died": "Leave on solid info and take the route that keeps you covered. If the site has already fallen, wait for your teammates at the entrance.",
+    "rot_react": "As soon as the bomb is seen or 3 players are called, go: every second counts for the retake.",
+    "anchor_hold": "As the anchor, your job is to survive 10 s and call the numbers: fall back one angle instead of dying first.",
+    "lurk_died": "Your lurk dies too often: wait for the CTs to rotate before showing yourself, and walk.",
+    "t_late": "Stick to the execute: arrive with the last flash, not 10 s later.",
+    "rt_solo": "Bomb planted: no solo retake. Wait for your teammates, go in on the same flash.",
+    "adv_throw": "When your team has one more player: no more solo duels, play the trade and the clock.",
+    "adv_conv": "With the advantage, regroup and play crossfires: structure converts, not one more kill.",
+    "lost_died": "Alone against 3 or more with little time: save your weapon.",
+    "isolated": "Too many deaths with nobody next to you to trade: get closer to a teammate before taking a duel.",
+    "steps_alone": "You run when you are alone near enemies: Shift, and reload by holding R.",
+    "steps_clutch": "In a clutch, walk: every step gives you away.",
+    "pp_surv": "After the plant: don't look for the duel, make the CTs come into your crossfires.",
+    "pp_kpr": "After the plant, position yourself to punish the defuser rather than peeking.",
 }
 
 
@@ -69,9 +69,9 @@ def level(adv, sid=None):
         pt = steamlink.local_playtime(sid) or (config.settings().get("players", {}).get(str(sid)) or {}).get("playtime")
     hours = (pt or {}).get("total_h")
     if hours is not None:
-        exp = "vétéran" if hours >= 1500 else "régulier" if hours >= 300 else "en progression"
+        exp = "veteran" if hours >= 1500 else "regular" if hours >= 300 else "improving"
     else:
-        exp = "vétéran" if total >= 400 or (yr and dt.date.today().year - yr >= 7 and total >= 150) else "régulier" if total >= 100 else "en progression"
+        exp = "veteran" if total >= 400 or (yr and dt.date.today().year - yr >= 7 and total >= 150) else "regular" if total >= 100 else "improving"
     return {"key": lv["key"] if lv else None, "name": lv["name"] if lv else None, "focus": lv["focus"] if lv else [],
             "rating": rating, "season": prem["season"] if prem else None, "comp": comp, "wins": wins, "premier_wins": prem_w,
             "since": yr, "experience": exp, "hours": hours, "two_weeks_h": (pt or {}).get("two_weeks_h"), "playtime_source": (pt or {}).get("source"),
@@ -89,8 +89,8 @@ def mid_findings(mb):
         u = m["unit"]
         fmt = lambda v: "—" if v is None else (f"{v:.0f} %" if u == "%" else f"{v:.1f}{u}".replace(".", ","))
         item = {"id": k, "label": m["label"], "you": m["you"], "median": m["median"], "pro": m.get("pro"), "percentile": m["percentile"],
-                "unit": u, "text": f"{m['label'][0].upper() + m['label'][1:]} : toi {fmt(m['you'])}, médiane de la base {fmt(m['median'])}"
-                                   + (f", pros {fmt(m['pro'])}" if m.get("pro") is not None else "") + f" (sur {m['n_you']:.0f})."}
+                "unit": u, "text": f"{m['label'][0].upper() + m['label'][1:]}: you {fmt(m['you'])}, base median {fmt(m['median'])}"
+                                   + (f", pros {fmt(m['pro'])}" if m.get("pro") is not None else "") + f" (out of {m['n_you']:.0f})."}
         if m["percentile"] <= 30:
             item["fix"] = MID_FIX.get(k)
             item["tags"] = MID_TAGS.get(k, [])
@@ -104,8 +104,8 @@ def mid_findings(mb):
     notes = []
     if rr and rd and rr.get("pro") and rd.get("pro") is not None and rr["you"] is not None and rd["you"] is not None:
         if rr["pro"] > rr["you"] + 2 and rd["pro"] < rd["you"]:
-            notes.append(f"Les pros partent en rotation plus tard que toi ({rr['pro']:.0f} s après l'arrivée des T sur le site, contre {rr['you']:.0f} s), "
-                         f"mais meurent moins en route ({rd['pro']:.0f} % contre {rd['you']:.0f} %) : ils attendent une info sûre et arrivent groupés.")
+            notes.append(f"Pros rotate later than you ({rr['pro']:.0f} s after the Ts reach the site, vs {rr['you']:.0f} s), "
+                         f"but die less on the way ({rd['pro']:.0f}% vs {rd['you']:.0f}%): they wait for solid info and arrive grouped.")
     return bad + [{"id": "note", "text": t, "percentile": None} for t in notes], good
 
 
@@ -161,12 +161,12 @@ def weapon_positions(wz, maps):
                 if wc != "pro_awp":
                     zones = sorted(zones, key=lambda z: -(z["duel_win"] or 0))
                 out.setdefault(mp, {}).setdefault(side, {})[wc] = {
-                    "label": "AWPers pros (démos HLTV)" if wc == "pro_awp" else K_CLASS.get(wc, wc), "rounds": v["rounds"],
+                    "label": "Pro AWPers (HLTV demos)" if wc == "pro_awp" else K_CLASS.get(wc, wc), "rounds": v["rounds"],
                     "zones": [{**z, "name": _zone(z["zone"])} for z in zones[:5]]}
     return out
 
 
-K_CLASS = {"awp": "AWP", "scout": "Scout", "rifle": "Fusils (AK, M4, AUG, SG)", "rifle_eco": "Galil / FAMAS", "smg": "SMG", "shotgun": "Fusils à pompe"}
+K_CLASS = {"awp": "AWP", "scout": "Scout", "rifle": "Rifles (AK, M4, AUG, SG)", "rifle_eco": "Galil / FAMAS", "smg": "SMG", "shotgun": "Shotguns"}
 
 
 def training(adv, deep, mb):
@@ -180,23 +180,23 @@ def training(adv, deep, mb):
     react = ((deep or {}).get("reaction") or {}).get("better_than_pct")
     pre = ((deep or {}).get("preaim") or {}).get("better_than_pct")
     if react is not None and react < 50:
-        blocks.append(("reaction", f"Ton temps de réaction est plus lent que {100 - react} % des joueurs de tes matchs."))
+        blocks.append(("reaction", f"Your reaction time is slower than {100 - react}% of the players in your matches."))
     if (pct("xhair") is not None and pct("xhair") < 50) or (pre is not None and pre < 50) or "xhair" in rid:
-        blocks.append(("xhair", "Ton viseur n'est pas encore à hauteur de tête au moment où l'ennemi apparaît."))
+        blocks.append(("xhair", "Your crosshair is not at head height yet when the enemy appears."))
     if "pistol" in rid or (pct("pistol_moving") is not None and pct("pistol_moving") < 40):
-        blocks.append(("pistol", "Trop de tirs au pistolet en mouvement."))
+        blocks.append(("pistol", "Too many pistol shots while moving."))
     if "spray" in rid or (pct("b9_hit") is not None and pct("b9_hit") < 40):
-        blocks.append(("spray", "Ton spray décroche après quelques balles."))
+        blocks.append(("spray", "Your spray falls apart after a few bullets."))
     if len(blocks) < 2:
-        blocks.append(("precision", "Précision du premier tir."))
-    blocks = blocks[:2] + [("dm", "Mettre le rythme avant la game.")]
+        blocks.append(("precision", "First-shot accuracy."))
+    blocks = blocks[:2] + [("dm", "Get into rhythm before the game.")]
     if "nades" in rid:
-        blocks.append(("nades", "Tu meurs souvent avec tes grenades."))
+        blocks.append(("nades", "You often die with your grenades."))
     warm = [{"drill": k, "why": why, **{a: b for a, b in K.DRILLS[k].items() if a != "src"}, "src": K.src(*K.DRILLS[k]["src"])} for k, why in blocks]
     week = [
-        {"title": "1 séance de démo", "text": "Revois tes 5 morts les plus coûteuses de la semaine dans le replay 2D (onglet Matchs), en te demandant : étais-je tradable ?"},
-        {"title": "1 expérience à la fois", "text": "Lance une expérience de l'onglet Progresser et tiens-la jusqu'au verdict."},
-        {"title": "4 cartes prêtes", "text": "Relis les fiches T et CT de tes 4 cartes Premier (choix de cartes depuis le 22 septembre 2026)."},
+        {"title": "1 demo session", "text": "Rewatch your 5 most costly deaths of the week in the 2D replay (Matches tab), asking yourself: could I be traded?"},
+        {"title": "1 experiment at a time", "text": "Start an experiment from the Progress tab and keep it until the verdict."},
+        {"title": "4 maps ready", "text": "Reread the T and CT sheets of your 4 Premier maps (map picks since September 22, 2026)."},
     ]
     return {"warmup": warm, "total_min": sum(w["min"] for w in warm), "week": week}
 
@@ -224,9 +224,9 @@ def kpis(sid, stats, mid_rows):
             series["isolated"].append([t, round(g("isolated_deaths") / max(g("rounds"), 1) * 24, 1)])
             if g("adv_rounds") >= 3:
                 series["adv_throw"].append([t, round(100 * g("adv_throw") / g("adv_rounds"))])
-    meta = {"rating": ("Note du match (≈ HLTV 2.0)", "", True), "adr": ("Dégâts par round", "", True), "traded": ("Morts vengées", "%", True),
-            "nades": ("Grenades mortes avec toi (par 24 rounds)", "", False), "xhair": ("Écart du viseur", "°", False),
-            "isolated": ("Morts isolées (par 24 rounds)", "", False), "adv_throw": ("Avantages rendus", "%", False)}
+    meta = {"rating": ("Match rating (≈ HLTV 2.0)", "", True), "adr": ("Damage per round", "", True), "traded": ("Deaths traded", "%", True),
+            "nades": ("Grenades that died with you (per 24 rounds)", "", False), "xhair": ("Crosshair offset", "°", False),
+            "isolated": ("Isolated deaths (per 24 rounds)", "", False), "adv_throw": ("Avantages rendus", "%", False)}
     out = []
     for k, s in series.items():
         s = sorted([x for x in s if x[0]], key=lambda x: x[0])
@@ -328,12 +328,12 @@ def build(steamid, adv, cross=None, deep=None, light=False):
         try:
             plan["map_refs"] = map_refs(PREMIER)
         except Exception as e:
-            print("références des cartes indisponibles :", e)
+            print("map references unavailable:", e)
         try:
             import tside
             plan["tside"] = tside.tendencies(PREMIER)
         except Exception as e:
-            print("tendances des T indisponibles :", e)
+            print("T tendencies unavailable:", e)
         return plan
     import cs2coach
     import midround
@@ -349,7 +349,7 @@ def build(steamid, adv, cross=None, deep=None, light=False):
     try:
         plan["map_refs"] = map_refs(sorted(set(PREMIER) | set(maps)))
     except Exception as e:
-        print("références des cartes indisponibles :", e)
+        print("map references unavailable:", e)
     wp = weapons.player(sid, mids)
     plan["weapons"] = wp
     try:
@@ -358,12 +358,12 @@ def build(steamid, adv, cross=None, deep=None, light=False):
               for m in (cross or {}).get("maps", []) for side, S in m.get("sides", {}).items()}
         plan["buys"] = buys.adapted(sid, sorted(set(PREMIER) | set(maps)), adv.get("archetype"), zd, wp)
     except Exception as e:
-        print("achats par type de round indisponibles :", e)
+        print("buys by round type unavailable:", e)
     try:
         import tside
         plan["tside"] = tside.tendencies(sorted(set(PREMIER) | set(maps)))
     except Exception as e:
-        print("tendances des T indisponibles :", e)
+        print("T tendencies unavailable:", e)
     try:
         import nades
         stats_n = []
@@ -377,15 +377,15 @@ def build(steamid, adv, cross=None, deep=None, light=False):
         stats_n.sort(key=lambda s: (s.get("match") or {}).get("time") or "")
         plan["nades"] = nades.for_player(sid, sorted(set(PREMIER) | set(maps)), cross, stats_n)
     except Exception as e:
-        print("grenades indisponibles :", e)
+        print("grenades unavailable:", e)
     ctx = context.analyze(sid)
     if ctx:
         ctx["matches"] = ctx["matches"][-40:]
     plan["context"] = ctx
-    grp = next((f for f in (ctx or {}).get("factors", []) if f["title"] == "Groupe"), None)
+    grp = next((f for f in (ctx or {}).get("factors", []) if f["title"] == "Group"), None)
     if grp and grp["rows"]:
         top = max(grp["rows"], key=lambda r: r["n"])["group"]
-        plan["party_mode"] = {"solo": "solo", "duo": "duo", "groupe de 3": "trio", "groupe de 4": "quatuor", "groupe de 5": "five"}.get(top, "solo")
+        plan["party_mode"] = {"solo": "solo", "duo": "duo", "group of 3": "trio", "group of 4": "quatuor", "group of 5": "five"}.get(top, "solo")
     plan["videos"] = {mp: K.src(*K.MAP_VIDEOS[mp]) for mp in maps if mp in K.MAP_VIDEOS}
     plan["training"] = training(adv, deep, mb)
     stats = []
@@ -412,11 +412,11 @@ def build(steamid, adv, cross=None, deep=None, light=False):
         if os.path.exists(voice.DIR):
             plan["calls"] = voice.summary(sid)
     except Exception as e:
-        print("calls indisponibles :", e)
+        print("calls unavailable:", e)
     try:
         import review
         plan["review"] = review.build(sid, stats, mid_rows, ctx, plan["experiments"], adv)
     except Exception as e:  # the review is a bonus: never block the plan
         plan["review"] = None
-        print("bilan indisponible :", e)
+        print("review unavailable:", e)
     return plan

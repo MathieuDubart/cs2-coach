@@ -16,8 +16,8 @@ from map_analysis import humanize
 
 OUT = os.path.join(config.OUT, "population", "buys")
 TYPES = ["pistol", "eco", "force", "full", "anti-eco"]
-TYPE_FR = {"pistol": "Round pistolet", "eco": "Éco", "force": "Force-buy", "full": "Full buy", "anti-eco": "Anti-éco"}
-ARMOR_FR = {"none": "sans kevlar", "kevlar": "kevlar", "helmet": "kevlar + casque"}
+TYPE_FR = {"pistol": "Pistol round", "eco": "Eco", "force": "Force-buy", "full": "Full buy", "anti-eco": "Anti-eco"}
+ARMOR_FR = {"none": "no kevlar", "kevlar": "kevlar", "helmet": "kevlar + helmet"}
 DEFAULT_PISTOLS = {"Glock-18", "USP-S", "P2000"}
 # weapons a side cannot buy: holding one means it was picked up (often after winning), not a buy choice
 FULL_WEAPONS = {"AK-47", "M4A4", "M4A1-S", "AUG", "SG 553", "AWP", "G3SG1", "SCAR-20"}
@@ -113,13 +113,13 @@ def kit(row):
     util = [u for u in (row["util"] or "").split(",") if u]
     ut = ", ".join(f"{k}{f' ×{v}' if v > 1 else ''}" for k, v in Counter(util).most_common())
     if rt in ("pistol", "eco"):
-        parts = [w if w != "?" else "pistolet de base", ARMOR_FR[a] if a != "none" else None, ut or None]
+        parts = [w if w != "?" else "default pistol", ARMOR_FR[a] if a != "none" else None, ut or None]
         return " + ".join(p for p in parts if p)
     if rt == "force":
         return f"{w} + {ARMOR_FR[a]}"
     if rt == "anti-eco":
         return w
-    return f"{w} + {'3 grenades et plus' if un >= 3 else '1 ou 2 grenades' if un else 'sans grenade'}"
+    return f"{w} + {'3+ grenades' if un >= 3 else '1-2 grenades' if un else 'no grenade'}"
 
 
 def _wilson_low(k, n, z=1.28):
@@ -185,9 +185,9 @@ def advise(sid, maps):
                 res["maps"].setdefault(mp, {}).setdefault(side, {})[rt] = {
                     "label": TYPE_FR[rt], "n_base": int(len(b)), "n_me": int(len(m)), "base_win": base_win, "by": by,
                     "my_win": round(100 * m.won.mean()) if len(m) else None,
-                    "zone": {"name": (rz or (bz[0] if bz else {})).get("key"), "from": "toi" if rz else "base",
+                    "zone": {"name": (rz or (bz[0] if bz else {})).get("key"), "from": "you" if rz else "base",
                              **{k: v for k, v in (rz or (bz[0] if bz else {})).items() if k in ("n", "win", "adr")}} if (rz or bz) else None,
-                    "kit": {"name": (rk or (bk[0] if bk else {})).get("key"), "from": "toi" if rk else "base",
+                    "kit": {"name": (rk or (bk[0] if bk else {})).get("key"), "from": "you" if rk else "base",
                             **{k: v for k, v in (rk or (bk[0] if bk else {})).items() if k in ("n", "win", "adr")}} if (rk or bk) else None,
                     "base_zones": bz[:4], "base_kits": bk[:4], "my_zones": mz[:3], "my_kits": mk[:3],
                     "avoid_zone": (bz[-1] if len(bz) >= 4 and bz[-1]["win"] <= (base_win or 50) - 8 else None)}
@@ -196,7 +196,7 @@ def advise(sid, maps):
 
 # ---------- adapted to the player's profile ----------
 ROLE_FR = {"entry": "entry", "trader": "second / trade", "support": "support", "lurker": "lurker", "awper": "AWPer",
-           "anchor": "ancre", "closer": "closer"}
+           "anchor": "anchor", "closer": "closer"}
 
 
 def peers(sid, arch):
@@ -239,11 +239,11 @@ def _blend(b, p, m, key, by, bonus=None, need=(12, 8, 3)):
             s_m = ((dm + s_p * 10) / (nm + 10)) / 200
         why = []
         if nm:
-            why.append(f"toi : {int(wm)} round{'s' if wm > 1 else ''} gagné{'s' if wm > 1 else ''} sur {nm}" if by == "win" else f"toi : {dm / nm:.0f} dégâts par round sur {nm}")
+            why.append(f"you: {int(wm)} round{'s' if wm != 1 else ''} won out of {nm}" if by == "win" else f"you: {dm / nm:.0f} damage per round over {nm}")
         if np_ >= 5:
-            why.append(f"joueurs de ton profil : {100 * wp / np_:.0f} % sur {np_}" if by == "win" else f"joueurs de ton profil : {dp / np_:.0f} dégâts sur {np_}")
+            why.append(f"players of your profile: {100 * wp / np_:.0f}% over {np_}" if by == "win" else f"players of your profile: {dp / np_:.0f} damage over {np_}")
         if nb >= 8:
-            why.append(f"base : {100 * wb / nb:.0f} % sur {nb}" if by == "win" else f"base : {db / nb:.0f} dégâts sur {nb}")
+            why.append(f"base: {100 * wb / nb:.0f}% over {nb}" if by == "win" else f"base: {db / nb:.0f} damage over {nb}")
         score = s_m
         if bonus:
             add, reason = bonus(k)
@@ -258,7 +258,7 @@ def _blend(b, p, m, key, by, bonus=None, need=(12, 8, 3)):
 
 # Not buying is not a buy. Over the whole base a full buy without grenades wins less (53 % vs 57 %) and a force buy
 # without kevlar too (30 % vs 41 %): when one tops a small cell it is noise, so it is never recommended.
-NON_BUYS = {"full": "sans grenade", "force": "sans kevlar"}
+NON_BUYS = {"full": "no grenade", "force": "no kevlar"}
 
 
 def _real_buys(kits, rt):
@@ -266,7 +266,7 @@ def _real_buys(kits, rt):
     kits = [k for k in kits if not bad or bad not in k["key"]]
     # one AWP per team: when it comes first, say so and keep the best rifle right behind it
     if kits and kits[0]["key"].startswith("AWP"):
-        kits[0] = dict(kits[0], why=kits[0]["why"] + ["si l'AWP est libre dans ton équipe"])
+        kits[0] = dict(kits[0], why=kits[0]["why"] + ["if the AWP is free on your team"])
         alt = next((i for i, k in enumerate(kits) if not k["key"].startswith("AWP")), None)
         if alt and alt > 1:
             kits.insert(1, kits.pop(alt))
@@ -295,7 +295,7 @@ def adapted(sid, maps, arch=None, zone_duels=None, weapons_info=None):
         if not d or r is None or d.get("n", 0) < 10:
             return 0, None
         edge = float(max(-0.06, min(0.06, (d["win"] - r) / 100 * 0.3)))
-        return edge, f"ton {w} : {d['win']} % de duels gagnés (base {r} %)"
+        return edge, f"your {w}: {d['win']}% of duels won (base {r}%)"
     res = {"profile": [ROLE_FR.get(r, r) for r in roles], "n_peers": len(ids), "types": {}, "maps": {}}
     for rt in TYPES:
         by = "adr" if rt == "eco" else "win"
@@ -315,7 +315,7 @@ def adapted(sid, maps, arch=None, zone_duels=None, weapons_info=None):
                 if not kd or kd[0] + kd[1] < 4:
                     return 0, None
                 k, d = kd
-                return float(0.25 * ((k + 3) / (k + d + 6) - 0.5)), f"tes duels ici (tous rounds) : {k}-{d}"
+                return float(0.25 * ((k + 3) / (k + d + 6) - 0.5)), f"your duels here (all rounds): {k}-{d}"
             for rt in TYPES:
                 by = "adr" if rt == "eco" else "win"
                 sel = lambda x: x[(x["map"] == mp) & (x.side == side) & (x.rtype == rt)]
@@ -338,7 +338,7 @@ if __name__ == "__main__":
     import json
     import sys
     sys.stdout.reconfigure(encoding="utf-8")
-    print(run_all(), "matchs")
+    print(run_all(), "matches")
     r = advise(int(sys.argv[1]) if len(sys.argv) > 1 else config.logged_in_account()[0], ["de_nuke", "de_anubis"])
     print(json.dumps(r["types"], ensure_ascii=False, indent=1)[:3000])
     print(json.dumps(r["maps"].get("de_nuke", {}).get("CT", {}).get("pistol"), ensure_ascii=False, indent=1))

@@ -134,7 +134,7 @@ def run_all(workers=12, force=False):
             try:
                 f.result()
             except Exception as e:
-                print("style ERREUR", e, flush=True)
+                print("style ERROR", e, flush=True)
     return len(todo)
 
 
@@ -147,4 +147,4 @@ if __name__ == "__main__":
     sys.stdout.reconfigure(encoding="utf-8")
     n = run_all(force="--force" in sys.argv)
     df = load()
-    print(n, "matchs traités ;", len(df), "fiches,", df.steamid.nunique() if len(df) else 0, "joueurs")
+    print(n, "matches processed;", len(df), "fiches,", df.steamid.nunique() if len(df) else 0, "players")

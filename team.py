@@ -23,20 +23,20 @@ TEAMS = os.path.join(config.OUT, "teams")
 META = os.path.join(config.OUT, "population", "map_meta.json")
 PREMIER = ["de_ancient", "de_anubis", "de_cache", "de_dust2", "de_inferno", "de_mirage", "de_nuke"]
 ROLE_FR = {"entry": "Entry", "trader": "Second / trade", "support": "Support", "lurker": "Lurker", "awper": "AWPer",
-           "flex": "Rifler flex", "anchor": "Ancre", "closer": "Closer"}
+           "flex": "Rifler flex", "anchor": "Anchor", "closer": "Closer"}
 T_ROLE_DO = {
-    "entry": "Premier sur le site, derrière la flash du support. Ton job : prendre l'espace et annoncer ce que tu vois, même si tu meurs.",
-    "trader": "Colle à l'entry à distance de trade (1 à 2 s derrière, pas sur la même ligne) et venge-le tout de suite.",
-    "support": "Lance les smokes et les flashs de l'exécution, puis entre en 3e. Garde une grenade pour le post-plant.",
-    "lurker": "Côté opposé à l'exécution : marche, écoute les rotations et coupe-les au moment où l'équipe entre.",
-    "awper": "Prends le premier pick sur l'angle long, puis couvre l'entrée ou le flanc. Ne re-peek jamais le même angle.",
-    "flex": "Renfort de l'exécution ou 2e lurk selon l'info. Joue la fin de round : clutch, post-plant.",
+    "entry": "First onto the site, behind the support's flash. Your job: take space and call what you see, even if you die.",
+    "trader": "Stick to the entry within trade distance (1 to 2 s behind, not on the same line) and avenge them right away.",
+    "support": "Throw the execute's smokes and flashes, then go in third. Keep a grenade for the post-plant.",
+    "lurker": "Opposite side of the execute: walk, listen to the rotations and cut them when the team goes in.",
+    "awper": "Take the first pick on the long angle, then cover the entry or the flank. Never re-peek the same angle.",
+    "flex": "Backup for the execute or a second lurker depending on the info. Play the end of the round: clutch, post-plant.",
 }
 CT_SLOT_DO = {
-    "anchor": "Tiens le site : survis 10 s, annonce combien ils sont et leurs grenades, recule plutôt que de mourir en premier.",
-    "support": "Renfort du site le plus attaqué : utilitaires de retardement, puis trade de l'ancre.",
-    "mid": "Contrôle du milieu : info en début de round, puis rotation rapide vers le site attaqué.",
-    "awp": "L'angle long qui fait mal aux T. Un tir, puis change de position.",
+    "anchor": "Hold the site: survive 10 s, call how many they are and their grenades, fall back rather than die first.",
+    "support": "Backup for the most attacked site: delaying utility, then trade the anchor.",
+    "mid": "Mid control: info early in the round, then a fast rotation to the attacked site.",
+    "awp": "The long angle that hurts the Ts. One shot, then change position.",
 }
 
 
@@ -170,8 +170,8 @@ def igl(M):
     res = []
     for m in M:
         vals, why = [], []
-        for key, where, label in (("adv_conv", "mid", "convertit les avantages"), ("adv_throw", "mid", "rend peu l'avantage"),
-                                  ("isolated", "mid", "meurt rarement isolé"), ("traded_pct", "bench", "joue en équipe (morts vengées)")):
+        for key, where, label in (("adv_conv", "mid", "converts advantages"), ("adv_throw", "mid", "rarely throws the advantage"),
+                                  ("isolated", "mid", "rarely dies isolated"), ("traded_pct", "bench", "plays as a team (deaths traded)")):
             p = _pct(m, key, where)
             if p is not None:
                 vals.append(p)
@@ -179,14 +179,14 @@ def igl(M):
                     why.append(label)
         role = m["arch"].get("role")
         bonus = 8 if role in ("support", "anchor", "closer", "lurker") else -8 if role in ("entry", "awper") else 0
-        art = {"support": "de support", "anchor": "d'ancre", "closer": "de closer", "lurker": "de lurker"}.get(role)
+        art = {"support": "Support", "anchor": "Anchor", "closer": "Closer", "lurker": "Lurker"}.get(role)
         hours = ((m["plan"].get("level") or {}).get("hours")) or 0
         exp = min(hours / 500, 8)
         score = (sum(vals) / len(vals) if vals else 50) + bonus + exp
         if bonus > 0:
-            why.append(f"profil {art} : souvent en retrait, il voit le round se dessiner")
+            why.append(f"{art} profile: often in the back, sees the round unfold")
         if hours >= 1500:
-            why.append(f"{hours:,} h de jeu".replace(",", " "))
+            why.append(f"{hours:,} h played")
         res.append({"steamid": m["steamid"], "name": m["name"], "score": round(score), "why": why})
     res.sort(key=lambda x: -x["score"])
     return res
@@ -303,13 +303,13 @@ def ct_setup(M, mp, ref, regions, meta):
         sl["name"] = m["name"]
         why = []
         if z and z["k"] + z["d"] >= 4:
-            why.append(f"{m['name']} y fait {z['k']}-{z['d']} ({z['win']} % de duels gagnés)")
+            why.append(f"{m['name']} goes {z['k']}-{z['d']} there ({z['win']}% of duels won)")
         elif z:
-            why.append(f"{m['name']} y joue {z['presence']:.0f} % de son temps")
+            why.append(f"{m['name']} plays there {z['presence']:.0f}% of the time")
         if sl["kind"] == "awp" and m["scores"]["awper"] >= 55:
-            why.append("profil d'AWPer")
+            why.append("AWPer profile")
         if sl["kind"] == "anchor" and m["scores"]["anchor"] >= 60:
-            why.append("profil d'ancre")
+            why.append("anchor profile")
         sl["why"] = why
     for sl in slots:
         sl["do"] = CT_SLOT_DO[sl["kind"]]
@@ -401,7 +401,7 @@ def executes(M, mp, ref, regions, troles, meta):
                 load[thrower] += 1
             items.append({"type": l["type"], "from": l["from_zone"], "to": l["to_zone"], "setpos": l.get("setpos"), "t": l.get("t"),
                           "how": l.get("how"), "uses": l["uses"], "from_px": l.get("from_px"), "to_px": l.get("to_px"), "level": l.get("level"),
-                          "member": thrower, "name": names.get(thrower, "un coéquipier"),
+                          "member": thrower, "name": names.get(thrower, "a teammate"),
                           "known": bool(thrower and (l["type"], l["from_zone"], l["to_zone"]) in mine[thrower]),
                           "blind": l.get("enemies_blind_avg"), "damage": l.get("damage_avg")})
         p = plants.get(L) or {}
@@ -485,13 +485,13 @@ def synergy(M):
 
 def collective(M):
     """Team averages of the percentiles that decide team rounds: the three weakest become collective goals."""
-    checks = [("traded_pct", "bench", "Jouer en paires (trades)", "Entry + trader toujours ensemble, à 1-2 s. En Deathmatch par équipe ou en serveur de retake : aucun duel sans coéquipier à portée."),
-              ("flash_duels_pct", "bench", "Flasher pour les autres", "Chaque exécution commence par une flash lancée pour l'entry. Annoncez « flash » avant de la lancer."),
-              ("nades_unused_24", "bench", "Vider les grenades", "Règle d'équipe des 40 s : à 1:15 au chrono en T, toutes les grenades sont parties."),
-              ("adv_conv", "mid", "Convertir les avantages", "À 5 contre 4 : regroupez-vous sur un site, tirs croisés, plus de duel seul."),
-              ("isolated", "mid", "Espacement", "Personne ne meurt seul : chacun doit pouvoir être vengé en moins de 2 s."),
-              ("rt_solo", "mid", "Retakes groupés", "Bombe posée : on se regroupe et on entre ensemble sur la même flash."),
-              ("rot_died", "mid", "Rotations sûres", "Une seule voix annonce la rotation, sur une info sûre, et on tourne par la route couverte.")]
+    checks = [("traded_pct", "bench", "Play in pairs (trades)", "Entry + trader always together, 1-2 s apart. In Team Deathmatch or on a retake server: no duel without a teammate in range."),
+              ("flash_duels_pct", "bench", "Flash for the others", "Every execute starts with a flash thrown for the entry. Call 'flash' before throwing it."),
+              ("nades_unused_24", "bench", "Empty the grenades", "Team 40-second rule: at 1:15 on the clock as T, all grenades are gone."),
+              ("adv_conv", "mid", "Convert advantages", "At 5v4: regroup on a site, crossfires, no more solo duels."),
+              ("isolated", "mid", "Espacement", "Nobody dies alone: everyone must be tradable within 2 s."),
+              ("rt_solo", "mid", "Grouped retakes", "Bomb planted: regroup and go in together on the same flash."),
+              ("rot_died", "mid", "Safe rotations", "A single voice calls the rotation, on solid info, and we rotate through the covered route.")]
     res = []
     for key, where, title, do in checks:
         vals = [(_pct(m, key, where), m["name"]) for m in M]
@@ -533,9 +533,9 @@ def economy(M, troles, awp_ok):
     names = {m["steamid"]: m["name"] for m in M}
     return {"awp": names.get(awper) if awper else None, "awp_ok": awp_ok, "members": rows,
             "drop_order": [names[s] for s in order], "pistol_openers": [r["name"] for r in rows if r["pistol"]],
-            "rules": ["On achète ensemble : full, force ou eco, annoncé avant le temps d'achat.",
-                      "Le plus riche drop en premier, dans cet ordre : " + ", ".join(names[s] for s in order) + (" (l'AWP d'abord)." if awper else "."),
-                      "Force seulement si l'argent de chacun, plus le bonus de défaite, fait au moins 4 000 $ au round suivant."],
+            "rules": ["We buy together: full, force or eco, called before buy time.",
+                      "The richest drops first, in this order: " + ", ".join(names[s] for s in order) + (" (the AWP first)." if awper else "."),
+                      "Force only if everyone's money plus the loss bonus still makes at least $4,000 next round."],
             "src": K.src("sw_economy", "h2k_economy")}
 
 
@@ -574,11 +574,11 @@ def team_id(ids):
 def build(ids, owner=None):
     ids = list(dict.fromkeys(str(int(i)) for i in ids))
     if not 2 <= len(ids) <= 5:
-        raise ValueError("Une équipe compte de 2 à 5 joueurs (toi + 1 à 4 coéquipiers).")
+        raise ValueError("A team has 2 to 5 players (you + 1 to 4 teammates).")
     M = [member(i) for i in ids]
     missing = [ids[i] for i, m in enumerate(M) if m is None]
     if missing:
-        raise ValueError("Ces joueurs ne sont pas encore analysés : " + ", ".join(missing) + ". Lance d'abord leur analyse avec la barre de recherche.")
+        raise ValueError("These players are not analyzed yet: " + ", ".join(missing) + ". Run their analysis first from the search bar.")
     meta = map_meta()
     troles, missing_roles, awp_ok = t_roles(M)
     pool, picks, work = map_pool(M, meta)

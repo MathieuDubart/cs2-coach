@@ -7,52 +7,52 @@ import style
 MIN_ROUNDS_REF = 20
 ROLES = {
     "awper": {"name": "AWPer", "icon": "🎯",
-              "what": "Il tient les angles longs et prend le premier kill avec l'AWP. Son économie et son placement dictent le rythme de l'équipe.",
-              "tips": ["Change de spot après chaque tir : un AWPer qui re-peek le même angle se fait punir.",
-                       "Joue avec un coéquipier qui te trade ou te flashe : l'AWP coûte 4 750 $, ne la perds pas seul.",
-                       "En eco, sauve l'AWP plutôt que de la jouer à 1 contre 3."],
-              "key": [("awp_share", "part de kills à l'AWP"), ("open_win", "premiers duels gagnés"), ("hold_share", "duels commencés posé")]},
+              "what": "Holds long angles and takes the first kill with the AWP. Their economy and positioning set the team's pace.",
+              "tips": ["Change spot after every shot: an AWPer who re-peeks the same angle gets punished.",
+                       "Play next to a teammate who trades or flashes for you: the AWP costs $4,750, don't lose it alone.",
+                       "On an eco, save the AWP rather than playing it 1v3."],
+              "key": [("awp_share", "share of kills with the AWP"), ("open_win", "opening duels won"), ("hold_share", "duels started standing still")]},
     "entry": {"name": "Entry fragger", "icon": "⚡",
-              "what": "Il entre le premier sur le site en attaque pour prendre de l'espace. Sa mort est acceptable si elle est tradée.",
-              "tips": ["Entre toujours derrière une flash (la tienne ou celle d'un coéquipier), jamais à sec.",
-                       "Annonce ton entrée pour que ton second entry soit prêt à trader dans la seconde.",
-                       "Vise les angles les plus probables dans l'ordre (pré-aim) : ta survie tient à ta première balle."],
-              "key": [("open_rate_T", "premiers duels provoqués par round en T"), ("open_win", "premiers duels gagnés"), ("traded_share", "morts vengées")]},
+              "what": "First onto the site when attacking, to take space. Their death is acceptable if it gets traded.",
+              "tips": ["Always go in behind a flash (yours or a teammate's), never dry.",
+                       "Call your entry so your second is ready to trade within the second.",
+                       "Pre-aim the most likely angles in order: your survival depends on your first bullet."],
+              "key": [("open_rate_T", "opening duels taken per round as T"), ("open_win", "opening duels won"), ("traded_share", "deaths traded")]},
     "trader": {"name": "Second entry / Trader", "icon": "🔁",
-               "what": "Il suit l'entry à courte distance et venge chaque mort. Il transforme un 1 contre 1 perdu en échange équilibré.",
-               "tips": ["Reste à moins de 500 unités de ton entry, dans la même ligne de vue.",
-                        "Pré-vise l'angle d'où ton coéquipier va se faire tirer dessus, pas celui qu'il regarde.",
-                        "Ne peeke pas en même temps que lui : un temps de retard, puis le trade."],
-               "key": [("trade_rate", "trades par round"), ("trade_time", "délai de trade (s)"), ("iso_T", "distance au coéquipier en T")]},
+               "what": "Follows the entry at short range and trades every death. Turns a lost 1v1 into an even exchange.",
+               "tips": ["Stay within 500 units of your entry, in the same line of sight.",
+                        "Pre-aim the angle your teammate will get shot from, not the one they are looking at.",
+                        "Don't peek at the same time as them: one beat later, then the trade."],
+               "key": [("trade_rate", "trades per round"), ("trade_time", "trade delay (s)"), ("iso_T", "distance to nearest teammate as T")]},
     "lurker": {"name": "Lurker", "icon": "🐍",
-               "what": "Il joue seul, loin du groupe, pour couper les rotations et prendre les défenseurs à revers au bon moment.",
-               "tips": ["Ton timing compte plus que ton aim : frappe quand l'équipe exécute, pas avant.",
-                        "Donne l'info : tu es souvent le seul à voir les rotations adverses.",
-                        "Si le round est perdu d'avance, sauve ton arme : un lurker mort sans impact coûte cher."],
-               "key": [("iso_T", "distance au coéquipier en T"), ("late_share", "part de kills après 60 s"), ("first_duel_t", "premier duel du round (s)")]},
+               "what": "Plays alone, far from the group, to cut rotations and catch defenders from behind at the right moment.",
+               "tips": ["Your timing matters more than your aim: strike when the team executes, not before.",
+                        "Give info: you are often the only one who sees the enemy rotations.",
+                        "If the round is already lost, save your weapon: a lurker who dies without impact is expensive."],
+               "key": [("iso_T", "distance to nearest teammate as T"), ("late_share", "share of kills after 60 s"), ("first_duel_t", "first duel of the round (s)")]},
     "support": {"name": "Support", "icon": "🛡️",
-                "what": "Il prépare le terrain avec ses grenades (smokes, flashs, molotovs) et joue pour que ses coéquipiers gagnent leurs duels.",
-                "tips": ["Apprends les exécutions complètes de tes cartes : 2 smokes, 2 flashs, 1 molotov par site.",
-                         "Flashe pour tes coéquipiers : annonce, puis lance au-dessus du mur.",
-                         "Garde une grenade pour le retake ou le post-plant."],
-                "key": [("util_pr", "grenades par round"), ("blind_pr", "ennemis aveuglés par round"), ("util_dmg_pr", "dégâts de grenades par round")]},
+                "what": "Prepares the ground with grenades (smokes, flashes, molotovs) and plays so teammates win their duels.",
+                "tips": ["Learn the full executes of your maps: 2 smokes, 2 flashes, 1 molotov per site.",
+                         "Flash for your teammates: call it, then throw it over the wall.",
+                         "Keep a grenade for the retake or the post-plant."],
+                "key": [("util_pr", "grenades per round"), ("blind_pr", "enemies flashed per round"), ("util_dmg_pr", "grenade damage per round")]},
     "anchor": {"name": "Anchor", "icon": "⚓",
-               "what": "En défense, il tient un site, souvent seul, et gagne du temps jusqu'aux rotations. Patience et utilitaires défensifs.",
-               "tips": ["Ton but est de retarder, pas de tuer : molotov et smoke dès le premier bruit.",
-                        "Change de position d'un round à l'autre pour ne pas te faire pré-viser.",
-                        "Joue en retrait quand tu es seul : recule et attends le retake plutôt que de mourir en 1 contre 3."],
-               "key": [("ct_site", "temps passé sur un site en CT"), ("hold_share", "duels commencés posé"), ("ct_top", "concentration sur une zone en CT")]},
+               "what": "On defense, holds a site, often alone, and buys time until rotations arrive. Patience and defensive utility.",
+               "tips": ["Your goal is to delay, not to kill: molotov and smoke at the first noise.",
+                        "Change position from one round to the next so you don't get pre-aimed.",
+                        "Play deep when you are alone: fall back and wait for the retake rather than dying 1v3."],
+               "key": [("ct_site", "time spent on a site as CT"), ("hold_share", "duels started standing still"), ("ct_top", "focus on one zone as CT")]},
     "closer": {"name": "Closer / Clutcher", "icon": "🧊",
-               "what": "Il fait ses kills tard dans le round : après-plant, retake, clutchs. Il garde son sang-froid quand le round se décide.",
-               "tips": ["Joue le temps et la bombe en clutch : isole les duels un par un.",
-                        "Reste en vie en début de round : ton impact arrive plus tard.",
-                        "En après-plant, joue les angles qui voient la bombe, pas le spawn adverse."],
-               "key": [("late_share", "part de kills après 60 s"), ("kpr", "kills par round"), ("hold_share", "duels commencés posé")]},
+               "what": "Gets their kills late in the round: post-plant, retake, clutches. Keeps calm when the round is decided.",
+               "tips": ["Play the clock and the bomb in a clutch: isolate duels one by one.",
+                        "Stay alive early in the round: your impact comes later.",
+                        "In the post-plant, play the angles that see the bomb, not the enemy spawn."],
+               "key": [("late_share", "share of kills after 60 s"), ("kpr", "kills per round"), ("hold_share", "duels started standing still")]},
 }
-SOURCES = [("Refrag, les rôles d'une équipe CS2", "https://refrag.gg/blog/cs2-team-roles-explained/"),
-           ("Esports.gg, tous les rôles en CS2", "https://esports.gg/news/counter-strike-2/all-roles-in-cs2/"),
-           ("CS2Hype, rôle d'entry fragger", "https://cs2hype.com/roles/entry-fragger"),
-           ("CS2Hype, rôle de rifler", "https://cs2hype.com/roles/rifler")]
+SOURCES = [("Refrag, the roles of a CS2 team", "https://refrag.gg/blog/cs2-team-roles-explained/"),
+           ("Esports.gg, every role in CS2", "https://esports.gg/news/counter-strike-2/all-roles-in-cs2/"),
+           ("CS2Hype, the entry fragger role", "https://cs2hype.com/roles/entry-fragger"),
+           ("CS2Hype, the rifler role", "https://cs2hype.com/roles/rifler")]
 WEAPON_FR = {"ak47": "AK-47", "m4a1": "M4A4", "m4a1_silencer": "M4A1-S", "awp": "AWP", "ssg08": "Scout", "deagle": "Desert Eagle",
              "galilar": "Galil", "famas": "FAMAS", "aug": "AUG", "sg556": "SG 553", "mac10": "MAC-10", "mp9": "MP9", "mp7": "MP7",
              "ump45": "UMP-45", "p90": "P90", "glock": "Glock", "usp_silencer": "USP-S", "hkp2000": "P2000", "p250": "P250",
@@ -205,23 +205,23 @@ def profile(steamid, xhair_pct=None):
         if cond:
             traits.append({"label": label, "text": text() if callable(text) else text})
     ms, iso, dl, tt, hs, up = P.get("move_share"), P.get("iso_T"), P.get("duel_len_won"), P.get("trade_time"), P.get("hs_share"), P.get("util_pr")
-    trait(ms is not None and ms >= 70, "Agressif", lambda: f"Tu engages en mouvement dans {fmt(r.move_share, 'pct')} de tes duels (plus que {ms:.0f} % des joueurs).")
-    trait(ms is not None and ms <= 30, "Patient", lambda: f"Tu attends l'adversaire : {fmt(r.hold_share, 'pct')} de tes duels commencent posé.")
-    trait(iso is not None and iso >= 70, "Solitaire", lambda: f"En attaque, ton coéquipier le plus proche est en médiane à {fmt(r.iso_T, 'u')} (plus loin que {iso:.0f} % des joueurs).")
-    trait(iso is not None and iso <= 30, "Joueur d'équipe", lambda: f"En attaque, tu restes groupé : {fmt(r.iso_T, 'u')} du coéquipier le plus proche en médiane.")
-    trait(dl is not None and dl <= 30, "Réflexes rapides", lambda: f"Tu conclus tes duels gagnés en {fmt(r.duel_len_won, 's')} en médiane (plus vite que {100 - dl:.0f} % des joueurs).")
-    trait(dl is not None and dl >= 75, "Duels longs", lambda: f"Tes duels gagnés durent {fmt(r.duel_len_won, 's')} en médiane : tu gagnes à l'usure plus qu'au premier tir.")
-    trait(tt is not None and tt <= 30 and r.trade_rate > 0, "Réflexe de trade", lambda: f"Tu venges un coéquipier en {fmt(r.trade_time, 's')} en médiane.")
-    trait(hs is not None and hs >= 75, "Tireur de tête", lambda: f"{fmt(r.hs_share, 'pct')} de tes kills à la tête (plus que {hs:.0f} % des joueurs).")
-    trait(up is not None and up >= 75, "Utilitaires", lambda: f"{fmt(r.util_pr, 'n')} grenade(s) par round (plus que {up:.0f} % des joueurs).")
-    trait(up is not None and up <= 25, "Peu de grenades", lambda: f"Seulement {fmt(r.util_pr, 'n')} grenade par round (moins que {100 - up:.0f} % des joueurs).")
+    trait(ms is not None and ms >= 70, "Agressif", lambda: f"You engage while moving in {fmt(r.move_share, 'pct')} of your duels (more than {ms:.0f}% of players).")
+    trait(ms is not None and ms <= 30, "Patient", lambda: f"You wait for the enemy: {fmt(r.hold_share, 'pct')} of your duels start with you standing still.")
+    trait(iso is not None and iso >= 70, "Solitaire", lambda: f"On attack, your nearest teammate is at {fmt(r.iso_T, 'u')} (median), further than for {iso:.0f}% of players.")
+    trait(iso is not None and iso <= 30, "Team player", lambda: f"On attack, you stay grouped: {fmt(r.iso_T, 'u')} from your nearest teammate (median).")
+    trait(dl is not None and dl <= 30, "Fast reflexes", lambda: f"You finish the duels you win in {fmt(r.duel_len_won, 's')} (median), faster than {100 - dl:.0f}% of players.")
+    trait(dl is not None and dl >= 75, "Duels longs", lambda: f"The duels you win last {fmt(r.duel_len_won, 's')} (median): you win by outlasting rather than with the first shot.")
+    trait(tt is not None and tt <= 30 and r.trade_rate > 0, "Trade reflex", lambda: f"You avenge a teammate in {fmt(r.trade_time, 's')} (median).")
+    trait(hs is not None and hs >= 75, "Headshot machine", lambda: f"{fmt(r.hs_share, 'pct')} of your kills are headshots (more than {hs:.0f}% of players).")
+    trait(up is not None and up >= 75, "Utilitaires", lambda: f"{fmt(r.util_pr, 'n')} grenade(s) per round (more than {up:.0f}% of players).")
+    trait(up is not None and up <= 25, "Few grenades", lambda: f"Only {fmt(r.util_pr, 'n')} grenade per round (fewer than {100 - up:.0f}% of players).")
     fd = P.get("first_duel_t")
-    trait(fd is not None and fd <= 25, "Début de round", lambda: f"Ton premier duel arrive vers {fmt(r.first_duel_t, 's')} : tu joues le contact tôt.")
-    trait(fd is not None and fd >= 75, "Fin de round", lambda: f"Ton premier duel arrive vers {fmt(r.first_duel_t, 's')} : tu laisses le round se développer.")
-    trait(xhair_pct is not None and xhair_pct >= 75, "Viseur bien placé", lambda: f"Ton viseur est mieux placé que celui de {xhair_pct:.0f} % des joueurs avant les duels.")
+    trait(fd is not None and fd <= 25, "Early in the round", lambda: f"Your first duel comes around {fmt(r.first_duel_t, 's')}: you play for early contact.")
+    trait(fd is not None and fd >= 75, "End of round", lambda: f"Your first duel comes around {fmt(r.first_duel_t, 's')}: you let the round develop.")
+    trait(xhair_pct is not None and xhair_pct >= 75, "Good crosshair placement", lambda: f"Your crosshair is better placed than {xhair_pct:.0f}% of players before duels.")
     # weapons
-    shares = {"AWP": r.awp_share, "rifles": r.rifle_share, "SMG": r.smg_share, "fusils à pompe": r.shotgun_share,
-              "pistolets": r.pistol_share + r.deagle_share}
+    shares = {"AWP": r.awp_share, "rifles": r.rifle_share, "SMG": r.smg_share, "shotguns": r.shotgun_share,
+              "pistols": r.pistol_share + r.deagle_share}
     main_w = max(shares, key=lambda k: shares[k] or 0)
     tw = top_weapons(df, sid)
     weapons = {"shares": {k: round(float(v or 0) * 100) for k, v in shares.items()},
@@ -237,16 +237,16 @@ def profile(steamid, xhair_pct=None):
                           "peers": fmt(peers[m].median(), KIND.get(m, "n")), "best": fmt(top[m].median(), KIND.get(m, "n"))})
     role = ROLES[main]
     name = ("Rifler polyvalent, tendance " + role["name"]) if versatile else role["name"]
-    desc = [f"{'Profil polyvalent' if versatile else role['name']} : {role['what']}"]
-    desc.append(f"Armes : {weapons['shares']['rifles']} % de tes kills au rifle, {weapons['shares']['AWP']} % à l'AWP, "
-                f"{weapons['shares']['SMG']} % en SMG, {weapons['shares']['pistolets']} % au pistolet. "
+    desc = [f"{'Versatile profile' if versatile else role['name']}: {role['what']}"]
+    desc.append(f"Weapons: {weapons['shares']['rifles']}% of your kills with rifles, {weapons['shares']['AWP']}% with the AWP, "
+                f"{weapons['shares']['SMG']}% with SMGs, {weapons['shares']['pistols']}% with pistols. "
                 + ("Favorites : " + ", ".join(f"{t['weapon']} ({t['kills']})" for t in weapons["top"][:3]) + "." if weapons["top"] else ""))
-    desc.append(f"Déplacements : {'tu engages souvent en mouvement' if (r.move_share or 0) > 0.4 else 'tu joues surtout posé'}, "
-                f"à {fmt(r.iso_T, 'u')} de ton coéquipier le plus proche en attaque et {fmt(r.iso_CT, 'u')} en défense.")
-    desc.append(f"Notions : {fmt(r.util_pr, 'n')} grenade(s) et {fmt(r.blind_pr, 'n')} ennemi(s) aveuglé(s) par round, "
-                f"{fmt(r.trade_rate, 'n')} trade(s) par round, {fmt(r.traded_share, 'pct')} de tes morts vengées.")
-    desc.append(f"Réactions : duels gagnés conclus en {fmt(r.duel_len_won, 's')}, premier duel du round vers {fmt(r.first_duel_t, 's')}"
-                + (f", trade en {fmt(r.trade_time, 's')}" if r.trade_time == r.trade_time and r.trade_rate > 0 else "") + ".")
+    desc.append(f"Movement: {'you often engage while moving' if (r.move_share or 0) > 0.4 else 'you mostly play standing still'}, "
+                f"{fmt(r.iso_T, 'u')} from your nearest teammate on attack and {fmt(r.iso_CT, 'u')} on defense.")
+    desc.append(f"Game sense: {fmt(r.util_pr, 'n')} grenade(s) and {fmt(r.blind_pr, 'n')} enemy(ies) flashed per round, "
+                f"{fmt(r.trade_rate, 'n')} trade(s) per round, {fmt(r.traded_share, 'pct')} of your deaths traded.")
+    desc.append(f"Reactions: duels won finished in {fmt(r.duel_len_won, 's')}, first duel of the round around {fmt(r.first_duel_t, 's')}"
+                + (f", trade in {fmt(r.trade_time, 's')}" if r.trade_time == r.trade_time and r.trade_rate > 0 else "") + ".")
     return {"role": main, "name": name, "icon": role["icon"], "versatile": bool(versatile),
             "second": {"role": second, "name": ROLES[second]["name"]} if second else None,
             "scores": [{"role": k, "name": ROLES[k]["name"], "score": round(v)} for k, v in ranked],

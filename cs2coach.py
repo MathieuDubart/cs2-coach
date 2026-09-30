@@ -48,7 +48,7 @@ def collect(args, own_id):
             for m in matchlist.fetch():
                 new.append(m)
         except Exception as e:
-            log("Liste des matchs Valve indisponible (Steam fermé ou CS2 ouvert ?) :", e)
+            log("Valve match list unavailable (Steam closed or CS2 open?):", e)
     codes = list(args.sharecode or [])
     if args.steamid and args.steamid != own_id and not args.no_fetch:
         codes += leetify_codes(args.steamid)
@@ -56,7 +56,7 @@ def collect(args, own_id):
     if args.authcode and args.knowncode:
         key = s.get("steam_api_key")
         if not key:
-            log("Il manque steam_api_key dans out/settings.json pour parcourir l'historique.")
+            log("steam_api_key is missing from out/settings.json to browse the history.")
         else:
             codes += [args.knowncode] + matchlist.history_codes(key, args.steamid, args.authcode, args.knowncode)
             s.setdefault("players", {}).setdefault(str(args.steamid), {}).update(
@@ -69,7 +69,7 @@ def collect(args, own_id):
                 continue
             new += matchlist.fetch_one(mid, oc, tok)
         except Exception as e:
-            log(f"Code {c} : échec ({e})")
+            log(f"Code {c}: failed ({e})")
     for m in new:
         if m.get("url"):
             reg.setdefault(m["match_id"], {}).update(m)
@@ -88,7 +88,7 @@ def leetify_codes(steamid, days=35, limit=15):
                      and dt.datetime.fromisoformat(m["finished_at"][:19]) >= since), key=lambda m: m["finished_at"], reverse=True)
     codes = [m["data_source_match_id"] for m in recent[:limit]]
     fc = sum(1 for m in ms if m.get("data_source") == "faceit")
-    log(f"Leetify : {len(ms)} matchs récents, {len(codes)} de matchmaking de moins de {days} jours, {fc} FACEIT")
+    log(f"Leetify: {len(ms)} recent matches, {len(codes)} matchmaking ones from the last {days} days, {fc} FACEIT")
     return codes
 
 
@@ -131,7 +131,7 @@ def ensure_demos(reg, workers=2, only=None):
             if (only is None or mid in only) and m.get("url") and (not m.get("expired") or _recent(m))
             and not os.path.exists(os.path.join(config.CACHE, f"{mid}.dem"))}
     if todo:
-        log(f"Téléchargement de {len(todo)} démo(s) chez Valve…")
+        log(f"Downloading {len(todo)} demo(s) from Valve…")
     with ThreadPoolExecutor(workers) as ex:
         futs = {ex.submit(_fetch_demo, mid, url): mid for mid, url in todo.items()}
         for i, f in enumerate(as_completed(futs), 1):
@@ -139,14 +139,14 @@ def ensure_demos(reg, workers=2, only=None):
             try:
                 f.result()
                 reg[mid].pop("expired", None)
-                log(f"  démo {i}/{len(todo)} prête")
+                log(f"  demo {i}/{len(todo)} ready")
             except Exception as e:
                 if _recent(reg[mid]):  # not online yet (a few minutes after the match), or a network hiccup
                     reg[mid].pop("expired", None)
-                    log(f"  [{mid}] démo pas encore disponible chez Valve ({e}) : elle arrive quelques minutes après la fin du match. Nouvel essai à la prochaine analyse.")
+                    log(f"  [{mid}] demo not available from Valve yet ({e}): it arrives a few minutes after the match ends. Trying again at the next analysis.")
                 else:
                     reg[mid]["expired"] = True
-                    log(f"  [{mid}] démo indisponible ({e}) : Valve ne la garde qu'environ un mois")
+                    log(f"  [{mid}] demo unavailable ({e}): Valve only keeps it for about a month")
     save_registry(reg)
 
 
@@ -171,11 +171,11 @@ def _ensure_deep(deep):
         out = os.path.join(config.DEEP, mid)
         if os.path.exists(os.path.join(out, "meta.json")):
             continue
-        log(f"[{mid}] extraction détaillée")
+        log(f"[{mid}] detailed extraction")
         try:
             deep.extract(os.path.join(config.CACHE, f), out)
         except Exception as e:
-            log(f"[{mid}] ERREUR extraction : {e}")
+            log(f"[{mid}] extraction ERROR: {e}")
             traceback.print_exc()
 
 
@@ -199,7 +199,7 @@ def _analyze_match(steamid, mid, m):
     try:
         st = analyze.analyze(dem, steamid)
         if st.get("error"):
-            return f"[{mid}] joueur absent"
+            return f"[{mid}] player not found"
         os.makedirs(folder, exist_ok=True)
         st["match"] = {"match_id": mid, "time": m.get("time"), "team_scores": m.get("team_scores"), "duration_s": m.get("duration_s")}
         st["mode"] = game_mode(dem, m.get("players", 10))
@@ -209,7 +209,7 @@ def _analyze_match(steamid, mid, m):
         json.dump(st, open(os.path.join(folder, "stats.json"), "w", encoding="utf-8"), ensure_ascii=False, default=enc)
         return f"[{mid}] {st['map']} {st['final_score']['me']}-{st['final_score']['them']}"
     except Exception as e:
-        return f"[{mid}] ERREUR : {e}"
+        return f"[{mid}] ERROR: {e}"
 
 
 def analyze_player(steamid, reg):
@@ -219,13 +219,13 @@ def analyze_player(steamid, reg):
     import advice
     pdir = config.player_dir(steamid)
     ids = player_matches(steamid)
-    log(f"Joueur {steamid} : {len(ids)} match(s) en cache")
+    log(f"Player {steamid}: {len(ids)} match(es) in cache")
     name = None
     todo = [mid for mid in ids if not os.path.exists(os.path.join(pdir, "matches", mid, "stats.json"))
             and os.path.exists(os.path.join(config.CACHE, f"{mid}.dem"))]
     if todo:
         import multiprocessing
-        log(f"Analyse de {len(todo)} match(s)…")
+        log(f"Analyzing {len(todo)} match(es)…")
         if multiprocessing.current_process().name == "MainProcess" and len(todo) > 1:
             from concurrent.futures import ProcessPoolExecutor, as_completed
             with ProcessPoolExecutor(min(8, len(todo))) as ex:
@@ -239,14 +239,14 @@ def analyze_player(steamid, reg):
     prof = leetify.profile(steamid)
     if not ids:
         if not prof:
-            log("Aucune démo et pas de profil Leetify public : rien à analyser.")
+            log("No demo and no public Leetify profile: nothing to analyze.")
             return None
         os.makedirs(pdir, exist_ok=True)
         lm = leetify.matches(steamid)
         adv = leetify.light_advice(prof, lm, steamid)
         adv["light"] = True
         json.dump(adv, open(os.path.join(pdir, "advice.json"), "w", encoding="utf-8"), ensure_ascii=False, indent=1)
-        log(f"Pas de démo disponible : profil allégé à partir de Leetify ({prof.get('total_matches')} matchs)")
+        log(f"No demo available: light profile built from Leetify ({prof.get('total_matches')} matches)")
         return pdir
     res = cross.run(steamid, set(ids))
     enc = lambda o: o.item() if hasattr(o, "item") else str(o)
@@ -270,7 +270,7 @@ def attach_plan(sid):
     try:
         adv["plan"] = plan.build(sid, adv, load("cross.json"), load("deepdive.json"), light=bool(adv.get("light")))
     except Exception as e:
-        log(f"Plan de progression indisponible : {e}")
+        log(f"Progress plan unavailable: {e}")
         traceback.print_exc()
         return
     json.dump(adv, open(p, "w", encoding="utf-8"), ensure_ascii=False, indent=1, default=str)
@@ -278,7 +278,7 @@ def attach_plan(sid):
         import coach_notes
         coach_notes.write(sid, load("cross.json"), adv.get("plan"))
     except Exception as e:
-        log(f"Notes par carte indisponibles : {e}")
+        log(f"Map notes unavailable: {e}")
 
 
 PARTIAL_HOOK = None  # called with the SteamID once a first profile can be displayed
@@ -295,13 +295,13 @@ def quick_profile(sid):
         return
     prof = leetify.profile(sid)
     if not prof:
-        log("Pas de profil Leetify public : l'analyse repose uniquement sur les démos.")
+        log("No public Leetify profile: the analysis relies on demos only.")
         return
     os.makedirs(pdir, exist_ok=True)
     adv = leetify.light_advice(prof, leetify.matches(sid), sid)
     adv["light"] = True
     json.dump(adv, open(adv_p, "w", encoding="utf-8"), ensure_ascii=False, indent=1)
-    log(f"Profil Leetify affiché ({prof.get('total_matches')} matchs suivis) : analyse des démos en cours…")
+    log(f"Leetify profile shown ({prof.get('total_matches')} matches tracked): analyzing demos…")
     if PARTIAL_HOOK:
         PARTIAL_HOOK(sid)
 
@@ -342,22 +342,22 @@ def minimal_profile(sid, ex):
     maps = sorted((m for m in cs.get("maps", []) if m["rank"] > 0), key=lambda m: -m["rank"])  # rank 0 = unranked
     if len(maps) >= 2 and maps[0]["rank"] - maps[-1]["rank"] >= 2:
         b, w = maps[0], maps[-1]
-        rules.append({"id": "maps", "score": 20, "short": f"Joue {b['map'].split('_')[-1].capitalize()} en priorité",
-                      "title": f"Ta meilleure carte en compétitif : {b['map'].split('_')[-1].capitalize()} ({b['rank_name']}), ta plus faible : {w['map'].split('_')[-1].capitalize()} ({w['rank_name']})",
-                      "why": [f"Rangs compétitifs par carte (csstats.gg) : " + ", ".join(f"{m['map'].split('_')[-1].capitalize()} {m['rank_name']}" for m in maps[:6]) + "."],
-                      "do": ["Choisis ta meilleure carte quand tu veux gagner, travaille la plus faible en Deathmatch et en mode entraînement."]})
+        rules.append({"id": "maps", "score": 20, "short": f"Play {b['map'].split('_')[-1].capitalize()} first",
+                      "title": f"Your best Competitive map: {b['map'].split('_')[-1].capitalize()} ({b['rank_name']}), your weakest: {w['map'].split('_')[-1].capitalize()} ({w['rank_name']})",
+                      "why": [f"Competitive ranks per map (csstats.gg): " + ", ".join(f"{m['map'].split('_')[-1].capitalize()} {m['rank_name']}" for m in maps[:6]) + "."],
+                      "do": ["Pick your best map when you want to win, work on the weakest in Deathmatch and practice mode."]})
     prem = [x for x in cs.get("premier", []) if x.get("current")]
     if len(prem) >= 2:
         cur, prev = prem[0], prem[1]
         delta = cur["current"] - prev["current"]
-        rules.append({"id": "premier", "score": 15, "short": "Premier : " + ("en progression" if delta > 0 else "en baisse"),
-                      "title": f"Premier {cur['season']} : {cur['current']:,} (meilleur {cur['best']:,}), contre {prev['current']:,} en {prev['season']}".replace(",", " "),
+        rules.append({"id": "premier", "score": 15, "short": "Premier: " + ("improving" if delta > 0 else "dropping"),
+                      "title": f"Premier {cur['season']}: {cur['current']:,} (best {cur['best']:,}), vs {prev['current']:,} in {prev['season']}".replace(",", " "),
                       "why": [f"{cur['wins']} victoires cette saison."], "do": []})
-    rules.append({"id": "unlock", "score": 1, "short": "Débloque l'analyse complète",
-                  "title": "Pas de démo ni de profil Leetify : analyse limitée aux classements publics",
-                  "why": ["Valve ne donne pas l'historique d'un joueur à partir de son seul SteamID."],
-                  "do": ["Colle un code de partage de match (CS2 → Regarder → Vos matchs → partager, format CSGO-…) dans la barre de recherche, avec ou sans son lien de profil.",
-                         "Ou crée un compte gratuit sur leetify.com avec ce compte Steam : ses prochains matchs deviendront analysables automatiquement."]})
+    rules.append({"id": "unlock", "score": 1, "short": "Unlock the full analysis",
+                  "title": "No demo and no Leetify profile: analysis limited to public rankings",
+                  "why": ["Valve doesn't give a player's history from their SteamID alone."],
+                  "do": ["Paste a match share code (CS2 → Watch → Your Matches → share, CSGO-… format) in the search bar, with or without the profile link.",
+                         "Or create a free account on leetify.com with this Steam account: its next matches will become analyzable automatically."]})
     adv = {"rules": rules, "strengths": [], "maps": {}, "match_notes": {}, "light": True, "minimal": True, **ex}
     os.makedirs(config.player_dir(sid), exist_ok=True)
     json.dump(adv, open(os.path.join(config.player_dir(sid), "advice.json"), "w", encoding="utf-8"), ensure_ascii=False, indent=1)
@@ -376,13 +376,13 @@ def run_for(query, fetch=True):
     if rest:
         sid, name = leetify.resolve_steamid(rest.split()[0])
         if not sid:
-            raise ValueError(f"Profil Steam introuvable : {rest}")
+            raise ValueError(f"Steam profile not found: {rest}")
     if not sid and not codes:
-        raise ValueError("Colle un lien de profil Steam, un SteamID64, un pseudo d'URL ou un code de partage CSGO-…")
+        raise ValueError("Paste a Steam profile link, a SteamID64, a custom URL name or a CSGO-… share code")
     s = config.settings()
     s.setdefault("own_steamid", own_id)
     if sid:
-        log(f"Profil : {name or '?'} ({sid})")
+        log(f"Profile: {name or '?'} ({sid})")
         p = s.setdefault("players", {}).setdefault(str(sid), {})
         if name:
             p["name"] = name
@@ -396,7 +396,7 @@ def run_for(query, fetch=True):
         ex = extras(sid)
         attach_extras(sid, ex)
     if codes:
-        log(f"{len(codes)} code(s) de partage : récupération des matchs chez Valve…")
+        log(f"{len(codes)} share code(s): fetching the matches from Valve…")
     args = SimpleNamespace(steamid=sid, sharecode=codes, authcode=None, knowncode=None, no_fetch=not fetch, own=False)
     before = set(registry())
     reg = collect(args, own_id)
@@ -412,13 +412,13 @@ def run_for(query, fetch=True):
     if sid:
         if not analyze_player(sid, reg):
             if not ex.get("steam") and not ex.get("csstats"):
-                raise ValueError("Rien de public sur ce joueur : ni démo, ni Leetify, ni csstats.gg. Essaie avec un code de partage de l'un de ses matchs.")
+                raise ValueError("Nothing public about this player: no demo, no Leetify, no csstats.gg. Try with a share code from one of their matches.")
             minimal_profile(sid, ex)
-            log("Pas de démo ni de profil Leetify : profil minimal (classements publics csstats.gg et profil Steam).")
+            log("No demo and no Leetify profile: minimal profile (public csstats.gg rankings and Steam profile).")
         else:
             attach_extras(sid, ex)
         attach_plan(sid)
-        log("Analyse terminée")
+        log("Analysis done")
         return sid
     # share codes only: profile every player of those matches
     import pandas as pd
@@ -430,8 +430,8 @@ def run_for(query, fetch=True):
                 if p_id:
                     players[int(p_id)] = nm
     if not players:
-        raise ValueError("Aucun match récupéré avec ce code : la démo a peut-être expiré chez Valve (environ 1 mois).")
-    log(f"{len(players)} joueurs dans ce(s) match(s) : création de leurs profils…")
+        raise ValueError("No match fetched with this code: the demo may have expired at Valve (about 1 month).")
+    log(f"{len(players)} players in this/these match(es): building their profiles…")
     s = config.settings()
     for p_id, nm in players.items():
         s.setdefault("players", {}).setdefault(str(p_id), {})["name"] = nm
@@ -439,8 +439,8 @@ def run_for(query, fetch=True):
     for i, (p_id, nm) in enumerate(players.items(), 1):
         if analyze_player(p_id, reg):
             attach_plan(p_id)
-        log(f"  profil {i}/{len(players)} : {nm}")
-    log("Analyse terminée")
+        log(f"  profile {i}/{len(players)}: {nm}")
+    log("Analysis done")
     return {"match_players": [{"steamid": str(k), "name": v} for k, v in players.items()]}
 
 
@@ -455,7 +455,7 @@ def sync_steam(sid=None):
     try:
         codes = steamlink.new_codes(sid, log=log)
     except steamlink.SteamError as e:
-        log(f"Historique Steam indisponible : {e}")
+        log(f"Steam history unavailable: {e}")
         codes = []
     key = s.get("steam_api_key")
     if key:
@@ -476,10 +476,10 @@ def sync_steam(sid=None):
         steamlink.done_codes(sid, got)
     new = {mid for mid in reg if mid not in before or (reg[mid].get("accounts") and not before[mid].get("accounts"))}
     if len(got) < len(codes):
-        log(f"{len(codes) - len(got)} match(s) pas encore récupéré(s) : Steam doit être ouvert et CS2 fermé. Nouvel essai à la prochaine synchro.")
+        log(f"{len(codes) - len(got)} match(es) not fetched yet: Steam must be open and CS2 closed. Trying again at the next sync.")
     fresh = [mid for mid in new if mid not in before]
     pend = pending_demos(reg) if sid == own_id else set()
-    log(f"{len(fresh)} nouveau(x) match(s)" + (f", {len(pend)} démo(s) encore à récupérer" if pend - set(fresh) else ""))
+    log(f"{len(fresh)} new match(es)" + (f", {len(pend)} demo(s) still to fetch" if pend - set(fresh) else ""))
     if not fresh and not pend and os.path.exists(os.path.join(config.player_dir(sid), "advice.json")):
         attach_plan(sid)  # history-only updates (sessions, friends, playtime) still change the plan
         return sid
@@ -492,13 +492,13 @@ def sync_steam(sid=None):
     if analyze_player(sid, reg):
         attach_extras(sid)
         attach_plan(sid)
-    log("Synchronisation terminée")
+    log("Sync done")
     return sid
 
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--steamid", help="SteamID64, lien de profil Steam ou pseudo d'URL")
+    ap.add_argument("--steamid", help="SteamID64, Steam profile link or custom URL name")
     ap.add_argument("--sharecode", action="append")
     ap.add_argument("--authcode")
     ap.add_argument("--knowncode")
@@ -512,9 +512,9 @@ def main():
         import leetify
         sid, target_name = leetify.resolve_steamid(args.steamid)
         if not sid:
-            log(f"Profil introuvable : {args.steamid}")
+            log(f"Profile not found: {args.steamid}")
             return
-        log(f"Profil : {target_name or '?'} ({sid})")
+        log(f"Profile: {target_name or '?'} ({sid})")
         args.steamid = sid
     s = config.settings()
     s.setdefault("own_steamid", own_id)

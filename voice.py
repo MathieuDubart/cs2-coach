@@ -83,7 +83,7 @@ class Recorder:
                 return self.meta
             os.makedirs(DIR, exist_ok=True)
             now = dt.datetime.now()
-            rid = f"{now:%Y%m%d_%H%M%S}_{(map_name or 'partie').replace('de_', '').replace('cs_', '')}"
+            rid = f"{now:%Y%m%d_%H%M%S}_{(map_name or 'match').replace('de_', '').replace('cs_', '')}"
             name = chosen_device()
             dev = None
             if name:  # PortAudio shortens names to 31 characters with some drivers
@@ -162,7 +162,7 @@ def on_gsi(g):
             pause_transcription()  # all the power for the game
             REC.start(g.get("map"), g.get("steamid"), "auto")
         except Exception as e:
-            print("micro indisponible :", e, flush=True)
+            print("microphone unavailable:", e, flush=True)
             return
     if REC.recording():
         key = (g.get("round"), g.get("round_phase"), g.get("side"))
@@ -438,19 +438,19 @@ def analyze(rid, sid):
 def tips(a):
     T = []
     if a["aligned"] and a["deaths"] and a["silent_deaths"] / a["deaths"] >= 0.4:
-        T.append(f"{a['silent_deaths']} morts sur {a['deaths']} sans info dans les 10 s avant : annonce ce que tu vois avant de prendre le duel, pas après.")
+        T.append(f"{a['silent_deaths']} deaths out of {a['deaths']} without any info in the 10 s before: call what you see before taking the duel, not after.")
     if a["info"] >= 5 and a["complete_share"] < 50:
-        T.append(f"Seulement {a['complete_share']} % de tes infos disent où ET combien (ou les dégâts) : « deux B, un touché à 80 » plutôt que « ils sont B ».")
+        T.append(f"Only {a['complete_share']}% of your calls say where AND how many (or the damage): 'two B, one tagged for 80' rather than 'they're B'.")
     if a["throws"] >= 4 and a["announced"] / a["throws"] < 0.5:
-        T.append(f"{a['announced']} grenades annoncées sur {a['throws']} : dis « flash » avant de la lancer, tes coéquipiers se retournent.")
+        T.append(f"{a['announced']} grenades called out of {a['throws']}: say 'flash' before throwing it, your teammates turn away.")
     if a["clutch_talk_rounds"]:
-        T.append(f"Tu as parlé pendant {a['clutch_talk_rounds']} clutch de coéquipier : une info utile, puis silence.")
+        T.append(f"You talked during {a['clutch_talk_rounds']} teammate clutch(es): one useful piece of info, then silence.")
     if a["tilt"] >= 3:
-        T.append(f"{a['tilt']} phrases d'énervement : après une erreur, une respiration, puis une info utile à l'équipe.")
+        T.append(f"{a['tilt']} frustrated phrases: after a mistake, one breath, then one useful piece of info for the team.")
     if a["aligned"] and a["rounds_n"] and a["silent_rounds"] / a["rounds_n"] >= 0.4:
-        T.append(f"Aucun call dans {a['silent_rounds']} rounds sur {a['rounds_n']} : même en lurk, annonce ce que tu entends (rotations, pas).")
+        T.append(f"No call in {a['silent_rounds']} rounds out of {a['rounds_n']}: even when lurking, call what you hear (rotations, steps).")
     if not T:
-        T.append("Tes calls sont propres : continue à dire où, combien et ce que tu vas faire.")
+        T.append("Your calls are clean: keep saying where, how many and what you are going to do.")
     return T
 
 
@@ -465,7 +465,7 @@ def summary(sid, limit=6):
             try:
                 a = analyze(r["id"], sid)
             except Exception as e:
-                print("analyse des calls impossible :", e)
+                print("call analysis impossible:", e)
                 a = None
             if a:
                 out.append(a)

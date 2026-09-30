@@ -85,7 +85,7 @@ def status():
 def install(port):
     d = cfg_dir()
     if not d:
-        raise ValueError("Dossier de CS2 introuvable : CS2 est-il installé avec Steam sur ce PC ?")
+        raise ValueError("CS2 folder not found: is CS2 installed with Steam on this PC?")
     open(os.path.join(d, NAME), "w", encoding="utf-8").write(config_text(port))
     return status()
 
@@ -218,7 +218,7 @@ def update(payload):
             try:
                 _hist(mp, rd, side if own else None)
             except Exception as e:
-                print("historique des rounds :", e, flush=True)
+                print("round history:", e, flush=True)
         elif pl.get("activity") == "menu":
             STATE.update({"map": None, "map_phase": None})
         now = time.time()

@@ -18,53 +18,53 @@ DIR = os.path.join(config.OUT, "experiments")
 
 # metric: (label, unit, higher_is_better)
 METRICS = {
-    "rating": ("note du match (≈ rating HLTV 2.0)", "", True),
-    "adr": ("dégâts par round", "", True),
-    "traded_pct": ("morts vengées", "%", True),
-    "nades_unused_pr": ("grenades mortes avec toi par round", "", False),
-    "xhair": ("écart du viseur avant le duel", "°", False),
-    "pistol_moving": ("tirs au pistolet en mouvement", "%", False),
-    "isolated_pr": ("morts isolées par round", "", False),
-    "adv_throw": ("avantages numériques rendus (par round d'avantage)", "%", False),
-    "rot_died": ("morts pendant une rotation", "%", False),
-    "rt_solo": ("morts seul en retake", "%", False),
-    "steps_alone_pr": ("pas audibles quand tu es seul, par round", "", False),
-    "open_win": ("premiers duels gagnés", "%", True),
-    "weapon_duels": ("duels gagnés avec l'arme", "%", True),
-    "weapon_adr": ("dégâts par round avec l'arme", "", True),
-    "zone_duels": ("duels gagnés dans la zone", "%", True),
-    "first_game": ("note de la 1re game de la session", "", True),
+    "rating": ("match rating (≈ HLTV 2.0 rating)", "", True),
+    "adr": ("damage per round", "", True),
+    "traded_pct": ("deaths traded", "%", True),
+    "nades_unused_pr": ("grenades that died with you per round", "", False),
+    "xhair": ("crosshair offset before the duel", "°", False),
+    "pistol_moving": ("pistol shots fired while moving", "%", False),
+    "isolated_pr": ("isolated deaths per round", "", False),
+    "adv_throw": ("man advantages thrown (per advantage round)", "%", False),
+    "rot_died": ("deaths during a rotation", "%", False),
+    "rt_solo": ("deaths alone in a retake", "%", False),
+    "steps_alone_pr": ("audible steps when you are alone, per round", "", False),
+    "open_win": ("opening duels won", "%", True),
+    "weapon_duels": ("duels won with the weapon", "%", True),
+    "weapon_adr": ("damage per round with the weapon", "", True),
+    "zone_duels": ("duels won in the zone", "%", True),
+    "first_game": ("rating of the first game of the session", "", True),
 }
 
 TEMPLATES = {
-    "weapon_swap": {"cat": "Arme", "title": "Remplacer {weapon} par {alt}", "metric": "weapon_duels", "min": 25, "unit_n": "duels",
-                    "how": ["Pendant 5 games, achète {alt} à chaque fois que tu aurais pris {weapon}.", "Le coach compare tes duels et tes dégâts avec chacune des deux armes."]},
-    "weapon_keep": {"cat": "Arme", "title": "Jouer {weapon} en priorité", "metric": "weapon_adr", "min": 20, "unit_n": "rounds",
-                    "how": ["Achète {weapon} dès que l'économie le permet pendant 5 games."]},
-    "zone": {"cat": "Position", "title": "Jouer {zone_name} sur {map_name} en {side}", "metric": "zone_duels", "min": 12, "unit_n": "duels",
-             "how": ["Sur {map_name} en {side}, prends {zone_name} dès que c'est libre, pendant 3 à 5 games sur cette carte.", "Le coach mesure tes duels dans la zone."]},
-    "trade_distance": {"cat": "Habitude", "title": "Rester à distance de trade", "metric": "isolated_pr", "min": 4, "unit_n": "games",
-                       "how": ["Avant chaque duel, un coéquipier doit pouvoir te venger en moins de 2 secondes.", "Si personne ne te couvre : recule ou attends."]},
-    "nades_40s": {"cat": "Habitude", "title": "Règle des 40 secondes : grenades lancées", "metric": "nades_unused_pr", "min": 4, "unit_n": "games",
-                  "how": ["En T, à 1:15 au chrono, toutes tes grenades doivent être parties.", "En CT, ralentis le premier contact avec une molotov ou une HE."]},
-    "advantage": {"cat": "Habitude", "title": "En avantage numérique, je joue le trade", "metric": "adv_throw", "min": 4, "unit_n": "games",
-                  "how": ["Dès que ton équipe a un joueur de plus : plus de duel seul, tu joues à deux et tu fais tourner le chrono.", "Regroupe-toi sur un site plutôt que de chercher un kill de plus."]},
-    "rotation": {"cat": "Mi-round", "title": "Rotations par la route sûre, au bon signal", "metric": "rot_died", "min": 4, "unit_n": "games",
-                 "how": ["Pars en rotation seulement sur une info sûre (bombe vue, 3 joueurs, 2 flashs et plus).", "Prends la route qui te garde couvert et annonce « je tourne »."]},
-    "retake_group": {"cat": "Mi-round", "title": "Retake groupé, jamais seul", "metric": "rt_solo", "min": 4, "unit_n": "games",
-                     "how": ["Bombe posée : attends tes coéquipiers et entrez sur la même flash.", "Seul contre 3 ou plus avec peu de temps : sauve ton arme."]},
-    "silent": {"cat": "Habitude", "title": "Marcher (Shift) quand tu es seul", "metric": "steps_alone_pr", "min": 4, "unit_n": "games",
-               "how": ["Dès que tu es à plus de 1 200 unités d'un coéquipier en T, et dans tous les clutchs : Shift.", "Recharge silencieuse (maintiens R) si un ennemi est proche."]},
-    "prefire": {"cat": "Entraînement", "title": "10 min de prefire avant de jouer", "metric": "xhair", "min": 5, "unit_n": "games",
-                "how": ["Avant chaque session : 10 minutes de carte de prefire (workshop) sur la carte que tu vas jouer.", "En jeu : viseur à hauteur de tête sur le prochain angle, pas au sol."]},
-    "counter_strafe": {"cat": "Entraînement", "title": "Contre-strafe au pistolet", "metric": "pistol_moving", "min": 5, "unit_n": "games",
-                       "how": ["Aim Botz, 5 min au pistolet : A-D, arrêt, un tir, jamais en mouvement.", "Deathmatch pistolets 5 min avant la session."]},
-    "warmup": {"cat": "Session", "title": "Échauffement de 15 min avant la 1re game", "metric": "first_game", "min": 4, "unit_n": "sessions",
-               "how": ["5 min Aim Botz ou Aim Rush, 5 min Deathmatch, 5 min de stuffs sur la carte du jour.", "Note-le dans le journal d'avant-session."]},
-    "session_limit": {"cat": "Session", "title": "Maximum 3 games par session, stop après 2 défaites", "metric": "rating", "min": 6, "unit_n": "games",
-                      "how": ["Au bout de 3 games ou de 2 défaites d'affilée : pause de 30 minutes minimum ou fin de session."]},
-    "opening": {"cat": "Habitude", "title": "Ouvertures avec flash uniquement", "metric": "open_win", "min": 5, "unit_n": "games",
-                "how": ["Plus de premier duel à sec : flash (la tienne ou celle d'un coéquipier) ou tu laisses l'ouverture."]},
+    "weapon_swap": {"cat": "Arme", "title": "Replace {weapon} with {alt}", "metric": "weapon_duels", "min": 25, "unit_n": "duels",
+                    "how": ["For 5 games, buy {alt} every time you would have bought {weapon}.", "The coach compares your duels and your damage with each of the two weapons."]},
+    "weapon_keep": {"cat": "Arme", "title": "Play {weapon} first", "metric": "weapon_adr", "min": 20, "unit_n": "rounds",
+                    "how": ["Buy {weapon} as soon as the economy allows, for 5 games."]},
+    "zone": {"cat": "Position", "title": "Play {zone_name} on {map_name} as {side}", "metric": "zone_duels", "min": 12, "unit_n": "duels",
+             "how": ["On {map_name} as {side}, take {zone_name} whenever it's free, for 3 to 5 games on this map.", "The coach measures your duels in the zone."]},
+    "trade_distance": {"cat": "Habitude", "title": "Stay within trade distance", "metric": "isolated_pr", "min": 4, "unit_n": "games",
+                       "how": ["Before every duel, a teammate must be able to avenge you within 2 seconds.", "If nobody covers you: fall back or wait."]},
+    "nades_40s": {"cat": "Habitude", "title": "40-second rule: grenades thrown", "metric": "nades_unused_pr", "min": 4, "unit_n": "games",
+                  "how": ["As T, at 1:15 on the clock, all your grenades must be gone.", "As CT, slow down the first contact with a molotov or an HE."]},
+    "advantage": {"cat": "Habitude", "title": "With a man advantage, I play the trade", "metric": "adv_throw", "min": 4, "unit_n": "games",
+                  "how": ["As soon as your team has one more player: no more solo duels, you play in pairs and run the clock.", "Regroup on a site rather than looking for one more kill."]},
+    "rotation": {"cat": "Mi-round", "title": "Rotations through the safe route, on the right signal", "metric": "rot_died", "min": 4, "unit_n": "games",
+                 "how": ["Only rotate on solid info (bomb seen, 3 players, 2 flashes or more).", "Take the route that keeps you covered and call 'rotating'."]},
+    "retake_group": {"cat": "Mi-round", "title": "Grouped retake, never alone", "metric": "rt_solo", "min": 4, "unit_n": "games",
+                     "how": ["Bomb planted: wait for your teammates and go in on the same flash.", "Alone against 3 or more with little time: save your weapon."]},
+    "silent": {"cat": "Habitude", "title": "Walk (Shift) when you are alone", "metric": "steps_alone_pr", "min": 4, "unit_n": "games",
+               "how": ["As soon as you are more than 1,200 units away from a teammate as T, and in every clutch: Shift.", "Silent reload (hold R) if an enemy is close."]},
+    "prefire": {"cat": "Training", "title": "10 min of prefire before playing", "metric": "xhair", "min": 5, "unit_n": "games",
+                "how": ["Before each session: 10 minutes of a prefire map (workshop) on the map you are about to play.", "In game: crosshair at head height on the next angle, not on the floor."]},
+    "counter_strafe": {"cat": "Training", "title": "Counter-strafe with pistols", "metric": "pistol_moving", "min": 5, "unit_n": "games",
+                       "how": ["Aim Botz, 5 min with a pistol: A-D, stop, one shot, never while moving.", "Pistol-only Deathmatch for 5 min before the session."]},
+    "warmup": {"cat": "Session", "title": "15-min warm-up before the 1st game", "metric": "first_game", "min": 4, "unit_n": "sessions",
+               "how": ["5 min of Aim Botz or Aim Rush, 5 min of Deathmatch, 5 min of lineups on the day's map.", "Note it in the pre-session journal."]},
+    "session_limit": {"cat": "Session", "title": "At most 3 games per session, stop after 2 losses", "metric": "rating", "min": 6, "unit_n": "games",
+                      "how": ["After 3 games or 2 losses in a row: a break of at least 30 minutes, or end of session."]},
+    "opening": {"cat": "Habitude", "title": "Only open with a flash", "metric": "open_win", "min": 5, "unit_n": "games",
+                "how": ["No more dry opening duels: flash (yours or a teammate's) or you leave the opening to someone else."]},
 }
 
 
@@ -92,7 +92,7 @@ def title_of(template, params):
 
 def start(sid, template, params=None):
     if template not in TEMPLATES:
-        raise ValueError("expérience inconnue")
+        raise ValueError("unknown experiment")
     exps = load(sid)
     e = {"id": uuid.uuid4().hex[:8], "template": template, "params": params or {}, "title": title_of(template, params),
          "started": dt.datetime.now().isoformat(timespec="minutes"), "status": "active", "ended": None}
@@ -244,7 +244,7 @@ def evaluate(sid, e, hist=None, stats_by_id=None):
     label, unit, hib = METRICS[tpl["metric"]]
     need = tpl["min"]
     have = a["n"] if tpl["unit_n"] in ("duels", "rounds") else a["games"]
-    verdict, z = "en cours", None
+    verdict, z = "in progress", None
     if a["value"] is not None and b["value"] is not None:
         if a["kind"] == "prop" and b["kind"] == "prop" and a["n"] and b["n"]:
             p = (a["k"] + b["k"]) / (a["n"] + b["n"])
@@ -255,9 +255,9 @@ def evaluate(sid, e, hist=None, stats_by_id=None):
             z = (a["value"] - b["value"]) / se if se else None
     if have >= need and z is not None:
         good = z if hib else -z
-        verdict = "ça marche" if good >= 1.64 else "ça dégrade" if good <= -1.64 else "pas d'effet net"
+        verdict = "it works" if good >= 1.64 else "it hurts" if good <= -1.64 else "no clear effect"
     elif have >= need:
-        verdict = "pas assez de données de comparaison"
+        verdict = "not enough data to compare yet"
     return {**e, "category": tpl["cat"], "how": [h.format(**{**(e.get("params") or {}), "map_name": (e.get("params") or {}).get("map", "").split("_")[-1].capitalize()}) for h in tpl["how"]],
             "metric": label, "unit": unit, "higher_better": hib, "before": b, "after": a, "progress": [min(have, need), need, tpl["unit_n"]],
             "z": None if z is None else round(z, 2), "verdict": verdict}
@@ -280,28 +280,28 @@ def suggestions(sid, adv, mid_bench=None, weapons_info=None, ctx=None, cross=Non
         elif s["kind"] == "weapon_strong":
             add("weapon_keep", s["text"], {"weapon": s["weapon"]}, 3)
     if "trade" in rid or "lastalive" in rid:
-        add("trade_distance", "Tes morts sont rarement vengées : c'est la piste la plus rentable.", prio=9)
+        add("trade_distance", "Your deaths rarely get traded: this is the most profitable thing to work on.", prio=9)
     if "nades" in rid:
-        add("nades_40s", "Tu meurs souvent avec des grenades en poche.", prio=7)
+        add("nades_40s", "You often die with grenades in your pockets.", prio=7)
     if "xhair" in rid:
-        add("prefire", "Ton viseur est loin de la tête quand le duel commence.", prio=7)
+        add("prefire", "Your crosshair is far from the head when the duel starts.", prio=7)
     if "pistol" in rid:
-        add("counter_strafe", "Beaucoup de tes tirs au pistolet partent en mouvement.", prio=6)
+        add("counter_strafe", "Many of your pistol shots are fired while moving.", prio=6)
     if "open" in rid or "early" in rid:
-        add("opening", "Tes premiers duels coûtent des rounds.", prio=6)
+        add("opening", "Your opening duels cost rounds.", prio=6)
     MB = (mid_bench or {}).get("metrics", {})
     if (MB.get("adv_throw") or {}).get("percentile") is not None and MB["adv_throw"]["percentile"] <= 35:
-        add("advantage", f"Tu rends l'avantage numérique plus souvent que {100 - MB['adv_throw']['percentile']:.0f} % des joueurs.", prio=8)
+        add("advantage", f"You throw away the man advantage more often than {100 - MB['adv_throw']['percentile']:.0f}% of players.", prio=8)
     if (MB.get("rot_died") or {}).get("percentile") is not None and MB["rot_died"]["percentile"] <= 35:
-        add("rotation", "Tu meurs souvent pendant tes rotations.", prio=7)
+        add("rotation", "You often die during your rotations.", prio=7)
     if (MB.get("rt_solo") or {}).get("percentile") is not None and MB["rt_solo"]["percentile"] <= 35:
-        add("retake_group", "Tu meurs souvent seul en retake.", prio=7)
+        add("retake_group", "You often die alone in retakes.", prio=7)
     if (MB.get("steps_alone") or {}).get("percentile") is not None and MB["steps_alone"]["percentile"] <= 40:
-        add("silent", "Tu fais du bruit à portée d'ennemi quand tu es seul : la base de ton rôle de lurker.", prio=6)
+        add("silent", "You make noise within enemy earshot when you are alone: the basics of your lurker role.", prio=6)
     recs = (ctx or {}).get("recs", [])
     if any(r["kind"] in ("stop", "tilt") for r in recs) or (ctx and ctx["sessions"]["max_games"] >= 4):
-        add("session_limit", "Tes sessions longues ou après défaites font baisser ta note.", prio=5)
-    add("warmup", "Mesure l'effet d'un vrai échauffement sur ta première game.", prio=4)
+        add("session_limit", "Long sessions or sessions after losses lower your rating.", prio=5)
+    add("warmup", "Measure the effect of a real warm-up on your first game.", prio=4)
     # positions the base wins in and the player rarely plays
     for m in (cross or {}).get("maps", [])[:3]:
         for side, Sd in m["sides"].items():
@@ -309,7 +309,7 @@ def suggestions(sid, adv, mid_bench=None, weapons_info=None, ctx=None, cross=Non
                   and "spawn" not in z["key"].lower() and z["t_med"] <= 45]
             if pz:
                 z = pz[0]
-                add("zone", f"Sur {m['map'].split('_')[-1].capitalize()} en {side}, les joueurs de la base gagnent {z['win']} % de leurs duels en {z['name']} et tu n'y vas presque jamais.",
+                add("zone", f"On {m['map'].split('_')[-1].capitalize()} as {side}, players in the base win {z['win']}% of their duels in {z['name']} and you almost never go there.",
                     {"map": m["map"], "side": side, "zone": z["key"], "zone_name": z["name"]}, 4)
                 break
     seen, out = set(), []

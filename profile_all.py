@@ -64,7 +64,7 @@ def main(min_demos=3, workers=None, force=False):
         s.setdefault("players", {}).setdefault(str(sid), {})["name"] = name
     config.save_settings(s)
     workers = workers or max(1, (os.cpu_count() or 4) - 2)
-    print(f"{len(todo)} profils à construire ({workers} processus)", flush=True)
+    print(f"{len(todo)} profiles to build ({workers} processes)", flush=True)
     done = 0
     with ProcessPoolExecutor(workers) as ex:
         futs = {ex.submit(work, sid): (sid, name, n) for sid, name, n in todo}
@@ -73,9 +73,9 @@ def main(min_demos=3, workers=None, force=False):
             done += 1
             try:
                 _, ok, secs = f.result()
-                print(f"[{done}/{len(todo)}] {name} ({n} démos) {'OK' if ok else 'rien'} {secs}s", flush=True)
+                print(f"[{done}/{len(todo)}] {name} ({n} demos) {'OK' if ok else 'nothing'} {secs}s", flush=True)
             except Exception as e:
-                print(f"[{done}/{len(todo)}] {name} ERREUR {e}", flush=True)
+                print(f"[{done}/{len(todo)}] {name} ERROR {e}", flush=True)
     print("FINI", flush=True)
 
 

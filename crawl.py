@@ -83,7 +83,7 @@ def collect_urls(max_new, prefer_maps, days, per_player=3, own_first=True):
                     todo.append(info[0] | {"crawled": True, "map_hint": m["map_name"]})
                     reg[info[0]["match_id"]] = todo[-1]
                     taken += 1
-                    print(f"  lien {len(todo)}/{max_new} : {m['map_name']} (joueur {pid})", flush=True)
+                    print(f"  link {len(todo)}/{max_new}: {m['map_name']} (player {pid})", flush=True)
             except Exception as e:
                 print(f"  code {code} : {e}", flush=True)
     s = config.settings()
@@ -110,7 +110,7 @@ def process(info):
 
 def main(max_new=40, prefer_maps=None, days=28, workers=4, per_player=3):
     todo = collect_urls(max_new, prefer_maps, days, per_player)
-    print(f"{len(todo)} démos à récupérer", flush=True)
+    print(f"{len(todo)} demos to fetch", flush=True)
     done = 0
     with ThreadPoolExecutor(workers) as ex:
         futs = [ex.submit(process, i) for i in todo]
@@ -120,8 +120,8 @@ def main(max_new=40, prefer_maps=None, days=28, workers=4, per_player=3):
                 done += 1
                 print(f"[{done}/{len(todo)}] {mp} {mid}", flush=True)
             except Exception as e:
-                print(f"  échec : {e}", flush=True)
-    print(f"FINI : {done} nouvelles démos", flush=True)
+                print(f"  failed: {e}", flush=True)
+    print(f"DONE: {done} new demos", flush=True)
 
 
 if __name__ == "__main__":

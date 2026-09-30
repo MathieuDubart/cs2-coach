@@ -184,7 +184,7 @@ def grenade_audit(steamid, my_matches):
                     continue
                 rep = g[(g.speed < 20) | g.jump]
                 b = (rep if len(rep) else g).iloc[0]
-                how = " + ".join(x for x, ok in (("sauté", b.jump), ("en courant", b.speed > 150), ("accroupi", b.crouch)) if ok) or "à l'arrêt"
+                how = " + ".join(x for x, ok in (("jump", b.jump), ("running", b.speed > 150), ("accroupi", b.crouch)) if ok) or "standing still"
                 res["missing"].append({"type": b["type"], "from": humanize(str(b.zone)), "to": humanize(str(b.land_zone)) if b.land_zone else None,
                                        "pro_uses": int(len(g)), "side": b.side, "t": round(float(g.t.median())), "how": how,
                                        "by": str(b.thrower_name), "setpos": f"setpos {b.X:.1f} {b.Y:.1f} {b.Z:.1f}; setang {b.pitch:.2f} {b.yaw:.2f} 0",
@@ -245,7 +245,7 @@ def run(steamid):
     E, Dd = [], []
     os.makedirs(os.path.join(pdir, "replays"), exist_ok=True)
     for mid in my_matches:
-        print(f"[{mid}] visibilité et replay", flush=True)
+        print(f"[{mid}] visibility and replay", flush=True)
         e, d = engagements(os.path.join(config.CACHE, f"{mid}.dem"))
         E.append(e.assign(match=mid))
         Dd.append(d.assign(match=mid))

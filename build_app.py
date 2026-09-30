@@ -181,7 +181,7 @@ def main(out_path=None):
     index = build()
     shutil.copy(os.path.join(SITE, "index.html"), out_path or os.path.join(config.OUT, "app.html"))
     size = sum(os.path.getsize(os.path.join(dp, f)) for dp, _, fs in os.walk(SITE) for f in fs)
-    print(f"{SITE} : {len(index)} joueurs, {size // 1024 // 1024} Mo")
+    print(f"{SITE}: {len(index)} players, {size // 1024 // 1024} MB")
 
 
 if __name__ == "__main__":

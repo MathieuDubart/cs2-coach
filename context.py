@@ -16,7 +16,7 @@ import config
 
 SESSION_GAP_MIN = 45        # more than 45 min between two games = new session
 JOURNAL = os.path.join(config.OUT, "journal")
-RATING_SRC = {"label": "flashed.gg, rating HLTV 2.0 reconstitué", "url": "https://flashed.gg/posts/reverse-engineering-hltv-rating/"}
+RATING_SRC = {"label": "flashed.gg, HLTV 2.0 rating rebuilt", "url": "https://flashed.gg/posts/reverse-engineering-hltv-rating/"}
 
 
 def rating(kills, deaths, assists, adr, kast, rounds):
@@ -158,7 +158,7 @@ def add_checkin(steamid, entry):
 
 
 def _bucket_hour(h):
-    return "matin (6 h-12 h)" if 6 <= h < 12 else "après-midi (12 h-18 h)" if 12 <= h < 18 else "soirée (18 h-23 h)" if 18 <= h < 23 else "nuit (23 h-6 h)"
+    return "morning (6am-12pm)" if 6 <= h < 12 else "afternoon (12pm-6pm)" if 12 <= h < 18 else "evening (6pm-11pm)" if 18 <= h < 23 else "night (11pm-6am)"
 
 
 def _stats(ms):
@@ -182,12 +182,12 @@ def _cmp(group, rest):
 
 def _level(z, n):
     if z is None:
-        return "insuffisant"
+        return "not enough data"
     if abs(z) >= 2 and n >= 5:
-        return "fiable"
+        return "reliable"
     if abs(z) >= 1.2 and n >= 3:
-        return "tendance"
-    return "pas d'écart net"
+        return "trend"
+    return "no clear gap"
 
 
 def analyze(steamid):
@@ -211,7 +211,7 @@ def analyze(steamid):
         for i, m in enumerate(s):
             m["session"] = si
             m["index"] = i + 1
-            m["prev"] = "1re game" if i == 0 else ("après 2 défaites ou plus" if streak <= -2 else "après une défaite" if streak == -1 else "après une victoire")
+            m["prev"] = "1st game" if i == 0 else ("after 2+ losses" if streak <= -2 else "after a loss" if streak == -1 else "after a win")
             m["rest_h"] = rest_h if i == 0 else 0
             streak = (min(streak, 0) - 1) if m["result"] == "loss" else (max(streak, 0) + 1 if m["result"] == "win" else 0)
         prev_end = s[-1]["end"]
@@ -256,24 +256,24 @@ def analyze(steamid):
         return {"title": title, "rows": rows}
 
     F = [
-        factor("Moment de la journée", lambda m: _bucket_hour(m["start"].hour),
-               ["matin (6 h-12 h)", "après-midi (12 h-18 h)", "soirée (18 h-23 h)", "nuit (23 h-6 h)"]),
-        factor("Place dans la session", lambda m: "4e game et plus" if m["index"] >= 4 else f"{m['index']}{'re' if m['index'] == 1 else 'e'} game",
-               ["1re game", "2e game", "3e game", "4e game et plus"]),
-        factor("Après le résultat précédent", lambda m: m["prev"], ["1re game", "après une victoire", "après une défaite", "après 2 défaites ou plus"]),
-        factor("Groupe", lambda m: None if m["party_size"] is None else ("solo" if m["party_size"] == 1 else "duo" if m["party_size"] == 2 else f"groupe de {m['party_size']}"),
-               ["solo", "duo", "groupe de 3", "groupe de 4", "groupe de 5"]),
-        factor("Jour", lambda m: "week-end" if m["start"].weekday() >= 5 else "semaine", ["semaine", "week-end"]),
-        factor("Repos avant la session", lambda m: None if m["index"] != 1 or m["rest_h"] is None else ("moins de 12 h" if m["rest_h"] < 12 else "12 h ou plus"),
-               ["moins de 12 h", "12 h ou plus"]),
-        factor("Sommeil (journal)", lambda m: None if not m["checkin"] or m["checkin"].get("sleep_h") in (None, "") else
-               ("moins de 6 h" if float(m["checkin"]["sleep_h"]) < 6 else "6 h-7 h 30" if float(m["checkin"]["sleep_h"]) < 7.5 else "7 h 30 et plus"),
-               ["moins de 6 h", "6 h-7 h 30", "7 h 30 et plus"]),
-        factor("Échauffement (journal)", lambda m: None if not m["checkin"] or not m["checkin"].get("warmup") else
-               ("sans échauffement" if m["checkin"]["warmup"] == "none" else "échauffé"), ["sans échauffement", "échauffé"]),
-        factor("Énergie (journal)", lambda m: None if not m["checkin"] or not m["checkin"].get("energy") else
-               ("basse (1-2)" if int(m["checkin"]["energy"]) <= 2 else "moyenne (3)" if int(m["checkin"]["energy"]) == 3 else "haute (4-5)"),
-               ["basse (1-2)", "moyenne (3)", "haute (4-5)"]),
+        factor("Time of day", lambda m: _bucket_hour(m["start"].hour),
+               ["morning (6am-12pm)", "afternoon (12pm-6pm)", "evening (6pm-11pm)", "night (11pm-6am)"]),
+        factor("Game in the session", lambda m: "4th game and later" if m["index"] >= 4 else f"{ORD[m['index']]} game",
+               ["1st game", "2nd game", "3rd game", "4th game and later"]),
+        factor("After the previous result", lambda m: m["prev"], ["1st game", "after a win", "after a loss", "after 2+ losses"]),
+        factor("Group", lambda m: None if m["party_size"] is None else ("solo" if m["party_size"] == 1 else "duo" if m["party_size"] == 2 else f"group of {m['party_size']}"),
+               ["solo", "duo", "group of 3", "group of 4", "group of 5"]),
+        factor("Day", lambda m: "weekend" if m["start"].weekday() >= 5 else "weekday", ["weekday", "weekend"]),
+        factor("Rest before the session", lambda m: None if m["index"] != 1 or m["rest_h"] is None else ("under 12 h" if m["rest_h"] < 12 else "12 h or more"),
+               ["under 12 h", "12 h or more"]),
+        factor("Sleep (journal)", lambda m: None if not m["checkin"] or m["checkin"].get("sleep_h") in (None, "") else
+               ("under 6 h" if float(m["checkin"]["sleep_h"]) < 6 else "6 h to 7.5 h" if float(m["checkin"]["sleep_h"]) < 7.5 else "7.5 h or more"),
+               ["under 6 h", "6 h to 7.5 h", "7.5 h or more"]),
+        factor("Warm-up (journal)", lambda m: None if not m["checkin"] or not m["checkin"].get("warmup") else
+               ("no warm-up" if m["checkin"]["warmup"] == "none" else "warmed up"), ["no warm-up", "warmed up"]),
+        factor("Energy (journal)", lambda m: None if not m["checkin"] or not m["checkin"].get("energy") else
+               ("low (1-2)" if int(m["checkin"]["energy"]) <= 2 else "medium (3)" if int(m["checkin"]["energy"]) == 3 else "high (4-5)"),
+               ["low (1-2)", "medium (3)", "high (4-5)"]),
     ]
     F = [f for f in F if f["rows"]]
     # partners
@@ -317,38 +317,41 @@ def _name_of(p, ms):
     return str(p)
 
 
+ORD = {1: "1st", 2: "2nd", 3: "3rd"}
+
+
 def _fr(v):
-    return f"{v:.2f}".replace(".", ",")
+    return f"{v:.2f}"
 
 
 def recommendations(F, overall, sessions, partners):
     """Personal rules drawn from the player's own history (only when the data says something)."""
     R = []
     fx = {f["title"]: {r["group"]: r for r in f["rows"]} for f in F}
-    idx = fx.get("Place dans la session", {})
-    late = idx.get("4e game et plus") or idx.get("3e game")
-    if late and late["level"] in ("fiable", "tendance") and (late["delta"] or 0) < 0:
-        R.append({"kind": "stop", "level": late["level"], "text": f"Tes {late['group']} sont nettement moins bonnes ({_fr(late['perf'])} contre {_fr(overall['perf'])} en moyenne sur {late['n']} games) : fixe-toi une limite de {2 if late['group'].startswith('3') else 3} games par session."})
-    after = fx.get("Après le résultat précédent", {}).get("après 2 défaites ou plus")
+    idx = fx.get("Game in the session", {})
+    late = idx.get("4th game and later") or idx.get("3rd game")
+    if late and late["level"] in ("reliable", "trend") and (late["delta"] or 0) < 0:
+        R.append({"kind": "stop", "level": late["level"], "text": f"Your {late['group']}s are clearly worse ({_fr(late['perf'])} vs {_fr(overall['perf'])} on average over {late['n']} games): set yourself a limit of {2 if late['group'].startswith('3') else 3} games per session."})
+    after = fx.get("After the previous result", {}).get("after 2+ losses")
     if after and after["n"] >= 2 and (after["delta"] or 0) < 0:
-        R.append({"kind": "tilt", "level": after["level"], "text": f"Après 2 défaites d'affilée : {after['winrate']} % de victoires et une note de {_fr(after['perf'])} ({after['n']} games). Règle : pause d'au moins 30 min, ou fin de session."})
-    hours = fx.get("Moment de la journée", {})
-    good = [r for r in hours.values() if r["level"] in ("fiable", "tendance") and (r["delta"] or 0) > 0]
-    bad = [r for r in hours.values() if r["level"] in ("fiable", "tendance") and (r["delta"] or 0) < 0]
+        R.append({"kind": "tilt", "level": after["level"], "text": f"After 2 losses in a row: {after['winrate']}% wins and a rating of {_fr(after['perf'])} ({after['n']} games). Rule: a break of at least 30 min, or end the session."})
+    hours = fx.get("Time of day", {})
+    good = [r for r in hours.values() if r["level"] in ("reliable", "trend") and (r["delta"] or 0) > 0]
+    bad = [r for r in hours.values() if r["level"] in ("reliable", "trend") and (r["delta"] or 0) < 0]
     for r in good[:1]:
-        R.append({"kind": "hour", "level": r["level"], "text": f"Tu joues le mieux en {r['group']} : note {_fr(r['perf'])} sur {r['n']} games. Place tes sessions classées sur ce créneau."})
+        R.append({"kind": "hour", "level": r["level"], "text": f"You play best in the {r['group']}: rating {_fr(r['perf'])} over {r['n']} games. Schedule your ranked sessions in that slot."})
     for r in bad[:1]:
-        R.append({"kind": "hour", "level": r["level"], "text": f"En {r['group']}, ta note tombe à {_fr(r['perf'])} ({r['n']} games) : garde ce créneau pour le Deathmatch ou le travail de stuffs."})
-    grp = fx.get("Groupe", {})
+        R.append({"kind": "hour", "level": r["level"], "text": f"In the {r['group']}, your rating drops to {_fr(r['perf'])} ({r['n']} games): keep that slot for Deathmatch or lineup practice."})
+    grp = fx.get("Group", {})
     solo, duo = grp.get("solo"), grp.get("duo")
     if solo and duo and solo["n"] >= 2 and duo["n"] >= 2 and solo["perf"] is not None and duo["perf"] is not None:
-        better = "en duo" if duo["perf"] > solo["perf"] else "en solo"
-        R.append({"kind": "party", "level": _level(duo.get("z"), duo["n"]) if better == "en duo" else _level(solo.get("z"), solo["n"]),
-                  "text": f"Tu performes mieux {better} : note {_fr(max(duo['perf'], solo['perf']))} contre {_fr(min(duo['perf'], solo['perf']))} ({duo['n']} games en duo, {solo['n']} en solo)."})
+        better = "as a duo" if duo["perf"] > solo["perf"] else "solo"
+        R.append({"kind": "party", "level": _level(duo.get("z"), duo["n"]) if better == "as a duo" else _level(solo.get("z"), solo["n"]),
+                  "text": f"You perform better {better}: rating {_fr(max(duo['perf'], solo['perf']))} vs {_fr(min(duo['perf'], solo['perf']))} ({duo['n']} games as a duo, {solo['n']} solo)."})
     for p in partners[:2]:
         if p["n"] >= 3:
-            R.append({"kind": "partner", "level": "tendance" if p["n"] >= 5 else "insuffisant",
-                      "text": f"Avec {p['name']} : {p['w']} victoires, {p['l']} défaites, note {_fr(p['perf'])} ({p['n']} games ensemble)."})
+            R.append({"kind": "partner", "level": "trend" if p["n"] >= 5 else "not enough data",
+                      "text": f"With {p['name']}: {p['w']} wins, {p['l']} losses, rating {_fr(p['perf'])} ({p['n']} games together)."})
     return R
 
 

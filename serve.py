@@ -117,15 +117,15 @@ class Handler(BaseHTTPRequestHandler):
             f = os.path.normpath(os.path.join(build_app.SITE, u.path.lstrip("/")))
             if f.startswith(os.path.normpath(build_app.SITE)) and os.path.exists(f):
                 return self.send(200, open(f, "rb").read())
-            return self.send(404, {"error": "introuvable"})
+            return self.send(404, {"error": "not found"})
         if u.path == "/api/ping":
             return self.send(200, {"ok": True})
         if u.path == "/api/analyze":
             query = (q.get("q") or [""])[0].strip()
             if not query:
-                return self.send(400, {"error": "Recherche vide"})
+                return self.send(400, {"error": "Empty search"})
             if not LOCK.acquire(blocking=False):
-                return self.send(409, {"error": "Une analyse est déjà en cours", "query": JOB["query"]})
+                return self.send(409, {"error": "An analysis is already running", "query": JOB["query"]})
             threading.Thread(target=run_job, args=(query,), daemon=True).start()
             return self.send(200, {"started": True})
         if u.path == "/api/job":
@@ -157,7 +157,7 @@ class Handler(BaseHTTPRequestHandler):
                 name = own_name if own and int(own) == sid else (config.settings().get("players", {}).get(str(sid)) or {}).get("name")
             steamlink.save_login(sid, name)
             return self.redirect("/?steam=ok#steam")
-        return self.send(404, {"error": "introuvable"})
+        return self.send(404, {"error": "not found"})
 
     def redirect(self, url):
         self.send_response(302)
@@ -172,7 +172,7 @@ class Handler(BaseHTTPRequestHandler):
             n = int(self.headers.get("Content-Length") or 0)
             body = json.loads(self.rfile.read(n) or b"{}")
         except (ValueError, json.JSONDecodeError):
-            return self.send(400, {"error": "requête invalide"})
+            return self.send(400, {"error": "invalid request"})
         if u.path == "/api/gsi":  # CS2 Game State Integration: the game itself, many times per round
             import gsi
             ok = gsi.update(body)
@@ -199,13 +199,13 @@ class Handler(BaseHTTPRequestHandler):
                     voice.finish()
                 elif act == "transcribe":
                     if not voice.start_transcription(str(body.get("id") or "")):
-                        return self.send(409, {"error": "Une transcription est déjà en cours."})
+                        return self.send(409, {"error": "A transcription is already running."})
                 elif act == "delete":
                     rid = str(body.get("id") or "")
                     if re.fullmatch(r"[\w-]+", rid):
                         voice.delete(rid)
                 else:
-                    return self.send(404, {"error": "introuvable"})
+                    return self.send(404, {"error": "not found"})
             except Exception as e:
                 return self.send(400, {"error": f"Micro : {e}"})
             return self.send(200, voice_status())
@@ -214,7 +214,7 @@ class Handler(BaseHTTPRequestHandler):
             try:
                 ok = gsi.set_site(int(body.get("round")), body.get("site"))
             except (TypeError, ValueError):
-                return self.send(400, {"error": "round invalide"})
+                return self.send(400, {"error": "invalid round"})
             return self.send(200 if ok else 409, gsi.state())
         if u.path in ("/api/gsi/install", "/api/gsi/uninstall"):
             import gsi
@@ -224,7 +224,7 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send(400, {"error": str(e)})
         sid = str(body.get("sid") or "")
         if not sid.isdigit():
-            return self.send(400, {"error": "joueur manquant"})
+            return self.send(400, {"error": "missing player"})
         try:
             if u.path == "/api/checkin":
                 import context
@@ -272,7 +272,7 @@ class Handler(BaseHTTPRequestHandler):
                         return self.send(200, {"ok": True, "status": steamlink.status(sid)})
                     if act == "sync":
                         if not LOCK.acquire(blocking=False):
-                            return self.send(409, {"error": "Une analyse est déjà en cours", "query": JOB["query"]})
+                            return self.send(409, {"error": "An analysis is already running", "query": JOB["query"]})
                         threading.Thread(target=run_job, args=("Synchronisation Steam", lambda: cs2coach.sync_steam(sid)), daemon=True).start()
                         return self.send(200, {"started": True})
                 except steamlink.SteamError as e:
@@ -282,7 +282,7 @@ class Handler(BaseHTTPRequestHandler):
         except Exception as e:
             traceback.print_exc()
             return self.send(500, {"error": str(e)})
-        return self.send(404, {"error": "introuvable"})
+        return self.send(404, {"error": "not found"})
 
 
 def refresh_plan(sid):
@@ -319,7 +319,7 @@ def voice_watch(every=15):
                 if sid and p.returncode == 0 and not LOCK.locked():
                     refresh_plan(sid)
         except Exception as e:
-            print("surveillance du micro :", e, flush=True)
+            print("microphone watch:", e, flush=True)
 
 
 def auto_sync(every=1800):
@@ -342,27 +342,27 @@ if __name__ == "__main__":
     else:
         sys.stdout.reconfigure(encoding="utf-8")
     if not os.path.exists(os.path.join(build_app.SITE, "index.json")):
-        print("Première construction du site…")
+        print("First build of the site…")
         build_app.build()
     ThreadingHTTPServer.allow_reuse_address = False  # a second instance must fail instead of sharing the port
     try:
         srv = ThreadingHTTPServer(("127.0.0.1", PORT), Handler)
     except OSError:
-        print(f"Coach CS2 tourne déjà : ouvre http://127.0.0.1:{PORT}/#avant")
+        print(f"Coach CS2 is already running: open http://127.0.0.1:{PORT}/#ingame")
         if "--no-browser" not in sys.argv:
-            webbrowser.open(f"http://127.0.0.1:{PORT}/#avant")
+            webbrowser.open(f"http://127.0.0.1:{PORT}/#ingame")
         sys.exit(0)
-    url = f"http://127.0.0.1:{PORT}/#avant"
-    print(f"Coach CS2 : {url}  (Ctrl+C pour arrêter)")
+    url = f"http://127.0.0.1:{PORT}/#ingame"
+    print(f"Coach CS2: {url}  (Ctrl+C to stop)")
     if os.environ.get("COACH_TEST"):  # a test copy: leaves the game's settings, the Steam sync and the microphone alone
-        print("copie de test : détection de la partie, synchronisation et micro laissés à l'application principale")
+        print("test copy: game detection, sync and microphone left to the main app")
     else:
         try:
             import gsi
             if gsi.refresh(PORT):
-                print("Détection de la partie mise à jour : relance CS2 pour qu'il la prenne en compte.")
+                print("Game detection updated: restart CS2 so it picks it up.")
         except Exception as e:
-            print("détection de la partie :", e)
+            print("game detection:", e)
         threading.Thread(target=auto_sync, daemon=True).start()
         threading.Thread(target=voice_watch, daemon=True).start()
     if "--no-browser" not in sys.argv:

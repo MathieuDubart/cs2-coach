@@ -15,18 +15,18 @@ STYLE_PRO = os.path.join(config.OUT, "style_pro")
 DIMS = ["awp_share", "iso_T", "iso_CT", "move_share", "hold_share", "open_rate_T", "open_win", "trade_rate",
         "late_share", "first_duel_t", "util_pr", "ct_site", "hs_share", "duel_len_won"]  # no blind data in pro demos
 PHRASE = {  # dim -> (high, low)
-    "awp_share": ("joue l'AWP", "ne joue presque pas l'AWP"),
-    "iso_T": ("joue loin de son équipe en attaque", "reste groupé en attaque"),
-    "iso_CT": ("défend seul, loin de ses coéquipiers", "défend groupé"),
-    "move_share": ("engage en mouvement", "engage rarement en mouvement"),
-    "hold_share": ("joue posé, attend l'adversaire", "joue rarement posé"),
-    "open_rate_T": ("ouvre les rounds en attaque", "laisse l'ouverture aux autres"),
-    "trade_rate": ("trade beaucoup", "trade peu"),
-    "late_share": ("fait ses kills en fin de round", "fait ses kills tôt"),
-    "first_duel_t": ("prend son premier duel tard", "prend son premier duel tôt"),
-    "util_pr": ("utilise beaucoup de grenades", "utilise peu de grenades"),
-    "ct_site": ("tient les sites en défense", "joue hors des sites en défense"),
-    "hs_share": ("vise la tête", ""),
+    "awp_share": ("plays the AWP", "barely plays the AWP"),
+    "iso_T": ("plays far from the team on attack", "stays grouped on attack"),
+    "iso_CT": ("defends alone, far from teammates", "defends grouped"),
+    "move_share": ("engages while moving", "rarely engages while moving"),
+    "hold_share": ("plays still, waits for the enemy", "rarely plays still"),
+    "open_rate_T": ("opens rounds on attack", "leaves the opening to others"),
+    "trade_rate": ("trades a lot", "trades little"),
+    "late_share": ("gets kills late in the round", "gets kills early"),
+    "first_duel_t": ("takes their first duel late", "takes their first duel early"),
+    "util_pr": ("uses a lot of grenades", "uses few grenades"),
+    "ct_site": ("holds sites on defense", "plays off-site on defense"),
+    "hs_share": ("aims for the head", ""),
 }
 _C = {}
 
@@ -156,14 +156,14 @@ def for_player(steamid):
                 maps.setdefault(m, {})[side] = {"pros": cands[:4], "mine": [{"zone": humanize(z), "share": round(v * 100)} for z, v in my_top]}
     return {"similar": rows[:6], "same_role": same_role, "role": my_role, "role_name": archetype.ROLES[my_role]["name"],
             "maps": maps, "n_pros": int(len(agg)), "n_maps": n_maps,
-            "note": "Démos officielles de matchs pro récents (HLTV). Similarité = proximité moyenne sur 15 indicateurs de style, en percentiles de la base."}
+            "note": "Official demos of recent pro matches (HLTV). Similarity = average closeness over 15 style indicators, in base percentiles."}
 
 
-TRAIT_TXT = [("move_share", 70, "Agressif", "engage en mouvement"), ("hold_share", 70, "Patient", "attend l'adversaire posé"),
-             ("iso_T", 70, "Solitaire", "joue loin de son équipe en attaque"), ("iso_T", -30, "Joueur d'équipe", "reste groupé en attaque"),
-             ("duel_len_won", -30, "Réflexes rapides", "conclut ses duels très vite"), ("trade_rate", 70, "Trader", "venge souvent ses coéquipiers"),
-             ("hs_share", 75, "Tireur de tête", "beaucoup de kills à la tête"), ("util_pr", 75, "Utilitaires", "lance beaucoup de grenades"),
-             ("open_rate_T", 75, "Ouvreur", "provoque les premiers duels en attaque"), ("late_share", 75, "Fin de round", "fait ses kills tard")]
+TRAIT_TXT = [("move_share", 70, "Agressif", "engages while moving"), ("hold_share", 70, "Patient", "waits for the enemy standing still"),
+             ("iso_T", 70, "Solitaire", "plays far from the team on attack"), ("iso_T", -30, "Team player", "stays grouped on attack"),
+             ("duel_len_won", -30, "Fast reflexes", "finishes duels very fast"), ("trade_rate", 70, "Trader", "often avenges teammates"),
+             ("hs_share", 75, "Headshot machine", "lots of headshot kills"), ("util_pr", 75, "Utilitaires", "throws a lot of grenades"),
+             ("open_rate_T", 75, "Ouvreur", "takes the opening duels on attack"), ("late_share", 75, "End of round", "gets kills late")]
 
 
 def pro_profiles():
@@ -183,8 +183,8 @@ def pro_profiles():
                 continue
             if (thr > 0 and v >= thr) or (thr < 0 and v <= -thr):
                 traits.append({"label": label, "text": txt})
-        shares = {"AWP": r.awp_share, "rifles": r.rifle_share, "SMG": r.smg_share, "fusils à pompe": r.shotgun_share,
-                  "pistolets": (r.pistol_share or 0) + (r.deagle_share or 0)}
+        shares = {"AWP": r.awp_share, "rifles": r.rifle_share, "SMG": r.smg_share, "shotguns": r.shotgun_share,
+                  "pistols": (r.pistol_share or 0) + (r.deagle_share or 0)}
         zones = {}
         for m, sides in zp.get(sid, {}).items():
             zones[m] = {sd: [{"zone": humanize(z), "share": round(v * 100)} for z, v in sorted(d.items(), key=lambda x: -x[1])[:5]]

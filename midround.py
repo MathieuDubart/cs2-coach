@@ -337,7 +337,7 @@ def _one(args):
         return mid, len(rot)
     except Exception as e:
         import traceback
-        return mid, f"ERREUR {e} {traceback.format_exc()[-400:]}"
+        return mid, f"ERROR {e} {traceback.format_exc()[-400:]}"
 
 
 def run_all(workers=6, log=print, force=False):
@@ -358,7 +358,7 @@ def run_all(workers=6, log=print, force=False):
                 todo.append((d, out, out_r, pro))
     if not todo:
         return 0
-    log(f"Mi-round : {len(todo)} démo(s)…")
+    log(f"Mid-round: {len(todo)} demo(s)…")
     from concurrent.futures import ProcessPoolExecutor
     with ProcessPoolExecutor(min(workers, len(todo))) as ex:
         for i, (mid, res) in enumerate(ex.map(_one, todo), 1):
@@ -388,24 +388,24 @@ def load_routes(pro=False):
 # ---------- benchmarks ----------
 # metric: (numerator, denominator, min denominator, label, higher_is_better, unit, scale)
 BENCH = {
-    "rot_react": ("rot_react_sum", "rot_react_n", 4, "temps avant de partir en rotation après l'attaque du site", False, " s", 1),
-    "rot_died": ("rot_died_way", "rot_done", 5, "rotations où tu meurs en route", False, "%", 100),
-    "rot_early": ("rot_early", "rot_done", 5, "rotations lancées avant l'attaque (anticipées)", None, "%", 100),
-    "rot_stayed": ("rot_stayed", "rot_needed", 5, "attaques de l'autre site où tu restes en place", None, "%", 100),
-    "anchor_hold": ("anchor_hold5", "anchor_n", 5, "attaques sur ton site où tu tiens au moins 5 s", True, "%", 100),
-    "anchor_kpr": ("anchor_kills", "anchor_n", 5, "kills par attaque subie en ancre", True, "", 1),
-    "lurk_kpr": ("lurk_kills", "lurk_n", 5, "kills par round de lurk", True, "", 1),
-    "lurk_died": ("lurk_died", "lurk_n", 5, "rounds de lurk où tu meurs", False, "%", 100),
-    "t_late": ("t_late", "t_follow_n", 5, "exécutions où tu arrives plus de 10 s après les autres", False, "%", 100),
-    "pp_surv": ("pp_survived", "pp_n", 5, "survie après la pose (T)", True, "%", 100),
-    "pp_kpr": ("pp_kills", "pp_n", 5, "kills après la pose (T)", True, "", 1),
-    "rt_solo": ("rt_solo_death", "rt_n", 5, "morts seul en retake (CT)", False, "%", 100),
-    "adv_throw": ("adv_throw", "adv_rounds", 8, "avantages numériques rendus (mort non vengée)", False, "%", 100),
-    "adv_conv": ("adv_won", "adv_rounds", 8, "rounds gagnés après avoir eu l'avantage", True, "%", 100),
-    "lost_died": ("lost_died", "lost_n", 3, "rounds perdus d'avance où tu meurs au lieu de sauver", False, "%", 100),
-    "isolated": ("isolated_deaths", "rounds", 30, "morts isolées (sans coéquipier proche) par 24 rounds", False, "", 24),
-    "steps_alone": ("steps_alone", "rounds", 30, "pas audibles quand tu es seul en T, par 24 rounds", False, "", 24),
-    "steps_clutch": ("steps_clutch", "clutch_rounds", 3, "pas audibles par clutch", False, "", 1),
+    "rot_react": ("rot_react_sum", "rot_react_n", 4, "time before rotating after the site is hit", False, " s", 1),
+    "rot_died": ("rot_died_way", "rot_done", 5, "rotations where you die on the way", False, "%", 100),
+    "rot_early": ("rot_early", "rot_done", 5, "rotations started before the hit (anticipated)", None, "%", 100),
+    "rot_stayed": ("rot_stayed", "rot_needed", 5, "hits on the other site where you stay in place", None, "%", 100),
+    "anchor_hold": ("anchor_hold5", "anchor_n", 5, "hits on your site where you hold at least 5 s", True, "%", 100),
+    "anchor_kpr": ("anchor_kills", "anchor_n", 5, "kills per attack faced as anchor", True, "", 1),
+    "lurk_kpr": ("lurk_kills", "lurk_n", 5, "kills per lurk round", True, "", 1),
+    "lurk_died": ("lurk_died", "lurk_n", 5, "lurk rounds where you die", False, "%", 100),
+    "t_late": ("t_late", "t_follow_n", 5, "executes where you arrive more than 10 s after the others", False, "%", 100),
+    "pp_surv": ("pp_survived", "pp_n", 5, "survival after the plant (T)", True, "%", 100),
+    "pp_kpr": ("pp_kills", "pp_n", 5, "kills after the plant (T)", True, "", 1),
+    "rt_solo": ("rt_solo_death", "rt_n", 5, "deaths alone in a retake (CT)", False, "%", 100),
+    "adv_throw": ("adv_throw", "adv_rounds", 8, "man advantages thrown (untraded death)", False, "%", 100),
+    "adv_conv": ("adv_won", "adv_rounds", 8, "rounds won after having the advantage", True, "%", 100),
+    "lost_died": ("lost_died", "lost_n", 3, "lost-cause rounds where you die instead of saving", False, "%", 100),
+    "isolated": ("isolated_deaths", "rounds", 30, "isolated deaths (no teammate nearby) per 24 rounds", False, "", 24),
+    "steps_alone": ("steps_alone", "rounds", 30, "audible steps when alone as T, per 24 rounds", False, "", 24),
+    "steps_clutch": ("steps_clutch", "clutch_rounds", 3, "audible steps per clutch", False, "", 1),
 }
 
 

@@ -25,8 +25,8 @@ TYPE_FR = {"flash": "flash", "smoke": "smoke", "he": "HE", "molotov": "molotov"}
 ROUND_TIME = 115.0
 # moments of the round, in seconds after the freeze time (the timer starts at 1:55)
 WINDOWS = [("debut", 0, 20), ("prise", 20, 40), ("action", 40, 70), ("fin", 70, 999)]
-WINDOW_FR = {"debut": "début de round (1:55 à 1:35)", "prise": "prise d'infos (1:35 à 1:15)", "action": "attaque du site (1:15 à 0:45)",
-             "fin": "fin de round (après 0:45)", "post": {"T": "après la pose", "CT": "retake"}}
+WINDOW_FR = {"debut": "start of the round (1:55 to 1:35)", "prise": "info gathering (1:35 to 1:15)", "action": "site attack (1:15 to 0:45)",
+             "fin": "end of the round (after 0:45)", "post": {"T": "after the plant", "CT": "retake"}}
 COLS = ["map", "match", "round", "t", "type", "thrower", "side", "zone", "land_zone", "X", "Y", "Z", "pitch", "yaw", "px", "py",
         "level", "land_px", "land_py", "land_level", "jump", "speed", "crouch", "walk", "click", "flight_s", "damage",
         "enemies_blind", "mates_blind", "kills_after", "post", "won", "buy"]
@@ -119,14 +119,14 @@ def _eff(x, typ):
 def _how(b):
     how = []
     if b.jump:
-        how.append("sauté")
+        how.append("jump")
     if b.speed > 150:
-        how.append("en courant")
+        how.append("running")
     elif b.walk or 20 < b.speed <= 150:
-        how.append("en marchant")
+        how.append("walking")
     if b.crouch:
         how.append("accroupi")
-    return " + ".join(how) or "à l'arrêt"
+    return " + ".join(how) or "standing still"
 
 
 def groups(df, side_rounds):

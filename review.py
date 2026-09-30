@@ -9,14 +9,14 @@ import os
 import pandas as pd
 
 KPI = {  # key: (label, unit, higher is better)
-    "rating": ("Note du match (≈ HLTV 2.0)", "", True),
-    "adr": ("Dégâts par round", "", True),
-    "traded": ("Morts vengées", "%", True),
-    "isolated": ("Morts isolées (par 24 rounds)", "", False),
-    "adv_throw": ("Avantages numériques rendus", "%", False),
-    "nades": ("Grenades mortes avec toi (par 24 rounds)", "", False),
-    "xhair": ("Écart du viseur avant le duel", "°", False),
-    "open": ("Premiers duels gagnés", "%", True),
+    "rating": ("Match rating (≈ HLTV 2.0)", "", True),
+    "adr": ("Damage per round", "", True),
+    "traded": ("Deaths traded", "%", True),
+    "isolated": ("Isolated deaths (per 24 rounds)", "", False),
+    "adv_throw": ("Man advantages thrown", "%", False),
+    "nades": ("Grenades that died with you (per 24 rounds)", "", False),
+    "xhair": ("Crosshair offset before the duel", "°", False),
+    "open": ("Opening duels won", "%", True),
 }
 # experiments whose measure is one of these numbers
 EXP_KPI = {"trade_distance": "isolated", "nades_40s": "nades", "prefire": "xhair", "advantage": "adv_throw", "opening": "open",
@@ -89,8 +89,8 @@ def build(sid, stats, mid_rows, ctx, exps, adv):
     if len(recent) < 2:
         recent = rows[-3:]
     before = [r for r in rows if r["time"] < recent[0]["time"]][-12:]
-    label = (f"ta dernière session ({len(recent)} games, le {recent[0]['time']:%d/%m})" if len(recent) >= 2 and
-             (recent[-1]["time"] - recent[0]["time"]).total_seconds() < 6 * 3600 else f"tes {len(recent)} derniers matchs")
+    label = (f"your last session ({len(recent)} games, on {recent[0]['time']:%m/%d})" if len(recent) >= 2 and
+             (recent[-1]["time"] - recent[0]["time"]).total_seconds() < 6 * 3600 else f"your last {len(recent)} matches")
     # context of each window, for the reasons
     def share_late(win):
         return sum(1 for r in win if r["time"].hour >= 23 or r["time"].hour < 6) / max(len(win), 1)
@@ -107,25 +107,25 @@ def build(sid, stats, mid_rows, ctx, exps, adv):
     reasons_bad, reasons_good = [], []
     if before and share_late(recent) >= 0.5 and share_late(before) < 0.3:
         n = sum(1 for r in recent if r["time"].hour >= 23 or r["time"].hour < 6)
-        reasons_bad.append(f"{n} de ces {len(recent)} games après 23 h")
+        reasons_bad.append(f"{n} of these {len(recent)} games after 11pm")
     if len(recent) >= 4:
-        reasons_bad.append(f"session de {len(recent)} games d'affilée : la fatigue monte après chaque game")
+        reasons_bad.append(f"a session of {len(recent)} games in a row: fatigue builds up after each game")
     half = max(2, math.ceil(len(recent) / 2))
     if worst_map and sum(1 for r in recent if r["map"] == worst_map) >= half:
-        reasons_bad.append(f"{sum(1 for r in recent if r['map'] == worst_map)} game(s) sur {worst_map.split('_')[-1].capitalize()}, ta carte la plus difficile ({map_win[worst_map]:.0f} % de rounds gagnés)")
+        reasons_bad.append(f"{sum(1 for r in recent if r['map'] == worst_map)} game(s) on {worst_map.split('_')[-1].capitalize()}, your hardest map ({map_win[worst_map]:.0f}% of rounds won)")
     if best_map and sum(1 for r in recent if r["map"] == best_map) >= half:
-        reasons_good.append(f"{sum(1 for r in recent if r['map'] == best_map)} game(s) sur {best_map.split('_')[-1].capitalize()}, ta meilleure carte ({map_win[best_map]:.0f} % de rounds gagnés)")
+        reasons_good.append(f"{sum(1 for r in recent if r['map'] == best_map)} game(s) on {best_map.split('_')[-1].capitalize()}, your best map ({map_win[best_map]:.0f}% of rounds won)")
     party = {m["id"]: m.get("party_size") for m in ms}
     pr = [party.get(r["id"]) for r in recent if party.get(r["id"])]
     pb = [party.get(r["id"]) for r in before if party.get(r["id"])]
     if pr and pb:
         solo_r, solo_b = sum(1 for p in pr if p == 1) / len(pr), sum(1 for p in pb if p == 1) / len(pb)
-        grp = next((f for f in (ctx or {}).get("factors", []) if f["title"] == "Groupe"), None)
+        grp = next((f for f in (ctx or {}).get("factors", []) if f["title"] == "Group"), None)
         solo_perf = next((row["delta"] for row in (grp or {}).get("rows", []) if row["group"] == "solo"), None)
         if solo_r - solo_b >= 0.5:
-            (reasons_bad if (solo_perf or 0) < 0 else reasons_good).append("tu jouais en solo, plus souvent que d'habitude")
+            (reasons_bad if (solo_perf or 0) < 0 else reasons_good).append("you played solo more often than usual")
         elif solo_b - solo_r >= 0.5:
-            (reasons_good if (solo_perf or 0) < 0 else reasons_bad).append("tu jouais en groupe, plus souvent que d'habitude")
+            (reasons_good if (solo_perf or 0) < 0 else reasons_bad).append("you played in a group more often than usual")
     started = [e for e in (exps or {}).get("experiments", []) if e.get("started") and
                dt.datetime.fromisoformat(e["started"]) <= recent[-1]["time"] and dt.datetime.fromisoformat(e["started"]) >= (before[-1]["time"] if before else rows[0]["time"])]
     changes, stable = [], []
@@ -139,13 +139,13 @@ def build(sid, stats, mid_rows, ctx, exps, adv):
         better = (a > b) == hib
         item = {"key": k, "label": lab, "unit": unit, "higher_better": hib, "before": round(b, 2), "after": round(a, 2),
                 "delta": round(a - b, 2), "better": better, "z": round(z, 2), "n_before": nb, "n_after": na,
-                "level": "net" if abs(z) >= 2 else "tendance" if abs(z) >= 1.2 else None, "why": []}
+                "level": "clear" if abs(z) >= 2 else "trend" if abs(z) >= 1.2 else None, "why": []}
         if item["level"] is None:
             stable.append(lab)
             continue
         for e in started:
             if EXP_KPI.get(e["template"]) == k:
-                item["why"].append(f"coïncide avec l'expérience « {e['title']} » lancée le {dt.datetime.fromisoformat(e['started']):%d/%m}")
+                item["why"].append(f"matches the experiment '{e['title']}' started on {dt.datetime.fromisoformat(e['started']):%m/%d}")
         if k in ("rating", "adr", "traded", "open"):
             item["why"] += reasons_good if better else reasons_bad
         changes.append(item)
@@ -172,9 +172,9 @@ def build(sid, stats, mid_rows, ctx, exps, adv):
     nxt = None
     worse = [c for c in changes if not c["better"]]
     if worse:
-        nxt = f"Corrige ce qui recule : {worse[0]['label'].lower()} ({worse[0]['before']:g} → {worse[0]['after']:g}).".replace(".", ",", 0)
+        nxt = f"Fix what is slipping: {worse[0]['label'].lower()} ({worse[0]['before']:g} → {worse[0]['after']:g}).".replace(".", ",", 0)
     elif axes:
-        nxt = f"Garde le cap sur ton axe n° 1 : {axes[0]['short'].lower()}."
+        nxt = f"Stay on track with your #1 focus: {axes[0]['short'].lower()}."
     return {"label": label, "since": recent[0]["time"].isoformat(timespec="minutes"),
             "session": {"games": len(recent), "wins": wins, "losses": losses,
                         "matches": [{"id": r["id"], "time": r["time"].isoformat(timespec="minutes"), "map": r["map"], "result": r["result"],

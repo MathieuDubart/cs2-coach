@@ -231,7 +231,7 @@ def _one(args):
     try:
         return os.path.basename(out), extract(dem, out)
     except Exception as e:
-        return os.path.basename(out), f"ERREUR {e}"
+        return os.path.basename(out), f"ERROR {e}"
 
 
 def run_all(cache, deep_dir, workers=3, log=print):
@@ -245,7 +245,7 @@ def run_all(cache, deep_dir, workers=3, log=print):
                 todo.append((os.path.join(cache, f), out))
     if not todo:
         return 0
-    log(f"Contexte des rounds : {len(todo)} démo(s)…")
+    log(f"Round context: {len(todo)} demo(s)…")
     with ProcessPoolExecutor(min(workers, len(todo)), initializer=_low_priority) as ex:
         for i, (mid, res) in enumerate(ex.map(_one, todo), 1):
             if i % 10 == 0 or isinstance(res, str):

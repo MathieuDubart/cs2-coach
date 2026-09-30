@@ -119,23 +119,23 @@ def contexts(mine, others):
         return {"name": name, "rows": res}
 
     specs = [
-        ("Soutien d'un coéquipier", [("coéquipier à moins de 600 u", lambda x: x.mate_dist < 600),
-                                     ("seul (coéquipier à plus de 1 200 u ou aucun)", lambda x: (x.mate_dist > 1200) | x.mate_dist.isna())]),
-        ("Mouvement au début du duel", [("posé, tu tiens l'angle (< 40 u/s)", lambda x: x.speed < 40),
-                                        ("en mouvement, tu peekes (> 110 u/s)", lambda x: x.speed > 110)]),
-        ("Mouvement de l'adversaire", [("l'adversaire peeke vers toi (> 110 u/s)", lambda x: x.opp_speed > 110),
-                                       ("l'adversaire est posé (< 40 u/s)", lambda x: x.opp_speed < 40)]),
-        ("Flashs", [("adversaire aveuglé par ton équipe", lambda x: x.opp_flashed == True),
-                    ("toi aveuglé", lambda x: x.me_flashed == True),
-                    ("personne aveuglé", lambda x: (x.opp_flashed == False) & (x.me_flashed == False))]),
-        ("Rapport de force", [("en supériorité numérique", lambda x: x.mates_alive > x.opp_mates_alive),
-                              ("à égalité", lambda x: x.mates_alive == x.opp_mates_alive),
-                              ("en infériorité", lambda x: x.mates_alive < x.opp_mates_alive)]),
-        ("Moment du round", [("0-20 s", lambda x: x.t <= 20), ("20-45 s", lambda x: (x.t > 20) & (x.t <= 45)),
-                             ("après 45 s", lambda x: x.t > 45)]),
+        ("Teammate support", [("teammate within 600 u", lambda x: x.mate_dist < 600),
+                                     ("alone (teammate beyond 1,200 u or none)", lambda x: (x.mate_dist > 1200) | x.mate_dist.isna())]),
+        ("Movement at the start of the duel", [("still, you hold the angle (< 40 u/s)", lambda x: x.speed < 40),
+                                        ("moving, you peek (> 110 u/s)", lambda x: x.speed > 110)]),
+        ("Enemy movement", [("the enemy peeks at you (> 110 u/s)", lambda x: x.opp_speed > 110),
+                                       ("the enemy is still (< 40 u/s)", lambda x: x.opp_speed < 40)]),
+        ("Flashs", [("enemy flashed by your team", lambda x: x.opp_flashed == True),
+                    ("you flashed", lambda x: x.me_flashed == True),
+                    ("nobody flashed", lambda x: (x.opp_flashed == False) & (x.me_flashed == False))]),
+        ("Balance of power", [("with a man advantage", lambda x: x.mates_alive > x.opp_mates_alive),
+                              ("even", lambda x: x.mates_alive == x.opp_mates_alive),
+                              ("outnumbered", lambda x: x.mates_alive < x.opp_mates_alive)]),
+        ("Moment of the round", [("0-20 s", lambda x: x.t <= 20), ("20-45 s", lambda x: (x.t > 20) & (x.t <= 45)),
+                             ("after 45 s", lambda x: x.t > 45)]),
         ("Distance", [("courte (< 10 m)", lambda x: x.distance < 10), ("moyenne (10-20 m)", lambda x: (x.distance >= 10) & (x.distance < 20)),
                       ("longue (> 20 m)", lambda x: x.distance >= 20)]),
-        ("Points de vie au début du duel", [("plus de 80 PV", lambda x: x.hp > 80), ("moins de 50 PV", lambda x: x.hp < 50)]),
+        ("Health at the start of the duel", [("more than 80 HP", lambda x: x.hp > 80), ("less than 50 HP", lambda x: x.hp < 50)]),
         ("Accroupi", [("accroupi", lambda x: x.crouch == True), ("debout", lambda x: x.crouch == False)]),
     ]
     out = []
@@ -210,11 +210,11 @@ def lineups(nades, side, zones_of_interest, meta, top=4):
         for value, rel, b, metric in groups[:top]:
             how = []
             if b.jump:
-                how.append("sauté")
+                how.append("jump")
             if b.speed > 150:
-                how.append("en courant")
+                how.append("running")
             elif b.walk or 20 < b.speed <= 150:
-                how.append("en marchant")
+                how.append("walking")
             if b.crouch:
                 how.append("accroupi")
             out.append({
@@ -222,7 +222,7 @@ def lineups(nades, side, zones_of_interest, meta, top=4):
                 "from_zone": zone_name(meta, b.zone), "to_zone": zone_name(meta, b.land_zone) if b.land_zone else None,
                 "from_px": [round(b.px), round(b.py)], "to_px": [round(b.land_px), round(b.land_py)],
                 "level": b.level, "land_level": b.land_level,
-                "t": b.t, "click": b.click, "how": " + ".join(how) or "à l'arrêt", "by": b.thrower_name,
+                "t": b.t, "click": b.click, "how": " + ".join(how) or "standing still", "by": b.thrower_name,
                 "setpos": f"setpos {b.X:.1f} {b.Y:.1f} {b.Z:.1f}; setang {b.pitch:.2f} {b.yaw:.2f} 0",
                 "flight_s": b.get("flight_s"),
             })

@@ -70,37 +70,37 @@ def light_advice(prof, ms, steamid):
 
     g = lambda k: st.get(k)
     if g("preaim") is not None:
-        (S.append(f"Viseur bien placé ({g('preaim'):.1f}° d'écart)".replace(".", ",")) if g("preaim") <= 7 else
-         add(10 + g("preaim"), f"Viseur mal placé avant les duels : {g('preaim'):.1f}° d'écart".replace(".", ","), "Viseur à hauteur de tête",
-             ["Écart moyen entre ton viseur et l'ennemi au moment où il apparaît (Leetify)."],
-             ["Pré-vise les angles à hauteur de tête en te déplaçant.", "Map d'entraînement : Prefire / crosshair placement."]))
+        (S.append(f"Good crosshair placement ({g('preaim'):.1f}° offset)".replace(".", ",")) if g("preaim") <= 7 else
+         add(10 + g("preaim"), f"Crosshair poorly placed before duels: {g('preaim'):.1f}° offset".replace(".", ","), "Crosshair at head height",
+             ["Average offset between your crosshair and the enemy when they appear (Leetify)."],
+             ["Pre-aim angles at head height while moving.", "Training map: Prefire / crosshair placement."]))
     if g("counter_strafing_good_shots_ratio") is not None:
         cs = g("counter_strafing_good_shots_ratio")
-        (S.append(f"Contre-strafe propre ({cs:.0f} % de bons tirs)") if cs >= 80 else
-         add(25 - cs / 5, f"Seulement {cs:.0f} % de tirs bien contre-strafés", "Contre-strafe avant de tirer",
-             ["Part de tes tirs partis à l'arrêt."], ["Tape la direction opposée avant chaque tir, au pistolet comme au rifle."]))
+        (S.append(f"Clean counter-strafing ({cs:.0f}% good shots)") if cs >= 80 else
+         add(25 - cs / 5, f"Only {cs:.0f}% of shots properly counter-strafed", "Counter-strafe before shooting",
+             ["Share of your shots fired standing still."], ["Tap the opposite direction before every shot, with pistols and rifles."]))
     fr, fo = g("flashbang_hit_friend_per_flashbang"), g("flashbang_hit_foe_per_flashbang")
     if fr is not None and fr >= 0.35:
-        add(15 + fr * 10, f"Tes flashs aveuglent {fr:.2f} coéquipier par flash".replace(".", ","), "Flashe pour tes coéquipiers, pas sur eux",
-            [f"Ennemis aveuglés par flash : {fo:.2f}.".replace(".", ","), f"Flashs menant à un kill : {g('flashbang_leading_to_kill') or 0:.0f} %."],
-            ["Annonce ta flash avant de la lancer.", "Apprends 2 popflashs par site : elles explosent au-dessus du mur, pas sur ton équipe."])
+        add(15 + fr * 10, f"Your flashes blind {fr:.2f} teammates per flash".replace(".", ","), "Flash for your teammates, not on them",
+            [f"Enemies blinded per flash: {fo:.2f}.".replace(".", ","), f"Flashes leading to a kill: {g('flashbang_leading_to_kill') or 0:.0f}%."],
+            ["Call your flash before throwing it.", "Learn 2 popflashes per site: they pop above the wall, not on your team."])
     ud = g("utility_on_death_avg")
     if ud is not None and ud >= 100:
-        add(10 + ud / 20, f"{ud:.0f} $ de grenades en poche à chaque mort en moyenne", "Vide ta poche avant 40 s",
-            ["Valeur moyenne des grenades non utilisées au moment de ta mort."], ["Lance tes grenades avant le contact."])
+        add(10 + ud / 20, f"${ud:.0f} of grenades in your pockets at each death on average", "Empty your pockets before 40 s",
+            ["Average value of unused grenades when you die."], ["Throw your grenades before the contact."])
     for side, k in (("CT", "ct_opening_duel_success_percentage"), ("T", "t_opening_duel_success_percentage")):
         v = g(k)
         if v is not None and v < 45:
-            add(8 + (45 - v) / 2, f"Premiers duels en {side} : {v:.0f} % gagnés", f"Ne prends pas le 1er duel seul en {side}",
-                ["Taux de victoire des duels d'ouverture (Leetify)."], ["Laisse l'ouverture à un coéquipier ou prends-la avec une flash."])
+            add(8 + (45 - v) / 2, f"Opening duels as {side}: {v:.0f}% won", f"Don't take the first duel alone as {side}",
+                ["Opening duel win rate (Leetify)."], ["Leave the opening to a teammate or take it with a flash."])
     tr = g("traded_deaths_success_percentage")
     if tr is not None and tr < 50:
-        add(20 - tr / 5, f"Seulement {tr:.0f} % de tes morts « tradables » sont vengées", "Joue à 2 secondes d'un coéquipier",
-            ["Quand un trade était possible, il a eu lieu dans ce pourcentage de cas."], ["Reste à portée de trade d'un coéquipier."])
+        add(20 - tr / 5, f"Only {tr:.0f}% of your 'tradable' deaths get traded", "Play within 2 seconds of a teammate",
+            ["When a trade was possible, it happened this share of the time."], ["Stay within trade range of a teammate."])
     rtm = g("reaction_time_ms")
     if rtm is not None and rtm > 650:
-        add(8, f"Temps de réaction de {rtm:.0f} ms", "Échauffement avant de jouer", ["Mesuré sur tes duels (Leetify)."],
-            ["10 minutes d'Aim Botz et de deathmatch avant chaque session."])
+        add(8, f"Reaction time of {rtm:.0f} ms", "Warm up before playing", ["Measured on your duels (Leetify)."],
+            ["10 minutes of Aim Botz and deathmatch before each session."])
     by_map = {}
     for m in ms:
         me = next((x for x in m.get("stats", []) if x.get("steam64_id") == str(steamid)), None)

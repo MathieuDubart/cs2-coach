@@ -87,7 +87,7 @@ def local_playtime(sid):
         if "Playtime" in vals:
             last = int(vals.get("LastPlayed", 0) or 0)
             return {"total_h": round(int(vals["Playtime"]) / 60), "two_weeks_h": round(int(vals.get("Playtime2wks", 0)) / 60, 1),
-                    "last_played": dt.datetime.fromtimestamp(last).isoformat(timespec="minutes") if last else None, "source": "Steam de ce PC"}
+                    "last_played": dt.datetime.fromtimestamp(last).isoformat(timespec="minutes") if last else None, "source": "This PC's Steam"}
     return None
 
 
@@ -105,7 +105,7 @@ def _api(path, **params):
     except urllib.error.HTTPError as e:
         return e.code, None
     except Exception as e:
-        raise SteamError(f"Steam ne répond pas ({e})")
+        raise SteamError(f"Steam is not responding ({e})")
 
 
 def api_key():
@@ -115,9 +115,9 @@ def api_key():
 def check_key(key, sid):
     code, j = _api("ISteamUser/GetPlayerSummaries/v2/", key=key, steamids=sid)
     if code in (401, 403):
-        raise SteamError("Clé d'API refusée par Steam : vérifie-la sur steamcommunity.com/dev/apikey.")
+        raise SteamError("API key rejected by Steam: check it on steamcommunity.com/dev/apikey.")
     if code != 200 or not j:
-        raise SteamError(f"Steam a répondu {code} à la vérification de la clé.")
+        raise SteamError(f"Steam answered {code} to the key check.")
     ps = (j.get("response") or {}).get("players") or []
     return ps[0] if ps else {}
 
@@ -126,13 +126,13 @@ def next_code(key, sid, auth, known):
     """-> next share code, or None when there is no newer match."""
     code, j = _api("ICSGOPlayers_730/GetNextMatchSharingCode/v1", key=key, steamid=sid, steamidkey=auth, knowncode=known)
     if code == 403:
-        raise SteamError("Code d'authentification refusé : génère-le à nouveau sur la page d'aide de Steam.")
+        raise SteamError("Authentication code rejected: generate it again on Steam's help page.")
     if code == 412:
-        raise SteamError("Le code de match de départ n'est pas reconnu pour ce compte.")
+        raise SteamError("The starting match code is not recognized for this account.")
     if code == 503 or code == 429:
-        raise SteamError("Steam est momentanément indisponible, réessaie dans quelques minutes.")
+        raise SteamError("Steam is temporarily unavailable, try again in a few minutes.")
     if code not in (200, 202) or j is None:
-        raise SteamError(f"Réponse inattendue de Steam ({code}).")
+        raise SteamError(f"Unexpected answer from Steam ({code}).")
     nxt = (j.get("result") or {}).get("nextcode")
     return None if not nxt or nxt == "n/a" else nxt
 
@@ -190,25 +190,25 @@ def set_credentials(sid, key=None, auth=None, known=None):
     known = (known or "").strip()
     if key:
         if not KEY_RE.match(key):
-            raise SteamError("La clé d'API Steam fait 32 caractères (chiffres et lettres A à F).")
+            raise SteamError("A Steam API key is 32 characters long (digits and letters A to F).")
         who = check_key(key, sid)
         s["steam_api_key"] = key
-        saved.append("clé d'API")
+        saved.append("API key")
         if who.get("personaname"):
             s.setdefault("players", {}).setdefault(sid, {})["name"] = who["personaname"]
     if auth:
         if not AUTH_RE.match(auth):
-            raise SteamError("Le code d'authentification a la forme XXXX-XXXXX-XXXX.")
+            raise SteamError("The authentication code looks like XXXX-XXXXX-XXXX.")
         if known and not CODE_RE.match(known):
-            raise SteamError("Le code de match a la forme CSGO-xxxxx-xxxxx-xxxxx-xxxxx-xxxxx.")
+            raise SteamError("The match code looks like CSGO-xxxxx-xxxxx-xxxxx-xxxxx-xxxxx.")
         k = s.get("steam_api_key")
         if not k:
-            raise SteamError("Ajoute d'abord ta clé d'API Steam : elle sert à interroger ton historique.")
+            raise SteamError("Add your Steam API key first: it is used to query your history.")
         start = known or (s.get("players", {}).get(sid, {}).get("last_code"))
         if not start:
             start = oldest_recent_code(sid)
         if not start:
-            raise SteamError("Il faut un code de match de départ : colle celui affiché sur la page d'aide de Steam, ou lance Steam (CS2 fermé) pour que le coach le trouve.")
+            raise SteamError("A starting match code is needed: paste the one shown on Steam's help page, or open Steam (CS2 closed) so the coach finds it.")
         next_code(k, sid, auth, start)  # raises if the code or the pair is refused
         p = s.setdefault("players", {}).setdefault(sid, {})
         p["authcode"] = auth
@@ -269,7 +269,7 @@ def new_codes(sid, log=print, limit=200):
     p.update(last_code=cur, pending_codes=pending, last_sync=dt.datetime.now().isoformat(timespec="minutes"))
     config.save_settings(s)
     if found:
-        log(f"Historique Steam : {len(found)} nouveau(x) match(s)")
+        log(f"Steam history: {len(found)} new match(es)")
     return pending
 
 

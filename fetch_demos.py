@@ -10,7 +10,7 @@ from coach import CACHE, decompress, download
 def get(m):
     dem = os.path.join(CACHE, f"{m['match_id']}.dem")
     if os.path.exists(dem):
-        return f"{m['match_id']} déjà là"
+        return f"{m['match_id']} already there"
     bz = dem + ".bz2"
     download(m["url"], bz)
     decompress(bz, dem)
@@ -26,5 +26,5 @@ if __name__ == "__main__":
             try:
                 print(f.result(), flush=True)
             except Exception as e:
-                print("ERREUR", e, flush=True)
+                print("ERROR", e, flush=True)
     print("FINI", flush=True)
