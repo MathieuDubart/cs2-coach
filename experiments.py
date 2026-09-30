@@ -258,7 +258,7 @@ def evaluate(sid, e, hist=None, stats_by_id=None):
         verdict = "it works" if good >= 1.64 else "it hurts" if good <= -1.64 else "no clear effect"
     elif have >= need:
         verdict = "not enough data to compare yet"
-    return {**e, "category": tpl["cat"], "how": [h.format(**{**(e.get("params") or {}), "map_name": (e.get("params") or {}).get("map", "").split("_")[-1].capitalize()}) for h in tpl["how"]],
+    return {**e, "title": title_of(e["template"], e.get("params") or {}), "category": tpl["cat"], "how": [h.format(**{**(e.get("params") or {}), "map_name": (e.get("params") or {}).get("map", "").split("_")[-1].capitalize()}) for h in tpl["how"]],
             "metric": label, "unit": unit, "higher_better": hib, "before": b, "after": a, "progress": [min(have, need), need, tpl["unit_n"]],
             "z": None if z is None else round(z, 2), "verdict": verdict}
 

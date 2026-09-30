@@ -87,7 +87,7 @@ def mid_findings(mb):
         if m.get("percentile") is None or m.get("you") is None:
             continue
         u = m["unit"]
-        fmt = lambda v: "—" if v is None else (f"{v:.0f} %" if u == "%" else f"{v:.1f}{u}".replace(".", ","))
+        fmt = lambda v: "—" if v is None else (f"{v:.0f}%" if u == "%" else f"{v:.1f}{u}")
         item = {"id": k, "label": m["label"], "you": m["you"], "median": m["median"], "pro": m.get("pro"), "percentile": m["percentile"],
                 "unit": u, "text": f"{m['label'][0].upper() + m['label'][1:]}: you {fmt(m['you'])}, base median {fmt(m['median'])}"
                                    + (f", pros {fmt(m['pro'])}" if m.get("pro") is not None else "") + f" (out of {m['n_you']:.0f})."}

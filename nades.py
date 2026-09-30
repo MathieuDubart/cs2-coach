@@ -42,6 +42,9 @@ def _timer(t):
     return f"{int(left // 60)}:{int(left % 60):02d}"
 
 
+VERSION = 2   # bump when the summary changes (texts, fields): the cache is rebuilt
+
+
 def _stamp():
     n, latest = 0, 0.0
     for mid in os.listdir(config.DEEP) if os.path.exists(config.DEEP) else []:
@@ -49,7 +52,7 @@ def _stamp():
         if os.path.exists(f):
             n += 1
             latest = max(latest, os.path.getmtime(f))
-    return f"{n}-{int(latest)}"
+    return f"v{VERSION}-{n}-{int(latest)}"
 
 
 def load_all(rebuild=False):

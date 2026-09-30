@@ -16,7 +16,8 @@ import config
 import mapdata
 from build_report import _names, radar_uri, summary
 
-TEMPLATE = os.path.join(config.HERE, "app_template.html")
+MODE_EN = {"Compétitif": "Competitive", "Compétitif / Premier": "Competitive / Premier"}  # older analyses
+TEMPLATE = os.environ.get("COACH_TEMPLATE") or os.path.join(config.HERE, "app_template.html")  # a test copy can point elsewhere
 SITE = os.path.join(config.OUT, "site")
 
 
@@ -42,7 +43,7 @@ def player_data(sid):
         names.append((st["match"].get("time"), st["player"]["name"]))
         manual = notes.get("matches", {}).get(mid)
         matches.append({
-            "id": mid, "time": st["match"].get("time"), "map": st["map"], "mode": st["mode"],
+            "id": mid, "time": st["match"].get("time"), "map": st["map"], "mode": MODE_EN.get(st["mode"], st["mode"]),
             "hostage": st["map"].startswith("cs_"), "score": st["final_score"], "result": st["result"],
             "rounds": st["rounds"], "sum": summary(st),
             "per_round": [{k: r[k] for k in ("round", "side", "won", "kills", "deaths", "my_buy", "team_buy")} for r in st["per_round"]],

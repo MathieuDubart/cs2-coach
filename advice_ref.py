@@ -65,7 +65,7 @@ def fmt(v, unit):
     if v is None:
         return "—"
     s = f"{v:.1f}" if abs(v) < 10 and unit != "%" else f"{v:.0f}"
-    return s.replace(".", ",") + (" %" if unit == "%" else unit)
+    return s + ("%" if unit == "%" else unit)
 
 
 def enrich(rules, bench):

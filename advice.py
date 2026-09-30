@@ -163,7 +163,7 @@ def rules(M, cross, per_match=False):
     sp = M.get("spray", {})
     b1, b9 = sp.get("bullet_1", (0, None)), sp.get("bullets_9+", (0, None))
     if b9[0] >= (15 if per_match else 40) and b9[1] is not None and b9[1] < 12:
-        add("spray", 14 + b9[0] / (10 * n), f"After the 9th bullet, you hit {b9[1]:.0f}%".replace(".", ","),
+        add("spray", 14 + b9[0] / (10 * n), f"After the 9th bullet, you hit {b9[1]:.0f}%",
             "Bursts of 3 to 5 bullets",
             [f"1st bullet: {b1[1]:.0f}% hits. Bullets 9 and up: {b9[1]:.0f}% ({int(b9[0])} bullets)."],
             ["Short burst, strafe, repeat.", "Recoil Master: the first 10 bullets of the AK and the M4."])

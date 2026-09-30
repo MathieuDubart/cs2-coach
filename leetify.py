@@ -70,8 +70,8 @@ def light_advice(prof, ms, steamid):
 
     g = lambda k: st.get(k)
     if g("preaim") is not None:
-        (S.append(f"Good crosshair placement ({g('preaim'):.1f}° offset)".replace(".", ",")) if g("preaim") <= 7 else
-         add(10 + g("preaim"), f"Crosshair poorly placed before duels: {g('preaim'):.1f}° offset".replace(".", ","), "Crosshair at head height",
+        (S.append(f"Good crosshair placement ({g('preaim'):.1f}° offset)") if g("preaim") <= 7 else
+         add(10 + g("preaim"), f"Crosshair poorly placed before duels: {g('preaim'):.1f}° offset", "Crosshair at head height",
              ["Average offset between your crosshair and the enemy when they appear (Leetify)."],
              ["Pre-aim angles at head height while moving.", "Training map: Prefire / crosshair placement."]))
     if g("counter_strafing_good_shots_ratio") is not None:
@@ -81,8 +81,8 @@ def light_advice(prof, ms, steamid):
              ["Share of your shots fired standing still."], ["Tap the opposite direction before every shot, with pistols and rifles."]))
     fr, fo = g("flashbang_hit_friend_per_flashbang"), g("flashbang_hit_foe_per_flashbang")
     if fr is not None and fr >= 0.35:
-        add(15 + fr * 10, f"Your flashes blind {fr:.2f} teammates per flash".replace(".", ","), "Flash for your teammates, not on them",
-            [f"Enemies blinded per flash: {fo:.2f}.".replace(".", ","), f"Flashes leading to a kill: {g('flashbang_leading_to_kill') or 0:.0f}%."],
+        add(15 + fr * 10, f"Your flashes blind {fr:.2f} teammates per flash", "Flash for your teammates, not on them",
+            [f"Enemies blinded per flash: {fo:.2f}.", f"Flashes leading to a kill: {g('flashbang_leading_to_kill') or 0:.0f}%."],
             ["Call your flash before throwing it.", "Learn 2 popflashes per site: they pop above the wall, not on your team."])
     ud = g("utility_on_death_avg")
     if ud is not None and ud >= 100:

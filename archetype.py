@@ -172,12 +172,12 @@ def fmt(v, kind):
     if v is None or pd.isna(v):
         return "—"
     if kind == "pct":
-        return f"{v * 100:.0f} %"
+        return f"{v * 100:.0f}%"
     if kind == "s":
-        return f"{v:.1f} s".replace(".", ",")
+        return f"{v:.1f} s"
     if kind == "u":
         return f"{v:.0f} u"
-    return f"{v:.2f}".replace(".", ",")
+    return f"{v:.2f}"
 
 
 KIND = {"awp_share": "pct", "open_win": "pct", "hold_share": "pct", "open_rate_T": "n", "traded_share": "pct", "trade_rate": "n",

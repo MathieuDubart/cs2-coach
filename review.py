@@ -159,7 +159,7 @@ def build(sid, stats, mid_rows, ctx, exps, adv):
         trend = None
         if a is not None and b is not None and na and nb:
             hib = KPI[k][2]
-            trend = "mieux" if (a > b) == hib and abs(a - b) > 0.05 * max(abs(b), 1) else "moins bien" if abs(a - b) > 0.05 * max(abs(b), 1) else "stable"
+            trend = "better" if (a > b) == hib and abs(a - b) > 0.05 * max(abs(b), 1) else "worse" if abs(a - b) > 0.05 * max(abs(b), 1) else "stable"
         axes.append({"id": r.get("id"), "title": r.get("title"), "short": r.get("short"), "do": (r.get("do") or [])[:2],
                      "drills": (r.get("drills") or [])[:1], "kpi": k, "kpi_label": KPI[k][0] if k else None, "unit": KPI[k][1] if k else None,
                      "before": None if b is None else round(b, 2), "after": None if a is None else round(a, 2), "trend": trend,

@@ -145,7 +145,7 @@ class Handler(BaseHTTPRequestHandler):
             params = {k: v[0] for k, v in q.items()}
             sid = steamlink.verify(params, f"http://127.0.0.1:{PORT}/api/steam/callback")
             if not sid:
-                return self.redirect("/?steam=refus#steam")
+                return self.redirect("/?steam=refused#settings")
             name = None
             try:
                 if steamlink.api_key():
@@ -156,7 +156,7 @@ class Handler(BaseHTTPRequestHandler):
                 own, own_name = config.logged_in_account()
                 name = own_name if own and int(own) == sid else (config.settings().get("players", {}).get(str(sid)) or {}).get("name")
             steamlink.save_login(sid, name)
-            return self.redirect("/?steam=ok#steam")
+            return self.redirect("/?steam=ok#settings")
         return self.send(404, {"error": "not found"})
 
     def redirect(self, url):
