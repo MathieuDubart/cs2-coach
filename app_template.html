@@ -1388,7 +1388,10 @@ function renderPartie(){
   if(m&&!m.levels.some(l=>l.key===S.level))S.level=m.levels[0].key;
   const plan=((p.advice.maps||{})[S.map]||{})[S.side],coach=((p.cross_notes||{})[S.map]||{})[S.side],bl=plan?plan.bullets:[];
   const isAv=(c,t,i)=>c.kinds?c.kinds[i]==="avoid":/[ée]vite/i.test(t),cAvoid=coach?coach.plan.filter((t,i)=>isAv(coach,t,i)):[],cGood=coach?coach.plan.filter((t,i)=>!isAv(coach,t,i)):[];
-  const good=bl.filter(b=>b.kind==="exploit"),bad=bl.filter(b=>b.kind==="avoid"),tries=bl.filter(b=>b.kind==="try"),times=bl.filter(b=>b.kind==="timing");
+  // a zone already covered by a coach note: its generic bullet is not repeated
+  const zkey=x=>{let s=String(x).replace(/<[^>]+>/g,"").trim().toLowerCase();s=s.replace(/^à essayer : /,"").replace(/^joue plus (souvent )?/,"");
+    return s.split(/ : | \(|\.|,/)[0].trim().replace(/^bombsite /,"site ")},coachZ=new Set((coach?coach.plan:[]).map(zkey));
+  const good=bl.filter(b=>b.kind==="exploit"&&!coachZ.has(zkey(b.text))),bad=bl.filter(b=>b.kind==="avoid"&&!coachZ.has(zkey(b.text))),tries=bl.filter(b=>b.kind==="try"&&!coachZ.has(zkey(b.text))),times=bl.filter(b=>b.kind==="timing");
   const strong=((PL.mid||{}).strong||[]).slice(0,2),rules=(p.advice.rules||[]).slice(0,2);
   const reflex=(PL.playbook||[]).filter(x=>x.side===S.side||x.side==="tous").slice().sort((a,b)=>(b.prio||0)-(a.prio||0)).slice(0,3);
   const rot=S.side==="CT"?Object.entries((PL.routes||{})[S.map]||{}).sort().map(([s,r])=>{const b=r.pro.best||r.base.best;return b?{site:s,route:b.route,travel:b.travel,died:b.died,who:r.pro.best?"pros":"joueurs de la base"}:null}).filter(Boolean):[];
