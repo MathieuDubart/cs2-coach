@@ -364,6 +364,20 @@ def build(steamid, adv, cross=None, deep=None, light=False):
         plan["tside"] = tside.tendencies(sorted(set(PREMIER) | set(maps)))
     except Exception as e:
         print("tendances des T indisponibles :", e)
+    try:
+        import nades
+        stats_n = []
+        mdir_n = os.path.join(config.player_dir(sid), "matches")
+        for mid in os.listdir(mdir_n) if os.path.exists(mdir_n) else []:
+            f = os.path.join(mdir_n, mid, "stats.json")
+            if os.path.exists(f):
+                st = json.load(open(f, encoding="utf-8"))
+                if not st.get("error"):
+                    stats_n.append(st)
+        stats_n.sort(key=lambda s: (s.get("match") or {}).get("time") or "")
+        plan["nades"] = nades.for_player(sid, sorted(set(PREMIER) | set(maps)), cross, stats_n)
+    except Exception as e:
+        print("grenades indisponibles :", e)
     ctx = context.analyze(sid)
     if ctx:
         ctx["matches"] = ctx["matches"][-40:]

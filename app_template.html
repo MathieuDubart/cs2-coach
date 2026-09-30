@@ -304,6 +304,10 @@ pre.cli{background:var(--radar-bg);color:#dfe6ec;padding:12px 14px;overflow-x:au
 .tread .ask{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:8px;padding:8px;border:1px dashed var(--flash);border-radius:6px}
 .tread .ask button{font:700 18px var(--f-display);padding:6px 18px;border:1px solid var(--line);background:var(--bg);color:var(--ink);border-radius:6px;cursor:pointer;min-height:40px}
 .tread .ask button:focus-visible,.tread .marks .mk:focus-visible{outline:2px solid var(--ct);outline-offset:2px}
+.tread.nd{border-left-color:var(--he)}
+.nd-t{font-weight:700}
+.nd-plan{display:flex;flex-wrap:wrap;gap:6px;margin:4px 0 8px}
+.nd-plan span{font:600 13px var(--f-mono);padding:4px 10px;border:1px solid var(--line);border-radius:14px;background:var(--bg)}
 .live{display:flex;flex-wrap:wrap;gap:6px 16px;align-items:center;background:var(--panel);border:1px solid var(--line);border-left:5px solid var(--muted);padding:8px 14px;font-size:14px}
 .live.on{border-left-color:var(--good)}
 .live .dot{width:10px;height:10px;border-radius:50%;background:var(--muted);display:inline-block}
@@ -1302,6 +1306,65 @@ function tsideTable(p,map){const TS=(p.advice.plan||{}).tside,M=TS&&TS.maps&&TS.
    ${(M.after||[]).length?`<h3>Après leur attaque</h3><p class="note">Où va l'attaque suivante de la même équipe, selon la précédente.</p>
     <div class="tbl"><table><thead><tr><th>Round précédent</th><th class="n">Puis A</th><th class="n">Puis B</th><th class="n">Pas claire</th><th class="n">Cas</th></tr></thead><tbody>
     ${M.after.map(a=>`<tr><td>${a.twice?`${a.last} au moins 2 fois de suite, le dernier ${a.won?"gagné":"perdu"}`:`${a.last} ${a.won?"gagné":"perdu"}`} par les T</td><td class="n">${a.A} %</td><td class="n">${a.B} %</td><td class="n">${a.none} %</td><td class="n">${a.n}</td></tr>`).join("")}</tbody></table></div>`:""}`}
+// ---------- grenades: what to buy with your money, where and when to throw what you hold ----------
+const NADE_FR={flash:"flash",smoke:"smoke",he:"HE",molotov:"molotov"},NADE_C={flash:"var(--flash)",smoke:"var(--smoke)",he:"var(--he)",molotov:"var(--molotov)"};
+const euro=x=>Math.round(x).toLocaleString("fr-FR")+" $";
+const nadeName=(t,side)=>t==="molotov"&&side==="CT"?"incendiaire":NADE_FR[t];
+const nadeArt=(t,side)=>t==="molotov"&&side==="CT"?"l'incendiaire":"la "+NADE_FR[t];
+function nadeWin(N,side,w){const W=((N&&N.windows)||{})[w];return W&&typeof W==="object"?W[side]:W||""}
+function nadeEff(x,t){
+  if(t==="flash")return `aveugle un ennemi ${x.blind} % du temps${x.kill>=10?`, kill dans les 3 s ${x.kill} %`:""}${x.team>=25?` (attention : aveugle un coéquipier ${x.team} %)`:""}`;
+  if(t==="he")return `${x.dmg} dégâts en moyenne, touche ${x.hit} % du temps`;
+  if(t==="molotov")return `ferme ${esc(x.to)} (lancée dans ${Math.round(x.per100)} rounds sur 100)${x.dmg>=5?`, ${x.dmg} dégâts en moyenne`:""}`;
+  return `smoke courante (${Math.round(x.per100)} rounds sur 100)${x.win!=null?`, rounds gagnés ${x.win} % quand elle est posée (${x.base_win} % en moyenne)`:""}`}
+function nadeLine(N,side,t,x,now,post){return `<span class="nd-t" style="color:${NADE_C[t]}">${nadeName(t,side)}</span> ${esc(x.from)} → <b>${esc(x.to)}</b>, ${post?esc(nadeWin(N,side,"post")):`vers ${x.timer}${x.best&&x.best!==x.usual&&t!=="smoke"?` (meilleur moment : ${esc(nadeWin(N,side,x.best))})`:""}`}${now?' <span class="pill" style="color:var(--flash)">maintenant</span>':""}<br><span class="note">${nadeEff(x,t)} · ${esc(x.how)}${x.click?`, clic ${esc(x.click)}`:""}</span>`}
+function nadePlan(E,money,held,maxN){const H=Object.assign({},held||{}),plan=[];let n=Object.entries(H).filter(([t])=>t!=="decoy").reduce((a,[,v])=>a+v,0),left=money;
+  const want=E.order.map(o=>o.type),fl=E.order.find(o=>o.type==="flash");if(fl&&fl.strong)want.push("flash");   // a 2nd flash when they blind from your zones
+  for(const t of want){if(n>=maxN)break;const o=E.order.find(x=>x.type===t),cap=t==="flash"?2:1;if(!o||(H[t]||0)>=cap||o.price>left)continue;plan.push(o);left-=o.price;H[t]=(H[t]||0)+1;n++}
+  return {plan,left,n}}
+function nadeBuy(p,g){const N=(p.advice.plan||{}).nades,E=N&&((N.maps||{})[g.map]||{})[g.side];if(!E||g.money==null||!E.order.length)return "";
+  const rt=roundType(g),C=(N.payoff||{}).count||{},wr=(k,n)=>((C[k]||{})[n]||{}).win;if(!rt||rt==="pistol")return "";   // the pistol kit already says it
+  const card=body=>`<div class="tread nd"><h3>Grenades · ${esc(RT_FR[rt]||rt)}</h3>${body}</div>`;
+  if(rt==="eco")return card(`<p><b>Pas de grenade ce round.</b> ${wr("eco",0)!=null&&wr("eco",2)!=null?`Dans la base, une éco avec 2 grenades gagne ${wr("eco",2)} % des rounds, contre ${wr("eco",0)} % sans : trop peu pour entamer ton prochain achat.`:"Garde ton argent pour le prochain achat."}</p>`);
+  const full=rt!=="force",maxN=full?4:2,held=g.nades||{};
+  let money=g.money,pre="";
+  if(full&&!(g.primary&&FULL_W.has(g.primary))){const main=(g.side==="T"?2700:2900)+(g.helmet?0:g.armor>0?350:1000);money=Math.max(0,g.money-main);pre=`Après ton fusil et ton armure (${euro(main)}), il te restera ${euro(money)}. `}
+  else if(!full&&!(g.armor>0))pre="D'abord ton arme et ton kevlar, ensuite seulement les grenades. ";
+  const {plan,left,n}=nadePlan(E,money,held,maxN),cost=plan.reduce((a,o)=>a+o.price,0);
+  const bonus=[1400,1900,2400,2900,3400][Math.min(g.losses||0,4)],next=left+bonus,need=g.side==="CT"?4200:4000;
+  const proof=full?(wr("full",4)!=null?`Dans la base, un full buy avec 4 grenades gagne ${wr("full",4)} % des rounds, ${wr("full",0)} % sans.`:"")
+    :(wr("force",3)!=null?`En force-buy, 3 grenades ou plus : ${wr("force",3)} % de rounds gagnés, ${wr("force",0)} % sans.`:"");
+  const last=plan[plan.length-1];
+  const tail=next>=need||!plan.length?"":last&&next+last.price>=need?` Si vous perdez ce round, tu auras environ ${euro(next)} au suivant ; sans ${nadeArt(last.type,g.side)} (${last.price} $), tu aurais ${euro(next+last.price)}, de quoi racheter complet.`
+    :` Si vous perdez ce round, tu auras environ ${euro(next)} au suivant.`;
+  const have=Object.entries(held).filter(([t,v])=>v>0&&NADE_FR[t]).map(([t,v])=>`${v>1?v+" ":""}${nadeName(t,g.side)}`).join(", ");
+  const where=plan.filter((o,i)=>plan.findIndex(x=>x.type===o.type)===i).map(o=>{const x=((E.types[o.type]||{}).picks||[])[0];return x?`<li class="ct">${nadeLine(N,g.side,o.type,x,false)}</li>`:""}).join("");
+  return card(`${have?`<p class="note">Tu as déjà : ${esc(have)}.</p>`:""}
+    <p>${esc(pre)}${plan.length?`<b>Achète, dans l'ordre :</b>`:n>=maxN?"<b>Tu as déjà assez de grenades pour ce round.</b>":"<b>Pas assez d'argent pour une grenade utile.</b>"}</p>
+    ${plan.length?`<div class="nd-plan">${plan.map(o=>`<span style="border-color:${NADE_C[o.type]}">${nadeName(o.type,g.side)} ${o.price} $</span>`).join("")}<span>total ${euro(cost)}</span></div>`:""}
+    ${where?`<ul class="big-list">${where}</ul>`:""}
+    <p class="note">${esc(proof)}${tail}</p>`)}
+function nadeLive(p,g){const N=(p.advice.plan||{}).nades,E=N&&((N.maps||{})[g.map]||{})[g.side];if(!E||g.health===0)return "";
+  const w=g.bomb==="planted"?"post":g.elapsed==null?null:g.elapsed<20?"debut":g.elapsed<40?"prise":g.elapsed<70?"action":"fin";
+  const list=t=>(w==="post"&&(E.types[t].post||[]).length?E.types[t].post:E.types[t].picks)||[];
+  const held=Object.entries(g.nades||{}).filter(([t,v])=>v>0&&E.types[t]&&list(t).length);if(!held.length)return "";
+  const rank=t=>{const i=E.order.findIndex(o=>o.type===t);return i<0?9:i};
+  const rows=held.sort((a,b)=>rank(a[0])-rank(b[0])).map(([t,v])=>{const ps=list(t).slice(0,2);
+    return `<li class="ct"><b>${v>1?v+" ":""}${nadeName(t,g.side)}${v>1?"s":""}</b><br>${ps.map(x=>nadeLine(N,g.side,t,x,!!w&&(w==="post"||x.best===w||x.usual===w),w==="post"&&(E.types[t].post||[]).includes(x))).join("<br>")}</li>`}).join("");
+  const warn=N.unused_per_death>=0.6?`<p class="note">Sur tes derniers matchs, tu meurs avec ${String(N.unused_per_death).replace(".",",")} grenade en main en moyenne : lance-la avant de prendre un duel risqué.</p>`:"";
+  return `<div class="tread nd"><h3>Tes grenades · ${w?esc(nadeWin(N,g.side,w)):"en jeu"}</h3><ul class="big-list">${rows}</ul>${warn}</div>`}
+function nadeTable(p,map,side){const N=(p.advice.plan||{}).nades,E=N&&((N.maps||{})[map]||{})[side];if(!E)return "";
+  const types=[...E.order.map(o=>o.type),...["smoke","flash","molotov","he"].filter(t=>!E.order.some(o=>o.type===t)&&E.types[t])].filter(t=>(E.types[t].picks||[]).length);
+  if(!types.length)return "";
+  const o0=E.order[0];
+  return `<h3>Tes grenades sur ${MAPN(map)} en ${side}</h3>
+   <p class="note">${E.personal?`Lancers efficaces depuis tes positions (${E.zones.map(esc).join(", ")}).`:"Pas encore de match à toi ici : les lancers les plus utiles du camp dans la base."}
+    Ordre d'achat quand l'argent manque : ${E.order.map(o=>`${nadeName(o.type,side)} (${o.price} $)`).join(" › ")}.${o0&&o0.alone&&E.none?` Achetée seule, ${nadeArt(o0.type,side)} fait gagner ${o0.alone.win} % des rounds, contre ${E.none.win} % sans grenade (base).`:""}</p>
+   <div class="tbl"><table><thead><tr><th>Grenade</th><th>Depuis → vers</th><th>Quand</th><th>Effet dans la base</th><th>Comment</th><th class="n">Tes lancers</th></tr></thead><tbody>
+   ${types.map(t=>(E.types[t].picks||[]).map(x=>`<tr><td><span class="nd-t" style="color:${NADE_C[t]}">${nadeName(t,side)}</span>${E.types[t].elsewhere?'<br><span class="note">ailleurs sur la carte</span>':""}</td><td>${esc(x.from)} → <b>${esc(x.to)}</b></td>
+     <td>vers ${x.timer}${x.best&&x.best!==x.usual&&t!=="smoke"?`<br><span class="note">plus efficace : ${esc(nadeWin(N,side,x.best))}</span>`:""}</td><td class="wrap">${nadeEff(x,t)}</td>
+     <td class="wrap">${esc(x.how)}${x.click?`, clic ${esc(x.click)}`:""}<div class="cmd"><code>${esc(x.setpos)}</code><button type="button">Copier</button></div></td><td class="n">${x.mine||"—"}</td></tr>`).join("")).join("")}</tbody></table></div>
+   ${N.unused_per_death!=null?`<p class="note">Sur tes derniers matchs, ${String(N.unused_per_death).replace(".",",")} grenade encore en main par mort (${(N.unused_last||[]).map(u=>`${MAPN(u.map)} : ${u.unused}`).join(", ")}). La position se colle dans la console d'un serveur d'entraînement (sv_cheats 1).</p>`:""}`}
 function micBtn(){const g=gsiLast||{};if(!D.local)return "";
   if(g.mic)return `${g.mic_silent?`<span class="pill weak" title="Aucun son capté depuis une minute">● Micro muet : <a href="#steam" style="color:inherit">vérifie le micro</a></span>`:`<span class="pill weak" title="Ton micro est enregistré pour analyser tes calls">● Micro</span>`}${g.mic_auto?"":`<button type="button" class="close" data-mic="stop">Arrêter l'enregistrement</button>`}`;
   return g.mic_auto?"":`<button type="button" class="close" data-mic="start" title="Enregistre ton micro pour analyser tes calls après la partie">Enregistrer mes calls</button>`}
@@ -1313,7 +1376,7 @@ function liveStrip(p){if(!D.local)return "";const g=gsiLast;
   return `<div class="live"><span class="dot" aria-hidden="true"></span>${st&&st.installed?"<span>Détection active : la fiche suivra ta partie dès que tu seras en jeu.</span>"
     :`<span>Choisis ta carte et ton camp, ou <a href="#steam" style="color:var(--ct)">active la détection automatique</a> : la fiche suivra ta partie toute seule.</span>`}${micBtn()}</div>`}
 async function gsiPoll(){clearTimeout(gsiTimer);if(!D.local||S.view!=="partie")return;
-  try{const g=await (await fetch("/api/gsi/state")).json();const sig=x=>x?[x.map,x.side,x.round,x.round_phase,x.money,x.bomb,x.age!=null&&x.age<75,JSON.stringify(x.hist||{})].join("|"):"";
+  try{const g=await (await fetch("/api/gsi/state")).json();const sig=x=>x?[x.map,x.side,x.round,x.round_phase,x.money,x.bomb,x.age!=null&&x.age<75,JSON.stringify(x.hist||{}),JSON.stringify(x.nades||{}),x.health===0,x.elapsed==null?"":x.elapsed<20?0:x.elapsed<40?1:x.elapsed<70?2:3].join("|"):"";
     const before=sig(gsiLast)+(gsiLast&&gsiLast.mic);gsiLast=g&&Object.keys(g).length?g:null;if(sig(gsiLast)+(gsiLast&&gsiLast.mic)!==before&&S.view==="partie"&&S.player&&D.players[S.player])renderPartie()}catch(e){}
   gsiTimer=setTimeout(gsiPoll,2000)}
 function renderPartie(){
@@ -1349,6 +1412,7 @@ function renderPartie(){
     <div class="btns side big" role="group" aria-label="Camp"><button type="button" data-side="T" aria-pressed="${S.side==="T"}">T · ${S.map?roleOf(S.map,"T"):"attaque"}</button><button type="button" data-side="CT" aria-pressed="${S.side==="CT"}">CT · ${S.map?roleOf(S.map,"CT"):"défense"}</button></div>
     <button type="button" class="close" id="focus">${focus?"Quitter le mode 2e écran":"Mode 2e écran"}</button>
    </div>
+   ${live&&!partieManual&&gsiLast.map===S.map&&gsiLast.side===S.side?(gsiLast.round_phase==="freezetime"?nadeBuy(p,gsiLast):gsiLast.round_phase==="live"?nadeLive(p,gsiLast):""):""}
    ${live&&!partieManual&&S.side==="CT"&&gsiLast.side==="CT"&&gsiLast.map===S.map?tsideLive(p,gsiLast):""}
    ${R0?`<p class="note">Pas encore de match à toi sur ${MAPN(S.map)} : cette fiche vient de ${R0.rounds||"—"} rounds de la base et des démos pros. Elle deviendra personnelle après tes premiers matchs ici.</p>`:""}
    <div class="ig">
@@ -1370,6 +1434,7 @@ function renderPartie(){
     ${D.local?`<div><b>Avant la 1re game</b><a href="#routine" style="color:var(--flash)">journal (20 s)</a> · <a href="#prog" style="color:var(--flash)">échauffement du jour</a></div>`:""}
    </div>
    ${S.map?buyRows(p,S.map,S.side,live&&gsiLast.map===S.map&&gsiLast.side===S.side?roundType(gsiLast):null):""}
+   ${S.map?nadeTable(p,S.map,S.side):""}
    ${S.map&&S.side==="CT"?tsideTable(p,S.map):""}`;
   copyBtn(v);
   $$("[data-map]",v).forEach(b=>b.onclick=()=>{S.map=b.dataset.map;S.level=null;partieManual=true;store("map",S.map);renderPartie()});

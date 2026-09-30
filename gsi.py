@@ -192,6 +192,9 @@ def set_site(rnd, site):
     return True
 
 
+NADE_KEY = {"flashbang": "flash", "smokegrenade": "smoke", "hegrenade": "he", "molotov": "molotov", "incgrenade": "molotov", "decoy": "decoy"}
+
+
 def update(payload):
     """A message from the game. Keeps only what the in-game sheet needs."""
     if (payload.get("auth") or {}).get("token") != config.settings().get("gsi_token"):
@@ -218,14 +221,26 @@ def update(payload):
                 print("historique des rounds :", e, flush=True)
         elif pl.get("activity") == "menu":
             STATE.update({"map": None, "map_phase": None})
+        now = time.time()
+        if rd.get("phase") == "live" and STATE.get("round_phase") != "live":
+            STATE["live_since"] = now      # end of the freeze time: the round clock starts
+        if rd.get("bomb") == "planted" and STATE.get("bomb") != "planted":
+            STATE["planted_at"] = now
         STATE.update({"steamid": me, "round_phase": rd.get("phase"), "bomb": rd.get("bomb"), "win_team": rd.get("win_team"),
-                      "activity": pl.get("activity"), "_t": time.time()})
+                      "activity": pl.get("activity"), "_t": now})
         if own:
             prim = None
             for w in (pl.get("weapons") or {}).values():
                 if w.get("type") in PRIMARY_TYPES:
                     n = str(w.get("name", "")).replace("weapon_", "")
                     prim = WEAPON_FR.get(n, n)
+            held = {}
+            for w in (pl.get("weapons") or {}).values():
+                if w.get("type") == "Grenade":
+                    k = NADE_KEY.get(str(w.get("name", "")).replace("weapon_", ""))
+                    if k:
+                        held[k] = held.get(k, 0) + max(1, int(w.get("ammo_reserve") or 1))
+            STATE["nades"] = held if pl.get("weapons") else STATE.get("nades")
             STATE.update({"side": side or STATE.get("side"), "money": st.get("money"), "equip": st.get("equip_value"),
                           "armor": st.get("armor"), "helmet": st.get("helmet"), "primary": prim if pl.get("weapons") else STATE.get("primary"),
                           "health": st.get("health"), "round_kills": st.get("round_kills"),
@@ -244,6 +259,10 @@ def state():
             s["hist"] = {"rounds": HIST.get("rounds", {}), "sites": HIST.get("sites", {})}
     if s:
         s["age"] = round(time.time() - s.pop("_t", 0), 1)
+        if s.get("round_phase") == "live" and s.get("live_since"):
+            s["elapsed"] = round(time.time() - s["live_since"], 1)   # seconds since the end of the freeze time
+        if s.get("bomb") == "planted" and s.get("planted_at"):
+            s["since_plant"] = round(time.time() - s["planted_at"], 1)
     return s
 
 
