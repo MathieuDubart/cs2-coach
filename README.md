@@ -1,87 +1,92 @@
-# Coach CS2
+# CS2 Coach
 
-Coach personnel pour Counter-Strike 2 : il récupère automatiquement tes démos de matchmaking (sans téléchargement manuel), les analyse en profondeur et génère une application locale avec des conseils précis, sourcés et directement applicables.
+Personal coach for Counter-Strike 2: it fetches your matchmaking demos automatically (no manual download), analyzes them in depth and builds a local app with precise, sourced advice you can apply right away.
 
-## Deux usages principaux
+## Two main uses
 
-- **En partie** (2e écran) : la fiche de la carte jouée, qui suit ta game toute seule grâce au Game State Integration de CS2 (carte, camp, round, argent). Tes forces et tes positions fortes, ce qu'il faut éviter, tes réflexes, tes rotations, tes stuffs clés, et le bon conseil au bon moment (achat pendant le freeze time, bombe posée, fin de round). Bouton « Mode 2e écran » pour un affichage plein écran. En CT, la **lecture des T** donne les chances d'une attaque A ou B au round qui vient, selon le type de round (pistol, round 2, éco, force, full) et ce que cette équipe a fait dans la mi-temps : un clic après chaque round (A, B ou pas clair) suffit pour que la prédiction s'adapte.
-- **Bilan** (à froid, après la session ou le lendemain) : ce qui change par rapport à tes matchs d'avant, de combien, les pistes d'explication (horaires, longueur de session, cartes, groupe, expériences lancées), tes axes du moment, ce que tu testes et ce que tu pourrais tester. L'analyse complète (matchs, cartes, mi-round, progression, routine) est accessible depuis le Bilan.
-- Aussi : **Équipe** (plan de jeu à plusieurs), **Explorer** (n'importe quel joueur, pros), **⚙ Réglages** (connexion Steam, détection de la partie). À la première ouverture, l'accueil propose d'analyser son propre profil.
+- **In game** (2nd screen): the sheet of the map you're playing, which follows your match on its own through CS2's Game State Integration (map, side, round, money, grenades in hand, round clock). A "Now" panel changes with the phase of the round:
+  - **freeze time**: what to buy with your money and the kind of round (weapon, armor, grenades in order, where to play), and what that leaves you for the next round;
+  - **during the round**: as CT, the **T read**: the odds of an A or B attack for this round, from the kind of round (pistol, round 2, eco, force, full), what this team did in the half (one click after each round: A, B or not clear), and what you see in the round: the clock running with no site taken yet, where the first contact happened, the site where you saw them. Plus where to throw the grenades you hold, marked "now" at the right moment, and where each side dies at this moment of the round;
+  - **bomb planted**: the plant spots of the site on the radar, the retake odds by players alive on each side, the retake or post-plant grenades.
+  Below, tabs: game plan (your strengths, what to avoid, reflexes, rotations), buys by round, grenades, T habits. "2nd screen mode" hides the top bar and enlarges the text.
+- **Review** (cold, after the session or the next day): what changed against your previous matches and by how much, the possible reasons (times, session length, maps, group, experiments), your focus areas, what you're testing and what you could test. The full analysis (matches, maps, mid-round, progress, routine) is one click away.
+- Also: **Team** (game plan for 2 to 5 players), **Explore** (any player, pros), **⚙ Settings** (Steam connection, game detection, microphone). On first launch, the home page offers to analyze your own profile.
 
-**Tes calls** (facultatif, Réglages) : l'app enregistre ton micro pendant tes parties (seulement ta voix ; avec un casque, celle de tes coéquipiers n'est pas captée), le transcrit sur ce PC avec Whisper (priorité basse, mis en pause si une partie commence), cale tes calls sur les rounds et mesure : infos données avant de mourir, « où + combien », grenades annoncées, parole pendant le clutch d'un coéquipier, énervement. Résultats dans le Bilan ; fichiers dans `out/voice` (non versionné). N'enregistre d'autres personnes qu'avec leur accord (article 226-1 du Code pénal).
+**Your calls** (optional, Settings): the app records your microphone during your matches (only your voice; with a headset, your teammates' voices aren't picked up), transcribes it on this PC with Whisper (low priority, paused when a match starts), lines your calls up with the rounds and measures: info given before dying, "where + how many", grenades called, talking during a teammate's clutch, frustration. Results in the Review; files in `out/voice` (not versioned). Only record other people with their consent (in France, article 226-1 of the Code pénal).
 
-La détection de la partie s'active dans les Réglages : l'app écrit `gamestate_integration_coachcs2.cfg` dans le dossier `cfg` de CS2 (fonction officielle de Valve, utilisée par les HUD et claviers RGB ; en partie, CS2 n'envoie que tes propres infos). Relancer CS2 après l'activation.
+Game detection is turned on in Settings: the app writes `gamestate_integration_coachcs2.cfg` in CS2's `cfg` folder (Valve's official feature, used by HUDs and RGB keyboards; during a match, CS2 only sends your own info). Restart CS2 after turning it on.
 
-## Ce que ça analyse
+## What it analyzes
 
-- **Économie** : achats, force-buys, sauvegardes, argent gaspillé.
-- **Utilitaires** : grenades lancées, dégâts de HE/molotov, flashs efficaces, lineups utilisés sur tes positions.
-- **Positionnement** : zones fortes/faibles par carte (callouts), duels gagnés/perdus par zone, positions à exploiter ou à éviter.
-- **Déplacements et tir** : temps de réaction, pré-visée, précision, contre-strafe, trades, repeeks.
-- **Archétype** : Entry, Lurker, AWPer, Support, Closer… selon tes armes, déplacements, notions et réactions, avec des **pros de référence** qui jouent aux mêmes endroits ou ont le même style.
-- **Fiche d'avant-match par carte** + résumé global, replays 2D des rounds clés.
-- **Où jouer et quoi acheter selon le round** (pistol, éco, force, full, anti-éco), par carte et par camp : tes propres rounds d'abord, puis les joueurs de ton profil (même rôle), puis toute la base, ajustés par tes duels dans chaque zone et avec chaque arme.
-- **Grenades** depuis tes positions, par carte et par camp : où lancer chaque smoke, flash, HE et molotov (de quelle zone vers laquelle, comment, position à copier pour s'entraîner), quand elles marchent le mieux et ce qu'elles font dans la base (ennemis aveuglés, kills qui suivent, dégâts, rounds gagnés). En partie : pendant le freeze time, quoi acheter selon ton argent et le type de round (et ce que ça laisse pour le round suivant) ; pendant le round, où lancer les grenades que tu as en main, avec celles dont c'est le moment (et celles du retake ou du post-plant une fois la bombe posée).
-- **Tendances des T** par carte : site visé selon le type de round, rushs, entrées (par où, à quel moment), premier contact, et où va l'attaque suivante après une attaque gagnée ou perdue. Une attaque stoppée avant le site compte pour le site visé (zones apprises sur les rounds où les T sont entrés).
-- **Mi-round** : rotations (délai de départ, trajet, route, morts en route), tenue de site, lurk, post-plant, retakes, avantage numérique rendu, sauvegardes, bruit à portée d'ennemi, comparés à la base et aux pros ; routes de rotation les plus sûres et positions selon l'arme, par carte ; réflexes « si… alors… ».
-- **Routine** : avant, pendant et après le round et la game, hors du jeu (sommeil, caféine, pauses), selon le groupe (solo, duo, trio, quatuor, five-stack), avec les changements récents du jeu. Habitudes mesurées : horaires, rang dans la session, séries de défaites, partenaires, et journal d'avant-session (sommeil, énergie, échauffement).
-- **Progresser** : priorités selon le niveau et l'expérience, conseils du rôle, échauffement ciblé, stats par arme, suivi des indicateurs match par match, et **expériences** (une arme, une position, une habitude…) évaluées automatiquement sur les matchs suivants.
-- **Équipe** : toi + 1 à 4 coéquipiers analysés. Le coach croise leurs données (rôles, zones, stuffs connues, armes, mi-round, matchs joués ensemble) avec la base et les pros : rôles T, setup CT par carte (qui joue où, sur le radar), exécutions A et B (qui lance quelle grenade, avec la commande `setpos`), rotations, IGL proposé, cartes à choisir en Premier, vocabulaire et calls, économie (AWP, ordre de drop, force-buy de chacun), synergies (trades entre vous), objectifs collectifs et travail individuel au service de l'équipe.
-- Chaque conseil cite ses sources : guides, vidéos de pros, études scientifiques, notes de patch (voir `knowledge.py`).
-- Comparaison à une population de référence (joueurs aléatoires + démos pro HLTV).
+- **Economy**: buys, force-buys, saves, wasted money.
+- **Utility**: grenades thrown, HE/molotov damage, effective flashes, lineups used from your positions.
+- **Positioning**: strong and weak zones per map (callouts), duels won and lost per zone, positions to play more or to avoid.
+- **Movement and aim**: reaction time, pre-aim, accuracy, counter-strafing, trades, re-peeks.
+- **Archetype**: Entry, Lurker, AWPer, Support, Closer… from your weapons, movement, game sense and reactions, with **reference pros** who play the same spots or share your style.
+- **Coach notes per map and side**: what to change or keep in each zone, the grenade to throw before pushing, the position to try.
+- **Where to play and what to buy by round** (pistol, eco, force, full, anti-eco), per map and side: your own rounds first, then players of your profile (same role), then the whole base, adjusted by your duels in each zone and with each weapon.
+- **Grenades** from your positions, per map and side: where to throw each smoke, flash, HE and molotov (from which zone to which, how, position to copy for practice), when they work best and what they do in the base (enemies flashed, kills that follow, damage, rounds won).
+- **T habits** per map: the site hit by kind of round, rushes, entries (through where, when), the first duel, where the next attack goes after a won or lost one, how quiet rounds tilt the odds, plant spots, retakes by players alive, and where each side dies by moment of the round. An attack stopped before the site counts for the site it was going to (zones learned from the rounds where the Ts got in).
+- **Mid-round**: rotations (time to leave, travel, route, deaths on the way), site holding, lurks, post-plant, retakes, man advantages thrown, saves, noise near enemies, compared with the base and pros; safest rotation routes and positions by weapon, per map; "if… then…" reflexes.
+- **Routine**: before, during and after the round and the game, and outside the game (sleep, caffeine, breaks), by group (solo, duo, trio, 4-stack, 5-stack), with the latest game changes. Measured habits: times, game number in the session, loss streaks, partners, and the pre-session journal (sleep, energy, warm-up).
+- **Progress**: priorities by level and experience, role tips, targeted warm-up, stats per weapon, match-by-match tracking, and **experiments** (a weapon, a position, a habit…) evaluated automatically over the next matches.
+- **Team**: you + 1 to 4 analyzed teammates. The coach crosses their data (roles, zones, known lineups, weapons, mid-round, matches played together) with the base and pros: T roles, CT setup per map (who plays where, on the radar), A and B executes (who throws which grenade, with the `setpos` command), rotations, suggested IGL, maps to pick in Premier, shared vocabulary and calls, economy (AWP, drop order, everyone's force-buy), synergies (trades between you), team goals and individual work for the team.
+- Every piece of advice cites its sources: guides, pro videos, scientific studies, patch notes (see `knowledge.py`).
+- Comparison with a reference population (random players + HLTV pro demos).
 
-N'importe quel joueur peut être analysé à la volée depuis la barre de recherche (lien Steam, SteamID64, URL personnalisée ou code de partage).
+Any player can be analyzed on the fly from the search bar (Steam link, SteamID64, custom URL or share code).
 
-## Prérequis
+## Requirements
 
 - Windows, Python 3.11+
-- Steam lancé et connecté, **CS2 fermé** (pour la récupération de la liste des matchs via le Game Coordinator)
-- Optionnel : [7-Zip](https://www.7-zip.org/) (démos pro HLTV) et [Git for Windows](https://gitforwindows.org/) (son `curl` est utilisé pour csstats.gg)
+- Steam running and signed in, **CS2 closed** (to fetch the match list through the Game Coordinator)
+- Optional: [7-Zip](https://www.7-zip.org/) (HLTV pro demos) and [Git for Windows](https://gitforwindows.org/) (its `curl` is used for csstats.gg)
 
 ```bash
 pip install -r requirements.txt
 ```
 
-`boiler-writter` et les radars des cartes sont téléchargés automatiquement au premier lancement.
+`boiler-writter` and the map radars are downloaded automatically on first launch.
 
-## Utilisation
+## Usage
 
-| Commande | Rôle |
+| Command | What it does |
 |---|---|
-| `Coach CS2.bat` | Lance l'application locale (http://localhost:8765) |
-| `python cs2coach.py` | Récupère et analyse tes derniers matchs (compte Steam connecté) |
-| `python cs2coach.py --steamid <id>` | Analyse un autre joueur |
-| `python cs2coach.py --sharecode CSGO-...` | Analyse un match précis |
-| `python cs2coach.py --authcode XXXX-XXXXX-XXXX --knowncode CSGO-...` | Tout l'historique (nécessite `steam_api_key` dans `out/settings.json`) |
-| `python crawl.py` / `python profile_all.py` | Étoffe la population de référence (joueurs croisés en match) |
-| `python pro.py --teams` | Télécharge et analyse des démos pro (HLTV) |
-| `python deepdive.py` | Analyse approfondie : engagements, audit des grenades, zones vs pros |
-| `python rounds.py` puis `python midround.py` | Contexte des rounds et analyse mi-round de toutes les démos (lancés automatiquement par l'app) |
-| `python profile_all.py --plans` | Recalcule le plan de progression de tous les profils |
-| `autostart.bat` | Lancement automatique au démarrage de Windows |
+| `Coach CS2.bat` | Starts the local app (http://localhost:8765) |
+| `python cs2coach.py` | Fetches and analyzes your latest matches (signed-in Steam account) |
+| `python cs2coach.py --steamid <id>` | Analyzes another player |
+| `python cs2coach.py --sharecode CSGO-...` | Analyzes one match |
+| `python cs2coach.py --authcode XXXX-XXXXX-XXXX --knowncode CSGO-...` | The whole history (needs `steam_api_key` in `out/settings.json`) |
+| `python crawl.py` / `python profile_all.py` | Grows the reference population (players met in matches) |
+| `python pro.py --teams` | Downloads and analyzes pro demos (HLTV) |
+| `python deepdive.py` | Deep analysis: engagements, grenade audit, zones vs pros |
+| `python rounds.py` then `python midround.py` | Round context and mid-round analysis of every demo (run automatically by the app) |
+| `python profile_all.py --plans` | Rebuilds the progress plan of every profile |
+| `python profile_all.py --existing` | Full analysis again for every existing profile |
+| `autostart.bat` | Starts the app automatically with Windows |
 
-Le port du serveur se change avec la variable d'environnement `COACH_PORT`.
+The server port is set with the `COACH_PORT` environment variable.
 
-## Connexion Steam (facultative, onglet « Compte Steam »)
+## Steam connection (optional, Settings)
 
-- **Se connecter avec Steam** : la page officielle de Steam confirme ton compte (OpenID), l'app ne voit jamais ton mot de passe.
-- **Temps de jeu** : lu dans les fichiers du client Steam de ce PC, sans connexion.
-- **Historique complet et automatique** : avec une clé d'API Steam ([steamcommunity.com/dev/apikey](https://steamcommunity.com/dev/apikey)) et le code d'authentification de ton historique ([page d'aide Steam pour CS2](https://help.steampowered.com/fr/wizard/HelpWithGameIssue/?appid=730&issueid=128)), chaque nouveau match est retrouvé, même des semaines plus tard, puis analysé. L'app vérifie au lancement puis toutes les 30 minutes. Les matchs sans démo comptent quand même dans tes habitudes (date, score, K/A/D, coéquipiers), et tes amis Steam servent à repérer ton groupe.
-- Clé et code restent dans `out/settings.json` (non versionné) et ne partent que vers l'API officielle de Steam. « Tout déconnecter » les retire.
+- **Sign in with Steam**: Steam's official page confirms your account (OpenID); the app never sees your password.
+- **Playtime**: read from the Steam client files on this PC, no connection needed.
+- **Full, automatic history**: with a Steam API key ([steamcommunity.com/dev/apikey](https://steamcommunity.com/dev/apikey)) and the authentication code of your history ([Steam's CS2 help page](https://help.steampowered.com/en/wizard/HelpWithGameIssue/?appid=730&issueid=128)), every new match is found, even weeks later, then analyzed. The app checks at launch and every 30 minutes. Demos that are not online yet (a few minutes after the match) are tried again at the next analysis. Matches without a demo still count in your habits (date, score, K/A/D, teammates), and your Steam friends are used to detect your group.
+- The key and code stay in `out/settings.json` (not versioned) and only go to Steam's official API. "Disconnect everything" removes them.
 
-## Limites
+## Limits
 
-- Valve ne fournit que les **8 derniers matchs**, et les démos expirent au bout d'environ **un mois**.
-- Un joueur sans profil Leetify public ni démo partagée n'obtient qu'un profil allégé (rangs Steam/csstats).
-- FACEIT n'est pas pris en charge.
+- Valve only provides the **last 8 matches**, and demos expire after about **a month**.
+- A player with no public Leetify profile and no shared demo only gets a light profile (Steam/csstats ranks).
+- FACEIT isn't supported.
 
-## Données et confidentialité
+## Data and privacy
 
-Tout reste en local dans `cache/` (démos) et `out/` (analyses, site généré, `settings.json` qui peut contenir une clé API Steam et un code d'authentification). Ces dossiers ne sont **pas versionnés**.
+Everything stays local in `cache/` (demos) and `out/` (analyses, generated site, `settings.json` which can hold a Steam API key and an authentication code). These folders are **not versioned**.
 
-## Crédits
+## Credits
 
-- [demoparser2](https://github.com/LaihoE/demoparser) — parsing des démos
-- [boiler-writter](https://github.com/akiver/boiler-writter) (MIT) — liste des matchs via le Game Coordinator
-- Radars et métadonnées de cartes issus de [CS Demo Manager](https://github.com/akiver/cs-demo-manager)
-- [Leetify](https://leetify.com), [csstats.gg](https://csstats.gg), [HLTV](https://www.hltv.org) — statistiques publiques et démos pro
+- [demoparser2](https://github.com/LaihoE/demoparser): demo parsing
+- [boiler-writter](https://github.com/akiver/boiler-writter) (MIT): match list through the Game Coordinator
+- Radars and map metadata from [CS Demo Manager](https://github.com/akiver/cs-demo-manager)
+- [Leetify](https://leetify.com), [csstats.gg](https://csstats.gg), [HLTV](https://www.hltv.org): public stats and pro demos
