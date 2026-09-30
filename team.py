@@ -515,7 +515,7 @@ def individual(M, troles, ct_by_member):
                     "ct_role": ct_by_member.get(m["steamid"]),
                     "archetype": m["arch"].get("name"),
                     "priorities": [r.get("short") or r.get("title") for r in rules] + [w.get("fix") for w in weak if w.get("fix")],
-                    "drill": warm[0]["map"] + " : " + warm[0]["text"] if warm else None})
+                    "drill": warm[0]["map"] + ": " + warm[0]["text"] if warm else None})
     return out
 
 

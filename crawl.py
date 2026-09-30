@@ -85,7 +85,7 @@ def collect_urls(max_new, prefer_maps, days, per_player=3, own_first=True):
                     taken += 1
                     print(f"  link {len(todo)}/{max_new}: {m['map_name']} (player {pid})", flush=True)
             except Exception as e:
-                print(f"  code {code} : {e}", flush=True)
+                print(f"  code {code}: {e}", flush=True)
     s = config.settings()
     s["crawl_visited"] = sorted(visited)
     s["crawl_deep"] = sorted(set(s.get("crawl_deep", [])) | {str(p) for p in ring1 if str(p) in visited})
