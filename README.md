@@ -8,6 +8,8 @@ Coach personnel pour Counter-Strike 2 : il récupère automatiquement tes démos
 - **Bilan** (à froid, après la session ou le lendemain) : ce qui change par rapport à tes matchs d'avant, de combien, les pistes d'explication (horaires, longueur de session, cartes, groupe, expériences lancées), tes axes du moment, ce que tu testes et ce que tu pourrais tester. L'analyse complète (matchs, cartes, mi-round, progression, routine) est accessible depuis le Bilan.
 - Aussi : **Équipe** (plan de jeu à plusieurs), **Explorer** (n'importe quel joueur, pros), **⚙ Réglages** (connexion Steam, détection de la partie). À la première ouverture, l'accueil propose d'analyser son propre profil.
 
+**Tes calls** (facultatif, Réglages) : l'app enregistre ton micro pendant tes parties (seulement ta voix ; avec un casque, celle de tes coéquipiers n'est pas captée), le transcrit sur ce PC avec Whisper (priorité basse, mis en pause si une partie commence), cale tes calls sur les rounds et mesure : infos données avant de mourir, « où + combien », grenades annoncées, parole pendant le clutch d'un coéquipier, énervement. Résultats dans le Bilan ; fichiers dans `out/voice` (non versionné). N'enregistre d'autres personnes qu'avec leur accord (article 226-1 du Code pénal).
+
 La détection de la partie s'active dans les Réglages : l'app écrit `gamestate_integration_coachcs2.cfg` dans le dossier `cfg` de CS2 (fonction officielle de Valve, utilisée par les HUD et claviers RGB ; en partie, CS2 n'envoie que tes propres infos). Relancer CS2 après l'activation.
 
 ## Ce que ça analyse

@@ -4,6 +4,7 @@ The search bar of the page sends any Steam link / SteamID here; the full pipelin
 (Steam open, CS2 closed for Valve match info) and the new player appears in the page when done.
 """
 import json
+import re
 import sys
 import threading
 import traceback
@@ -85,9 +86,24 @@ class Handler(BaseHTTPRequestHandler):
             # standards mode (the claude.ai host adds this wrapper itself when publishing)
             head = '<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head><body style="margin:0">'
             return self.send(200, head + build_app.shell_html(load_index(), local=True) + "</body></html>", "text/html; charset=utf-8")
+        if u.path == "/api/voice/status":
+            return self.send(200, voice_status())
+        if u.path == "/api/voice/devices":
+            try:
+                import voice
+                return self.send(200, voice.devices())
+            except Exception as e:
+                return self.send(200, {"error": str(e)})
         if u.path == "/api/gsi/state":
             import gsi
-            return self.send(200, gsi.state())
+            s = gsi.state()
+            try:
+                import voice
+                s["mic"] = voice.REC.recording()
+                s["mic_auto"] = bool(voice.settings().get("auto"))
+            except Exception:
+                pass
+            return self.send(200, s)
         if u.path == "/api/gsi/status":
             import gsi
             return self.send(200, gsi.status())
@@ -157,7 +173,40 @@ class Handler(BaseHTTPRequestHandler):
             return self.send(400, {"error": "requête invalide"})
         if u.path == "/api/gsi":  # CS2 Game State Integration: the game itself, many times per round
             import gsi
-            return self.send(200 if gsi.update(body) else 403, {})
+            ok = gsi.update(body)
+            if ok:
+                try:
+                    import voice
+                    if voice.settings().get("auto"):
+                        voice.on_gsi(gsi.state())
+                except Exception as e:
+                    print("calls :", e, flush=True)
+            return self.send(200 if ok else 403, {})
+        if u.path.startswith("/api/voice/"):
+            import gsi
+            import voice
+            act = u.path.rsplit("/", 1)[-1]
+            try:
+                if act == "settings":
+                    voice.save_settings(**{k: body[k] for k in ("auto", "device") if k in body})
+                elif act == "start":
+                    g = gsi.state()
+                    voice.pause_transcription()
+                    voice.REC.start(g.get("map"), body.get("sid") or config.settings().get("own_steamid"), "manual")
+                elif act == "stop":
+                    voice.finish()
+                elif act == "transcribe":
+                    if not voice.start_transcription(str(body.get("id") or "")):
+                        return self.send(409, {"error": "Une transcription est déjà en cours."})
+                elif act == "delete":
+                    rid = str(body.get("id") or "")
+                    if re.fullmatch(r"[\w-]+", rid):
+                        voice.delete(rid)
+                else:
+                    return self.send(404, {"error": "introuvable"})
+            except Exception as e:
+                return self.send(400, {"error": f"Micro : {e}"})
+            return self.send(200, voice_status())
         if u.path in ("/api/gsi/install", "/api/gsi/uninstall"):
             import gsi
             try:
@@ -232,6 +281,36 @@ def refresh_plan(sid):
     build_app.write_player(sid)
 
 
+def voice_status():
+    try:
+        import voice
+    except Exception as e:
+        return {"available": False, "error": str(e)}
+    m = voice.REC.meta
+    return {"available": True, "settings": voice.settings(), "recording": bool(m), "current": m and {k: m[k] for k in ("id", "map", "start_iso", "device", "source")},
+            "transcribing": voice.transcribing(), "recordings": voice.recordings()[:12]}
+
+
+def voice_watch(every=15):
+    """Stops an automatic recording when the game is gone, and refreshes the plan once a transcription is done."""
+    import time
+    done = set()
+    while True:
+        time.sleep(every)
+        try:
+            import gsi
+            import voice
+            voice.watchdog(gsi.state())
+            p = voice.JOB.get("proc")
+            if p and p.poll() is not None and voice.JOB.get("id") not in done:
+                done.add(voice.JOB["id"])
+                sid = config.settings().get("own_steamid")
+                if sid and p.returncode == 0 and not LOCK.locked():
+                    refresh_plan(sid)
+        except Exception as e:
+            print("surveillance du micro :", e, flush=True)
+
+
 def auto_sync(every=1800):
     """Steam history connected: check for new matches at start-up, then every 30 minutes (only when idle)."""
     import time
@@ -265,6 +344,7 @@ if __name__ == "__main__":
     url = f"http://127.0.0.1:{PORT}/#avant"
     print(f"Coach CS2 : {url}  (Ctrl+C pour arrêter)")
     threading.Thread(target=auto_sync, daemon=True).start()
+    threading.Thread(target=voice_watch, daemon=True).start()
     if "--no-browser" not in sys.argv:
         webbrowser.open(url)
     srv.serve_forever()

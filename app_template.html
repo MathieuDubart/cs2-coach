@@ -947,6 +947,7 @@ async function renderSteam(){
   v.innerHTML=head+`<div class="empty"><span class="spin" aria-hidden="true"></span>Lecture de ta connexion Steam…</div>`;
   let st;try{st=await (await fetch("/api/steam/status"+(D.own?`?sid=${D.own}`:""))).json()}catch(e){v.innerHTML=head+`<div class="empty">Le serveur local ne répond pas : relance « Coach CS2.bat ».</div>`;return}
   let gs=null;try{gs=await (await fetch("/api/gsi/status")).json()}catch(e){}
+  let vs=null;try{vs=await (await fetch("/api/voice/status")).json()}catch(e){}
   const flag=new URLSearchParams(location.search).get("steam");
   const ok=b=>b?`<span class="pill strong">fait</span>`:`<span class="pill">à faire</span>`;
   const pt=st.playtime,L=st.links||{};
@@ -956,6 +957,19 @@ async function renderSteam(){
    <p>CS2 envoie à l'app la carte, ton camp, le round, le score et ton argent : l'écran « En partie » suit ta game tout seul et te donne le bon conseil au bon moment (achat pendant le freeze time, bombe posée, fin de round).</p>
    <p class="note">C'est le Game State Integration de Valve, la fonction officielle qu'utilisent les HUD et les claviers RGB (Logitech en a déjà un sur ce PC). Pendant une partie, CS2 n'envoie que tes propres infos, jamais celles des adversaires.${gs&&gs.path?` Fichier : <code>${esc(gs.path)}</code>.`:""}${gs&&gs.installed?(gs.receiving?" CS2 envoie bien ses données.":" Relance CS2 pour qu'il le prenne en compte."):""}</p>
    <div class="btns">${gs&&gs.installed?`<button type="button" id="gsi-off">Désactiver la détection</button>`:`<button type="button" class="primary" id="gsi-on" ${gs&&gs.cfg_dir?"":"disabled"}>Activer la détection</button>`}${gs&&!gs.cfg_dir?`<span class="note">Dossier de CS2 introuvable sur ce PC.</span>`:""}</div></article>
+  <article class="card form"><h3>Tes calls (micro) ${ok(vs&&vs.settings&&vs.settings.auto)}</h3>
+   <p>Pendant tes parties, l'app enregistre <b>ton micro</b>, transcrit tes calls sur ce PC et les cale sur les rounds : infos données avant de mourir, « où + combien », grenades annoncées, parole pendant le clutch d'un coéquipier, énervement. Le résultat apparaît dans le Bilan.</p>
+   <p class="note">Seulement ta voix : avec un casque, celle de tes coéquipiers n'arrive pas dans ton micro. Rien ne sort du PC (dossier <code>out/voice</code>, non versionné). N'enregistre d'autres personnes qu'avec leur accord : enregistrer les paroles de quelqu'un sans son consentement est interdit (article 226-1 du Code pénal).</p>
+   ${vs&&vs.available?`
+    <div class="row"><label style="display:flex;gap:8px;align-items:center;font-size:14px"><input type="checkbox" id="v-auto" ${vs.settings.auto?"checked":""}> Enregistrer automatiquement pendant mes parties (avec la détection de la partie)</label></div>
+    <div class="row"><span class="f">Micro</span><select id="v-dev" style="font:14px var(--f-body);background:var(--bg);color:var(--ink);border:1px solid var(--line);border-radius:3px;padding:5px 8px;max-width:360px"><option value="">Micro par défaut de Windows</option></select></div>
+    ${vs.recording?`<p><b class="bad">● Enregistrement en cours</b> ${vs.current.map?`(${MAPN(vs.current.map)})`:""}, depuis ${fmtDate(vs.current.start_iso)} <button type="button" id="v-stop">Arrêter</button></p>`:""}
+    ${vs.transcribing?`<p class="note"><span class="spin" aria-hidden="true"></span>Transcription en cours (${esc(vs.transcribing)}) : elle tourne en priorité basse et s'arrête si une partie commence.</p>`:""}
+    ${vs.recordings.length?`<div class="tbl"><table><thead><tr><th>Date</th><th>Carte</th><th class="n">Durée</th><th class="n">Rounds repérés</th><th>Transcription</th><th></th></tr></thead><tbody>
+      ${vs.recordings.map(r=>`<tr><td>${fmtDate(r.start)}</td><td>${r.map?MAPN(r.map):"—"}</td><td class="n">${r.duration?Math.round(r.duration/60)+" min":"en cours"}</td><td class="n">${r.rounds_marked||"—"}</td>
+        <td>${r.transcribed?"faite":r.duration?`<button type="button" data-vtr="${r.id}">Transcrire</button>`:"—"}</td><td><button type="button" data-vdel="${r.id}">Supprimer</button></td></tr>`).join("")}</tbody></table></div>`
+      :`<p class="note">Aucun enregistrement pour l'instant.</p>`}<span class="note" id="v-msg" role="status"></span>`
+    :`<p class="note">Micro indisponible sur ce PC${vs&&vs.error?` (${esc(vs.error)})`:""}.</p>`}</article>
   <div class="insights">
    <article class="card"><h3>1. Qui es-tu ? ${ok(st.login)}</h3>
     ${st.login?`<p>Connecté avec Steam : <b>${esc(st.login.name||st.login.steamid)}</b> <span class="num note">${esc(st.login.steamid)}</span>, le ${fmtDate(st.login.time)}. Ce compte est ton profil par défaut dans l'app.</p>`
@@ -987,6 +1001,14 @@ async function renderSteam(){
    <p class="note">Tes codes restent dans <code>out/settings.json</code> sur ce PC : ce fichier n'est pas versionné et les codes ne partent que vers l'API officielle de Steam. Tu peux tout retirer à tout moment.</p>
    <div class="btns"><button type="button" id="st-forget">${steamForget?"Confirmer : retirer la connexion et les codes":"Tout déconnecter"}</button></div></article>`;
   const msg=$("#st-msg",v),sid=st.steamid;
+  const vmsg=$("#v-msg",v),vcall=async(path,body)=>{try{await api(path,Object.assign({sid},body||{}));renderSteam()}catch(e){if(vmsg)vmsg.textContent=e.message}};
+  const va=$("#v-auto",v);if(va)va.onchange=()=>vcall("/api/voice/settings",{auto:va.checked});
+  const vd=$("#v-dev",v);if(vd){fetch("/api/voice/devices").then(r=>r.json()).then(list=>{if(!Array.isArray(list))return;const cur=(vs.settings||{}).device||"";
+    vd.innerHTML=`<option value="">Micro par défaut de Windows</option>`+list.map(d=>`<option value="${esc(d.name)}" ${d.name===cur?"selected":""}>${esc(d.name)}${d.default?" (par défaut)":""}</option>`).join("")}).catch(()=>{});
+    vd.onchange=()=>vcall("/api/voice/settings",{device:vd.value||null})}
+  const vst=$("#v-stop",v);if(vst)vst.onclick=()=>vcall("/api/voice/stop");
+  $$("[data-vtr]",v).forEach(b=>b.onclick=()=>{b.disabled=true;vcall("/api/voice/transcribe",{id:b.dataset.vtr})});
+  $$("[data-vdel]",v).forEach(b=>b.onclick=()=>{if(b.dataset.ok!=="1"){b.dataset.ok="1";b.textContent="Confirmer";return}vcall("/api/voice/delete",{id:b.dataset.vdel})});
   const gon=$("#gsi-on",v),goff=$("#gsi-off",v);
   if(gon)gon.onclick=async()=>{gon.disabled=true;try{gsiStatus=await api("/api/gsi/install",{});renderSteam()}catch(e){msg.textContent=e.message;gon.disabled=false}};
   if(goff)goff.onclick=async()=>{goff.disabled=true;try{gsiStatus=await api("/api/gsi/uninstall",{});renderSteam()}catch(e){msg.textContent=e.message;goff.disabled=false}};
@@ -1165,16 +1187,19 @@ function buyTip(g,p){if(g.money==null||!g.side)return "";
 function phaseTip(g,p){if(g.round_phase==="freezetime")return buyTip(g,p);if(g.round_phase==="over")return "5 s : pourquoi ce round ? Puis une longue expiration.";
   if(g.bomb==="planted")return g.side==="CT"?"Bombe posée : retake groupé, ou sauve si tu es seul contre 3.":"Bombe posée : tirs croisés, fais venir les CT.";return ""}
 const gsiFresh=()=>gsiLast&&gsiLast.age!=null&&gsiLast.age<75&&gsiLast.map;
+function micBtn(){const g=gsiLast||{};if(!D.local)return "";
+  if(g.mic)return `<span class="pill weak" title="Ton micro est enregistré pour analyser tes calls">● Micro</span>${g.mic_auto?"":`<button type="button" class="close" data-mic="stop">Arrêter l'enregistrement</button>`}`;
+  return g.mic_auto?"":`<button type="button" class="close" data-mic="start" title="Enregistre ton micro pour analyser tes calls après la partie">Enregistrer mes calls</button>`}
 function liveStrip(p){if(!D.local)return "";const g=gsiLast;
   if(gsiFresh())return `<div class="live on" role="status"><span class="dot" aria-hidden="true"></span><b>${MAPN(g.map)}</b><span>${g.side?`${g.side} · ${roleOf(g.map,g.side)}`:"en spectateur"}</span>
     <span>Round ${g.round??"—"}${g.score_ct!=null?` · CT ${g.score_ct} - ${g.score_t} T`:""}</span>${g.money!=null?`<span>${g.money.toLocaleString("fr-FR")} $</span>`:""}
-    <span class="tip">${esc(phaseTip(g,p))}</span>${partieManual?`<button type="button" class="close" id="follow">Suivre la partie</button>`:""}</div>`;
+    <span class="tip">${esc(phaseTip(g,p))}</span>${partieManual?`<button type="button" class="close" id="follow">Suivre la partie</button>`:""}${micBtn()}</div>`;
   const st=gsiStatus;
   return `<div class="live"><span class="dot" aria-hidden="true"></span>${st&&st.installed?"<span>Détection active : la fiche suivra ta partie dès que tu seras en jeu.</span>"
-    :`<span>Choisis ta carte et ton camp, ou <a href="#steam" style="color:var(--ct)">active la détection automatique</a> : la fiche suivra ta partie toute seule.</span>`}</div>`}
+    :`<span>Choisis ta carte et ton camp, ou <a href="#steam" style="color:var(--ct)">active la détection automatique</a> : la fiche suivra ta partie toute seule.</span>`}${micBtn()}</div>`}
 async function gsiPoll(){clearTimeout(gsiTimer);if(!D.local||S.view!=="partie")return;
   try{const g=await (await fetch("/api/gsi/state")).json();const sig=x=>x?[x.map,x.side,x.round,x.round_phase,x.money,x.bomb,x.age!=null&&x.age<75].join("|"):"";
-    const before=sig(gsiLast);gsiLast=g&&Object.keys(g).length?g:null;if(sig(gsiLast)!==before&&S.view==="partie"&&S.player&&D.players[S.player])renderPartie()}catch(e){}
+    const before=sig(gsiLast)+(gsiLast&&gsiLast.mic);gsiLast=g&&Object.keys(g).length?g:null;if(sig(gsiLast)+(gsiLast&&gsiLast.mic)!==before&&S.view==="partie"&&S.player&&D.players[S.player])renderPartie()}catch(e){}
   gsiTimer=setTimeout(gsiPoll,2000)}
 function renderPartie(){
   const p=P(),v=$("#v-partie"),PL=p.advice.plan||{},live=gsiFresh(),refs=PL.map_refs||{},mine=mapsOf(p);
@@ -1234,6 +1259,7 @@ function renderPartie(){
   $$("[data-level]",v).forEach(b=>b.onclick=()=>{S.level=b.dataset.level;renderPartie()});
   $("#focus",v).onclick=()=>{document.body.classList.toggle("focus");store("focus",document.body.classList.contains("focus"));renderPartie()};
   const fl=$("#follow",v);if(fl)fl.onclick=()=>{partieManual=false;renderPartie()};
+  $$("[data-mic]",v).forEach(b=>b.onclick=async()=>{b.disabled=true;try{await api("/api/voice/"+b.dataset.mic,{sid:p.steamid});gsiLast=Object.assign(gsiLast||{},{mic:b.dataset.mic==="start"});renderPartie()}catch(e){b.textContent=e.message}});
   if(m){const st={level:S.level,layers:["zones","best","nades"],nades:plan?plan.key_nades:[],sel:null};crossRadar($(".radar-box",v),m,S.side,st)}
   if(R0){const items=[...rifle.map(z=>({px:z.px,level:z.level,label:`${z.name} ${z.duel_win} %`,color:z.duel_win>=53?"var(--good)":z.duel_win<=47?"var(--bad)":"#8a96a3",title:`${z.name} : ${z.duel_win} % de duels gagnés`})),
       ...proAwp.map(z=>({px:z.px,level:z.level,label:`AWP pro · ${z.name}`,color:"var(--ct)",title:"Position des AWPers pros"}))].filter(x=>x.px);
@@ -1250,6 +1276,21 @@ function wireExp(v,X,p){const msg=$("#xmsg",v);
     try{await api("/api/experiment",{sid:p.steamid,action:"start",template:s.template,params:s.params});await reloadPlayer()}catch(e){if(msg)msg.textContent="Échec : "+e.message;b.disabled=false}});
   $$("[data-xstop]",v).forEach(b=>b.onclick=async()=>{b.disabled=true;
     try{await api("/api/experiment",{sid:p.steamid,action:"stop",id:b.dataset.xstop});await reloadPlayer()}catch(e){if(msg)msg.textContent="Échec : "+e.message;b.disabled=false}})}
+function callsBlock(PL){const C=PL.calls||[];if(!C.length)return D.local?`<h3>Tes calls</h3><p class="note">Pas encore d'enregistrement : active « Tes calls » dans les <a href="#steam" style="color:var(--ct)">réglages</a>, joue, et le coach analysera ta communication après la partie.</p>`:"";
+  const a=C[0],pct=(x,n)=>n?Math.round(100*x/n)+" %":"—";
+  const src=((PL.phases||[]).flatMap(ph=>ph.items).find(i=>i.id==="info_calls")||{}).src;
+  return `<h3>Tes calls</h3>
+   <p class="note">${a.map?MAPN(a.map):"Partie"} · ${fmtDate(a.start)} · ${a.utterances} phrases, ${Math.round((a.speech_s||0)/60)} min de parole${a.match?"":" · match pas encore analysé : mets à jour ton profil"}${a.aligned?"":" · sans la détection de la partie, les calls ne sont pas calés sur les rounds"}.</p>
+   <div class="gauge">
+    <div><b>${a.deaths?pct(a.deaths-a.silent_deaths,a.deaths):"—"}</b><span>de tes morts précédées d'une info (10 s avant)</span></div>
+    <div><b>${a.info?a.complete_share+" %":"—"}</b><span>de tes infos disent où et combien</span></div>
+    <div><b>${a.throws?pct(a.announced,a.throws):"—"}</b><span>de tes grenades annoncées</span></div>
+    <div><b>${a.clutch_talk_rounds}</b><span>clutch${a.clutch_talk_rounds>1?"s":""} de coéquipier où tu as parlé</span></div></div>
+   <ul class="pl-list">${a.tips.map(t=>`<li class="coach">${esc(t)}</li>`).join("")}</ul>
+   ${a.examples.length?`<p class="note">Tes meilleurs calls : ${a.examples.map(x=>"« "+esc(x)+" »").join(" · ")}</p>`:""}
+   ${a.rounds.length?`<details><summary style="cursor:pointer">Tes calls round par round</summary><div class="tbl" style="margin-top:8px"><table><thead><tr><th class="n">Round</th><th>Ce que tu as dit (secondes depuis le début du round)</th><th class="n">Mort à</th></tr></thead><tbody>
+     ${a.rounds.map(r=>`<tr><td class="n">${r.round}</td><td class="wrap">${r.texts.length?r.texts.map(x=>`<span class="${x.kind==="tilt"?"bad":""}">${x.t} s : ${esc(x.text)}</span>`).join("<br>"):'<span class="note">rien</span>'}</td><td class="n">${r.died_t==null?"vivant":Math.round(r.died_t)+" s"}</td></tr>`).join("")}</tbody></table></div></details>`:""}
+   ${srcLinks(src,true)}`}
 function renderBilan(){const p=P(),v=$("#v-bilan"),PL=p.advice.plan||{},R=PL.review,X=PL.experiments||{};
   const head=`<div class="head"><div style="display:grid;gap:4px"><span class="eyebrow">${esc(p.name)}${R?` · ${esc(R.label)}, comparé${R.session.games>1?"s":""} à tes ${R.n_before} matchs d'avant`:""}</span><h2>Bilan à froid</h2></div>
     ${R?`<div class="record"><span>${R.session.wins}<small>victoires</small></span><span>${R.session.losses}<small>défaites</small></span></div>`:""}</div>`;
@@ -1271,6 +1312,7 @@ function renderBilan(){const p=P(),v=$("#v-bilan"),PL=p.advice.plan||{},R=PL.rev
    <div class="insights">${R.axes.map(a=>`<article class="card"><h3>${esc(a.short||a.title)}</h3><p class="note">${esc(a.title)}</p>
      ${a.kpi&&a.before!=null?`<p>${esc(a.kpi_label)} : ${f(a.before,a.unit)} → <b>${f(a.after,a.unit)}</b> ${a.trend?`<span class="pill ${a.trend==="mieux"?"strong":a.trend==="moins bien"?"weak":""}">${a.trend}</span>`:""}</p>`:""}
      ${a.do.length?`<ul>${a.do.map(d=>`<li>${esc(d)}</li>`).join("")}</ul>`:""}${a.drills.length?`<p class="note">Exercice : ${esc(a.drills[0])}</p>`:""}${srcLinks(a.sources,true)}</article>`).join("")}</div>
+   ${callsBlock(PL)}
    <h3>Ce que tu testes, ce que tu pourrais tester</h3>
    ${R.tests.active.length?`<div class="exps">${R.tests.active.map(expCard).join("")}</div>`:`<p class="note">Aucune expérience en cours.</p>`}
    ${R.tests.done.length?`<span class="lbl4" style="color:var(--muted)">Terminées</span><div class="exps">${R.tests.done.map(expCard).join("")}</div>`:""}

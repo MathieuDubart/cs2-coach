@@ -377,6 +377,12 @@ def build(steamid, adv, cross=None, deep=None, light=False):
     plan["kpis"] = kpis(sid, stats, mid_rows)
     plan["experiments"] = experiments.report(sid, adv, mb, wp, ctx, cross)
     try:
+        import voice
+        if os.path.exists(voice.DIR):
+            plan["calls"] = voice.summary(sid)
+    except Exception as e:
+        print("calls indisponibles :", e)
+    try:
         import review
         plan["review"] = review.build(sid, stats, mid_rows, ctx, plan["experiments"], adv)
     except Exception as e:  # the review is a bonus: never block the plan

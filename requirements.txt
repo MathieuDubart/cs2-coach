@@ -3,3 +3,6 @@ pandas
 numpy
 pyarrow
 pillow
+soundfile
+sounddevice
+faster-whisper
