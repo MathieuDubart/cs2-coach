@@ -279,6 +279,7 @@ pre.cli{background:var(--radar-bg);color:#dfe6ec;padding:12px 14px;overflow-x:au
 .bench.wide .row{grid-template-columns:minmax(0,1.3fr) minmax(90px,1fr) 260px}
 .insights.wide{grid-template-columns:repeat(auto-fill,minmax(390px,1fr));align-items:start}
 .insights.wide .card{align-content:start}
+.insights>.card{align-content:start}
 </style>
 
 <div class="bar"><div class="bar-in">
@@ -289,11 +290,12 @@ pre.cli{background:var(--radar-bg);color:#dfe6ec;padding:12px 14px;overflow-x:au
     <a href="#routine" data-view="routine">Routine</a>
     <a href="#mid" data-view="mid">Mi-round</a>
     <a href="#prog" data-view="prog">Progresser</a>
+    <a href="#equipe" data-view="equipe">Équipe</a>
     <a href="#matchs" data-view="matchs">Matchs</a>
-    <a href="#cartes" data-view="cartes">Cartes et stuffs</a>
+    <a href="#cartes" data-view="cartes">Cartes</a>
     <a href="#joueurs" data-view="joueurs">Joueurs</a>
     <a href="#pros" data-view="pros">Pros</a>
-    <a href="#steam" data-view="steam">Compte Steam</a>
+    <a href="#steam" data-view="steam">Steam</a>
   </nav>
   <form class="search" id="search" role="search" autocomplete="off">
     <input id="q" name="q" type="search" placeholder="Lien Steam, SteamID64, pseudo ou code de partage CSGO-…" aria-label="Rechercher un joueur : lien de profil Steam, SteamID64 ou pseudo">
@@ -307,6 +309,7 @@ pre.cli{background:var(--radar-bg);color:#dfe6ec;padding:12px 14px;overflow-x:au
   <section class="view" id="v-routine" hidden></section>
   <section class="view" id="v-mid" hidden></section>
   <section class="view" id="v-prog" hidden></section>
+  <section class="view" id="v-equipe" hidden></section>
   <section class="view" id="v-matchs" hidden></section>
   <section class="view" id="v-cartes" hidden></section>
   <section class="view" id="v-joueurs" hidden></section>
@@ -431,7 +434,7 @@ function renderAvant(){
       <div class="rec eyebrow">Rounds gagnés ${rec}</div>
       <ul class="pl-list">${(coach?coach.plan.map(t=>`<li class="coach">${t}</li>`):[]).join("")}${(plan?plan.bullets:[]).filter(b=>!coach||b.kind==="timing"||b.kind==="try").map(b=>`<li class="${b.kind}">${b.text}</li>`).join("")}</ul>
       ${Sd&&plan&&plan.key_nades.length?`<span class="lbl4">Stuffs clés</span><div class="lineups">${plan.key_nades.map(i=>lineupCard(Sd.lineups[i],i)).join("")}</div>`:""}
-      ${Sd?`<p class="note">Toutes les stuffs de la carte sont dans « Cartes et stuffs ».</p>`:""}`:""}
+      ${Sd?`<p class="note">Toutes les stuffs de la carte sont dans « Cartes ».</p>`:""}`:""}
       ${p.advice.plan?pregameHints(p.advice.plan,S.map,S.side):""}
     </div>
   </div>`;
@@ -521,7 +524,7 @@ function deepCard(p){const X=p.deep;if(!X)return "";const r=X.reaction,a=X.preai
     <div class="tbl"><table><thead><tr><th>Carte</th><th>Camp</th><th>Zone</th><th class="n">Tes duels</th><th class="n">Toi</th><th class="n">Pros</th><th class="n">Posé (toi / pros)</th></tr></thead><tbody>
     ${X.zones_vs_pros.map(z=>`<tr><td>${MAPN(z.map)}</td><td>${z.side}</td><td>${esc(z.zone)}</td><td class="n">${z.my_duels}</td><td class="n ${z.my_win-z.pro_win>=8?"good":z.my_win-z.pro_win<=-10?"bad":""}">${z.my_win} %</td><td class="n">${z.pro_win} % <span class="note">(${z.pro_duels})</span></td><td class="n">${z.my_hold} % / ${z.pro_hold} %</td></tr>`).join("")}
     </tbody></table></div><p class="note">Duels gagnés dans la zone, par camp. Les pros viennent des démos HLTV analysées.</p>`:""}
-   <p class="note">Le replay 2D de chaque round est dans l'onglet Matchs. Les grenades des pros à ajouter à ton jeu sont dans « Cartes et stuffs ».</p></article>`}
+   <p class="note">Le replay 2D de chaque round est dans l'onglet Matchs. Les grenades des pros à ajouter à ton jeu sont dans « Cartes ».</p></article>`}
 function renderSynthese(){
   const p=P(),v=$("#v-synthese"),ms=p.matches;const rec={win:0,draw:0,loss:0};ms.forEach(m=>rec[m.result]++);
   const auto=p.advice.rules.map((r,i)=>({level:i<2?"high":"mid",title:r.title,evidence:r.why,fix:r.do,standing:r.standing,target:r.target,bench:r.bench,drills:r.drills,sources:r.sources}));
@@ -727,7 +730,7 @@ function contextBlock(C){
   return `<article class="card"><h3>Tes habitudes de jeu</h3>
    <p class="note">${C.n} matchs datés (${src}) · ${C.sessions.n} session${C.sessions.n>1?"s":""} de ${String(C.sessions.avg_games).replace(".",",")} game(s) en moyenne, ${C.sessions.max_games} au maximum · ${C.sessions.games_after_2_losses} game(s) lancée(s) après 2 défaites d'affilée · journal : ${C.journal_n} entrée(s).
    « Note » : rating du match sur le modèle du HLTV 2.0 (1,00 = joueur moyen du lobby). Ta moyenne : ${pf(C.overall.perf)}.</p>
-   ${D.local&&!(C.sources_count||{}).steam?`<p class="note">Pour mesurer tes habitudes sur tout ton historique (et pas seulement sur les démos), connecte ton historique Steam : <a href="#steam" style="color:var(--ct)">onglet Compte Steam</a>.</p>`:""}
+   ${D.local&&!(C.sources_count||{}).steam?`<p class="note">Pour mesurer tes habitudes sur tout ton historique (et pas seulement sur les démos), connecte ton historique Steam : <a href="#steam" style="color:var(--ct)">onglet Steam</a>.</p>`:""}
    ${recs.length?`<ul class="pl-list">${recs.map(r=>`<li class="coach">${esc(r.text)} <span class="lvl ${lvlCls(r.level)}">${esc(LVL[r.level]||r.level)}</span></li>`).join("")}</ul>`
      :`<p>Pas encore de règle personnelle fiable : il faut plus de matchs. En attendant, applique les règles générales de « Après la game ».</p>`}
    <div class="tbl"><table><thead><tr><th>Situation</th><th class="n">Games</th><th class="n">V-D</th><th class="n">Victoires</th><th class="n">Note</th><th class="n">Écart</th><th>Fiabilité</th></tr></thead><tbody>
@@ -901,7 +904,7 @@ let steamForget=false;
 async function renderSteam(){
   const v=$("#v-steam");
   const head=`<div class="head"><div style="display:grid;gap:4px"><span class="eyebrow">Connexion facultative · tout reste sur ce PC</span><h2>Compte Steam</h2></div></div>`;
-  if(!D.local){v.innerHTML=head+`<div class="empty">La connexion Steam se fait dans l'app locale : double-clic sur <code>Coach CS2.bat</code>, puis onglet « Compte Steam ».</div>`;return}
+  if(!D.local){v.innerHTML=head+`<div class="empty">La connexion Steam se fait dans l'app locale : double-clic sur <code>Coach CS2.bat</code>, puis onglet « Steam ».</div>`;return}
   v.innerHTML=head+`<div class="empty"><span class="spin" aria-hidden="true"></span>Lecture de ta connexion Steam…</div>`;
   let st;try{st=await (await fetch("/api/steam/status"+(D.own?`?sid=${D.own}`:""))).json()}catch(e){v.innerHTML=head+`<div class="empty">Le serveur local ne répond pas : relance « Coach CS2.bat ».</div>`;return}
   const flag=new URLSearchParams(location.search).get("steam");
@@ -948,6 +951,137 @@ async function renderSteam(){
   const au=$("#st-auto",v);if(au)au.onchange=async()=>{try{await api("/api/steam/options",{sid,auto_sync:au.checked})}catch(e){msg.textContent=e.message}};
   $("#st-forget",v).onclick=async()=>{if(!steamForget){steamForget=true;renderSteam();return}steamForget=false;
     try{await api("/api/steam/forget",{sid});renderSteam()}catch(e){msg.textContent=e.message}};
+}
+
+// ---------- view: équipe ----------
+const TCOL=["#e8d44d","#4cb87a","#e0663a","#5b9be0","#c77dff"];
+let teamSel=null,teamId=null,teamPlan=null,teamIdx=null,teamSug=null,teamQ="",teamMap=null,teamSide="CT",teamLevel=null,teamExec=null;
+async function loadTeamIdx(force){if(teamIdx&&!force)return teamIdx;try{const r=await fetch("teams/index.json"+(force?`?t=${Date.now()}`:""));teamIdx=r.ok?await r.json():[]}catch(e){teamIdx=[]}return teamIdx}
+async function loadTeam(id){const r=await fetch(`teams/${id}.json?t=${Date.now()}`);if(!r.ok)throw new Error("plan introuvable");teamPlan=await r.json();teamId=id;
+  await Promise.all(Object.keys(teamPlan.plans||{}).map(loadRadar));return teamPlan}
+const TR={entry:"Entry",trader:"Second / trade",support:"Support",lurker:"Lurker",awper:"AWPer",flex:"Rifler flex"};
+function teamRadarDraw(box,map,level,items){const svg=$("svg",box),g=$("g",box);
+  $("image",box).setAttribute("href",D.radars[`${map}:${level}`]||"");svg.setAttribute("viewBox",(D.viewboxes[map]||[0,0,1024,1024]).join(" "));g.replaceChildren();
+  items.filter(it=>it.px&&(!it.level||!level||it.level===level)).forEach(it=>{
+    if(it.to){el("line",{x1:it.px[0],y1:it.px[1],x2:it.to[0],y2:it.to[1],style:`stroke:${it.color};stroke-width:2.5;stroke-dasharray:7 5`},g);
+      tip(el("circle",{cx:it.to[0],cy:it.to[1],r:10,style:`fill:${it.color};fill-opacity:.45;stroke:#fff;stroke-width:1.5`},g),it.title||"");
+      el("text",{x:it.to[0],y:it.to[1]+4,"text-anchor":"middle",class:"zsmall"},g).textContent=it.short||""}
+    else{tip(el("circle",{cx:it.px[0],cy:it.px[1],r:12,style:`fill:${it.color};stroke:#111;stroke-width:2`},g),it.title||"");
+      el("text",{x:it.px[0],y:it.px[1]-17,"text-anchor":"middle",class:"zlabel"},g).textContent=it.label}})}
+function teamBuilder(){
+  const I=IDX(),own=D.own&&I[D.own]?D.own:S.player;
+  if(!teamSel)teamSel=own?[own]:[];
+  const chips=teamSel.map((id,i)=>`<button type="button" data-rm="${id}" ${i===0?"disabled":""} aria-label="Retirer ${esc((I[id]||{}).name||id)}"><b style="color:${TCOL[i]}">●</b> ${esc((I[id]||{}).name||id)}${i===0?" (toi)":" ✕"}</button>`).join("");
+  const q=teamQ.toLowerCase(),res=q?D.index.filter(e=>!teamSel.includes(e.steamid)&&!e.minimal&&(e.name.toLowerCase().includes(q)||e.steamid.includes(q))).slice(0,8):[];
+  const sug=(teamSug||[]).filter(s=>!teamSel.includes(s.steamid));
+  return `<article class="card"><h3>Composer l'équipe</h3>
+   <p class="note">Toi et 1 à 4 coéquipiers déjà analysés. Pour ajouter quelqu'un de nouveau : colle son lien Steam dans la barre de recherche en haut, puis reviens ici.</p>
+   <div class="btns" role="group" aria-label="Membres">${chips}</div>
+   ${sug.length?`<span class="lbl4" style="color:var(--muted)">Tes coéquipiers fréquents</span><div class="btns">${sug.map(s=>`<button type="button" data-add="${s.steamid}" ${s.analyzed&&teamSel.length<5?"":"disabled"} title="${s.analyzed?"":"Pas encore analysé"}">${esc(s.name)} <span class="note">${s.together} match${s.together>1?"s":""} ensemble</span></button>`).join("")}</div>`:""}
+   <div class="btns" style="align-items:center"><input id="tq" type="search" value="${esc(teamQ)}" placeholder="Chercher un joueur analysé (pseudo, SteamID)" aria-label="Chercher un joueur" style="font:14px var(--f-body);background:var(--bg);color:var(--ink);border:1px solid var(--line);border-radius:3px;padding:6px 10px;min-width:260px"></div>
+   ${res.length?`<div class="btns">${res.map(e=>`<button type="button" data-add="${e.steamid}" ${teamSel.length<5?"":"disabled"}>${esc(e.name)}${e.archetype?` <span class="note">${esc(e.archetype)}</span>`:""}</button>`).join("")}</div>`:""}
+   <div class="row" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">${D.local?`<button type="button" class="primary" id="tbuild" ${teamSel.length>=2?"":"disabled"}>Créer le plan d'équipe</button>`:`<span class="note">La création d'un plan se fait dans l'app locale.</span>`}<span class="note" id="tmsg" role="status"></span></div>
+   ${(teamIdx||[]).length?`<span class="lbl4" style="color:var(--muted)">Plans enregistrés</span><div class="btns">${teamIdx.map(t=>`<button type="button" data-team="${t.id}" aria-pressed="${t.id===teamId}">${t.members.map(m=>esc(m.name)).join(" · ")}</button>`).join("")}</div>`:""}</article>`}
+function renderTeam(){
+  const v=$("#v-equipe");
+  v.innerHTML=`<div class="head"><div style="display:grid;gap:4px"><span class="eyebrow">Données croisées de tous les membres, de la base et des pros</span><h2>Équipe</h2></div></div>${teamBuilder()}<div id="tplan"></div>`;
+  const tq=$("#tq",v);tq.oninput=()=>{teamQ=tq.value.trim();const pos=tq.selectionStart;renderTeam();const n=$("#tq");n.focus();n.setSelectionRange(pos,pos)};
+  $$("[data-add]",v).forEach(b=>b.onclick=()=>{if(teamSel.length<5&&!teamSel.includes(b.dataset.add))teamSel.push(b.dataset.add);teamQ="";renderTeam()});
+  $$("[data-rm]",v).forEach(b=>b.onclick=()=>{teamSel=teamSel.filter(x=>x!==b.dataset.rm);renderTeam()});
+  $$("[data-team]",v).forEach(b=>b.onclick=async()=>{try{await loadTeam(b.dataset.team);teamSel=teamPlan.members.map(m=>m.steamid);teamMap=null;renderTeam()}catch(e){$("#tmsg",v).textContent=e.message}});
+  const tb=$("#tbuild",v);if(tb)tb.onclick=async()=>{tb.disabled=true;$("#tmsg",v).textContent="Croisement des données…";
+    try{const j=await api("/api/team",{sid:teamSel[0],ids:teamSel});await loadTeamIdx(true);await loadTeam(j.id);teamMap=null;renderTeam()}catch(e){$("#tmsg",v).textContent=e.message;tb.disabled=false}};
+  if(!teamSug&&D.local&&teamSel[0]){fetch(`/api/team/suggest?sid=${teamSel[0]}`).then(r=>r.json()).then(j=>{teamSug=j;if(S.view==="equipe")renderTeam()}).catch(()=>{teamSug=[]})}
+  if(!teamIdx){loadTeamIdx().then(()=>{if(S.view==="equipe"&&teamIdx.length)renderTeam()})}
+  if(teamPlan)teamPlanView($("#tplan",v));
+}
+function teamPlanView(host){
+  const T=teamPlan,col=Object.fromEntries(T.members.map((m,i)=>[m.steamid,TCOL[i]])),nm=Object.fromEntries(T.members.map(m=>[m.steamid,m.name]));
+  const maps=Object.keys(T.plans||{});if(!teamMap||!maps.includes(teamMap))teamMap=maps[0];
+  const P=T.plans[teamMap];
+  const ind=Object.fromEntries((T.individual||[]).map(x=>[x.steamid,x]));
+  const igl=T.igl[0];
+  host.innerHTML=`
+  <div class="head" style="border-bottom-width:1px"><div style="display:grid;gap:4px"><span class="eyebrow">Plan créé le ${fmtDate(T.created)} · ${T.size} joueurs${T.missing_roles.length?` · rôles laissés aux joueurs en plus : ${T.missing_roles.map(esc).join(", ")}`:""}</span>
+    <h2>${T.members.map((m,i)=>`<span style="color:${TCOL[i]}">${esc(m.name)}</span>`).join(" · ")}</h2></div></div>
+  <div class="tbl"><table><thead><tr><th>Joueur</th><th>Profil</th><th>Rôle en T</th><th>Postes en CT</th><th>Son travail individuel</th></tr></thead><tbody>
+   ${T.members.map((m,i)=>{const x=ind[m.steamid]||{};return `<tr><td><b style="color:${TCOL[i]}">●</b> ${esc(m.name)}${igl&&igl.steamid===m.steamid?' <span class="probadge">IGL proposé</span>':""}</td>
+     <td>${esc(m.archetype||"—")}${m.light?' <span class="note">(données limitées)</span>':""}</td><td><b>${esc(m.t_role_name||"—")}</b></td>
+     <td class="wrap">${esc(x.ct_role||"—")}</td><td class="wrap">${(x.priorities||[]).slice(0,2).map(esc).join(" · ")}</td></tr>`}).join("")}</tbody></table></div>
+  <div class="insights">
+   <article class="card"><h3>Qui call ?</h3><p>Proposition : <b>${esc(igl.name)}</b>${igl.why.length?` (${igl.why.map(esc).join(", ")})`:""}.</p>
+     <p class="note">Classement : ${T.igl.map(x=>`${esc(x.name)} ${x.score}`).join(" · ")}. Mesuré sur la conversion des avantages, les morts isolées, les trades, le profil et l'expérience. C'est à vous de trancher : l'IGL doit surtout parler clair et rester calme.</p></article>
+   <article class="card"><h3>Vos cartes</h3><p>À choisir en Premier : <b>${T.picks.length?T.picks.map(MAPN).join(", "):"pas encore de carte du pool avec des données"}</b>${T.to_work.length?` · à travailler : ${T.to_work.map(MAPN).join(", ")}`:""}.</p>
+     <div class="tbl"><table><thead><tr><th>Carte</th><th class="n">Rounds gagnés</th><th class="n">Rounds</th>${T.members.map((m,i)=>`<th class="n" style="color:${TCOL[i]}">${esc(m.name.slice(0,10))}</th>`).join("")}</tr></thead><tbody>
+      ${T.maps.filter(r=>r.members_with_data).slice(0,8).map(r=>`<tr><td>${MAPN(r.map)}${r.premier?' <span class="pill">Premier</span>':""}</td><td class="n">${r.round_win==null?"—":r.round_win+" %"}</td><td class="n">${r.rounds}</td>
+        ${r.per_member.map(x=>`<td class="n">${x.win==null?"—":x.win+" %"}</td>`).join("")}</tr>`).join("")}</tbody></table></div>
+     <p class="note">Rounds gagnés par les membres sur chaque carte (leurs démos). Depuis le 22 septembre 2026, chaque équipe choisit ses cartes et une des quatre est tirée au sort.</p></article>
+  </div>
+  ${maps.length?`<h3>Plan de jeu par carte</h3>
+  <div class="chips" role="group" aria-label="Carte">${maps.map(m=>`<button type="button" data-tmap="${m}" aria-pressed="${m===teamMap}">${MAPN(m)}</button>`).join("")}</div>
+  <div class="btns side big" role="group" aria-label="Camp"><button type="button" data-tside="CT" aria-pressed="${teamSide==="CT"}">CT · setup</button><button type="button" data-tside="T" aria-pressed="${teamSide==="T"}">T · exécutions</button></div>
+  <div class="stage">${radarShell((P.levels||[]).length>1?`<div class="btns" role="group" aria-label="Étage">${P.levels.map(l=>`<button type="button" data-tlevel="${l.key}" aria-pressed="${l.key===(teamLevel||P.levels[0].key)}">${esc(l.name)}</button>`).join("")}</div>`:"")}
+   <div style="display:grid;gap:14px;min-width:0" id="tside"></div></div>
+  <div class="insights" id="tcalls"></div>`:`<div class="empty">Aucune carte en commun avec des données détaillées : jouez quelques matchs ensemble, puis recréez le plan.</div>`}
+  <h3>Économie et armes</h3>
+  <div class="insights"><article class="card"><ul>${T.economy.rules.map(r=>`<li>${esc(r)}</li>`).join("")}</ul>
+    <p>${T.economy.awp?`AWP : <b>${esc(T.economy.awp)}</b>.`:"Pas d'AWPer attitré : l'AWP se prend seulement quand l'équipe est riche."} ${T.economy.pistol_openers.length?`Rounds pistolets : ${T.economy.pistol_openers.map(esc).join(", ")} prend${T.economy.pistol_openers.length>1?"nent":""} les premiers duels.`:""}</p>${srcLinks(T.economy.src,true)}</article>
+   <article class="card"><h3>Force-buy de chacun</h3><ul>${T.economy.members.map(x=>`<li><b>${esc(x.name)}</b> : ${x.force?`${esc(x.force)} (${x.force_adr} dégâts par round en force)`:"pas assez de rounds en force"}</li>`).join("")}</ul></article></div>
+  ${T.synergy.length?`<h3>Vous ensemble</h3><div class="tbl"><table><thead><tr><th>Duo</th><th class="n">Matchs ensemble</th><th class="n">Rounds gagnés</th><th class="n">Trades (l'un venge l'autre)</th></tr></thead><tbody>
+   ${T.synergy.map(s=>`<tr><td>${esc(s.name_a)} + ${esc(s.name_b)}</td><td class="n">${s.matches}</td><td class="n">${s.round_win==null?"—":s.round_win+" %"}</td><td class="n">${s.trades_ab} · ${s.trades_ba}</td></tr>`).join("")}</tbody></table></div>`:""}
+  ${T.matches.length?`<p class="note">${T.matches.length} match(s) avec au moins 2 membres dans la même équipe : ${T.matches.slice(0,6).map(x=>`${MAPN(x.map||"?")} ${x.score?`${x.score.me}-${x.score.them}`:""}`).join(" · ")}.</p>`:""}
+  ${T.collective.length?`<h3>Objectifs collectifs</h3><div class="insights">${T.collective.map(c=>`<article class="card"><h3>${esc(c.title)}</h3><p>${esc(c.do)}</p>
+    <p class="note">Percentile moyen de l'équipe : ${c.avg_percentile} (${c.members.map(x=>`${esc(x.name)} ${x.percentile}`).join(" · ")}).</p></article>`).join("")}</div>`:""}
+  <h3>Travail individuel au service de l'équipe</h3>
+  <div class="insights">${(T.individual||[]).map(x=>{const i=T.members.findIndex(m=>m.steamid===x.steamid),m=T.members[i];return `<article class="card"><h3 style="color:${TCOL[i]}">${esc(x.name)} · ${esc(x.t_role||"")}</h3>
+    <p class="note">${esc(m.t_do||"")}</p><ol>${(x.priorities||[]).map(p=>`<li>${esc(p)}</li>`).join("")}</ol>${x.drill?`<p class="note">Échauffement : ${esc(x.drill)}</p>`:""}</article>`}).join("")}</div>
+  ${T.party&&T.party[T.party_key]?`<h3>${esc(T.party[T.party_key].title)}</h3><article class="card"><ul>${T.party[T.party_key].items.map(t=>`<li>${esc(t)}</li>`).join("")}</ul>${srcLinks(T.party[T.party_key].src,true)}</article>`:""}
+  ${D.local?`<div class="btns"><button type="button" id="tdel">Supprimer ce plan</button></div>`:""}`;
+  $$("[data-tmap]",host).forEach(b=>b.onclick=()=>{teamMap=b.dataset.tmap;teamLevel=null;teamPlanView(host)});
+  $$("[data-tside]",host).forEach(b=>b.onclick=()=>{teamSide=b.dataset.tside;teamPlanView(host)});
+  $$("[data-tlevel]",host).forEach(b=>b.onclick=()=>{teamLevel=b.dataset.tlevel;teamPlanView(host)});
+  const del=$("#tdel",host);if(del)del.onclick=async()=>{if(del.dataset.ok!=="1"){del.dataset.ok="1";del.textContent="Confirmer la suppression";return}
+    try{await api("/api/team/delete",{sid:T.owner,id:T.id});teamPlan=null;teamId=null;await loadTeamIdx(true);renderTeam()}catch(e){}};
+  if(!P)return;
+  const onMap=teamSide==="CT"?P.ct.map(x=>x.level):[...P.t_lanes.map(x=>x.level),...(((P.executes||{})[teamExec||P.t_target]||{}).items||[]).map(x=>x.level)];
+  const cnt={};onMap.filter(Boolean).forEach(l=>cnt[l]=(cnt[l]||0)+1);
+  const busiest=Object.keys(cnt).sort((a,b)=>cnt[b]-cnt[a])[0];
+  const level=teamLevel||busiest||(P.levels&&P.levels[0]?P.levels[0].key:null);
+  $$("[data-tlevel]",host).forEach(b=>{b.setAttribute("aria-pressed",b.dataset.tlevel===level);if(cnt[b.dataset.tlevel])b.textContent=`${b.textContent.replace(/ \(\d+\)$/,"")} (${cnt[b.dataset.tlevel]})`});
+  const box=$(".radar-box",host),side=$("#tside",host);
+  const s=x=>x==null?"—":String(x).replace(".",",")+" s";
+  if(teamSide==="CT"){
+    teamRadarDraw(box,teamMap,level,P.ct.map(sl=>({px:sl.px,level:sl.level,label:sl.member?nm[sl.member]:"libre",color:sl.member?col[sl.member]:"#8a96a3",title:`${sl.label} · ${sl.zone}`})));
+    $(".caption",box).innerHTML=`<span>Setup CT proposé : chaque point est une position où les CT de la base gagnent leurs duels.</span>`;
+    side.innerHTML=`<ul class="pl-list">${P.ct.map(sl=>`<li style="border-left-color:${sl.member?col[sl.member]:"var(--muted)"}"><b>${esc(sl.label)} · ${esc(sl.zone)}</b> : ${sl.member?`<b>${esc(sl.name)}</b>`:"un joueur en plus"}${sl.why&&sl.why.length?` (${sl.why.map(esc).join(", ")})`:""}.
+       <br><span class="note">${esc(sl.do)}${sl.base_win!=null?` La base y gagne ${sl.base_win} % de ses duels.`:""}${sl.t_med?` Contact médian vers ${Math.round(sl.t_med)} s.`:""}</span></li>`).join("")}</ul>
+      ${P.plants&&P.plants.A&&P.plants.B?`<p class="note">Dans la base, les T posent en A ${P.plants.A.share} % du temps et en B ${P.plants.B.share} % : le renfort va sur ${P.heavy_site}.</p>`:""}
+      ${P.rotations.length?`<span class="lbl4" style="color:var(--muted)">Rotations</span><ul>${P.rotations.map(r=>`<li><b>${esc(r.name)}</b> vers ${r.to} : ${esc(r.route)} (${s(r.travel)}, ${r.died} % de morts en route sur ${r.n} rotations ${r.who==="pro"?"de pros":"de la base"})</li>`).join("")}</ul>`:""}`;
+  }else{
+    const ex=P.executes||{},sites=Object.keys(ex);if(!teamExec||!sites.includes(teamExec))teamExec=P.t_target&&sites.includes(P.t_target)?P.t_target:sites[0];
+    const E=ex[teamExec]||{items:[]};
+    teamRadarDraw(box,teamMap,level,[...P.t_lanes.map(l=>({px:l.px,level:l.level,label:l.name,color:col[l.member],title:`${l.role_name} · ${l.zone||""}`})),
+      ...E.items.map(it=>({px:it.from_px,to:it.to_px,level:it.level,color:it.member?col[it.member]:"#8a96a3",short:{smoke:"S",flash:"F",molotov:"M",he:"H"}[it.type]||"",title:`${TYPE[it.type]} ${it.from} → ${it.to} : ${it.name}`}))]);
+    $(".caption",box).innerHTML=`<span>Zones de combat de chacun et grenades de l'exécution ${esc(teamExec)} (S smoke, F flash, M molotov).</span>`;
+    side.innerHTML=`<div class="btns" role="group" aria-label="Site">${sites.map(L=>`<button type="button" data-texec="${L}" aria-pressed="${L===teamExec}">Exécution ${L}${L===P.t_target?" (prioritaire)":""}</button>`).join("")}</div>
+      ${E.plant_share!=null?`<p class="note">Base : ${E.plant_share} % des poses sur ${teamExec}, les T gagnent ${E.t_win} % des rounds où ils posent, pose médiane à ${s(E.plant_t)} de round.</p>`:""}
+      <ul class="pl-list">${P.t_lanes.map(l=>`<li style="border-left-color:${col[l.member]}"><b>${esc(l.name)} · ${esc(l.role_name)}</b>${l.zone?` · ${esc(l.zone)}`:""}<br><span class="note">${esc(l.do)}</span></li>`).join("")}</ul>
+      ${E.items.length?`<span class="lbl4" style="color:var(--muted)">Grenades de l'exécution ${esc(teamExec)}</span><div class="lineups">${E.items.map(it=>`<article class="lu" data-type="${it.type}" style="cursor:default"><div class="top"><span class="ty">${TYPE[it.type]} · ${esc(it.name)}</span><span class="pill ${it.known?"strong":""}">${it.known?"déjà lancée":"à apprendre"}</span></div>
+        <div class="route">${esc(it.from)} → ${esc(it.to)}</div><div class="meta">${esc(it.how||"")}${it.t!=null?` · vers ${Math.round(it.t)} s`:""} · ${it.uses} lancers dans la base</div>
+        ${it.setpos?`<div class="cmd"><code>${esc(it.setpos)}</code><button type="button">Copier</button></div>`:""}</article>`).join("")}</div>`:`<p class="note">Pas assez de grenades observées vers ce site dans la base.</p>`}`;
+    $$("[data-texec]",side).forEach(b=>b.onclick=()=>{teamExec=b.dataset.texec;teamPlanView(host)});
+    copyBtn(side);
+  }
+  const C=P.callouts||{};
+  $("#tcalls",host).innerHTML=`<article class="card"><h3>Vocabulaire commun</h3><p class="note">Les mêmes noms pour tout le monde : ce sont ceux du jeu (radar).</p>
+    ${["A","mid","B"].filter(k=>C[k]).map(k=>`<p><b>${k==="mid"?"Milieu":"Côté "+k}</b> : ${C[k].map(esc).join(", ")}</p>`).join("")}</article>
+   <article class="card"><h3>Les calls de chacun</h3><ul>
+    <li><b>Entry, ancre</b> : « combien, où, quelles grenades » : « 3 B, flash, molotov boîte ».</li>
+    <li><b>Lurker</b> : les rotations entendues : « un CT passe connector, B léger ».</li>
+    <li><b>AWPer</b> : « pick mid » ou « AWP repositionné », jamais le même angle deux fois.</li>
+    <li><b>IGL</b> : le plan au temps d'achat, l'adaptation à 1:00, la décision de sauver.</li>
+    <li><b>Mort</b> : une info utile, puis silence.</li></ul></article>
+   <article class="card"><h3>Déclencheurs en ${teamSide}</h3><ul>${(T.playbook||[]).filter(x=>x.side===teamSide||x.side==="tous").slice(0,5).map(x=>`<li><b>Si ${esc(lc(x.if))}</b> → ${esc(x.then)}</li>`).join("")}</ul>${P.videos&&P.videos.length?`<p class="note">Vidéos sur ${MAPN(teamMap)} :</p>${srcLinks(P.videos,true)}`:""}</article>`;
 }
 
 // ---------- data loading (profiles and radars are separate files) ----------
@@ -1059,13 +1193,14 @@ $("#search").addEventListener("submit",async e=>{e.preventDefault();const q=$("#
     <p class="note">Il faut que l'app locale tourne : double-clic sur <code>Coach CS2.bat</code> dans <code>E:\dev\cs2-coach</code>, ou active son démarrage automatique avec <code>autostart.bat</code>.</p>`)});
 
 // ---------- routing ----------
-const RENDER={avant:renderAvant,synthese:renderSynthese,routine:renderRoutine,mid:renderMid,prog:renderProgress,matchs:renderMatchs,cartes:renderCartes,joueurs:renderJoueurs,pros:renderPros,steam:renderSteam};
+const RENDER={avant:renderAvant,synthese:renderSynthese,routine:renderRoutine,mid:renderMid,prog:renderProgress,equipe:renderTeam,matchs:renderMatchs,cartes:renderCartes,joueurs:renderJoueurs,pros:renderPros,steam:renderSteam};
 function go(view){if(location.hash!=="#"+view)history.replaceState(null,"","#"+view);show(view)}
 function show(view){if(!RENDER[view])view="avant";S.view=view;$$("main>.view").forEach(x=>x.hidden=x.id!=="v-"+view);
   $$("nav a").forEach(a=>{if(a.dataset.view===view)a.setAttribute("aria-current","page");else a.removeAttribute("aria-current")});
   if(view==="joueurs"){renderJoueurs();return}
   if(view==="pros"){renderPros();window.scrollTo(0,0);return}
   if(view==="steam"){renderSteam();window.scrollTo(0,0);return}
+  if(view==="equipe"){renderTeam();window.scrollTo(0,0);return}
   if(!S.player||!D.players[S.player]){$("#v-"+view).innerHTML=S.player?`<div class="empty"><span class="spin" aria-hidden="true"></span>Chargement du profil…</div>`:`<div class="empty">Aucune donnée. Lance <code>python cs2coach.py</code> sur ton PC.</div>`;return}
   RENDER[view]();window.scrollTo(0,0)}
 async function setPlayer(id,force){S.player=id;store("player",id);S.match=0;

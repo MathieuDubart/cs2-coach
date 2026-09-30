@@ -85,7 +85,11 @@ class Handler(BaseHTTPRequestHandler):
             # standards mode (the claude.ai host adds this wrapper itself when publishing)
             head = '<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head><body style="margin:0">'
             return self.send(200, head + build_app.shell_html(load_index(), local=True) + "</body></html>", "text/html; charset=utf-8")
-        if u.path in ("/index.json", "/pros.json") or u.path.startswith(("/players/", "/radars/", "/replays/")):
+        if u.path == "/api/team/suggest":
+            import team
+            sid = (q.get("sid") or [""])[0]
+            return self.send(200, team.suggestions(sid) if sid.isdigit() else [])
+        if u.path in ("/index.json", "/pros.json") or u.path.startswith(("/players/", "/radars/", "/replays/", "/teams/")):
             f = os.path.normpath(os.path.join(build_app.SITE, u.path.lstrip("/")))
             if f.startswith(os.path.normpath(build_app.SITE)) and os.path.exists(f):
                 return self.send(200, open(f, "rb").read())
@@ -163,6 +167,20 @@ class Handler(BaseHTTPRequestHandler):
                 else:
                     return self.send(400, {"error": "action inconnue"})
                 refresh_plan(sid)
+                return self.send(200, {"ok": True})
+            if u.path == "/api/team":
+                import team
+                ids = [str(i) for i in body.get("ids") or [] if str(i).isdigit()]
+                p = team.build(ids, owner=sid)
+                build_app.write_teams()
+                return self.send(200, {"ok": True, "id": p["id"]})
+            if u.path == "/api/team/delete":
+                import team
+                tid = str(body.get("id") or "")
+                f = os.path.join(team.TEAMS, f"{tid}.json")
+                if tid.isalnum() and os.path.exists(f):
+                    os.remove(f)
+                build_app.write_teams()
                 return self.send(200, {"ok": True})
             if u.path.startswith("/api/steam/"):
                 import steamlink

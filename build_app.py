@@ -128,6 +128,23 @@ def write_player(sid, out_dir=SITE):
     return index_entry(p)
 
 
+def write_teams(out_dir=SITE):
+    """Team plans (out/teams) next to the profiles, with their index."""
+    import team
+    dst = os.path.join(out_dir, "teams")
+    os.makedirs(dst, exist_ok=True)
+    keep = set()
+    if os.path.exists(team.TEAMS):
+        for f in os.listdir(team.TEAMS):
+            if f.endswith(".json"):
+                shutil.copy(os.path.join(team.TEAMS, f), os.path.join(dst, f))
+                keep.add(f)
+    for f in os.listdir(dst):
+        if f.endswith(".json") and f != "index.json" and f not in keep:
+            os.remove(os.path.join(dst, f))
+    json.dump(team.index(), open(os.path.join(dst, "index.json"), "w", encoding="utf-8"), ensure_ascii=False)
+
+
 def shell_html(index, local=False):
     s = config.settings()
     own = str(s.get("own_steamid"))
@@ -152,6 +169,10 @@ def build(out_dir=SITE, local=False, players=None):
         json.dump(proref.pro_profiles(), open(os.path.join(out_dir, "pros.json"), "w", encoding="utf-8"), ensure_ascii=False)
     except Exception as e:
         print("pros.json :", e)
+    try:
+        write_teams(out_dir)
+    except Exception as e:
+        print("teams :", e)
     open(os.path.join(out_dir, "index.html"), "w", encoding="utf-8").write(shell_html(index, local))
     return index
 
