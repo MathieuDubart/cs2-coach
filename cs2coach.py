@@ -127,6 +127,8 @@ def ensure_deep():
     _ensure_deep(deep)
     rounds.run_all(config.CACHE, config.DEEP, log=log)
     midround.run_all(log=log)
+    import buys
+    buys.run_all(log=log)
 
 
 def _ensure_deep(deep):

@@ -24,6 +24,8 @@ WCLASS = {
 }
 PISTOLS = {"Glock-18", "USP-S", "P2000", "P250", "Five-SeveN", "Tec-9", "CZ75-Auto", "Desert Eagle", "Dual Berettas", "R8 Revolver"}
 NADES = {"High Explosive Grenade", "Smoke Grenade", "Flashbang", "Molotov", "Incendiary Grenade", "Decoy Grenade"}
+NADE_SHORT = {"Flashbang": "flash", "Smoke Grenade": "smoke", "High Explosive Grenade": "HE", "Molotov": "molotov",
+              "Incendiary Grenade": "molotov", "Decoy Grenade": "decoy"}
 
 
 def sid(x):
@@ -146,12 +148,15 @@ def extract(path, out):
                 continue
             a = alive.loc[(r, s)] if (r, s) in alive.index else x
             inv = list(a.inventory) if isinstance(a.inventory, (list, np.ndarray)) else []
+            inv0 = list(x.inventory) if isinstance(x.inventory, (list, np.ndarray)) else []  # 2 s in: what was bought, before any throw
             prim = next((w for w in inv if w in WCLASS), None)
             pist = next((w for w in inv if w in PISTOLS), None)
             rows_l.append({
                 "round": r, "steamid": s, "name": x["name"], "side": SIDE.get(int(x.team_num)),
                 "primary": prim, "wclass": WCLASS.get(prim, "pistol"), "pistol": pist,
-                "nades": int(sum(1 for w in inv if w in NADES)), "armor": int(a.armor_value or 0), "helmet": bool(a.has_helmet),
+                "nades": int(sum(1 for w in inv if w in NADES)), "util": ",".join(sorted(NADE_SHORT[w] for w in inv if w in NADE_SHORT)),
+                "buy_util": ",".join(sorted(NADE_SHORT[w] for w in inv0 if w in NADE_SHORT)),
+                "armor": int(a.armor_value or 0), "helmet": bool(a.has_helmet),
                 "defuser": bool(a.has_defuser), "equip": float(a.current_equip_value or 0), "money_start": int(x.balance or 0),
                 "kills": int(kills.get((r, s), 0)), "damage": int(min(dmg.get((r, s), 0), 500)),
                 "died_t": None if (r, s) not in died.index else round(float(died.loc[(r, s)]), 1),
@@ -206,7 +211,19 @@ def extract(path, out):
 
 
 def done(out):
-    return all(os.path.exists(os.path.join(out, f)) for f in ("rounds.parquet", "loadout.parquet", "steps.parquet", "deaths_w.parquet"))
+    if not all(os.path.exists(os.path.join(out, f)) for f in ("rounds.parquet", "loadout.parquet", "steps.parquet", "deaths_w.parquet")):
+        return False
+    import pyarrow.parquet as pq
+    return "buy_util" in pq.read_schema(os.path.join(out, "loadout.parquet")).names  # grenades bought (types), added later
+
+
+def _low_priority():
+    """Worker processes run below normal priority: the game keeps the CPU when both run."""
+    try:
+        import ctypes
+        ctypes.windll.kernel32.SetPriorityClass(ctypes.windll.kernel32.GetCurrentProcess(), 0x00004000)
+    except Exception:
+        pass
 
 
 def _one(args):
@@ -217,7 +234,7 @@ def _one(args):
         return os.path.basename(out), f"ERREUR {e}"
 
 
-def run_all(cache, deep_dir, workers=6, log=print):
+def run_all(cache, deep_dir, workers=3, log=print):
     """Every cached demo whose deep extraction exists but has no round context yet."""
     from concurrent.futures import ProcessPoolExecutor
     todo = []
@@ -229,7 +246,7 @@ def run_all(cache, deep_dir, workers=6, log=print):
     if not todo:
         return 0
     log(f"Contexte des rounds : {len(todo)} démo(s)…")
-    with ProcessPoolExecutor(min(workers, len(todo))) as ex:
+    with ProcessPoolExecutor(min(workers, len(todo)), initializer=_low_priority) as ex:
         for i, (mid, res) in enumerate(ex.map(_one, todo), 1):
             if i % 10 == 0 or isinstance(res, str):
                 log(f"  {i}/{len(todo)} {mid} {res if isinstance(res, str) else ''}")

@@ -345,6 +345,11 @@ def build(steamid, adv, cross=None, deep=None, light=False):
         plan["map_refs"] = map_refs(sorted(set(PREMIER) | set(maps)))
     except Exception as e:
         print("références des cartes indisponibles :", e)
+    try:
+        import buys
+        plan["buys"] = buys.advise(sid, sorted(set(PREMIER) | set(maps)))
+    except Exception as e:
+        print("achats par type de round indisponibles :", e)
     wp = weapons.player(sid, mids)
     plan["weapons"] = wp
     ctx = context.analyze(sid)

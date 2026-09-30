@@ -902,6 +902,13 @@ function weaponsBlock(W){const RD=W.ref_duels||{};
    </tbody></table></div>
    ${W.force&&W.force.length?`<p class="note"><b>En force-buy :</b> ${W.force.filter(x=>x.rounds>=2).map(x=>`${esc(x.key)} ${x.adr} dégâts/round (${x.rounds} rounds)`).join(" · ")}</p>`:""}
    <p class="note">Sur ${W.n_rounds} rounds analysés. Duels : kills et morts avec l'arme en main, comparés à tous les joueurs de la base.</p>`}
+function buysBlock(B){if(!B||!B.types)return "";const T=B.types;
+  return `<h3>Tes achats par type de round</h3>
+   <div class="tbl"><table><thead><tr><th>Round</th><th class="n">Tes rounds</th><th class="n">Gagnés (toi · base)</th><th class="n">Dégâts</th><th>Tes achats qui marchent le mieux</th><th>Ce qui marche dans la base</th></tr></thead><tbody>
+   ${["pistol","eco","force","full","anti-eco"].filter(k=>T[k]).map(k=>{const x=T[k];return `<tr><td><b>${esc(x.label)}</b></td><td class="n">${x.rounds}</td><td class="n">${x.win??"—"} % · ${x.base_win??"—"} %</td><td class="n">${x.adr??"—"}</td>
+     <td class="wrap">${x.my_kits.length?x.my_kits.slice(0,2).map(y=>`${esc(y.key)} <span class="note">(${y.win} % sur ${y.n})</span>`).join("<br>"):'<span class="note">pas encore assez</span>'}</td>
+     <td class="wrap">${x.base_kits.slice(0,2).map(y=>`${esc(y.key)} <span class="note">(${y.win} % sur ${y.n})</span>`).join("<br>")}</td></tr>`}).join("")}</tbody></table></div>
+   <p class="note">Toutes cartes confondues. Le détail par carte et par camp (où jouer, quoi acheter) est dans « En partie ».</p>`}
 function renderProgress(){
   const p=P(),v=$("#v-prog"),PL=p.advice.plan;if(!PL)return noPlan(v);
   const L=PL.level,T=PL.training,X=PL.experiments,Wp=PL.weapons,K=PL.kpis||[];
@@ -919,6 +926,7 @@ function renderProgress(){
     ${old.length?`<details><summary style="cursor:pointer">Expériences terminées (${old.length})</summary><div class="exps" style="margin-top:10px">${old.map(expCard).join("")}</div></details>`:""}
     <p class="note" id="xmsg" role="status"></p>`:""}
    ${Wp?weaponsBlock(Wp):""}
+   ${buysBlock(PL.buys)}
    ${K.length?`<h3>Suivi de tes indicateurs</h3><p class="note">Match par match. En couleur : l'évolution de tes 3 derniers matchs par rapport aux précédents.</p><div class="kpis">${K.map(kpiCard).join("")}</div>`:""}`;
   const msg=$("#xmsg",v);
   $$("[data-xstart]",v).forEach(b=>b.onclick=async()=>{const s=X.suggested[+b.dataset.xstart];b.disabled=true;
@@ -1184,9 +1192,22 @@ function buyTip(g,p){if(g.money==null||!g.side)return "";
   if(g.money>=full)return `Full buy possible (${eur(g.money)}).`;
   if(g.money+bonus>=full)return `Eco conseillé : même en perdant ce round, tu auras ${eur(g.money+bonus)} au suivant.`;
   return `Force seulement si toute l'équipe force (${eur(g.money)}).`}
-function phaseTip(g,p){if(g.round_phase==="freezetime")return buyTip(g,p);if(g.round_phase==="over")return "5 s : pourquoi ce round ? Puis une longue expiration.";
+function phaseTip(g,p){if(g.round_phase==="freezetime"){const rt=roundType(g),x=(((((p.advice.plan||{}).buys||{}).maps||{})[g.map]||{})[g.side]||{})[rt];
+    return buyTip(g,p)+(x?` ${RT_FR[rt]} : ${x.zone&&x.zone.name?`joue ${x.zone.name}`:""}${x.kit&&x.kit.name?`${x.zone&&x.zone.name?", ":""}achète ${x.kit.name}`:""}.`:"")}if(g.round_phase==="over")return "5 s : pourquoi ce round ? Puis une longue expiration.";
   if(g.bomb==="planted")return g.side==="CT"?"Bombe posée : retake groupé, ou sauve si tu es seul contre 3.":"Bombe posée : tirs croisés, fais venir les CT.";return ""}
 const gsiFresh=()=>gsiLast&&gsiLast.age!=null&&gsiLast.age<75&&gsiLast.map;
+const RT_FR={pistol:"Round pistolet",eco:"Éco",force:"Force-buy",full:"Full buy","anti-eco":"Anti-éco"};
+function roundType(g){if(!g||!g.side||g.round==null)return null;if(g.round===1||g.round===13)return "pistol";if(g.money==null)return null;
+  const full=g.side==="CT"?4200:4000;return g.money>=full?"full":g.money<2000?"eco":"force"}
+function buyRows(p,map,side,cur){const B=(((p.advice.plan||{}).buys||{}).maps||{})[map];const S_=B&&B[side];if(!S_)return "";
+  const cell=(x,unit)=>x&&x.name?`<b>${esc(x.name)}</b><br><span class="note">${x.from==="toi"?"toi":"base"} : ${x.win} % de rounds gagnés sur ${x.n}${x.adr!=null?`, ${x.adr} dégâts`:""}</span>`:'<span class="note">pas assez de rounds</span>';
+  const rows=["pistol","eco","force","full","anti-eco"].filter(k=>S_[k]);if(!rows.length)return "";
+  return `<h3>Où jouer et quoi acheter selon le round</h3>
+   <div class="tbl"><table><thead><tr><th>Round</th><th>Où jouer (15-25 s)</th><th>Quoi acheter</th><th>Toi</th></tr></thead><tbody>
+   ${rows.map(k=>{const x=S_[k],on=k===cur;return `<tr${on?' style="outline:2px solid var(--flash)"':""}><td><b>${esc(x.label)}</b>${on?'<br><span class="pill warn" style="color:var(--flash)">ce round</span>':""}<br><span class="note">base : ${x.base_win??"—"} % gagnés</span></td>
+     <td class="wrap">${cell(x.zone)}${x.avoid_zone?`<br><span class="note bad">à éviter : ${esc(x.avoid_zone.key)} (${x.avoid_zone.win} %)</span>`:""}</td><td class="wrap">${cell(x.kit)}</td>
+     <td class="wrap">${x.n_me?`${x.n_me} round${x.n_me>1?"s":""}, ${x.my_win} % gagnés${x.my_kits.length?`<br><span class="note">ton achat le plus joué : ${esc(x.my_kits[0].key)}</span>`:""}`:'<span class="note">aucun round ici</span>'}</td></tr>`}).join("")}</tbody></table></div>
+   <p class="note">« Base » : joueurs de la base sur la même carte, le même camp et le même type de round. Ta propre donnée prend le relais dès que tu as au moins 3 rounds qui marchent mieux que la base.</p>`}
 function micBtn(){const g=gsiLast||{};if(!D.local)return "";
   if(g.mic)return `<span class="pill weak" title="Ton micro est enregistré pour analyser tes calls">● Micro</span>${g.mic_auto?"":`<button type="button" class="close" data-mic="stop">Arrêter l'enregistrement</button>`}`;
   return g.mic_auto?"":`<button type="button" class="close" data-mic="start" title="Enregistre ton micro pour analyser tes calls après la partie">Enregistrer mes calls</button>`}
@@ -1252,7 +1273,8 @@ function renderPartie(){
     <div><b>Règle de session</b>${recs.length?esc(recs[0].text):"Pause de 10 à 15 min après une défaite, stop après 2 défaites d'affilée."}</div>
     <div><b>Économie</b>On achète ensemble. Force seulement si chacun aura 4 000 $ au round suivant.</div>
     ${D.local?`<div><b>Avant la 1re game</b><a href="#routine" style="color:var(--flash)">journal (20 s)</a> · <a href="#prog" style="color:var(--flash)">échauffement du jour</a></div>`:""}
-   </div>`;
+   </div>
+   ${S.map?buyRows(p,S.map,S.side,live&&gsiLast.map===S.map&&gsiLast.side===S.side?roundType(gsiLast):null):""}`;
   copyBtn(v);
   $$("[data-map]",v).forEach(b=>b.onclick=()=>{S.map=b.dataset.map;S.level=null;partieManual=true;store("map",S.map);renderPartie()});
   $$("[data-side]",v).forEach(b=>b.onclick=()=>{S.side=b.dataset.side;partieManual=true;store("side",S.side);renderPartie()});
