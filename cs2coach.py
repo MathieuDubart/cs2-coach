@@ -94,16 +94,41 @@ def leetify_codes(steamid, days=35, limit=15):
 
 def _fetch_demo(mid, url):
     dem = os.path.join(config.CACHE, f"{mid}.dem")
-    download(url, dem + ".bz2")
-    decompress(dem + ".bz2", dem)
-    os.remove(dem + ".bz2")
+    arc = dem + ".bz2"
+    if os.path.exists(arc) and not os.path.exists(arc + ".part"):  # left by an earlier, cut download: resume it
+        os.replace(arc, arc + ".part")
+    download(url, arc)
+    try:
+        decompress(arc, dem)
+    except Exception:
+        os.remove(arc)  # complete but damaged: download it again next time
+        raise
+    os.remove(arc)
 
 
-def ensure_demos(reg, workers=5, only=None):
+DEMO_DAYS = 28  # Valve keeps matchmaking demos about a month
+
+
+def _recent(m, days=DEMO_DAYS):
+    import datetime as dt
+    try:
+        return dt.datetime.now() - dt.datetime.fromisoformat(str(m.get("time"))[:16]) < dt.timedelta(days=days)
+    except ValueError:
+        return False
+
+
+def pending_demos(reg):
+    """Your own matches known to Valve whose demo is not here yet: it goes online a few minutes after the match,
+    so a download tried too early is tried again at the next analysis."""
+    return {mid for mid, m in reg.items() if m.get("url") and m.get("me") and (not m.get("expired") or _recent(m))
+            and not os.path.exists(os.path.join(config.CACHE, f"{mid}.dem"))}
+
+
+def ensure_demos(reg, workers=2, only=None):
     from concurrent.futures import ThreadPoolExecutor, as_completed
     os.makedirs(config.CACHE, exist_ok=True)
     todo = {mid: m["url"] for mid, m in reg.items()
-            if (only is None or mid in only) and m.get("url") and not m.get("expired")
+            if (only is None or mid in only) and m.get("url") and (not m.get("expired") or _recent(m))
             and not os.path.exists(os.path.join(config.CACHE, f"{mid}.dem"))}
     if todo:
         log(f"Téléchargement de {len(todo)} démo(s) chez Valve…")
@@ -113,10 +138,15 @@ def ensure_demos(reg, workers=5, only=None):
             mid = futs[f]
             try:
                 f.result()
+                reg[mid].pop("expired", None)
                 log(f"  démo {i}/{len(todo)} prête")
             except Exception as e:
-                log(f"  [{mid}] démo indisponible ({e}) : Valve ne la garde que quelques semaines")
-                reg[mid]["expired"] = True
+                if _recent(reg[mid]):  # not online yet (a few minutes after the match), or a network hiccup
+                    reg[mid].pop("expired", None)
+                    log(f"  [{mid}] démo pas encore disponible chez Valve ({e}) : elle arrive quelques minutes après la fin du match. Nouvel essai à la prochaine analyse.")
+                else:
+                    reg[mid]["expired"] = True
+                    log(f"  [{mid}] démo indisponible ({e}) : Valve ne la garde qu'environ un mois")
     save_registry(reg)
 
 
@@ -367,7 +397,8 @@ def run_for(query, fetch=True):
     reg = collect(args, own_id)
     new = set(reg) - before
     code_ids = {str(matchlist.decode_sharecode(c)[0]) for c in codes}
-    ensure_demos(reg, only=new | code_ids)  # only the matches of this search: it stays fast
+    own = bool(sid) and int(sid) == int(own_id or 0)
+    ensure_demos(reg, only=new | code_ids | (pending_demos(reg) if own else set()))  # only this search (+ your demos still missing)
     ensure_deep()
     import population
     import style
@@ -442,11 +473,12 @@ def sync_steam(sid=None):
     if len(got) < len(codes):
         log(f"{len(codes) - len(got)} match(s) pas encore récupéré(s) : Steam doit être ouvert et CS2 fermé. Nouvel essai à la prochaine synchro.")
     fresh = [mid for mid in new if mid not in before]
-    log(f"{len(fresh)} nouveau(x) match(s)")
-    if not fresh and os.path.exists(os.path.join(config.player_dir(sid), "advice.json")):
+    pend = pending_demos(reg) if sid == own_id else set()
+    log(f"{len(fresh)} nouveau(x) match(s)" + (f", {len(pend)} démo(s) encore à récupérer" if pend - set(fresh) else ""))
+    if not fresh and not pend and os.path.exists(os.path.join(config.player_dir(sid), "advice.json")):
         attach_plan(sid)  # history-only updates (sessions, friends, playtime) still change the plan
         return sid
-    ensure_demos(reg, only=set(fresh))
+    ensure_demos(reg, only=set(fresh) | pend)
     ensure_deep()
     import population
     import style

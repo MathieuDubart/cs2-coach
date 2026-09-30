@@ -28,16 +28,57 @@ def log(*a):
     print(*a, flush=True)
 
 
-def download(url, dest):
+def download(url, dest, tries=8):
+    """Valve's replay servers sometimes drop the connection in the middle of a demo, and Python does not notice it
+    (the file just ends early): check the size announced by the server and resume where it stopped."""
+    import time
+    import urllib.error
     tmp = dest + ".part"
-    with urllib.request.urlopen(url, timeout=60) as r, open(tmp, "wb") as f:
-        shutil.copyfileobj(r, f, 1 << 20)
-    os.replace(tmp, dest)
+    total, err = None, None
+    for attempt in range(tries):
+        have = os.path.getsize(tmp) if os.path.exists(tmp) else 0
+        req = urllib.request.Request(url, headers={"Range": f"bytes={have}-"} if have else {})
+        try:
+            with urllib.request.urlopen(req, timeout=60) as r:
+                if r.status == 206:
+                    t = r.headers.get("Content-Range", "").rsplit("/", 1)[-1]
+                    total = int(t) if t.isdigit() else total
+                    mode = "ab"
+                else:  # a whole file (first try, or the server does not resume): start over
+                    cl = r.headers.get("Content-Length")
+                    total = int(cl) if cl and cl.isdigit() else None
+                    mode = "wb"
+                with open(tmp, mode) as f:
+                    shutil.copyfileobj(r, f, 1 << 20)
+            err = None
+        except urllib.error.HTTPError as e:
+            if e.code == 416 and have and total and have >= total:  # already complete
+                err = None
+            elif e.code in (404, 410):
+                raise
+            else:
+                err = e
+        except OSError as e:  # connection reset, timeout...
+            err = e
+        size = os.path.getsize(tmp) if os.path.exists(tmp) else 0
+        if err is None and (total is None or size >= total):
+            os.replace(tmp, dest)
+            return
+        time.sleep(min(30, 2 ** attempt))
+    raise IOError(f"téléchargement incomplet après {tries} essais ({size // 1_000_000} / {(total or 0) // 1_000_000} Mo){f' : {err}' if err else ''}")
 
 
 def decompress(src, dest):
-    with bz2.open(src, "rb") as i, open(dest, "wb") as o:
-        shutil.copyfileobj(i, o, 1 << 20)
+    """Into a temporary file first: a damaged archive never leaves a half demo behind."""
+    tmp = dest + ".part"
+    try:
+        with bz2.open(src, "rb") as i, open(tmp, "wb") as o:
+            shutil.copyfileobj(i, o, 1 << 20)
+    except Exception:
+        if os.path.exists(tmp):
+            os.remove(tmp)
+        raise
+    os.replace(tmp, dest)
 
 
 def game_mode(path, n_players):
