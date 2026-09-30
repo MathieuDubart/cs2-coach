@@ -38,14 +38,30 @@ def save_settings(**kw):
     return v
 
 
+def cs2_voice_device():
+    """The microphone CS2 uses for voice chat (voice_device_override in CS2's settings), if one is set."""
+    try:
+        own = config.logged_in_account()[0]
+        f = os.path.join(config.steam_path(), "userdata", str(int(own) - 76561197960265728), "730", "local", "cfg", "cs2_machine_convars.vcfg")
+        m = re.search(r'"voice_device_override"\s*"([^"]+)"', open(f, encoding="utf-8", errors="replace").read())
+        return m.group(1) if m else None
+    except Exception:
+        return None
+
+
+def chosen_device():
+    return settings().get("device") or cs2_voice_device()
+
+
 def devices():
     import sounddevice as sd
     default = sd.query_devices(kind="input")["name"]
+    cs2 = cs2_voice_device()
     seen, out = set(), []
     for d in sd.query_devices():
         if d["max_input_channels"] > 0 and d["name"] not in seen:
             seen.add(d["name"])
-            out.append({"name": d["name"], "default": d["name"] == default})
+            out.append({"name": d["name"], "default": d["name"] == default, "cs2": bool(cs2) and d["name"].startswith(cs2[:31])})
     return out
 
 
@@ -54,6 +70,7 @@ class Recorder:
     def __init__(self):
         self.lock = threading.Lock()
         self.stream = self.file = self.meta = None
+        self.peak = 0.0          # loudest sample of the recording (silence = wrong microphone)
 
     def recording(self):
         return self.stream is not None
@@ -67,10 +84,12 @@ class Recorder:
             os.makedirs(DIR, exist_ok=True)
             now = dt.datetime.now()
             rid = f"{now:%Y%m%d_%H%M%S}_{(map_name or 'partie').replace('de_', '').replace('cs_', '')}"
-            name = settings().get("device")
+            name = chosen_device()
             dev = None
-            if name:
-                dev = next((i for i, d in enumerate(sd.query_devices()) if d["name"] == name and d["max_input_channels"] > 0), None)
+            if name:  # PortAudio shortens names to 31 characters with some drivers
+                dev = next((i for i, d in enumerate(sd.query_devices()) if d["max_input_channels"] > 0
+                            and (d["name"] == name or name.startswith(d["name"]) or d["name"].startswith(name[:31]))), None)
+            self.peak = 0.0
             info = sd.query_devices(dev, kind="input")
             rate = SR
             try:
@@ -83,7 +102,11 @@ class Recorder:
 
             def cb(indata, frames, tinfo, status):
                 try:
-                    self.file.write(indata[:, 0].copy())
+                    block = indata[:, 0].copy()
+                    self.file.write(block)
+                    p = float(abs(block).max()) if len(block) else 0.0
+                    if p > self.peak:
+                        self.peak = p
                 except Exception:
                     pass
             self.stream = sd.InputStream(samplerate=rate, channels=1, dtype="float32", callback=cb, device=dev)
@@ -113,6 +136,8 @@ class Recorder:
                 self.file = None
                 self.meta["end"] = time.time()
                 self.meta["duration"] = round(self.meta["end"] - self.meta["start"], 1)
+                self.meta["peak"] = round(self.peak, 4)
+                self.meta["silent"] = self.peak < 0.01  # nothing above -40 dB: the microphone was not the one in use
                 self._save()
                 m, self.meta = self.meta, None
             return m
@@ -167,7 +192,7 @@ def watchdog(g):
 def finish():
     m = REC.stop()
     LAST.update(key=None, gameover=None)
-    if m and m.get("duration", 0) >= 60:
+    if m and m.get("duration", 0) >= 60 and not m.get("silent"):
         start_transcription(m["id"])
     return m
 
@@ -247,6 +272,7 @@ def recordings():
             out.append({"id": rid, "start": m.get("start_iso"), "map": m.get("map"), "duration": m.get("duration"), "device": m.get("device"),
                         "rounds_marked": len({r.get("round") for r in m.get("rounds", [])}), "source": m.get("source"),
                         "transcribed": os.path.exists(os.path.join(DIR, rid + ".transcript.json")),
+                        "silent": bool(m.get("silent")) or (m.get("peak") is not None and m["peak"] < 0.01),
                         "match": json.load(open(a, encoding="utf-8")).get("match") if os.path.exists(a) else None,
                         "audio": os.path.exists(os.path.join(DIR, m["file"]))})
     return out
@@ -435,7 +461,7 @@ def summary(sid, limit=6):
         m = json.load(open(os.path.join(DIR, r["id"] + ".json"), encoding="utf-8"))
         if m.get("steamid") and str(m["steamid"]) != str(sid):
             continue
-        if r["transcribed"]:
+        if r["transcribed"] and not r.get("silent"):
             try:
                 a = analyze(r["id"], sid)
             except Exception as e:

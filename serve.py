@@ -7,6 +7,7 @@ import json
 import re
 import sys
 import threading
+import time
 import traceback
 import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -100,6 +101,7 @@ class Handler(BaseHTTPRequestHandler):
             try:
                 import voice
                 s["mic"] = voice.REC.recording()
+                s["mic_silent"] = voice.REC.recording() and time.time() - (voice.REC.meta or {}).get("start", time.time()) > 60 and voice.REC.peak < 0.01
                 s["mic_auto"] = bool(voice.settings().get("auto"))
             except Exception:
                 pass
@@ -287,7 +289,9 @@ def voice_status():
     except Exception as e:
         return {"available": False, "error": str(e)}
     m = voice.REC.meta
-    return {"available": True, "settings": voice.settings(), "recording": bool(m), "current": m and {k: m[k] for k in ("id", "map", "start_iso", "device", "source")},
+    return {"available": True, "settings": voice.settings(), "device": voice.chosen_device(), "cs2_device": voice.cs2_voice_device(),
+            "recording": bool(m), "level": round(voice.REC.peak, 4) if m else None,
+            "current": m and {k: m[k] for k in ("id", "map", "start_iso", "device", "source")},
             "transcribing": voice.transcribing(), "recordings": voice.recordings()[:12]}
 
 

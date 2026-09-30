@@ -970,12 +970,13 @@ async function renderSteam(){
    <p class="note">Seulement ta voix : avec un casque, celle de tes coéquipiers n'arrive pas dans ton micro. Rien ne sort du PC (dossier <code>out/voice</code>, non versionné). N'enregistre d'autres personnes qu'avec leur accord : enregistrer les paroles de quelqu'un sans son consentement est interdit (article 226-1 du Code pénal).</p>
    ${vs&&vs.available?`
     <div class="row"><label style="display:flex;gap:8px;align-items:center;font-size:14px"><input type="checkbox" id="v-auto" ${vs.settings.auto?"checked":""}> Enregistrer automatiquement pendant mes parties (avec la détection de la partie)</label></div>
+    <p class="note">Micro enregistré : <b>${esc(vs.device||"micro par défaut de Windows")}</b>${vs.cs2_device&&vs.device===vs.cs2_device?" (le même que dans CS2)":""}.</p>
     <div class="row"><span class="f">Micro</span><select id="v-dev" style="font:14px var(--f-body);background:var(--bg);color:var(--ink);border:1px solid var(--line);border-radius:3px;padding:5px 8px;max-width:360px"><option value="">Micro par défaut de Windows</option></select></div>
     ${vs.recording?`<p><b class="bad">● Enregistrement en cours</b> ${vs.current.map?`(${MAPN(vs.current.map)})`:""}, depuis ${fmtDate(vs.current.start_iso)} <button type="button" id="v-stop">Arrêter</button></p>`:""}
     ${vs.transcribing?`<p class="note"><span class="spin" aria-hidden="true"></span>Transcription en cours (${esc(vs.transcribing)}) : elle tourne en priorité basse et s'arrête si une partie commence.</p>`:""}
     ${vs.recordings.length?`<div class="tbl"><table><thead><tr><th>Date</th><th>Carte</th><th class="n">Durée</th><th class="n">Rounds repérés</th><th>Transcription</th><th></th></tr></thead><tbody>
       ${vs.recordings.map(r=>`<tr><td>${fmtDate(r.start)}</td><td>${r.map?MAPN(r.map):"—"}</td><td class="n">${r.duration?Math.round(r.duration/60)+" min":"en cours"}</td><td class="n">${r.rounds_marked||"—"}</td>
-        <td>${r.transcribed?"faite":r.duration?`<button type="button" data-vtr="${r.id}">Transcrire</button>`:"—"}</td><td><button type="button" data-vdel="${r.id}">Supprimer</button></td></tr>`).join("")}</tbody></table></div>`
+        <td>${r.silent?'<span class="bad">muet : mauvais micro</span>':r.transcribed?"faite":r.duration?`<button type="button" data-vtr="${r.id}">Transcrire</button>`:"—"}</td><td><button type="button" data-vdel="${r.id}">Supprimer</button></td></tr>`).join("")}</tbody></table></div>`
       :`<p class="note">Aucun enregistrement pour l'instant.</p>`}<span class="note" id="v-msg" role="status"></span>`
     :`<p class="note">Micro indisponible sur ce PC${vs&&vs.error?` (${esc(vs.error)})`:""}.</p>`}</article>
   <div class="insights">
@@ -1012,7 +1013,7 @@ async function renderSteam(){
   const vmsg=$("#v-msg",v),vcall=async(path,body)=>{try{await api(path,Object.assign({sid},body||{}));renderSteam()}catch(e){if(vmsg)vmsg.textContent=e.message}};
   const va=$("#v-auto",v);if(va)va.onchange=()=>vcall("/api/voice/settings",{auto:va.checked});
   const vd=$("#v-dev",v);if(vd){fetch("/api/voice/devices").then(r=>r.json()).then(list=>{if(!Array.isArray(list))return;const cur=(vs.settings||{}).device||"";
-    vd.innerHTML=`<option value="">Micro par défaut de Windows</option>`+list.map(d=>`<option value="${esc(d.name)}" ${d.name===cur?"selected":""}>${esc(d.name)}${d.default?" (par défaut)":""}</option>`).join("")}).catch(()=>{});
+    vd.innerHTML=`<option value="">${vs.cs2_device?`Le même que CS2 (${esc(vs.cs2_device)})`:"Micro par défaut de Windows"}</option>`+list.map(d=>`<option value="${esc(d.name)}" ${d.name===cur?"selected":""}>${esc(d.name)}${d.cs2?" (utilisé par CS2)":d.default?" (par défaut de Windows)":""}</option>`).join("")}).catch(()=>{});
     vd.onchange=()=>vcall("/api/voice/settings",{device:vd.value||null})}
   const vst=$("#v-stop",v);if(vst)vst.onclick=()=>vcall("/api/voice/stop");
   $$("[data-vtr]",v).forEach(b=>b.onclick=()=>{b.disabled=true;vcall("/api/voice/transcribe",{id:b.dataset.vtr})});
@@ -1216,7 +1217,7 @@ function buyRows(p,map,side,cur){const B=(((p.advice.plan||{}).buys||{}).maps||{
      <td class="wrap">${x.n_me?`${x.n_me} round${x.n_me>1?"s":""}, ${x.my_win} % gagnés${x.my_kits.length?`<br><span class="note">ton achat le plus joué : ${esc(x.my_kits[0].key)}</span>`:""}`:'<span class="note">aucun round ici</span>'}</td></tr>`}).join("")}</tbody></table></div>
    <p class="note">« Base » : joueurs de la base sur la même carte, le même camp et le même type de round. Ta propre donnée prend le relais dès que tu as au moins 3 rounds qui marchent mieux que la base.</p>`}
 function micBtn(){const g=gsiLast||{};if(!D.local)return "";
-  if(g.mic)return `<span class="pill weak" title="Ton micro est enregistré pour analyser tes calls">● Micro</span>${g.mic_auto?"":`<button type="button" class="close" data-mic="stop">Arrêter l'enregistrement</button>`}`;
+  if(g.mic)return `${g.mic_silent?`<span class="pill weak" title="Aucun son capté depuis une minute">● Micro muet : <a href="#steam" style="color:inherit">vérifie le micro</a></span>`:`<span class="pill weak" title="Ton micro est enregistré pour analyser tes calls">● Micro</span>`}${g.mic_auto?"":`<button type="button" class="close" data-mic="stop">Arrêter l'enregistrement</button>`}`;
   return g.mic_auto?"":`<button type="button" class="close" data-mic="start" title="Enregistre ton micro pour analyser tes calls après la partie">Enregistrer mes calls</button>`}
 function liveStrip(p){if(!D.local)return "";const g=gsiLast;
   if(gsiFresh())return `<div class="live on" role="status"><span class="dot" aria-hidden="true"></span><b>${MAPN(g.map)}</b><span>${g.side?`${g.side} · ${roleOf(g.map,g.side)}`:"en spectateur"}</span>
