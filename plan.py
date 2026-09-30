@@ -118,10 +118,13 @@ def routes_view(proutes, maps):
             ref = v.get("ref", {})
             base, pro = ref.get("base", {}), ref.get("pro", {})
 
-            def pick(rs):
-                rs = [r for r in rs if r.get("travel") is not None and r["n"] >= 3]
-                return min(rs, key=lambda r: (r["died"], r["travel"])) if rs else None
-            best_b, best_p = pick(base.get("routes", [])), pick(pro.get("routes", []))
+            def pick(rs, timing, min_n):
+                # death rate pulled toward the map average (5 virtual rotations): 3 rotations with no death is not "0 %"
+                avg = (timing or {}).get("died_way") or 25
+                rs = [r for r in rs if r.get("travel") is not None and r["n"] >= min_n]
+                smooth = lambda r: (r["died"] * r["n"] + avg * 5) / (r["n"] + 5)
+                return min(rs, key=lambda r: (smooth(r), r["travel"])) if rs else None
+            best_b, best_p = pick(base.get("routes", []), base.get("timing"), 8), pick(pro.get("routes", []), pro.get("timing"), 5)
             out.setdefault(mp, {})[site] = {
                 "n": v["n"], "arrived": v["arrived"], "died_way": v["died_way"], "react": v["react_med"], "travel": v["travel_med"],
                 "mine": [{"route": _route(r), "n": n} for r, n in v["routes"].items()],

@@ -229,6 +229,56 @@ svg.radar{display:block;width:100%;height:auto}
 .gauge b{font-family:var(--f-display);font-size:30px;line-height:1}
 .gauge span{font-size:12.5px;color:var(--muted)}
 pre.cli{background:var(--radar-bg);color:#dfe6ec;padding:12px 14px;overflow-x:auto;font:12.5px/1.6 var(--f-mono);margin:0;border-radius:2px}
+/* routine / mi-round / progresser */
+.pg-grid2{display:grid;grid-template-columns:minmax(280px,400px) minmax(0,1fr);gap:18px;align-items:start}
+@media (max-width:980px){.pg-grid2{grid-template-columns:1fr}}
+.phases{display:grid;grid-template-columns:repeat(auto-fill,minmax(310px,1fr));gap:14px;align-items:start}
+.phase{background:var(--panel);border:1px solid var(--line);border-top:4px solid var(--ct);padding:14px 16px;display:grid;gap:12px;align-content:start;min-width:0}
+.phase h3{font-size:21px;text-transform:uppercase;letter-spacing:.04em}
+.tip{display:grid;gap:5px;border-top:1px dashed var(--line);padding-top:10px;min-width:0}
+.phase h3+.tip{border-top:0;padding-top:0}
+.tip>b{font-family:var(--f-display);font-size:18px;line-height:1.2}
+.tip>p{font-size:13.5px;color:var(--muted)}
+.tip ul{font-size:14px}
+.srcs.sm{font-size:11.5px}
+.srcs.sm a{padding:1px 7px}
+.pb{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:10px;align-items:start}
+.pbc{background:var(--panel);border:1px solid var(--line);border-left:4px solid var(--muted);padding:10px 14px;display:grid;gap:5px;font-size:14px;min-width:0}
+.pbc.CT{border-left-color:var(--ct)} .pbc.T{border-left-color:var(--t)}
+.pbc .if{font-weight:600}
+.pbc .why{font-size:12.5px;color:var(--muted)}
+.pbc .you{font:600 11px var(--f-mono);color:var(--bad);text-transform:uppercase;letter-spacing:.06em}
+.lvl{display:inline-block;font:600 11px var(--f-mono);padding:1px 7px;border-radius:9px;background:var(--chip);color:var(--muted);white-space:nowrap}
+.lvl.fiable{background:color-mix(in srgb,var(--good) 18%,transparent);color:var(--good)}
+.lvl.tendance{background:color-mix(in srgb,var(--warn) 20%,transparent);color:var(--warn)}
+.form .row{display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center}
+.form .f{font:500 13px var(--f-body);color:var(--muted);min-width:104px}
+.form input[type=number],.form input[type=text]{font:14px var(--f-body);background:var(--bg);color:var(--ink);border:1px solid var(--line);border-radius:3px;padding:5px 8px}
+.form input[type=number]{width:84px}
+.form input[type=text]{flex:1;min-width:180px}
+.form input:focus-visible{outline:2px solid var(--ct);outline-offset:1px}
+.primary{font:600 14px var(--f-body);padding:7px 14px;border:1px solid var(--ink);background:var(--ink);color:var(--bg);border-radius:3px;cursor:pointer}
+.primary:disabled{opacity:.5;cursor:progress}
+.exps{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px;align-items:start}
+.exp .top{display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center;justify-content:space-between}
+.exp .ttl{font-family:var(--f-display);font-size:19px;font-weight:600;line-height:1.2}
+.prog{height:8px;background:var(--chip);border-radius:4px;overflow:hidden}
+.prog i{display:block;height:100%;background:var(--ct)}
+.kpis{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:10px}
+.kpi{background:var(--panel);border:1px solid var(--line);padding:10px 12px;display:grid;gap:4px;min-width:0}
+.kpi>b{font-family:var(--f-display);font-size:26px;line-height:1.1}
+.kpi svg{width:100%;height:40px;display:block}
+.warm{list-style:none;padding:0;display:grid;gap:8px;margin:0}
+.warm li{background:var(--panel);border:1px solid var(--line);border-left:4px solid var(--flash);padding:8px 12px;margin:0;display:grid;gap:3px}
+.warm li>b{font-family:var(--f-display);font-size:18px}
+.rot{display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:12px}
+.meta-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:10px}
+.meta-list article{background:var(--panel);border:1px solid var(--line);padding:10px 14px;display:grid;gap:5px;font-size:14px;align-content:start}
+.meta-list article>b{font-family:var(--f-display);font-size:18px}
+.card>ul{font-size:14px}
+.bench.wide .row{grid-template-columns:minmax(0,1.3fr) minmax(90px,1fr) 260px}
+.insights.wide{grid-template-columns:repeat(auto-fill,minmax(390px,1fr));align-items:start}
+.insights.wide .card{align-content:start}
 </style>
 
 <div class="bar"><div class="bar-in">
@@ -236,6 +286,9 @@ pre.cli{background:var(--radar-bg);color:#dfe6ec;padding:12px 14px;overflow-x:au
   <nav aria-label="Vues">
     <a href="#avant" data-view="avant">Avant la game</a>
     <a href="#synthese" data-view="synthese">Synthèse</a>
+    <a href="#routine" data-view="routine">Routine</a>
+    <a href="#mid" data-view="mid">Mi-round</a>
+    <a href="#prog" data-view="prog">Progresser</a>
     <a href="#matchs" data-view="matchs">Matchs</a>
     <a href="#cartes" data-view="cartes">Cartes et stuffs</a>
     <a href="#joueurs" data-view="joueurs">Joueurs</a>
@@ -250,6 +303,9 @@ pre.cli{background:var(--radar-bg);color:#dfe6ec;padding:12px 14px;overflow-x:au
 <main>
   <section class="view" id="v-avant"></section>
   <section class="view" id="v-synthese" hidden></section>
+  <section class="view" id="v-routine" hidden></section>
+  <section class="view" id="v-mid" hidden></section>
+  <section class="view" id="v-prog" hidden></section>
   <section class="view" id="v-matchs" hidden></section>
   <section class="view" id="v-cartes" hidden></section>
   <section class="view" id="v-joueurs" hidden></section>
@@ -374,6 +430,7 @@ function renderAvant(){
       <ul class="pl-list">${(coach?coach.plan.map(t=>`<li class="coach">${t}</li>`):[]).join("")}${(plan?plan.bullets:[]).filter(b=>!coach||b.kind==="timing"||b.kind==="try").map(b=>`<li class="${b.kind}">${b.text}</li>`).join("")}</ul>
       ${Sd&&plan&&plan.key_nades.length?`<span class="lbl4">Stuffs clés</span><div class="lineups">${plan.key_nades.map(i=>lineupCard(Sd.lineups[i],i)).join("")}</div>`:""}
       ${Sd?`<p class="note">Toutes les stuffs de la carte sont dans « Cartes et stuffs ».</p>`:""}`:""}
+      ${p.advice.plan?pregameHints(p.advice.plan,S.map,S.side):""}
     </div>
   </div>`;
   copyBtn(v);
@@ -470,6 +527,7 @@ function renderSynthese(){
     <div class="record"><span>${rec.win}<small>victoires</small></span><span>${rec.draw}<small>nuls</small></span><span>${rec.loss}<small>défaites</small></span></div></div>
     ${p.advice.strengths.length?`<div class="strengths">${p.advice.strengths.map(s=>`<span>${esc(s)}</span>`).join("")}</div>`:""}
     ${archCard(p)}
+    ${midCard(p)}
     ${deepCard(p)}
     ${prosBlock(p)}
     ${p.overall?`<h3>Analyse du coach${p.overall.scope?` · ${esc(p.overall.scope)}`:""}</h3><p style="max-width:75ch;font-size:16px">${p.overall.summary}</p>${findings(p.overall.priorities)}<h3>Détection automatique · ${ms.length} matchs</h3>`:""}
@@ -641,6 +699,199 @@ function renderCartes(){
   }
 }
 
+// ---------- shared: sources, local API ----------
+const srcLinks=(l,sm)=>l&&l.length?`<div class="srcs${sm?" sm":""}"><span class="note">Sources :</span>${l.map(x=>`<a href="${esc(x.url)}" target="_blank" rel="noopener">${esc(x.label)}</a>`).join("")}</div>`:"";
+async function api(path,body){const r=await fetch(path,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
+  const j=await r.json().catch(()=>({}));if(!r.ok)throw new Error(j.error||"erreur du serveur local");return j}
+async function reloadPlayer(){const id=S.player;delete D.players[id];await loadPlayer(id,true);RENDER[S.view]()}
+const lc=s=>s?s.charAt(0).toLowerCase()+s.slice(1):s;
+const WNAME={awp:"AWP",scout:"Scout",rifle:"Fusils",rifle_eco:"Galil / FAMAS",smg:"SMG",shotgun:"Fusils à pompe",pistol:"Pistolet",heavy:"Mitrailleuse",auto:"Auto-sniper",pro_awp:"AWPers pros"};
+function levelLine(L){if(!L)return "";const bits=[];
+  if(L.rating)bits.push(`Premier ${esc(L.season||"")} : ${L.rating.toLocaleString("fr-FR")}`);
+  if(L.comp)bits.push(`${esc(L.comp)} en compétitif`);
+  const xp=[L.wins?`${L.wins} victoires en compétitif`:"",L.premier_wins?`${L.premier_wins} en Premier`:"",L.since?`compte Steam depuis ${L.since}`:""].filter(Boolean).join(", ");
+  return `${L.name?`niveau ${esc(L.name)}`:"niveau inconnu"}${bits.length?` · ${bits.join(" · ")}`:""} · profil ${esc(L.experience)}${xp?` (${xp})`:""}`}
+
+// ---------- view: routine ----------
+let partySel=null,ckState={};
+const LVL={"fiable":"fiable","tendance":"tendance","pas d'écart net":"pas d'écart net","insuffisant":"trop peu de games"};
+const lvlCls=l=>l==="fiable"?"fiable":l==="tendance"?"tendance":"";
+function phaseCard(ph){return `<article class="phase"><h3>${esc(ph.title)}</h3>${ph.items.map(i=>`<div class="tip"><b>${esc(i.title)}</b><p>${esc(i.text)}</p>
+  ${i.do&&i.do.length?`<ul>${i.do.map(d=>`<li>${esc(d)}</li>`).join("")}</ul>`:""}${srcLinks(i.src,true)}</div>`).join("")}</article>`}
+function contextBlock(C){
+  const pf=v=>v==null?"—":v.toFixed(2).replace(".",","),recs=C.recs||[];
+  const src=Object.entries(C.sources_count||{}).map(([k,n])=>`${n} ${k==="demo"?"avec démo":"via Leetify"}`).join(", ");
+  return `<article class="card"><h3>Tes habitudes de jeu</h3>
+   <p class="note">${C.n} matchs datés (${src}) · ${C.sessions.n} session${C.sessions.n>1?"s":""} de ${String(C.sessions.avg_games).replace(".",",")} game(s) en moyenne, ${C.sessions.max_games} au maximum · ${C.sessions.games_after_2_losses} game(s) lancée(s) après 2 défaites d'affilée · journal : ${C.journal_n} entrée(s).
+   « Note » : rating du match sur le modèle du HLTV 2.0 (1,00 = joueur moyen du lobby). Ta moyenne : ${pf(C.overall.perf)}.</p>
+   ${recs.length?`<ul class="pl-list">${recs.map(r=>`<li class="coach">${esc(r.text)} <span class="lvl ${lvlCls(r.level)}">${esc(LVL[r.level]||r.level)}</span></li>`).join("")}</ul>`
+     :`<p>Pas encore de règle personnelle fiable : il faut plus de matchs. En attendant, applique les règles générales de « Après la game ».</p>`}
+   <div class="tbl"><table><thead><tr><th>Situation</th><th class="n">Games</th><th class="n">V-D</th><th class="n">Victoires</th><th class="n">Note</th><th class="n">Écart</th><th>Fiabilité</th></tr></thead><tbody>
+   ${C.factors.map(f=>`<tr><td class="grp" colspan="7">${esc(f.title)}</td></tr>`+f.rows.map(r=>`<tr><td>${esc(r.group)}</td><td class="n">${r.n}</td><td class="n">${r.w}-${r.l}</td>
+     <td class="n">${r.winrate==null?"—":r.winrate+" %"}</td><td class="n">${pf(r.perf)}</td>
+     <td class="n ${lvlCls(r.level)&&r.delta!=null?(r.delta>0?"good":"bad"):""}">${r.delta==null?"—":(r.delta>0?"+":"")+pf(r.delta)}</td>
+     <td><span class="lvl ${lvlCls(r.level)}">${esc(LVL[r.level]||r.level)}</span></td></tr>`).join("")).join("")}
+   </tbody></table></div>
+   ${C.partners&&C.partners.length?`<p><b>Partenaires réguliers</b> (repérés dans ton équipe sur au moins 2 matchs) : ${C.partners.map(x=>`${esc(x.name)} ${x.w}V-${x.l}D, note ${pf(x.perf)} sur ${x.n} games`).join(" · ")}</p>`:""}
+   ${srcLinks([C.rating_source],true)}</article>`}
+function checkinCard(){
+  if(!D.local)return `<article class="card"><h3>Journal d'avant-session</h3><p class="note">Le journal (sommeil, énergie, échauffement) se remplit dans l'app locale : double-clic sur <code>Coach CS2.bat</code>.</p></article>`;
+  const b=(k,vals)=>`<div class="btns" role="group" data-ck="${k}">${vals.map(([val,t])=>`<button type="button" data-v="${val}" aria-pressed="${String(ckState[k])===String(val)}">${t}</button>`).join("")}</div>`;
+  const five=[[1,"1"],[2,"2"],[3,"3"],[4,"4"],[5,"5"]];
+  return `<article class="card form"><h3>Journal d'avant-session</h3>
+   <p class="note">20 secondes avant ta première game. Chaque entrée est reliée aux matchs des 6 heures suivantes : au fil des semaines, le coach mesure l'effet de ton sommeil, de ton énergie et de ton échauffement sur ta note.</p>
+   <div class="row"><label class="f" for="ck-sleep">Sommeil (heures)</label><input id="ck-sleep" type="number" min="0" max="14" step="0.5" value="${esc(ckState.sleep_h??"")}"></div>
+   <div class="row"><span class="f">Énergie (1-5)</span>${b("energy",five)}</div>
+   <div class="row"><span class="f">Humeur (1-5)</span>${b("mood",five)}</div>
+   <div class="row"><span class="f">Échauffement</span>${b("warmup",[["none","aucun"],["short","moins de 10 min"],["full","15 min et plus"]])}</div>
+   <div class="row"><span class="f">Caféine</span>${b("caffeine",[["yes","oui"],["no","non"]])}</div>
+   <div class="row"><span class="f">Groupe</span>${b("party",[["solo","solo"],["duo","duo"],["trio","trio"],["quatuor","à 4"],["five","à 5"]])}</div>
+   <div class="row"><label class="f" for="ck-note">Objectif</label><input id="ck-note" type="text" value="${esc(ckState.note??"")}" placeholder="Ton objectif de la session"></div>
+   <div class="row"><button type="button" class="primary" id="ck-save">Enregistrer</button><span class="note" id="ck-msg" role="status"></span></div></article>`}
+function partyBlock(PL){const P_=PL.party;if(!P_)return "";const keys=["solo","duo","trio","quatuor","five"],cur=partySel||PL.party_mode||"solo",x=P_[cur];
+  const how={solo:"en solo",duo:"en duo",trio:"à trois",quatuor:"à quatre",five:"à cinq"};
+  return `<article class="card"><h3>Selon ton groupe</h3>${PL.party_mode?`<p class="note">D'après les coéquipiers qui reviennent dans tes matchs, tu joues surtout ${how[PL.party_mode]}.</p>`:""}
+   <div class="btns" role="group" aria-label="Taille du groupe">${keys.map(k=>`<button type="button" data-party="${k}" aria-pressed="${k===cur}">${esc(P_[k].title)}</button>`).join("")}</div>
+   <ul>${x.items.map(t=>`<li>${esc(t)}</li>`).join("")}</ul>${srcLinks(x.src,true)}</article>`}
+function metaBlock(PL){if(!PL.meta||!PL.meta.length)return "";
+  return `<h3>Ce qui a changé dans le jeu</h3><p class="note">Recherche du ${esc(PL.updated)} : patchs, pool de cartes et conséquences pour ton jeu.</p>
+  <div class="meta-list">${PL.meta.map(m=>`<article><span class="eyebrow">${esc(m.date)}</span><b>${esc(m.title)}</b><p>${esc(m.text)}</p><p><b>Pour toi :</b> ${esc(m.impact)}</p>${srcLinks(m.src,true)}</article>`).join("")}</div>`}
+function noPlan(v){v.innerHTML=`<div class="empty">Le plan de ce joueur n'est pas encore calculé. Relance son analyse depuis la barre de recherche (bouton « Mettre à jour »).</div>`}
+function renderRoutine(){
+  const p=P(),v=$("#v-routine"),PL=p.advice.plan;if(!PL)return noPlan(v);
+  v.innerHTML=`<div class="head"><div style="display:grid;gap:4px"><span class="eyebrow">${esc(p.name)} · ${levelLine(PL.level)}</span><h2>Routine : avant, pendant, après</h2></div></div>
+   <div class="pg-grid2">${checkinCard()}${PL.context?contextBlock(PL.context):`<article class="card"><h3>Tes habitudes de jeu</h3><p class="note">Aucun match daté pour ce joueur : les habitudes (horaires, sessions, groupe) demandent des démos ou un historique Leetify.</p></article>`}</div>
+   <div class="phases">${PL.phases.map(phaseCard).join("")}</div>
+   ${partyBlock(PL)}
+   ${metaBlock(PL)}`;
+  $$("[data-ck]",v).forEach(g=>$$("button",g).forEach(bt=>bt.onclick=()=>{ckState[g.dataset.ck]=bt.dataset.v;press(g,"button",bt)}));
+  const sl=$("#ck-sleep",v),nt=$("#ck-note",v);if(sl)sl.oninput=()=>ckState.sleep_h=sl.value;if(nt)nt.oninput=()=>ckState.note=nt.value;
+  const sv=$("#ck-save",v);if(sv)sv.onclick=async()=>{sv.disabled=true;const msg=$("#ck-msg",v);
+    try{const j=await api("/api/checkin",{sid:p.steamid,...ckState});ckState={};msg.textContent=`Enregistré : ${j.n} entrée(s) dans ton journal.`;
+      $$("[data-ck] button",v).forEach(x=>x.setAttribute("aria-pressed","false"));if(sl)sl.value="";if(nt)nt.value=""}
+    catch(e){msg.textContent="Échec : "+e.message}sv.disabled=false};
+  $$("[data-party]",v).forEach(b=>b.onclick=()=>{partySel=b.dataset.party;renderRoutine()});
+}
+
+// ---------- view: mi-round ----------
+let pbSide="me",midMap=null,wpSide=null;
+function midMetricRows(B){const rows=Object.entries(B.metrics).filter(([k,m])=>m.you!=null).sort((a,b)=>(a[1].percentile??101)-(b[1].percentile??101));
+  const col=q=>q<30?"var(--bad)":q<60?"var(--warn)":"var(--good)";
+  return `<div class="card bench wide">${rows.map(([k,m])=>`<div class="row"><span class="lb">${esc(m.label[0].toUpperCase()+m.label.slice(1))}${m.higher_better==null?' <span class="note">(indicatif)</span>':""}</span>
+    <div class="pbar" title="${m.percentile==null?"Ni bon ni mauvais en soi":`Mieux que ${m.percentile} % des joueurs`}">${m.percentile==null?"":`<i style="width:${Math.max(2,m.percentile)}%;background:${col(m.percentile)}"></i>`}<b></b></div>
+    <span class="v">toi ${fmtU(m.you,m.unit)} · méd. ${fmtU(m.median,m.unit)}${m.pro!=null?` · pros ${fmtU(m.pro,m.unit)}`:""}</span></div>`).join("")}</div>`}
+function rotCard(site,r){const s=x=>x==null?"—":String(x).replace(".",",")+" s",pc=x=>x==null?"—":x+" %";
+  const my=r.n?Math.round(100*r.died_way/r.n):null,bd=r.base.died;
+  return `<article class="card"><h3>Rotations vers ${esc(site)}</h3>
+   <div class="tbl"><table><thead><tr><th></th><th class="n">Départ après l'attaque</th><th class="n">Trajet</th><th class="n">Morts en route</th><th class="n">Rotations</th></tr></thead><tbody>
+    <tr><td>Toi</td><td class="n">${s(r.react)}</td><td class="n">${s(r.travel)}</td><td class="n ${my!=null&&bd!=null?(my>=bd+10?"bad":my<=bd-10?"good":""):""}">${pc(my)}</td><td class="n">${r.n}</td></tr>
+    <tr><td>Base</td><td class="n">${s(r.base.react)}</td><td class="n">${s(r.base.travel)}</td><td class="n">${pc(bd)}</td><td class="n">${r.base.n??"—"}</td></tr>
+    <tr><td>Pros</td><td class="n">${s(r.pro.react)}</td><td class="n">${s(r.pro.travel)}</td><td class="n">${pc(r.pro.died)}</td><td class="n">${r.pro.n??"—"}</td></tr></tbody></table></div>
+   <ul>${r.mine.length?`<li><b>Tes routes :</b> ${r.mine.map(x=>`${esc(x.route)}${x.n>1?` ×${x.n}`:""}`).join(" · ")}</li>`:""}
+    ${r.base.best?`<li><b>La plus sûre dans la base :</b> ${esc(r.base.best.route)} (${s(r.base.best.travel)}, ${r.base.best.died} % de morts en route, ${r.base.best.n} rotations)</li>`:""}
+    ${r.pro.best?`<li><b>La plus sûre chez les pros :</b> ${esc(r.pro.best.route)} (${s(r.pro.best.travel)}, ${r.pro.best.died} % de morts, ${r.pro.best.n} rotations)</li>`:""}</ul>
+   ${Object.keys(r.base.by_weapon||{}).length?`<details><summary style="cursor:pointer" class="note">Routes selon l'arme (base)</summary><ul class="note">${Object.entries(r.base.by_weapon).map(([w,x])=>`<li><b>${esc(WNAME[w]||w)}</b> : ${x.routes.map(y=>esc(y.route)).join(" ou ")} · ${x.died} % de morts en route sur ${x.n} rotations</li>`).join("")}</ul></details>`:""}
+  </article>`}
+function wpBlock(W,side){const cl=W&&W[side];if(!cl)return `<p class="note">Pas assez de rounds sur cette carte pour ce camp.</p>`;
+  const order=["awp","pro_awp","rifle","rifle_eco","smg","shotgun","scout"];
+  return `<div class="insights wide">${order.filter(k=>cl[k]&&cl[k].zones.length).map(k=>{const x=cl[k],pro=k==="pro_awp";
+    return `<article class="card"><h3>${esc(x.label)}</h3><span class="note">${x.rounds} rounds${pro?" avec un kill à l'AWP":""}</span>
+    <div class="tbl"><table><thead><tr><th>Zone</th><th class="n">Part</th>${pro?"":`<th class="n">Duels gagnés</th><th class="n">Rounds gagnés</th>`}</tr></thead><tbody>
+    ${x.zones.map(z=>`<tr><td>${esc(z.name)}</td><td class="n">${z.share} %</td>${pro?"":`<td class="n ${z.duel_win!=null&&z.duel_win>=55?"good":z.duel_win!=null&&z.duel_win<=42?"bad":""}">${z.duel_win==null?"—":z.duel_win+" %"} <span class="note">(${z.duels})</span></td><td class="n">${z.round_win} %</td>`}</tr>`).join("")}
+    </tbody></table></div></article>`}).join("")}</div>`}
+function renderMid(){
+  const p=P(),v=$("#v-mid"),PL=p.advice.plan;if(!PL)return noPlan(v);
+  const M=PL.mid,all=PL.playbook||[],anyMe=all.some(x=>x.prio>0);if(pbSide==="me"&&!anyMe)pbSide="all";
+  const pb=all.filter(x=>pbSide==="all"||(pbSide==="me"?x.prio>0:(x.side===pbSide||x.side==="tous")));
+  const maps=[...new Set([...Object.keys(PL.routes||{}),...Object.keys(PL.weapon_positions||{})])];
+  if(!midMap||!maps.includes(midMap))midMap=maps.includes(S.map)?S.map:maps[0];
+  const R=(PL.routes||{})[midMap]||{},W=(PL.weapon_positions||{})[midMap],ws=W?Object.keys(W).sort():[];
+  if(!wpSide||!ws.includes(wpSide))wpSide=ws.includes(S.side)?S.side:ws[0];
+  const B=M&&M.bench;
+  v.innerHTML=`<div class="head"><div style="display:grid;gap:4px"><span class="eyebrow">${esc(p.name)}${B?` · ${B.matches} matchs · comparé à ${B.n_players} joueurs de la base et ${B.n_pros} pros`:""}</span><h2>Mi-round : déplacements et décisions</h2></div></div>
+   ${M?`${M.weak.length?`<div class="insights">${M.weak.map(w=>`<article class="card"><h3>${w.id==="note"?"Ce que font les pros":esc(w.label[0].toUpperCase()+w.label.slice(1))}</h3>
+       <p>${w.id==="note"?esc(w.text):`<span class="num">toi ${fmtU(w.you,w.unit)}</span> · médiane de la base ${fmtU(w.median,w.unit)}${w.pro!=null?` · pros ${fmtU(w.pro,w.unit)}`:""}`}</p>
+       ${w.fix?`<div class="fix"><h4>À faire</h4><p>${esc(w.fix)}</p></div>`:""}${w.percentile!=null?`<span class="note">Tu fais mieux que ${w.percentile} % des joueurs de la base.</span>`:""}</article>`).join("")}</div>`:""}
+     ${M.strong.length?`<div class="strengths">${M.strong.map(s=>`<span>${esc(s.text)}</span>`).join("")}</div>`:""}
+     ${B?`<h3>Tous tes indicateurs de mi-round</h3><p class="note">Barre : ton percentile dans la base (à droite, tu fais mieux que la plupart ; le trait marque la médiane). « Indicatif » : ni bon ni mauvais en soi, à lire avec le reste.</p>${midMetricRows(B)}`:""}`
+     :`<div class="empty">Les indicateurs de mi-round demandent des démos de ce joueur. Les réflexes ci-dessous s'appliquent à tout le monde.</div>`}
+   <h3>Si… alors… : les réflexes de mi-round</h3>
+   <div class="btns" role="group" aria-label="Filtrer les réflexes">${[...(anyMe?[["me","Prioritaires pour toi"]]:[]),["all","Tous"],["CT","CT"],["T","T"]].map(([k,t])=>`<button type="button" data-pb="${k}" aria-pressed="${pbSide===k}">${t}</button>`).join("")}</div>
+   <div class="pb">${pb.map(x=>`<article class="pbc ${x.side==="tous"?"":x.side}">${x.prio>0?`<span class="you">Prioritaire pour toi</span>`:""}<span class="eyebrow">${x.side==="tous"?"CT et T":x.side}</span>
+     <span class="if">Si ${esc(lc(x.if))}</span><span>→ ${esc(x.then)}</span><span class="why">${esc(x.why)}</span>${srcLinks(x.src,true)}</article>`).join("")}</div>
+   ${maps.length?`<h3>Par carte : rotations et positions selon l'arme</h3>
+   <div class="chips" role="group" aria-label="Carte">${maps.map(m=>`<button type="button" data-mm="${m}" aria-pressed="${m===midMap}">${MAPN(m)}</button>`).join("")}</div>
+   ${Object.keys(R).length?`<div class="rot">${Object.entries(R).sort().map(([s,r])=>rotCard(s,r)).join("")}</div>
+     <p class="note">« Départ » : secondes entre l'arrivée d'au moins 2 T sur le site et ton départ vers lui (négatif : tu étais parti avant). « Trajet » : de ton départ à ton arrivée. Routes : les 3 premières zones traversées.</p>`
+     :`<p class="note">Aucune rotation de ta part repérée sur ${MAPN(midMap)}.</p>`}
+   ${W?`<h3>Où jouer selon ton arme sur ${MAPN(midMap)}</h3><div class="btns side" role="group" aria-label="Camp">${ws.map(s=>`<button type="button" data-wps="${s}" aria-pressed="${s===wpSide}">${s}</button>`).join("")}</div>${wpBlock(W,wpSide)}
+     <p class="note">Position de chaque joueur entre 15 et 25 s de round, selon l'arme de son round (base de matchmaking). « Duels gagnés » : ses duels dans cette zone. AWPers pros : joueurs ayant fait un kill à l'AWP dans le round (démos HLTV).</p>`:""}
+   ${(PL.videos||{})[midMap]?`<p><b>Vidéos sur ${MAPN(midMap)}</b></p>${srcLinks(PL.videos[midMap])}`:""}`:""}`;
+  $$("[data-pb]",v).forEach(b=>b.onclick=()=>{pbSide=b.dataset.pb;renderMid()});
+  $$("[data-mm]",v).forEach(b=>b.onclick=()=>{midMap=b.dataset.mm;renderMid()});
+  $$("[data-wps]",v).forEach(b=>b.onclick=()=>{wpSide=b.dataset.wps;renderMid()});
+}
+
+// ---------- view: progresser ----------
+function expValue(x,unit){if(!x||x.value==null)return "—";return x.kind==="prop"?`${String(x.value).replace(".",",")} % (${x.k}/${x.n})`:fmtU(x.value,unit)}
+function expCard(e){const pr=e.progress||[0,1,""],pct=Math.min(100,Math.round(100*pr[0]/Math.max(pr[1],1)));
+  const cls=e.verdict==="ça marche"?"strong":e.verdict==="ça dégrade"?"weak":"";
+  return `<article class="card exp"><div class="top"><span class="tag">${esc(e.category)}</span><span class="pill ${cls}">${e.status==="active"?"":"terminée · "}${esc(e.verdict)}</span></div>
+   <span class="ttl">${esc(e.title)}</span>
+   <ul>${(e.how||[]).map(h=>`<li>${esc(h)}</li>`).join("")}</ul>
+   <div class="prog" title="${pct} %"><i style="width:${pct}%"></i></div><span class="note">${pr[0]}/${pr[1]} ${esc(pr[2])} · lancée le ${fmtDate(e.started)}${e.ended?` · terminée le ${fmtDate(e.ended)}`:""}</span>
+   <div class="standing"><span>${esc(e.metric)}</span><span>avant : ${expValue(e.before,e.unit)} · depuis : ${expValue(e.after,e.unit)}</span></div>
+   ${e.status==="active"&&D.local?`<div class="btns"><button type="button" data-xstop="${e.id}">Terminer l'expérience</button></div>`:""}</article>`}
+function kpiCard(k){const vals=k.series.map(x=>x[1]),W=200,H=40,mn=Math.min(...vals),mx=Math.max(...vals),rg=(mx-mn)||1;
+  const pts=vals.map((y,i)=>`${(i/Math.max(vals.length-1,1)*W).toFixed(1)},${(H-4-(y-mn)/rg*(H-8)).toFixed(1)}`).join(" ");
+  const d=k.recent-k.before,better=k.higher_better?d>0:d<0;
+  return `<div class="kpi"><span class="note">${esc(k.label)}</span><b class="${Math.abs(d)<1e-9?"":better?"good":"bad"}">${fmtU(k.recent,k.unit)}</b>
+   <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="Évolution sur ${vals.length} matchs"><polyline points="${pts}" fill="none" stroke="var(--ct)" stroke-width="2" vector-effect="non-scaling-stroke"/></svg>
+   <span class="note">3 derniers ${fmtU(k.recent,k.unit)} · avant ${fmtU(k.before,k.unit)} · ${vals.length} matchs</span></div>`}
+function weaponsBlock(W){const RD=W.ref_duels||{};
+  return `<h3>Tes armes</h3>${W.suggestions.length?`<ul class="pl-list">${W.suggestions.map(s=>`<li class="${s.kind==="weapon_weak"?"avoid":/strong/.test(s.kind)?"exploit":"coach"}">${esc(s.text)}</li>`).join("")}</ul>`:""}
+   <div class="tbl"><table><thead><tr><th>Arme principale du round</th><th class="n">Rounds</th><th class="n">Kills / round</th><th class="n">Dégâts / round</th><th class="n">Survie</th><th class="n">Rounds gagnés</th><th class="n">Duels gagnés : toi · base</th></tr></thead><tbody>
+   ${W.by_weapon.map(x=>{const d=W.duels[x.key],r=RD[x.key];return `<tr><td>${esc(x.key)}</td><td class="n">${x.rounds}</td><td class="n">${f1(x.kpr)}</td><td class="n">${x.adr}</td><td class="n">${x.survival} %</td><td class="n">${x.win} %</td>
+     <td class="n ${d&&r!=null&&d.n>=10?(d.win>=r+8?"good":d.win<=r-8?"bad":""):""}">${d?`${d.win} % <span class="note">(${d.n})</span>`:"—"} · ${r!=null?r+" %":"—"}</td></tr>`}).join("")}
+   </tbody></table></div>
+   ${W.force&&W.force.length?`<p class="note"><b>En force-buy :</b> ${W.force.filter(x=>x.rounds>=2).map(x=>`${esc(x.key)} ${x.adr} dégâts/round (${x.rounds} rounds)`).join(" · ")}</p>`:""}
+   <p class="note">Sur ${W.n_rounds} rounds analysés. Duels : kills et morts avec l'arme en main, comparés à tous les joueurs de la base.</p>`}
+function renderProgress(){
+  const p=P(),v=$("#v-prog"),PL=p.advice.plan;if(!PL)return noPlan(v);
+  const L=PL.level,T=PL.training,X=PL.experiments,Wp=PL.weapons,K=PL.kpis||[];
+  const ex=(X&&X.experiments)||[],act=ex.filter(e=>e.status==="active"),old=ex.filter(e=>e.status!=="active");
+  v.innerHTML=`<div class="head"><div style="display:grid;gap:4px"><span class="eyebrow">${esc(p.name)}</span><h2>Progresser</h2></div></div>
+   <div class="insights">
+    <article class="card"><h3>Ton niveau</h3><p>${levelLine(L)}</p>${L&&L.focus.length?`<div class="fix"><h4>À ce niveau, travaille</h4><ol>${L.focus.map(f=>`<li>${esc(f)}</li>`).join("")}</ol></div>`:""}${srcLinks(L&&L.src,true)}</article>
+    ${PL.role?`<article class="card"><h3>Ton rôle : ${esc((p.advice.archetype||{}).name||PL.role.role)}</h3><ul>${PL.role.items.map(t=>`<li>${esc(t)}</li>`).join("")}</ul>${srcLinks(PL.role.src,true)}</article>`:""}
+   </div>
+   ${T?`<h3>Échauffement du jour · ${T.total_min} min</h3><ol class="warm">${T.warmup.map(w=>`<li><b>${w.min} min · ${esc(w.map)}</b><span>${esc(w.text)}</span><span class="note">Pourquoi : ${esc(w.why)}</span>${srcLinks(w.src,true)}</li>`).join("")}</ol>
+    <div class="tech">${T.week.map(w=>`<div><b>${esc(w.title)}</b>${esc(w.text)}</div>`).join("")}</div>`:""}
+   ${X?`<h3>Expériences</h3><p class="note">Tu lances un test et tu joues normalement : le coach compare tes matchs suivants à tes 15 matchs d'avant et rend un verdict quand il y a assez de données (écart significatif à 90 %).${D.local?"":" Lancer ou terminer une expérience se fait dans l'app locale."}</p>
+    ${act.length?`<span class="lbl4" style="color:var(--muted)">En cours</span><div class="exps">${act.map(expCard).join("")}</div>`:""}
+    ${X.suggested.length?`<span class="lbl4" style="color:var(--muted)">Proposées pour toi</span><div class="exps">${X.suggested.map((s,i)=>`<article class="card exp"><div class="top"><span class="tag">${esc(s.category)}</span></div><span class="ttl">${esc(s.title)}</span><p>${esc(s.why)}</p><span class="note">Mesure : ${esc(s.metric)}</span>${D.local?`<div class="btns"><button type="button" data-xstart="${i}">Lancer</button></div>`:""}</article>`).join("")}</div>`:""}
+    ${old.length?`<details><summary style="cursor:pointer">Expériences terminées (${old.length})</summary><div class="exps" style="margin-top:10px">${old.map(expCard).join("")}</div></details>`:""}
+    <p class="note" id="xmsg" role="status"></p>`:""}
+   ${Wp?weaponsBlock(Wp):""}
+   ${K.length?`<h3>Suivi de tes indicateurs</h3><p class="note">Match par match. En couleur : l'évolution de tes 3 derniers matchs par rapport aux précédents.</p><div class="kpis">${K.map(kpiCard).join("")}</div>`:""}`;
+  const msg=$("#xmsg",v);
+  $$("[data-xstart]",v).forEach(b=>b.onclick=async()=>{const s=X.suggested[+b.dataset.xstart];b.disabled=true;
+    try{await api("/api/experiment",{sid:p.steamid,action:"start",template:s.template,params:s.params});await reloadPlayer()}catch(e){if(msg)msg.textContent="Échec : "+e.message;b.disabled=false}});
+  $$("[data-xstop]",v).forEach(b=>b.onclick=async()=>{b.disabled=true;
+    try{await api("/api/experiment",{sid:p.steamid,action:"stop",id:b.dataset.xstop});await reloadPlayer()}catch(e){if(msg)msg.textContent="Échec : "+e.message;b.disabled=false}});
+}
+
+// ---------- pre-game and summary additions ----------
+function pregameHints(PL,map,side){const out=[],R=(PL.routes||{})[map];
+  if(side==="CT"&&R)Object.entries(R).sort().forEach(([s,r])=>{const b=r.pro.best||r.base.best;
+    if(b)out.push(`<li class="timing"><b>Rotation vers ${esc(s)}</b> : ${esc(b.route)} (${String(b.travel).replace(".",",")} s, ${b.died} % de morts en route sur ${b.n} rotations ${r.pro.best?"de pros":"de la base"}).</li>`)});
+  (PL.playbook||[]).filter(x=>x.prio>0&&(x.side===side||x.side==="tous")).slice(0,2).forEach(x=>out.push(`<li class="coach"><b>Si ${esc(lc(x.if))}</b> → ${esc(x.then)}</li>`));
+  ((PL.context||{}).recs||[]).filter(r=>r.kind==="stop"||r.kind==="tilt").slice(0,1).forEach(r=>out.push(`<li class="avoid">${esc(r.text)}</li>`));
+  return out.length?`<span class="lbl4">Mi-round et session</span><ul class="pl-list">${out.join("")}</ul>`:""}
+function midCard(p){const M=(p.advice.plan||{}).mid;if(!M||(!M.weak.length&&!M.strong.length))return "";
+  return `<article class="card"><h3>Mi-round en bref</h3><ul>${M.weak.slice(0,3).map(w=>`<li>${esc(w.text)}${w.fix?` <b>${esc(w.fix)}</b>`:""}</li>`).join("")}${M.strong.slice(0,2).map(s=>`<li class="good">${esc(s.text)}</li>`).join("")}</ul>
+   <p><a href="#mid" style="color:var(--ct)">Routes de rotation, positions selon l'arme et réflexes : onglet Mi-round</a></p></article>`}
+
 // ---------- data loading (profiles and radars are separate files) ----------
 D.players={};D.radars={};D.viewboxes={};
 const IDX=()=>Object.fromEntries(D.index.map(e=>[e.steamid,e]));
@@ -750,7 +1001,7 @@ $("#search").addEventListener("submit",async e=>{e.preventDefault();const q=$("#
     <p class="note">Il faut que l'app locale tourne : double-clic sur <code>Coach CS2.bat</code> dans <code>E:\dev\cs2-coach</code>, ou active son démarrage automatique avec <code>autostart.bat</code>.</p>`)});
 
 // ---------- routing ----------
-const RENDER={avant:renderAvant,synthese:renderSynthese,matchs:renderMatchs,cartes:renderCartes,joueurs:renderJoueurs,pros:renderPros};
+const RENDER={avant:renderAvant,synthese:renderSynthese,routine:renderRoutine,mid:renderMid,prog:renderProgress,matchs:renderMatchs,cartes:renderCartes,joueurs:renderJoueurs,pros:renderPros};
 function go(view){if(location.hash!=="#"+view)history.replaceState(null,"","#"+view);show(view)}
 function show(view){if(!RENDER[view])view="avant";S.view=view;$$("main>.view").forEach(x=>x.hidden=x.id!=="v-"+view);
   $$("nav a").forEach(a=>{if(a.dataset.view===view)a.setAttribute("aria-current","page");else a.removeAttribute("aria-current")});

@@ -271,6 +271,10 @@ def _name_of(p, ms):
     return str(p)
 
 
+def _fr(v):
+    return f"{v:.2f}".replace(".", ",")
+
+
 def recommendations(F, overall, sessions, partners):
     """Personal rules drawn from the player's own history (only when the data says something)."""
     R = []
@@ -278,27 +282,27 @@ def recommendations(F, overall, sessions, partners):
     idx = fx.get("Place dans la session", {})
     late = idx.get("4e game et plus") or idx.get("3e game")
     if late and late["level"] in ("fiable", "tendance") and (late["delta"] or 0) < 0:
-        R.append({"kind": "stop", "level": late["level"], "text": f"Tes {late['group']} sont nettement moins bonnes ({late['perf']:.2f} contre {overall['perf']:.2f} en moyenne sur {late['n']} games) : fixe-toi une limite de {2 if late['group'].startswith('3') else 3} games par session."})
+        R.append({"kind": "stop", "level": late["level"], "text": f"Tes {late['group']} sont nettement moins bonnes ({_fr(late['perf'])} contre {_fr(overall['perf'])} en moyenne sur {late['n']} games) : fixe-toi une limite de {2 if late['group'].startswith('3') else 3} games par session."})
     after = fx.get("Après le résultat précédent", {}).get("après 2 défaites ou plus")
     if after and after["n"] >= 2 and (after["delta"] or 0) < 0:
-        R.append({"kind": "tilt", "level": after["level"], "text": f"Après 2 défaites d'affilée : {after['winrate']} % de victoires et une note de {after['perf']:.2f} ({after['n']} games). Règle : pause d'au moins 30 min, ou fin de session."})
+        R.append({"kind": "tilt", "level": after["level"], "text": f"Après 2 défaites d'affilée : {after['winrate']} % de victoires et une note de {_fr(after['perf'])} ({after['n']} games). Règle : pause d'au moins 30 min, ou fin de session."})
     hours = fx.get("Moment de la journée", {})
     good = [r for r in hours.values() if r["level"] in ("fiable", "tendance") and (r["delta"] or 0) > 0]
     bad = [r for r in hours.values() if r["level"] in ("fiable", "tendance") and (r["delta"] or 0) < 0]
     for r in good[:1]:
-        R.append({"kind": "hour", "level": r["level"], "text": f"Tu joues le mieux en {r['group']} : note {r['perf']:.2f} sur {r['n']} games. Place tes sessions classées sur ce créneau."})
+        R.append({"kind": "hour", "level": r["level"], "text": f"Tu joues le mieux en {r['group']} : note {_fr(r['perf'])} sur {r['n']} games. Place tes sessions classées sur ce créneau."})
     for r in bad[:1]:
-        R.append({"kind": "hour", "level": r["level"], "text": f"En {r['group']}, ta note tombe à {r['perf']:.2f} ({r['n']} games) : garde ce créneau pour le Deathmatch ou le travail de stuffs."})
+        R.append({"kind": "hour", "level": r["level"], "text": f"En {r['group']}, ta note tombe à {_fr(r['perf'])} ({r['n']} games) : garde ce créneau pour le Deathmatch ou le travail de stuffs."})
     grp = fx.get("Groupe", {})
     solo, duo = grp.get("solo"), grp.get("duo")
     if solo and duo and solo["n"] >= 2 and duo["n"] >= 2 and solo["perf"] is not None and duo["perf"] is not None:
         better = "en duo" if duo["perf"] > solo["perf"] else "en solo"
         R.append({"kind": "party", "level": _level(duo.get("z"), duo["n"]) if better == "en duo" else _level(solo.get("z"), solo["n"]),
-                  "text": f"Tu performes mieux {better} : note {max(duo['perf'], solo['perf']):.2f} contre {min(duo['perf'], solo['perf']):.2f} ({duo['n']} games en duo, {solo['n']} en solo)."})
+                  "text": f"Tu performes mieux {better} : note {_fr(max(duo['perf'], solo['perf']))} contre {_fr(min(duo['perf'], solo['perf']))} ({duo['n']} games en duo, {solo['n']} en solo)."})
     for p in partners[:2]:
         if p["n"] >= 3:
             R.append({"kind": "partner", "level": "tendance" if p["n"] >= 5 else "insuffisant",
-                      "text": f"Avec {p['name']} : {p['w']} victoires, {p['l']} défaites, note {p['perf']:.2f} ({p['n']} games ensemble)."})
+                      "text": f"Avec {p['name']} : {p['w']} victoires, {p['l']} défaites, note {_fr(p['perf'])} ({p['n']} games ensemble)."})
     return R
 
 

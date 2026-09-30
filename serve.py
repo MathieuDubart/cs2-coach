@@ -103,6 +103,45 @@ class Handler(BaseHTTPRequestHandler):
             return self.send(200, JOB)
         return self.send(404, {"error": "introuvable"})
 
+    def do_POST(self):
+        """Journal check-ins and experiments: saved in out/, then the player's plan and page are rebuilt."""
+        u = urlparse(self.path)
+        try:
+            n = int(self.headers.get("Content-Length") or 0)
+            body = json.loads(self.rfile.read(n) or b"{}")
+        except (ValueError, json.JSONDecodeError):
+            return self.send(400, {"error": "requête invalide"})
+        sid = str(body.get("sid") or "")
+        if not sid.isdigit():
+            return self.send(400, {"error": "joueur manquant"})
+        try:
+            if u.path == "/api/checkin":
+                import context
+                context.add_checkin(sid, body)
+                refresh_plan(sid)
+                return self.send(200, {"ok": True, "n": len(context.journal(sid))})
+            if u.path == "/api/experiment":
+                import experiments
+                if body.get("action") == "start":
+                    experiments.start(sid, body.get("template"), body.get("params") or {})
+                elif body.get("action") == "stop":
+                    experiments.stop(sid, body.get("id"), "done")
+                else:
+                    return self.send(400, {"error": "action inconnue"})
+                refresh_plan(sid)
+                return self.send(200, {"ok": True})
+        except ValueError as e:
+            return self.send(400, {"error": str(e)})
+        except Exception as e:
+            traceback.print_exc()
+            return self.send(500, {"error": str(e)})
+        return self.send(404, {"error": "introuvable"})
+
+
+def refresh_plan(sid):
+    cs2coach.attach_plan(sid)
+    build_app.write_player(sid)
+
 
 if __name__ == "__main__":
     if sys.stdout is None:  # started with pythonw (no console): keep a log file instead

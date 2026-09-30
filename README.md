@@ -10,6 +10,10 @@ Coach personnel pour Counter-Strike 2 : il récupère automatiquement tes démos
 - **Déplacements et tir** : temps de réaction, pré-visée, précision, contre-strafe, trades, repeeks.
 - **Archétype** : Entry, Lurker, AWPer, Support, Closer… selon tes armes, déplacements, notions et réactions, avec des **pros de référence** qui jouent aux mêmes endroits ou ont le même style.
 - **Fiche d'avant-match par carte** + résumé global, replays 2D des rounds clés.
+- **Mi-round** : rotations (délai de départ, trajet, route, morts en route), tenue de site, lurk, post-plant, retakes, avantage numérique rendu, sauvegardes, bruit à portée d'ennemi, comparés à la base et aux pros ; routes de rotation les plus sûres et positions selon l'arme, par carte ; réflexes « si… alors… ».
+- **Routine** : avant, pendant et après le round et la game, hors du jeu (sommeil, caféine, pauses), selon le groupe (solo, duo, trio, quatuor, five-stack), avec les changements récents du jeu. Habitudes mesurées : horaires, rang dans la session, séries de défaites, partenaires, et journal d'avant-session (sommeil, énergie, échauffement).
+- **Progresser** : priorités selon le niveau et l'expérience, conseils du rôle, échauffement ciblé, stats par arme, suivi des indicateurs match par match, et **expériences** (une arme, une position, une habitude…) évaluées automatiquement sur les matchs suivants.
+- Chaque conseil cite ses sources : guides, vidéos de pros, études scientifiques, notes de patch (voir `knowledge.py`).
 - Comparaison à une population de référence (joueurs aléatoires + démos pro HLTV).
 
 N'importe quel joueur peut être analysé à la volée depuis la barre de recherche (lien Steam, SteamID64, URL personnalisée ou code de partage).
@@ -38,6 +42,8 @@ pip install -r requirements.txt
 | `python crawl.py` / `python profile_all.py` | Étoffe la population de référence (joueurs croisés en match) |
 | `python pro.py --teams` | Télécharge et analyse des démos pro (HLTV) |
 | `python deepdive.py` | Analyse approfondie : engagements, audit des grenades, zones vs pros |
+| `python rounds.py` puis `python midround.py` | Contexte des rounds et analyse mi-round de toutes les démos (lancés automatiquement par l'app) |
+| `python profile_all.py --plans` | Recalcule le plan de progression de tous les profils |
 | `autostart.bat` | Lancement automatique au démarrage de Windows |
 
 Le port du serveur se change avec la variable d'environnement `COACH_PORT`.
