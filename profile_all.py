@@ -1,6 +1,7 @@
 """Build individual profiles for every player with enough demos in the base (parallel).
 
 Usage: python profile_all.py [min_demos=3] [--workers N] [--force]
+       python profile_all.py --plans      # rebuild only the coaching plans of every existing profile
 """
 import os
 import sys
@@ -34,12 +35,22 @@ def work(sid):
     buf = io.StringIO()
     t = time.time()
     with contextlib.redirect_stdout(buf), contextlib.redirect_stderr(buf):
-        ok = cs2coach.analyze_player(int(sid), cs2coach.registry())
+        ok = cs2coach.analyze_player(int(sid), cs2coach.registry()) if not PLANS_ONLY else True
+        if ok:
+            cs2coach.attach_plan(int(sid))
     return sid, bool(ok), round(time.time() - t)
 
 
+PLANS_ONLY = "--plans" in sys.argv  # only (re)build the coaching plan of existing profiles
+
+
 def main(min_demos=3, workers=None, force=False):
-    todo = candidates(min_demos)
+    if PLANS_ONLY:
+        todo = [(sid, (config.settings().get("players", {}).get(sid) or {}).get("name") or sid, 0) for sid in os.listdir(config.PLAYERS)
+                if os.path.exists(os.path.join(config.player_dir(sid), "advice.json"))]
+        force = True
+    else:
+        todo = candidates(min_demos)
     if not force:
         todo = [t for t in todo if not os.path.exists(os.path.join(config.player_dir(t[0]), "advice.json"))]
     s = config.settings()

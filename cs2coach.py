@@ -122,6 +122,14 @@ def ensure_demos(reg, workers=5, only=None):
 
 def ensure_deep():
     import deep
+    import rounds
+    import midround
+    _ensure_deep(deep)
+    rounds.run_all(config.CACHE, config.DEEP, log=log)
+    midround.run_all(log=log)
+
+
+def _ensure_deep(deep):
     for f in os.listdir(config.CACHE):
         if not f.endswith(".dem"):
             continue
@@ -214,6 +222,24 @@ def analyze_player(steamid, reg):
         adv["leetify"] = leetify.light_advice(prof, leetify.matches(steamid), steamid)["leetify"]
     json.dump(adv, open(os.path.join(pdir, "advice.json"), "w", encoding="utf-8"), ensure_ascii=False, indent=1)
     return pdir
+
+
+def attach_plan(sid):
+    """Coaching plan (routine, mid-round, weapons, context, experiments) from the saved analysis of a player."""
+    import plan
+    pdir = config.player_dir(sid)
+    p = os.path.join(pdir, "advice.json")
+    if not os.path.exists(p):
+        return
+    adv = json.load(open(p, encoding="utf-8"))
+    load = lambda n: json.load(open(os.path.join(pdir, n), encoding="utf-8")) if os.path.exists(os.path.join(pdir, n)) else None
+    try:
+        adv["plan"] = plan.build(sid, adv, load("cross.json"), load("deepdive.json"), light=bool(adv.get("light")))
+    except Exception as e:
+        log(f"Plan de progression indisponible : {e}")
+        traceback.print_exc()
+        return
+    json.dump(adv, open(p, "w", encoding="utf-8"), ensure_ascii=False, indent=1, default=str)
 
 
 PARTIAL_HOOK = None  # called with the SteamID once a first profile can be displayed
@@ -351,6 +377,7 @@ def run_for(query, fetch=True):
             log("Pas de démo ni de profil Leetify : profil minimal (classements publics csstats.gg et profil Steam).")
         else:
             attach_extras(sid, ex)
+        attach_plan(sid)
         log("Analyse terminée")
         return sid
     # share codes only: profile every player of those matches
@@ -370,7 +397,8 @@ def run_for(query, fetch=True):
         s.setdefault("players", {}).setdefault(str(p_id), {})["name"] = nm
     config.save_settings(s)
     for i, (p_id, nm) in enumerate(players.items(), 1):
-        analyze_player(p_id, reg)
+        if analyze_player(p_id, reg):
+            attach_plan(p_id)
         log(f"  profil {i}/{len(players)} : {nm}")
     log("Analyse terminée")
     return {"match_players": [{"steamid": str(k), "name": v} for k, v in players.items()]}
@@ -414,7 +442,9 @@ def main():
         style.run_all(workers=4)
         targets = [args.steamid] if args.steamid else [own_id]
         for sid in targets:
-            analyze_player(sid, reg)
+            if analyze_player(sid, reg):
+                attach_extras(sid)
+                attach_plan(sid)
     import build_app
     build_app.main()
 
