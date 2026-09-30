@@ -22,12 +22,13 @@ JOB = {"running": False, "log": [], "done": False, "error": None, "steamid": Non
 LOCK = threading.Lock()
 
 
-def run_job(query):
+def run_job(query, task=None):
+    """One analysis at a time (search, or Steam history sync when task is given). The caller holds LOCK."""
     JOB.update(running=True, log=[], done=False, error=None, steamid=None, query=query, partial=None, players=None)
     cs2coach.LOG_HOOK = lambda m: JOB["log"].append(m)
     cs2coach.PARTIAL_HOOK = publish_partial
     try:
-        res = cs2coach.run_for(query)
+        res = task() if task else cs2coach.run_for(query)
         ids = [p["steamid"] for p in res["match_players"]] if isinstance(res, dict) else [str(res)]
         entries = {i: build_app.write_player(i) for i in ids}
         idx = [x for x in load_index() if x["steamid"] not in entries] + [e for e in entries.values() if e]
@@ -101,7 +102,40 @@ class Handler(BaseHTTPRequestHandler):
             return self.send(200, {"started": True})
         if u.path == "/api/job":
             return self.send(200, JOB)
+        if u.path == "/api/steam/status":
+            import steamlink
+            sid = (q.get("sid") or [""])[0] or str(config.settings().get("own_steamid") or config.logged_in_account()[0] or "")
+            if not sid.isdigit():
+                return self.send(200, {"steamid": None, "links": {"key": steamlink.KEY_URL, "auth": steamlink.AUTH_URL}})
+            return self.send(200, steamlink.status(sid))
+        if u.path == "/api/steam/login":  # sign in through Steam: Steam's own page, then back to /api/steam/callback
+            import steamlink
+            base = f"http://127.0.0.1:{PORT}"
+            return self.redirect(steamlink.login_url(base + "/api/steam/callback", base + "/"))
+        if u.path == "/api/steam/callback":
+            import steamlink
+            params = {k: v[0] for k, v in q.items()}
+            sid = steamlink.verify(params, f"http://127.0.0.1:{PORT}/api/steam/callback")
+            if not sid:
+                return self.redirect("/?steam=refus#steam")
+            name = None
+            try:
+                if steamlink.api_key():
+                    name = steamlink.check_key(steamlink.api_key(), sid).get("personaname")
+            except steamlink.SteamError:
+                pass
+            if not name:
+                own, own_name = config.logged_in_account()
+                name = own_name if own and int(own) == sid else (config.settings().get("players", {}).get(str(sid)) or {}).get("name")
+            steamlink.save_login(sid, name)
+            return self.redirect("/?steam=ok#steam")
         return self.send(404, {"error": "introuvable"})
+
+    def redirect(self, url):
+        self.send_response(302)
+        self.send_header("Location", url)
+        self.send_header("Content-Length", "0")
+        self.end_headers()
 
     def do_POST(self):
         """Journal check-ins and experiments: saved in out/, then the player's plan and page are rebuilt."""
@@ -130,6 +164,28 @@ class Handler(BaseHTTPRequestHandler):
                     return self.send(400, {"error": "action inconnue"})
                 refresh_plan(sid)
                 return self.send(200, {"ok": True})
+            if u.path.startswith("/api/steam/"):
+                import steamlink
+                act = u.path.rsplit("/", 1)[-1]
+                try:
+                    if act == "credentials":
+                        saved = steamlink.set_credentials(sid, body.get("api_key"), body.get("auth_code"), body.get("known_code"))
+                        return self.send(200, {"ok": True, "saved": saved, "status": steamlink.status(sid)})
+                    if act == "options":
+                        s = config.settings()
+                        s.setdefault("players", {}).setdefault(sid, {})["auto_sync"] = bool(body.get("auto_sync"))
+                        config.save_settings(s)
+                        return self.send(200, {"ok": True, "status": steamlink.status(sid)})
+                    if act == "forget":
+                        steamlink.forget(sid)
+                        return self.send(200, {"ok": True, "status": steamlink.status(sid)})
+                    if act == "sync":
+                        if not LOCK.acquire(blocking=False):
+                            return self.send(409, {"error": "Une analyse est déjà en cours", "query": JOB["query"]})
+                        threading.Thread(target=run_job, args=("Synchronisation Steam", lambda: cs2coach.sync_steam(sid)), daemon=True).start()
+                        return self.send(200, {"started": True})
+                except steamlink.SteamError as e:
+                    return self.send(400, {"error": str(e)})
         except ValueError as e:
             return self.send(400, {"error": str(e)})
         except Exception as e:
@@ -141,6 +197,20 @@ class Handler(BaseHTTPRequestHandler):
 def refresh_plan(sid):
     cs2coach.attach_plan(sid)
     build_app.write_player(sid)
+
+
+def auto_sync(every=1800):
+    """Steam history connected: check for new matches at start-up, then every 30 minutes (only when idle)."""
+    import time
+    time.sleep(20)
+    while True:
+        s = config.settings()
+        sid = str(s.get("own_steamid") or "")
+        p = s.get("players", {}).get(sid, {})
+        if sid.isdigit() and p.get("authcode") and p.get("auto_sync", True) and LOCK.acquire(blocking=False):
+            print("Synchronisation Steam automatique…", flush=True)
+            run_job("Synchronisation Steam", lambda: cs2coach.sync_steam(sid))  # releases LOCK
+        time.sleep(every)
 
 
 if __name__ == "__main__":
@@ -161,6 +231,7 @@ if __name__ == "__main__":
         sys.exit(0)
     url = f"http://127.0.0.1:{PORT}/#avant"
     print(f"Coach CS2 : {url}  (Ctrl+C pour arrêter)")
+    threading.Thread(target=auto_sync, daemon=True).start()
     if "--no-browser" not in sys.argv:
         webbrowser.open(url)
     srv.serve_forever()

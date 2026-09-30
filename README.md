@@ -48,6 +48,13 @@ pip install -r requirements.txt
 
 Le port du serveur se change avec la variable d'environnement `COACH_PORT`.
 
+## Connexion Steam (facultative, onglet « Compte Steam »)
+
+- **Se connecter avec Steam** : la page officielle de Steam confirme ton compte (OpenID), l'app ne voit jamais ton mot de passe.
+- **Temps de jeu** : lu dans les fichiers du client Steam de ce PC, sans connexion.
+- **Historique complet et automatique** : avec une clé d'API Steam ([steamcommunity.com/dev/apikey](https://steamcommunity.com/dev/apikey)) et le code d'authentification de ton historique ([page d'aide Steam pour CS2](https://help.steampowered.com/fr/wizard/HelpWithGameIssue/?appid=730&issueid=128)), chaque nouveau match est retrouvé, même des semaines plus tard, puis analysé. L'app vérifie au lancement puis toutes les 30 minutes. Les matchs sans démo comptent quand même dans tes habitudes (date, score, K/A/D, coéquipiers), et tes amis Steam servent à repérer ton groupe.
+- Clé et code restent dans `out/settings.json` (non versionné) et ne partent que vers l'API officielle de Steam. « Tout déconnecter » les retire.
+
 ## Limites
 
 - Valve ne fournit que les **8 derniers matchs**, et les démos expirent au bout d'environ **un mois**.

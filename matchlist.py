@@ -99,12 +99,21 @@ def parse(raw):
             # teams swap at half-time: the final state lists scores for the starting sides
             mine = {"kills": kills[idx], "assists": assists[idx], "deaths": deaths[idx], "score": scores[idx],
                     "team_index": my_team}
+        # share code of the match (match id, outcome = reservation id, token = GOTV port)
+        watch = decode(mi[3][0]) if 3 in mi else {}
+        outcome, token = last.get(1, [None])[0], watch.get(2, [None])[0]
+        hs, mvps = col(17), col(21)
         matches.append({
             "match_id": str(mi[1][0]),
             "time": dt.datetime.fromtimestamp(mi[2][0]).isoformat(timespec="minutes"),
             "url": url, "players": len(accounts), "team_scores": team_scores,
             "rounds": len(rounds), "duration_s": last.get(15, [None])[0],
             "me": mine,
+            "sharecode": encode_sharecode(mi[1][0], outcome, token) if outcome and token else None,
+            "accounts": accounts,  # first half = first team; SteamID64 = account + 76561197960265728
+            "stats": [{"k": kills[i] if i < len(kills) else None, "a": assists[i] if i < len(assists) else None,
+                       "d": deaths[i] if i < len(deaths) else None, "hs": hs[i] if i < len(hs) else None,
+                       "mvp": mvps[i] if i < len(mvps) else None} for i in range(len(accounts))],
         })
     return matches
 

@@ -404,6 +404,57 @@ def run_for(query, fetch=True):
     return {"match_players": [{"steamid": str(k), "name": v} for k, v in players.items()]}
 
 
+def sync_steam(sid=None):
+    """Your account: new matches from your Steam history (API key + authentication code) and Valve's last 8,
+    then the full analysis. Nothing is recomputed when there is nothing new. Returns the SteamID64."""
+    from types import SimpleNamespace
+    import steamlink
+    own_id, _ = config.logged_in_account()
+    s = config.settings()
+    sid = int(sid or s.get("own_steamid") or own_id)
+    try:
+        codes = steamlink.new_codes(sid, log=log)
+    except steamlink.SteamError as e:
+        log(f"Historique Steam indisponible : {e}")
+        codes = []
+    key = s.get("steam_api_key")
+    if key:
+        try:
+            steamlink.friends(key, sid, refresh=True)
+            pt = steamlink.owned_cs2(key, sid)
+            if pt:
+                s = config.settings()
+                s.setdefault("players", {}).setdefault(str(sid), {})["playtime"] = pt
+                config.save_settings(s)
+        except steamlink.SteamError as e:
+            log(f"Steam : {e}")
+    before = registry()
+    args = SimpleNamespace(steamid=sid, sharecode=codes, authcode=None, knowncode=None, no_fetch=False, own=(sid == own_id))
+    reg = collect(args, own_id)
+    got = [c for c in codes if str(matchlist.decode_sharecode(c)[0]) in reg]
+    if got:
+        steamlink.done_codes(sid, got)
+    new = {mid for mid in reg if mid not in before or (reg[mid].get("accounts") and not before[mid].get("accounts"))}
+    if len(got) < len(codes):
+        log(f"{len(codes) - len(got)} match(s) pas encore récupéré(s) : Steam doit être ouvert et CS2 fermé. Nouvel essai à la prochaine synchro.")
+    fresh = [mid for mid in new if mid not in before]
+    log(f"{len(fresh)} nouveau(x) match(s)")
+    if not fresh and os.path.exists(os.path.join(config.player_dir(sid), "advice.json")):
+        attach_plan(sid)  # history-only updates (sessions, friends, playtime) still change the plan
+        return sid
+    ensure_demos(reg, only=set(fresh))
+    ensure_deep()
+    import population
+    import style
+    population.run_all()
+    style.run_all(workers=4)
+    if analyze_player(sid, reg):
+        attach_extras(sid)
+        attach_plan(sid)
+    log("Synchronisation terminée")
+    return sid
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--steamid", help="SteamID64, lien de profil Steam ou pseudo d'URL")

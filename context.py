@@ -96,7 +96,39 @@ def history(steamid):
                         "rounds": rounds, "score": [won, lost], "perf": None, "leetify": me.get("leetify_rating"),
                         "kills": me.get("total_kills"), "deaths": me.get("total_deaths"), "adr": me.get("dpr"), "mates": []})
             seen.add(mid)
+    # matches known from Valve (Steam history sync, last 8 matches): no demo, but date, score, own K/A/D and the 10 players
+    acc = sid - 76561197960265728
+    for mid, r in reg.items():
+        accs = r.get("accounts") or []
+        if mid in seen or acc not in accs or not r.get("time") or len(r.get("team_scores") or []) != 2:
+            continue
+        i = accs.index(acc)
+        team = 0 if i < len(accs) // 2 else 1
+        mine, theirs = r["team_scores"][team], r["team_scores"][1 - team]
+        st = (r.get("stats") or [])[i] if i < len(r.get("stats") or []) else {}
+        rounds = r.get("rounds") or (mine + theirs)
+        start = _local(r["time"])
+        k, d, a = st.get("k"), st.get("d"), st.get("a")
+        out.append({"id": mid, "source": "steam", "start": start, "end": start + dt.timedelta(seconds=r.get("duration_s") or rounds * 110),
+                    "map": None, "mode": None, "result": "win" if mine > theirs else "loss" if mine < theirs else "draw",
+                    "rounds": rounds, "score": [mine, theirs], "perf": None,
+                    "raw": None if k is None or d is None else (k - d) / max(rounds, 1),
+                    "kills": k, "deaths": d, "adr": None,
+                    "mates": sorted(x + 76561197960265728 for j, x in enumerate(accs) if x != acc and (0 if j < len(accs) // 2 else 1) == team)})
+        seen.add(mid)
     out.sort(key=lambda m: m["start"])
+    # Valve-only matches: K/A/D per round expressed on the rating scale of the player's demo matches
+    dm = [m for m in out if m["source"] == "demo" and m.get("perf") is not None and m.get("kills") is not None]
+    sv = [m for m in out if m["source"] == "steam" and m.get("raw") is not None]
+    if sv:
+        raw_d = [(m["kills"] - m["deaths"]) / max(m["rounds"], 1) for m in dm]
+        if len(dm) >= 3:
+            rm, rs = sum(raw_d) / len(raw_d), (pd.Series(raw_d).std() or 0.3)
+            pm, ps = sum(m["perf"] for m in dm) / len(dm), (pd.Series([m["perf"] for m in dm]).std() or 0.25)
+        else:
+            rm, rs, pm, ps = 0.0, 0.3, 1.0, 0.25
+        for m in sv:
+            m["perf"] = round(pm + (m["raw"] - rm) / rs * ps, 3)
     # Leetify-only matches: express Leetify's rating on the same scale (z-score within the player)
     lv = [m["leetify"] for m in out if m.get("leetify") is not None]
     dv = [m["perf"] for m in out if m.get("perf") is not None]
@@ -183,13 +215,18 @@ def analyze(steamid):
             m["rest_h"] = rest_h if i == 0 else 0
             streak = (min(streak, 0) - 1) if m["result"] == "loss" else (max(streak, 0) + 1 if m["result"] == "win" else 0)
         prev_end = s[-1]["end"]
-    # party: teammates met at least twice on the same side
+    # party: teammates met at least twice on the same side, or Steam friends (when the friend list is public)
     cnt = Counter(p for m in ms for p in m["mates"])
-    friends = {p for p, c in cnt.items() if c >= 2}
+    try:
+        import steamlink
+        steam_friends = steamlink.cached_friends(sid)
+    except Exception:
+        steam_friends = set()
+    friends = {p for p, c in cnt.items() if c >= 2} | (set(cnt) & steam_friends)
     names = config.settings().get("players", {})
     for m in ms:
         m["party"] = [p for p in m["mates"] if p in friends]
-        m["party_size"] = 1 + len(m["party"]) if m["source"] == "demo" else None
+        m["party_size"] = 1 + len(m["party"]) if m["source"] in ("demo", "steam") else None
     # journal: the latest check-in within 6 h before the match
     J = journal(sid)
     for m in ms:
@@ -246,6 +283,15 @@ def analyze(steamid):
         st = _stats(g)
         partners.append({"steamid": str(p), "name": (names.get(str(p)) or {}).get("name") or _name_of(p, g), **{a: b for a, b in st.items() if a != "sd"}})
     partners.sort(key=lambda x: -x["n"])
+    unknown = [p["steamid"] for p in partners if p["name"] == p["steamid"]]
+    if unknown:  # partners seen only in Valve's match info: ask Steam for their names (needs the API key)
+        try:
+            import steamlink
+            got = steamlink.names(unknown)
+            for p in partners:
+                p["name"] = got.get(p["steamid"], p["name"])
+        except Exception:
+            pass
     # sessions summary
     slen = [len(s) for s in sessions]
     tilt = sum(1 for s in sessions for i in range(2, len(s)) if s[i - 1]["result"] == "loss" and s[i - 2]["result"] == "loss")

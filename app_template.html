@@ -293,6 +293,7 @@ pre.cli{background:var(--radar-bg);color:#dfe6ec;padding:12px 14px;overflow-x:au
     <a href="#cartes" data-view="cartes">Cartes et stuffs</a>
     <a href="#joueurs" data-view="joueurs">Joueurs</a>
     <a href="#pros" data-view="pros">Pros</a>
+    <a href="#steam" data-view="steam">Compte Steam</a>
   </nav>
   <form class="search" id="search" role="search" autocomplete="off">
     <input id="q" name="q" type="search" placeholder="Lien Steam, SteamID64, pseudo ou code de partage CSGO-…" aria-label="Rechercher un joueur : lien de profil Steam, SteamID64 ou pseudo">
@@ -310,6 +311,7 @@ pre.cli{background:var(--radar-bg);color:#dfe6ec;padding:12px 14px;overflow-x:au
   <section class="view" id="v-cartes" hidden></section>
   <section class="view" id="v-joueurs" hidden></section>
   <section class="view" id="v-pros" hidden></section>
+  <section class="view" id="v-steam" hidden></section>
 </main>
 
 <script>
@@ -709,7 +711,8 @@ const WNAME={awp:"AWP",scout:"Scout",rifle:"Fusils",rifle_eco:"Galil / FAMAS",sm
 function levelLine(L){if(!L)return "";const bits=[];
   if(L.rating)bits.push(`Premier ${esc(L.season||"")} : ${L.rating.toLocaleString("fr-FR")}`);
   if(L.comp)bits.push(`${esc(L.comp)} en compétitif`);
-  const xp=[L.wins?`${L.wins} victoires en compétitif`:"",L.premier_wins?`${L.premier_wins} en Premier`:"",L.since?`compte Steam depuis ${L.since}`:""].filter(Boolean).join(", ");
+  const xp=[L.hours!=null?`${L.hours.toLocaleString("fr-FR")} h de CS2${L.two_weeks_h!=null?`, dont ${String(L.two_weeks_h).replace(".",",")} h ces 2 semaines`:""}`:"",
+    L.wins?`${L.wins} victoires en compétitif`:"",L.premier_wins?`${L.premier_wins} en Premier`:"",L.since?`compte Steam depuis ${L.since}`:""].filter(Boolean).join(", ");
   return `${L.name?`niveau ${esc(L.name)}`:"niveau inconnu"}${bits.length?` · ${bits.join(" · ")}`:""} · profil ${esc(L.experience)}${xp?` (${xp})`:""}`}
 
 // ---------- view: routine ----------
@@ -720,10 +723,11 @@ function phaseCard(ph){return `<article class="phase"><h3>${esc(ph.title)}</h3>$
   ${i.do&&i.do.length?`<ul>${i.do.map(d=>`<li>${esc(d)}</li>`).join("")}</ul>`:""}${srcLinks(i.src,true)}</div>`).join("")}</article>`}
 function contextBlock(C){
   const pf=v=>v==null?"—":v.toFixed(2).replace(".",","),recs=C.recs||[];
-  const src=Object.entries(C.sources_count||{}).map(([k,n])=>`${n} ${k==="demo"?"avec démo":"via Leetify"}`).join(", ");
+  const src=Object.entries(C.sources_count||{}).map(([k,n])=>`${n} ${k==="demo"?"avec démo":k==="steam"?"via l'historique Steam":"via Leetify"}`).join(", ");
   return `<article class="card"><h3>Tes habitudes de jeu</h3>
    <p class="note">${C.n} matchs datés (${src}) · ${C.sessions.n} session${C.sessions.n>1?"s":""} de ${String(C.sessions.avg_games).replace(".",",")} game(s) en moyenne, ${C.sessions.max_games} au maximum · ${C.sessions.games_after_2_losses} game(s) lancée(s) après 2 défaites d'affilée · journal : ${C.journal_n} entrée(s).
    « Note » : rating du match sur le modèle du HLTV 2.0 (1,00 = joueur moyen du lobby). Ta moyenne : ${pf(C.overall.perf)}.</p>
+   ${D.local&&!(C.sources_count||{}).steam?`<p class="note">Pour mesurer tes habitudes sur tout ton historique (et pas seulement sur les démos), connecte ton historique Steam : <a href="#steam" style="color:var(--ct)">onglet Compte Steam</a>.</p>`:""}
    ${recs.length?`<ul class="pl-list">${recs.map(r=>`<li class="coach">${esc(r.text)} <span class="lvl ${lvlCls(r.level)}">${esc(LVL[r.level]||r.level)}</span></li>`).join("")}</ul>`
      :`<p>Pas encore de règle personnelle fiable : il faut plus de matchs. En attendant, applique les règles générales de « Après la game ».</p>`}
    <div class="tbl"><table><thead><tr><th>Situation</th><th class="n">Games</th><th class="n">V-D</th><th class="n">Victoires</th><th class="n">Note</th><th class="n">Écart</th><th>Fiabilité</th></tr></thead><tbody>
@@ -892,6 +896,60 @@ function midCard(p){const M=(p.advice.plan||{}).mid;if(!M||(!M.weak.length&&!M.s
   return `<article class="card"><h3>Mi-round en bref</h3><ul>${M.weak.slice(0,3).map(w=>`<li>${esc(w.text)}${w.fix?` <b>${esc(w.fix)}</b>`:""}</li>`).join("")}${M.strong.slice(0,2).map(s=>`<li class="good">${esc(s.text)}</li>`).join("")}</ul>
    <p><a href="#mid" style="color:var(--ct)">Routes de rotation, positions selon l'arme et réflexes : onglet Mi-round</a></p></article>`}
 
+// ---------- view: compte Steam ----------
+let steamForget=false;
+async function renderSteam(){
+  const v=$("#v-steam");
+  const head=`<div class="head"><div style="display:grid;gap:4px"><span class="eyebrow">Connexion facultative · tout reste sur ce PC</span><h2>Compte Steam</h2></div></div>`;
+  if(!D.local){v.innerHTML=head+`<div class="empty">La connexion Steam se fait dans l'app locale : double-clic sur <code>Coach CS2.bat</code>, puis onglet « Compte Steam ».</div>`;return}
+  v.innerHTML=head+`<div class="empty"><span class="spin" aria-hidden="true"></span>Lecture de ta connexion Steam…</div>`;
+  let st;try{st=await (await fetch("/api/steam/status"+(D.own?`?sid=${D.own}`:""))).json()}catch(e){v.innerHTML=head+`<div class="empty">Le serveur local ne répond pas : relance « Coach CS2.bat ».</div>`;return}
+  const flag=new URLSearchParams(location.search).get("steam");
+  const ok=b=>b?`<span class="pill strong">fait</span>`:`<span class="pill">à faire</span>`;
+  const pt=st.playtime,L=st.links||{};
+  v.innerHTML=head+`
+  ${flag==="ok"?`<div class="jobpanel" style="padding:0"><div class="in ok">Connexion Steam confirmée par Steam.</div></div>`:flag==="refus"?`<div class="jobpanel" style="padding:0"><div class="in err">Steam n'a pas confirmé la connexion. Réessaie.</div></div>`:""}
+  <div class="insights">
+   <article class="card"><h3>1. Qui es-tu ? ${ok(st.login)}</h3>
+    ${st.login?`<p>Connecté avec Steam : <b>${esc(st.login.name||st.login.steamid)}</b> <span class="num note">${esc(st.login.steamid)}</span>, le ${fmtDate(st.login.time)}. Ce compte est ton profil par défaut dans l'app.</p>`
+      :`<p>Connecte-toi par la page officielle de Steam : elle confirme ton compte au coach. Le coach ne voit jamais ton mot de passe, seulement ton SteamID.</p>`}
+    <p><a class="primary" style="display:inline-block;text-decoration:none" href="/api/steam/login">${st.login?"Se reconnecter avec Steam":"Se connecter avec Steam"}</a></p>
+    ${st.pc_account&&st.pc_account.steamid?`<p class="note">Compte Steam ouvert sur ce PC : ${esc(st.pc_account.name||"")} <span class="num">${esc(st.pc_account.steamid)}</span>.</p>`:""}</article>
+   <article class="card"><h3>Temps de jeu</h3>
+    ${pt?`<div class="gauge"><div><b>${pt.total_h.toLocaleString("fr-FR")} h</b><span>sur CS2 au total</span></div><div><b>${String(pt.two_weeks_h).replace(".",",")} h</b><span>ces 2 dernières semaines</span></div></div>
+      <p class="note">Source : ${esc(pt.source)}${pt.last_played?` · dernière partie le ${fmtDate(pt.last_played)}`:""}. Sert à régler tes priorités selon ton expérience.</p>`
+      :`<p class="note">Pas de temps de jeu trouvé : ce compte n'a pas joué sur ce PC. Avec la clé d'API (étape 2), le coach le lit sur Steam si tes détails de jeu sont publics.</p>`}</article>
+  </div>
+  <article class="card form"><h3>2. Historique complet et automatique ${ok(st.has_key&&st.has_auth)}</h3>
+   <p>Valve ne donne que tes <b>8 derniers matchs</b> et efface les démos au bout d'environ <b>un mois</b>. Avec ces deux codes, le coach retrouve <b>chaque nouveau match</b>, même s'il n'a pas tourné pendant des semaines. Il analyse les démos encore disponibles et garde pour tous les autres la date, le score, tes kills et morts, et tes coéquipiers : tes horaires, tes sessions, tes séries et ton groupe deviennent mesurables sur tout ton historique.</p>
+   <div class="row"><span class="f">Clé d'API Steam ${ok(st.has_key)}</span><input id="st-key" type="password" autocomplete="off" spellcheck="false" placeholder="${st.has_key?"déjà enregistrée · colle une nouvelle clé pour la remplacer":"32 caractères"}" style="flex:1;min-width:220px;font:14px var(--f-mono);background:var(--bg);color:var(--ink);border:1px solid var(--line);border-radius:3px;padding:5px 8px"></div>
+   <p class="note">À créer sur <a href="${esc(L.key)}" target="_blank" rel="noopener" style="color:var(--ct)">steamcommunity.com/dev/apikey</a> (connecté à ton compte Steam). Nom de domaine : écris <code>localhost</code>.</p>
+   <div class="row"><span class="f">Code d'authentification ${ok(st.has_auth)}</span><input id="st-auth" type="password" autocomplete="off" spellcheck="false" placeholder="${st.has_auth?"déjà enregistré":"XXXX-XXXXX-XXXX"}" style="width:220px;font:14px var(--f-mono);background:var(--bg);color:var(--ink);border:1px solid var(--line);border-radius:3px;padding:5px 8px">
+     <input id="st-known" type="text" autocomplete="off" spellcheck="false" placeholder="Code du dernier match CSGO-… (facultatif)" style="flex:1;min-width:240px;font:14px var(--f-mono)"></div>
+   <p class="note">Sur <a href="${esc(L.auth)}" target="_blank" rel="noopener" style="color:var(--ct)">la page d'aide de Steam pour CS2</a> (connecté à ton compte) : « Créer un code d'authentification ». La même page affiche le code de ton dernier match. S'il est vide, le coach le trouve seul à partir de tes 8 derniers matchs (Steam ouvert, CS2 fermé).</p>
+   <div class="row"><button type="button" class="primary" id="st-save">Enregistrer et vérifier</button>
+     <button type="button" class="primary" id="st-sync" ${st.has_auth?"":"disabled"}>Synchroniser maintenant</button><span class="note" id="st-msg" role="status"></span></div>
+   ${st.has_auth?`<div class="row"><label style="display:flex;gap:8px;align-items:center;font-size:14px"><input type="checkbox" id="st-auto" ${st.auto_sync?"checked":""}> Synchroniser automatiquement au lancement de l'app puis toutes les 30 minutes</label></div>
+     <p class="note">Dernière synchro : ${st.last_sync?fmtDate(st.last_sync):"jamais"} · ${st.known_matches} match(s) connus pour ce compte${st.pending?` · ${st.pending} en attente (Steam doit être ouvert et CS2 fermé)`:""}${st.friends!=null?` · ${st.friends} amis Steam (servent à repérer ton groupe)`:""}.</p>`:""}
+  </article>
+  <article class="card"><h3>Ce que ça débloque</h3><ul>
+    <li><b>Aucun match perdu</b> : tous tes matchs de matchmaking sont retrouvés, analysés tant que la démo existe, et comptés dans tes habitudes ensuite.</li>
+    <li><b>Habitudes sur tout l'historique</b> : heures où tu joues le mieux, nombre idéal de games par session, effet des séries de défaites (onglet Routine).</li>
+    <li><b>Ton groupe</b> : tes amis Steam présents dans ton équipe sont reconnus comme ton groupe, même après un seul match ensemble.</li>
+    <li><b>Ton expérience</b> : ton temps de jeu règle les priorités de l'onglet Progresser.</li></ul>
+   <p class="note">Tes codes restent dans <code>out/settings.json</code> sur ce PC : ce fichier n'est pas versionné et les codes ne partent que vers l'API officielle de Steam. Tu peux tout retirer à tout moment.</p>
+   <div class="btns"><button type="button" id="st-forget">${steamForget?"Confirmer : retirer la connexion et les codes":"Tout déconnecter"}</button></div></article>`;
+  const msg=$("#st-msg",v),sid=st.steamid;
+  $("#st-save",v).onclick=async()=>{const b=$("#st-save",v);b.disabled=true;msg.textContent="Vérification auprès de Steam…";
+    try{const j=await api("/api/steam/credentials",{sid,api_key:$("#st-key",v).value.trim(),auth_code:$("#st-auth",v).value.trim(),known_code:$("#st-known",v).value.trim()});
+      msg.textContent=j.saved.length?`Enregistré : ${j.saved.join(" et ")}.`:"Rien de nouveau à enregistrer.";setTimeout(renderSteam,900)}
+    catch(e){msg.textContent=e.message;b.disabled=false}};
+  $("#st-sync",v).onclick=async()=>{msg.textContent="";try{await api("/api/steam/sync",{sid});poll()}catch(e){msg.textContent=e.message}};
+  const au=$("#st-auto",v);if(au)au.onchange=async()=>{try{await api("/api/steam/options",{sid,auto_sync:au.checked})}catch(e){msg.textContent=e.message}};
+  $("#st-forget",v).onclick=async()=>{if(!steamForget){steamForget=true;renderSteam();return}steamForget=false;
+    try{await api("/api/steam/forget",{sid});renderSteam()}catch(e){msg.textContent=e.message}};
+}
+
 // ---------- data loading (profiles and radars are separate files) ----------
 D.players={};D.radars={};D.viewboxes={};
 const IDX=()=>Object.fromEntries(D.index.map(e=>[e.steamid,e]));
@@ -1001,12 +1059,13 @@ $("#search").addEventListener("submit",async e=>{e.preventDefault();const q=$("#
     <p class="note">Il faut que l'app locale tourne : double-clic sur <code>Coach CS2.bat</code> dans <code>E:\dev\cs2-coach</code>, ou active son démarrage automatique avec <code>autostart.bat</code>.</p>`)});
 
 // ---------- routing ----------
-const RENDER={avant:renderAvant,synthese:renderSynthese,routine:renderRoutine,mid:renderMid,prog:renderProgress,matchs:renderMatchs,cartes:renderCartes,joueurs:renderJoueurs,pros:renderPros};
+const RENDER={avant:renderAvant,synthese:renderSynthese,routine:renderRoutine,mid:renderMid,prog:renderProgress,matchs:renderMatchs,cartes:renderCartes,joueurs:renderJoueurs,pros:renderPros,steam:renderSteam};
 function go(view){if(location.hash!=="#"+view)history.replaceState(null,"","#"+view);show(view)}
 function show(view){if(!RENDER[view])view="avant";S.view=view;$$("main>.view").forEach(x=>x.hidden=x.id!=="v-"+view);
   $$("nav a").forEach(a=>{if(a.dataset.view===view)a.setAttribute("aria-current","page");else a.removeAttribute("aria-current")});
   if(view==="joueurs"){renderJoueurs();return}
   if(view==="pros"){renderPros();window.scrollTo(0,0);return}
+  if(view==="steam"){renderSteam();window.scrollTo(0,0);return}
   if(!S.player||!D.players[S.player]){$("#v-"+view).innerHTML=S.player?`<div class="empty"><span class="spin" aria-hidden="true"></span>Chargement du profil…</div>`:`<div class="empty">Aucune donnée. Lance <code>python cs2coach.py</code> sur ton PC.</div>`;return}
   RENDER[view]();window.scrollTo(0,0)}
 async function setPlayer(id,force){S.player=id;store("player",id);S.match=0;

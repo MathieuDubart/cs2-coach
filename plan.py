@@ -43,7 +43,7 @@ def _route(r):
     return " → ".join(_zone(x) for x in str(r).split(" > ")) if r else r
 
 
-def level(adv):
+def level(adv, sid=None):
     """Level from Premier rating (csstats), else Competitive rank, else the median map rank seen in demos."""
     cs = (adv or {}).get("csstats") or {}
     prem = next((p for p in cs.get("premier", []) if p.get("current")), None)
@@ -63,10 +63,19 @@ def level(adv):
     since = ((adv or {}).get("steam") or {}).get("member_since") or ""
     yr = next((int(t) for t in since.replace(",", " ").split() if t.isdigit() and len(t) == 4), None)
     total = wins + prem_w
-    exp = "vétéran" if total >= 400 or (yr and dt.date.today().year - yr >= 7 and total >= 150) else "régulier" if total >= 100 else "en progression"
+    pt = None
+    if sid:
+        import steamlink
+        pt = steamlink.local_playtime(sid) or (config.settings().get("players", {}).get(str(sid)) or {}).get("playtime")
+    hours = (pt or {}).get("total_h")
+    if hours is not None:
+        exp = "vétéran" if hours >= 1500 else "régulier" if hours >= 300 else "en progression"
+    else:
+        exp = "vétéran" if total >= 400 or (yr and dt.date.today().year - yr >= 7 and total >= 150) else "régulier" if total >= 100 else "en progression"
     return {"key": lv["key"] if lv else None, "name": lv["name"] if lv else None, "focus": lv["focus"] if lv else [],
             "rating": rating, "season": prem["season"] if prem else None, "comp": comp, "wins": wins, "premier_wins": prem_w,
-            "since": yr, "experience": exp, "src": K.src(*K.LEVEL_SRC)}
+            "since": yr, "experience": exp, "hours": hours, "two_weeks_h": (pt or {}).get("two_weeks_h"), "playtime_source": (pt or {}).get("source"),
+            "src": K.src(*K.LEVEL_SRC)}
 
 
 def mid_findings(mb):
@@ -235,7 +244,7 @@ def build(steamid, adv, cross=None, deep=None, light=False):
     import context
     import experiments
     sid = int(steamid)
-    lv = level(adv)
+    lv = level(adv, sid)
     role = (adv.get("archetype") or {}).get("role")
     plan = {"updated": K.UPDATED, "level": lv, "meta": [{**m, "src": K.src(*m["src"])} for m in K.META],
             "phases": [{"key": p["key"], "title": p["title"], "items": [{**{a: b for a, b in i.items() if a != "src"}, "src": K.src(*i["src"])} for i in p["items"]]}

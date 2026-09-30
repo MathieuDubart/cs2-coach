@@ -1,0 +1,302 @@
+"""Steam connection for the local app.
+
+- Sign in through Steam (OpenID 2.0): Steam's own page confirms who you are; the app never sees a password.
+- Local Steam data of this PC (no login): CS2 playtime of the accounts that used this PC.
+- Steam Web API key + match-history authentication code (both created by the player on Steam's site):
+  every new match is found automatically (GetNextMatchSharingCode), even weeks later, and Steam friends
+  help detect who you queue with.
+
+Keys and codes stay in out/settings.json (not versioned) and are only sent to Steam's official API.
+"""
+import datetime as dt
+import json
+import os
+import re
+import urllib.error
+import urllib.parse
+import urllib.request
+
+import config
+
+OPENID = "https://steamcommunity.com/openid/login"
+API = "https://api.steampowered.com"
+STEAM64 = 76561197960265728
+KEY_URL = "https://steamcommunity.com/dev/apikey"
+AUTH_URL = "https://help.steampowered.com/fr/wizard/HelpWithGameIssue/?appid=730&issueid=128"
+KEY_RE = re.compile(r"^[0-9A-Fa-f]{32}$")
+AUTH_RE = re.compile(r"^[A-Za-z0-9]{4}-[A-Za-z0-9]{5}-[A-Za-z0-9]{4}$")
+CODE_RE = re.compile(r"^CSGO(-[A-Za-z0-9]{5}){5}$")
+FRIENDS_DIR = os.path.join(config.OUT, "steam")
+
+
+# ---------- sign in through Steam (OpenID 2.0) ----------
+def login_url(return_to, realm):
+    q = {"openid.ns": "http://specs.openid.net/auth/2.0", "openid.mode": "checkid_setup",
+         "openid.return_to": return_to, "openid.realm": realm,
+         "openid.identity": "http://specs.openid.net/auth/2.0/identifier_select",
+         "openid.claimed_id": "http://specs.openid.net/auth/2.0/identifier_select"}
+    return OPENID + "?" + urllib.parse.urlencode(q)
+
+
+def verify(params, return_to):
+    """Ask Steam to confirm the signed answer it sent back. -> SteamID64 or None."""
+    if params.get("openid.mode") != "id_res" or not str(params.get("openid.return_to", "")).startswith(return_to):
+        return None
+    m = re.fullmatch(r"https?://steamcommunity\.com/openid/id/(7656\d{13})", params.get("openid.claimed_id", ""))
+    if not m:
+        return None
+    data = dict(params, **{"openid.mode": "check_authentication"})
+    req = urllib.request.Request(OPENID, data=urllib.parse.urlencode(data).encode(), headers={"User-Agent": "cs2-coach"})
+    try:
+        with urllib.request.urlopen(req, timeout=20) as r:
+            body = r.read().decode("utf-8", "replace")
+    except Exception:
+        return None
+    return int(m.group(1)) if "is_valid:true" in body else None
+
+
+def save_login(sid, name=None):
+    s = config.settings()
+    s["steam_login"] = {"steamid": str(sid), "name": name, "time": dt.datetime.now().isoformat(timespec="minutes")}
+    s["own_steamid"] = int(sid)
+    p = s.setdefault("players", {}).setdefault(str(sid), {})
+    if name:
+        p["name"] = name
+    config.save_settings(s)
+
+
+# ---------- local Steam data (this PC) ----------
+def local_playtime(sid):
+    """CS2 playtime recorded by the Steam client of this PC for this account (minutes -> hours)."""
+    try:
+        acc = int(sid) - STEAM64
+        f = os.path.join(config.steam_path(), "userdata", str(acc), "config", "localconfig.vdf")
+        txt = open(f, encoding="utf-8", errors="replace").read()
+    except (OSError, ValueError):
+        return None
+    for m in re.finditer(r'"730"\s*\{', txt):
+        # keep only the keys at the first level of the "730" block (it can contain nested blocks)
+        depth, i, top = 1, m.end(), []
+        while depth and i < len(txt):
+            c = txt[i]
+            depth += (c == "{") - (c == "}")
+            if depth == 1 and c not in "{}":
+                top.append(c)
+            i += 1
+        vals = dict(re.findall(r'"(LastPlayed|Playtime2wks|Playtime)"\s*"(\d+)"', "".join(top)))
+        if "Playtime" in vals:
+            last = int(vals.get("LastPlayed", 0) or 0)
+            return {"total_h": round(int(vals["Playtime"]) / 60), "two_weeks_h": round(int(vals.get("Playtime2wks", 0)) / 60, 1),
+                    "last_played": dt.datetime.fromtimestamp(last).isoformat(timespec="minutes") if last else None, "source": "Steam de ce PC"}
+    return None
+
+
+# ---------- Steam Web API ----------
+class SteamError(Exception):
+    pass
+
+
+def _api(path, **params):
+    url = f"{API}/{path}?" + urllib.parse.urlencode(params)
+    req = urllib.request.Request(url, headers={"User-Agent": "cs2-coach"})
+    try:
+        with urllib.request.urlopen(req, timeout=20) as r:
+            return r.status, json.loads(r.read() or b"{}")
+    except urllib.error.HTTPError as e:
+        return e.code, None
+    except Exception as e:
+        raise SteamError(f"Steam ne répond pas ({e})")
+
+
+def api_key():
+    return config.settings().get("steam_api_key")
+
+
+def check_key(key, sid):
+    code, j = _api("ISteamUser/GetPlayerSummaries/v2/", key=key, steamids=sid)
+    if code in (401, 403):
+        raise SteamError("Clé d'API refusée par Steam : vérifie-la sur steamcommunity.com/dev/apikey.")
+    if code != 200 or not j:
+        raise SteamError(f"Steam a répondu {code} à la vérification de la clé.")
+    ps = (j.get("response") or {}).get("players") or []
+    return ps[0] if ps else {}
+
+
+def next_code(key, sid, auth, known):
+    """-> next share code, or None when there is no newer match."""
+    code, j = _api("ICSGOPlayers_730/GetNextMatchSharingCode/v1", key=key, steamid=sid, steamidkey=auth, knowncode=known)
+    if code == 403:
+        raise SteamError("Code d'authentification refusé : génère-le à nouveau sur la page d'aide de Steam.")
+    if code == 412:
+        raise SteamError("Le code de match de départ n'est pas reconnu pour ce compte.")
+    if code == 503 or code == 429:
+        raise SteamError("Steam est momentanément indisponible, réessaie dans quelques minutes.")
+    if code not in (200, 202) or j is None:
+        raise SteamError(f"Réponse inattendue de Steam ({code}).")
+    nxt = (j.get("result") or {}).get("nextcode")
+    return None if not nxt or nxt == "n/a" else nxt
+
+
+def owned_cs2(key, sid):
+    code, j = _api("IPlayerService/GetOwnedGames/v1/", key=key, steamid=sid, include_played_free_games=1, **{"appids_filter[0]": 730})
+    g = next((x for x in ((j or {}).get("response") or {}).get("games", []) if x.get("appid") == 730), None) if code == 200 else None
+    if not g:
+        return None
+    return {"total_h": round(g.get("playtime_forever", 0) / 60), "two_weeks_h": round(g.get("playtime_2weeks", 0) / 60, 1), "source": "API Steam"}
+
+
+def friends(key, sid, refresh=False):
+    """Steam friends (only if the friend list is public). Cached one day."""
+    os.makedirs(FRIENDS_DIR, exist_ok=True)
+    f = os.path.join(FRIENDS_DIR, f"{sid}_friends.json")
+    if os.path.exists(f) and not refresh:
+        c = json.load(open(f, encoding="utf-8"))
+        if (dt.datetime.now() - dt.datetime.fromisoformat(c["time"])).total_seconds() < 86400:
+            return c["friends"]
+    code, j = _api("ISteamUser/GetFriendList/v1/", key=key, steamid=sid, relationship="friend")
+    ids = [int(x["steamid"]) for x in ((j or {}).get("friendslist") or {}).get("friends", [])] if code == 200 else None
+    json.dump({"time": dt.datetime.now().isoformat(timespec="minutes"), "friends": ids}, open(f, "w", encoding="utf-8"))
+    return ids
+
+
+def names(ids):
+    """Persona names of SteamIDs (API key needed), remembered in the settings."""
+    s = config.settings()
+    key = s.get("steam_api_key")
+    known = {i: (s.get("players", {}).get(str(i)) or {}).get("name") for i in ids}
+    ask = [str(i) for i, n in known.items() if not n]
+    if key and ask:
+        code, j = _api("ISteamUser/GetPlayerSummaries/v2/", key=key, steamids=",".join(ask[:100]))
+        for p in ((j or {}).get("response") or {}).get("players", []) if code == 200 else []:
+            known[p["steamid"]] = p.get("personaname")
+            s.setdefault("players", {}).setdefault(p["steamid"], {})["name"] = p.get("personaname")
+        config.save_settings(s)
+    return {str(i): n for i, n in known.items() if n}
+
+
+def cached_friends(sid):
+    f = os.path.join(FRIENDS_DIR, f"{sid}_friends.json")
+    return set(json.load(open(f, encoding="utf-8")).get("friends") or []) if os.path.exists(f) else set()
+
+
+# ---------- credentials ----------
+def set_credentials(sid, key=None, auth=None, known=None):
+    """Validate and store what the player pasted. Returns the list of what was saved."""
+    sid = str(int(sid))
+    s = config.settings()
+    saved = []
+    key = (key or "").strip()
+    auth = (auth or "").strip().upper() if auth else ""
+    known = (known or "").strip()
+    if key:
+        if not KEY_RE.match(key):
+            raise SteamError("La clé d'API Steam fait 32 caractères (chiffres et lettres A à F).")
+        who = check_key(key, sid)
+        s["steam_api_key"] = key
+        saved.append("clé d'API")
+        if who.get("personaname"):
+            s.setdefault("players", {}).setdefault(sid, {})["name"] = who["personaname"]
+    if auth:
+        if not AUTH_RE.match(auth):
+            raise SteamError("Le code d'authentification a la forme XXXX-XXXXX-XXXX.")
+        if known and not CODE_RE.match(known):
+            raise SteamError("Le code de match a la forme CSGO-xxxxx-xxxxx-xxxxx-xxxxx-xxxxx.")
+        k = s.get("steam_api_key")
+        if not k:
+            raise SteamError("Ajoute d'abord ta clé d'API Steam : elle sert à interroger ton historique.")
+        start = known or (s.get("players", {}).get(sid, {}).get("last_code"))
+        if not start:
+            start = oldest_recent_code(sid)
+        if not start:
+            raise SteamError("Il faut un code de match de départ : colle celui affiché sur la page d'aide de Steam, ou lance Steam (CS2 fermé) pour que le coach le trouve.")
+        next_code(k, sid, auth, start)  # raises if the code or the pair is refused
+        p = s.setdefault("players", {}).setdefault(sid, {})
+        p["authcode"] = auth
+        p["last_code"] = start
+        p.setdefault("auto_sync", True)
+        saved.append("code d'historique")
+    config.save_settings(s)
+    return saved
+
+
+def forget(sid):
+    s = config.settings()
+    p = s.get("players", {}).get(str(sid), {})
+    for k in ("authcode", "last_code", "auto_sync", "last_sync", "pending_codes"):
+        p.pop(k, None)
+    if s.get("steam_login", {}).get("steamid") == str(sid):
+        s.pop("steam_login", None)
+    s.pop("steam_api_key", None)
+    config.save_settings(s)
+    f = os.path.join(FRIENDS_DIR, f"{sid}_friends.json")
+    if os.path.exists(f):
+        os.remove(f)
+
+
+def oldest_recent_code(sid):
+    """Share code of the oldest of the last 8 matches given by Valve (Steam running, CS2 closed)."""
+    import matchlist
+    try:
+        ms = matchlist.fetch()
+    except Exception:
+        return None
+    own = config.logged_in_account()[0]
+    if own and int(own) != int(sid):
+        return None
+    ms = [m for m in ms if m.get("sharecode")]
+    return min(ms, key=lambda m: m["time"])["sharecode"] if ms else None
+
+
+def new_codes(sid, log=print, limit=200):
+    """Walk the player's history forward from the last known code.
+    -> share codes still to fetch (new ones + those a previous sync could not fetch)."""
+    sid = str(int(sid))
+    s = config.settings()
+    p = s.get("players", {}).get(sid, {})
+    key, auth, cur = s.get("steam_api_key"), p.get("authcode"), p.get("last_code")
+    if not (key and auth and cur):
+        return list(p.get("pending_codes") or [])
+    found = []
+    for _ in range(limit):
+        nxt = next_code(key, sid, auth, cur)
+        if not nxt:
+            break
+        found.append(nxt)
+        cur = nxt
+    s = config.settings()
+    p = s.setdefault("players", {}).setdefault(sid, {})
+    pending = list(dict.fromkeys((p.get("pending_codes") or []) + found))
+    p.update(last_code=cur, pending_codes=pending, last_sync=dt.datetime.now().isoformat(timespec="minutes"))
+    config.save_settings(s)
+    if found:
+        log(f"Historique Steam : {len(found)} nouveau(x) match(s)")
+    return pending
+
+
+def done_codes(sid, codes):
+    s = config.settings()
+    p = s.setdefault("players", {}).setdefault(str(sid), {})
+    p["pending_codes"] = [c for c in p.get("pending_codes") or [] if c not in set(codes)]
+    config.save_settings(s)
+
+
+def status(sid):
+    sid = str(int(sid))
+    s = config.settings()
+    p = s.get("players", {}).get(sid, {})
+    own, own_name = config.logged_in_account()
+    login = s.get("steam_login") or {}
+    reg_n = 0
+    rp = os.path.join(config.CACHE, "matches.json")
+    if os.path.exists(rp):
+        acc = int(sid) - STEAM64
+        reg_n = sum(1 for m in json.load(open(rp)).values() if acc in (m.get("accounts") or []) or (m.get("me") and str(own) == sid))
+    fr = cached_friends(sid)
+    return {"steamid": sid, "name": p.get("name"),
+            "login": login if login.get("steamid") == sid else None,
+            "pc_account": {"steamid": str(own) if own else None, "name": own_name},
+            "playtime": local_playtime(sid),
+            "has_key": bool(s.get("steam_api_key")), "has_auth": bool(p.get("authcode")),
+            "last_code": p.get("last_code"), "last_sync": p.get("last_sync"), "pending": len(p.get("pending_codes") or []),
+            "auto_sync": bool(p.get("auto_sync")), "known_matches": reg_n, "friends": len(fr) if fr else None,
+            "links": {"key": KEY_URL, "auth": AUTH_URL}}

@@ -131,7 +131,8 @@ def write_player(sid, out_dir=SITE):
 def shell_html(index, local=False):
     s = config.settings()
     own = str(s.get("own_steamid"))
-    data = {"index": index, "default": own if any(e["steamid"] == own for e in index) else (index[0]["steamid"] if index else None),
+    data = {"index": index, "own": own if own and own != "None" else None,
+            "default": own if any(e["steamid"] == own for e in index) else (index[0]["steamid"] if index else None),
             "local": local, "generated": dt.datetime.now().isoformat(timespec="minutes")}
     return open(TEMPLATE, encoding="utf-8").read().replace("__DATA__", json.dumps(data, ensure_ascii=False, separators=(",", ":")))
 
