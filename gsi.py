@@ -21,6 +21,8 @@ WEAPON_FR = {"ak47": "AK-47", "m4a1": "M4A4", "m4a1_silencer": "M4A1-S", "awp": 
 PRIMARY_TYPES = {"Rifle", "SniperRifle", "Submachine Gun", "Shotgun", "Machine Gun"}
 LOCK = threading.Lock()
 STATE = {}
+HIST_F = os.path.join(LOG_DIR, "match.json")
+HIST = {}   # the match being played: result and side of every round, and where the T attacked (marked by the player)
 
 
 def cfg_dir():
@@ -130,6 +132,66 @@ def uninstall():
     return status()
 
 
+def _hist_save():
+    import json
+    try:
+        os.makedirs(LOG_DIR, exist_ok=True)
+        json.dump(dict(HIST, _t=time.time()), open(HIST_F, "w", encoding="utf-8"))
+    except OSError:
+        pass
+
+
+def _hist_load():
+    """After a restart of the app during a match, the rounds already played are still known."""
+    import json
+    try:
+        h = json.load(open(HIST_F, encoding="utf-8"))
+        if time.time() - h.get("_t", 0) < 2 * 3600:
+            HIST.update(h)
+    except (OSError, ValueError):
+        pass
+
+
+def _hist(mp, rd, side):
+    """Round results (map.round_wins when the game sends it, round.win_team otherwise) and the side played each round."""
+    name, rnum, phase = mp.get("name"), int(mp.get("round") or 0), rd.get("phase")
+    changed = False
+    if HIST.get("map") != name or mp.get("phase") == "warmup" or rnum + 1 < HIST.get("_max", 0):
+        HIST.clear()
+        HIST.update({"map": name, "start": time.time(), "rounds": {}, "sites": {}, "_max": 0})
+        changed = True
+    R = HIST["rounds"]
+    for k, v in (mp.get("round_wins") or {}).items():
+        win = "T" if str(v).startswith("t_") else "CT" if str(v).startswith("ct_") else None
+        if win and R.get(str(k), {}).get("win") != win:
+            R.setdefault(str(k), {}).update(win=win, reason=v)
+            changed = True
+    cur = rnum if phase == "over" else rnum + 1
+    if phase == "over" and rd.get("win_team") in ("T", "CT") and R.get(str(rnum), {}).get("win") != rd["win_team"]:
+        R.setdefault(str(rnum), {}).update(win=rd["win_team"], bomb=rd.get("bomb"))
+        changed = True
+    if side and R.get(str(cur), {}).get("side") != side:
+        R.setdefault(str(cur), {})["side"] = side
+        changed = True
+    HIST["_max"] = max(HIST.get("_max", 0), cur)
+    if changed:
+        _hist_save()
+
+
+def set_site(rnd, site):
+    """The player marks where the T attacked on a round (A, B, '-' for no clear attack, None to erase)."""
+    with LOCK:
+        if not HIST:
+            return False
+        if site in ("A", "B", "-"):
+            HIST.setdefault("sites", {})[str(int(rnd))] = site
+        else:
+            HIST.setdefault("sites", {}).pop(str(int(rnd)), None)
+        _hist_save()
+        log_event({"map": HIST.get("map"), "round": int(rnd), "site_mark": site})
+    return True
+
+
 def update(payload):
     """A message from the game. Keeps only what the in-game sheet needs."""
     if (payload.get("auth") or {}).get("token") != config.settings().get("gsi_token"):
@@ -150,6 +212,10 @@ def update(payload):
                           "round": (mp.get("round") or 0) + (0 if rd.get("phase") == "over" else 1),
                           "score_ct": (mp.get("team_ct") or {}).get("score"), "score_t": (mp.get("team_t") or {}).get("score"),
                           "losses": (mp.get(tkey) or {}).get("consecutive_round_losses") if tkey else STATE.get("losses")})
+            try:
+                _hist(mp, rd, side if own else None)
+            except Exception as e:
+                print("historique des rounds :", e, flush=True)
         elif pl.get("activity") == "menu":
             STATE.update({"map": None, "map_phase": None})
         STATE.update({"steamid": me, "round_phase": rd.get("phase"), "bomb": rd.get("bomb"), "win_team": rd.get("win_team"),
@@ -174,6 +240,11 @@ def update(payload):
 def state():
     with LOCK:
         s = {k: v for k, v in STATE.items() if k != "_key"}
+        if HIST and HIST.get("map") == s.get("map"):
+            s["hist"] = {"rounds": HIST.get("rounds", {}), "sites": HIST.get("sites", {})}
     if s:
         s["age"] = round(time.time() - s.pop("_t", 0), 1)
     return s
+
+
+_hist_load()

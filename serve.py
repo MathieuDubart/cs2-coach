@@ -209,6 +209,13 @@ class Handler(BaseHTTPRequestHandler):
             except Exception as e:
                 return self.send(400, {"error": f"Micro : {e}"})
             return self.send(200, voice_status())
+        if u.path == "/api/gsi/site":  # the player marks where the T attacked
+            import gsi
+            try:
+                ok = gsi.set_site(int(body.get("round")), body.get("site"))
+            except (TypeError, ValueError):
+                return self.send(400, {"error": "round invalide"})
+            return self.send(200 if ok else 409, gsi.state())
         if u.path in ("/api/gsi/install", "/api/gsi/uninstall"):
             import gsi
             try:
@@ -347,14 +354,17 @@ if __name__ == "__main__":
         sys.exit(0)
     url = f"http://127.0.0.1:{PORT}/#avant"
     print(f"Coach CS2 : {url}  (Ctrl+C pour arrêter)")
-    try:
-        import gsi
-        if gsi.refresh(PORT):
-            print("Détection de la partie mise à jour : relance CS2 pour qu'il la prenne en compte.")
-    except Exception as e:
-        print("détection de la partie :", e)
-    threading.Thread(target=auto_sync, daemon=True).start()
-    threading.Thread(target=voice_watch, daemon=True).start()
+    if os.environ.get("COACH_TEST"):  # a test copy: leaves the game's settings, the Steam sync and the microphone alone
+        print("copie de test : détection de la partie, synchronisation et micro laissés à l'application principale")
+    else:
+        try:
+            import gsi
+            if gsi.refresh(PORT):
+                print("Détection de la partie mise à jour : relance CS2 pour qu'il la prenne en compte.")
+        except Exception as e:
+            print("détection de la partie :", e)
+        threading.Thread(target=auto_sync, daemon=True).start()
+        threading.Thread(target=voice_watch, daemon=True).start()
     if "--no-browser" not in sys.argv:
         webbrowser.open(url)
     srv.serve_forever()

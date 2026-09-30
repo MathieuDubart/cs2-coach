@@ -329,6 +329,11 @@ def build(steamid, adv, cross=None, deep=None, light=False):
             plan["map_refs"] = map_refs(PREMIER)
         except Exception as e:
             print("références des cartes indisponibles :", e)
+        try:
+            import tside
+            plan["tside"] = tside.tendencies(PREMIER)
+        except Exception as e:
+            print("tendances des T indisponibles :", e)
         return plan
     import cs2coach
     import midround
@@ -345,13 +350,20 @@ def build(steamid, adv, cross=None, deep=None, light=False):
         plan["map_refs"] = map_refs(sorted(set(PREMIER) | set(maps)))
     except Exception as e:
         print("références des cartes indisponibles :", e)
-    try:
-        import buys
-        plan["buys"] = buys.advise(sid, sorted(set(PREMIER) | set(maps)))
-    except Exception as e:
-        print("achats par type de round indisponibles :", e)
     wp = weapons.player(sid, mids)
     plan["weapons"] = wp
+    try:
+        import buys
+        zd = {(m["map"], side): {z["name"]: (z["k"], z["d"]) for z in S.get("zones", [])}
+              for m in (cross or {}).get("maps", []) for side, S in m.get("sides", {}).items()}
+        plan["buys"] = buys.adapted(sid, sorted(set(PREMIER) | set(maps)), adv.get("archetype"), zd, wp)
+    except Exception as e:
+        print("achats par type de round indisponibles :", e)
+    try:
+        import tside
+        plan["tside"] = tside.tendencies(sorted(set(PREMIER) | set(maps)))
+    except Exception as e:
+        print("tendances des T indisponibles :", e)
     ctx = context.analyze(sid)
     if ctx:
         ctx["matches"] = ctx["matches"][-40:]

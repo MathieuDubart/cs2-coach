@@ -289,6 +289,21 @@ pre.cli{background:var(--radar-bg);color:#dfe6ec;padding:12px 14px;overflow-x:au
 .whochip{font:500 12.5px var(--f-body);color:var(--muted);display:flex;gap:6px;align-items:center}
 .whochip button{font:500 12px var(--f-body);background:none;border:1px solid var(--line);color:var(--ct);border-radius:10px;padding:1px 8px;cursor:pointer}
 /* en partie */
+.tread{background:var(--panel);border:1px solid var(--line);border-left:5px solid var(--ct);padding:10px 14px;margin:10px 0}
+.tread h3{margin:0 0 6px}
+.tread .odds{display:flex;flex-wrap:wrap;gap:8px;align-items:stretch;margin:4px 0 8px}
+.tread .o{min-width:86px;padding:6px 12px;border:1px solid var(--line);border-radius:6px;text-align:center;background:var(--bg)}
+.tread .o b{display:block;font:700 30px/1.1 var(--f-display)}
+.tread .o span{font:500 12px var(--f-mono);color:var(--muted)}
+.tread .o.top{border:2px solid var(--flash)}
+.tread .o.none b{font-size:20px;color:var(--muted)}
+.tread ul{margin:6px 0;padding-left:18px}
+.tread .marks{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:8px}
+.tread .marks .mk{font:600 13px var(--f-mono);padding:4px 8px;border:1px solid var(--line);background:var(--bg);color:var(--ink);border-radius:4px;cursor:pointer;min-width:52px}
+.tread .marks .mk.won{border-color:var(--good)} .tread .marks .mk.lost{border-color:var(--bad)}
+.tread .ask{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:8px;padding:8px;border:1px dashed var(--flash);border-radius:6px}
+.tread .ask button{font:700 18px var(--f-display);padding:6px 18px;border:1px solid var(--line);background:var(--bg);color:var(--ink);border-radius:6px;cursor:pointer;min-height:40px}
+.tread .ask button:focus-visible,.tread .marks .mk:focus-visible{outline:2px solid var(--ct);outline-offset:2px}
 .live{display:flex;flex-wrap:wrap;gap:6px 16px;align-items:center;background:var(--panel);border:1px solid var(--line);border-left:5px solid var(--muted);padding:8px 14px;font-size:14px}
 .live.on{border-left-color:var(--good)}
 .live .dot{width:10px;height:10px;border-radius:50%;background:var(--muted);display:inline-block}
@@ -904,11 +919,11 @@ function weaponsBlock(W){const RD=W.ref_duels||{};
    <p class="note">Sur ${W.n_rounds} rounds analysés. Duels : kills et morts avec l'arme en main, comparés à tous les joueurs de la base.</p>`}
 function buysBlock(B){if(!B||!B.types)return "";const T=B.types;
   return `<h3>Tes achats par type de round</h3>
-   <div class="tbl"><table><thead><tr><th>Round</th><th class="n">Tes rounds</th><th class="n">Gagnés (toi · base)</th><th class="n">Dégâts</th><th>Tes achats qui marchent le mieux</th><th>Ce qui marche dans la base</th></tr></thead><tbody>
-   ${["pistol","eco","force","full","anti-eco"].filter(k=>T[k]).map(k=>{const x=T[k];return `<tr><td><b>${esc(x.label)}</b></td><td class="n">${x.rounds}</td><td class="n">${x.win??"—"} % · ${x.base_win??"—"} %</td><td class="n">${x.adr??"—"}</td>
-     <td class="wrap">${x.my_kits.length?x.my_kits.slice(0,2).map(y=>`${esc(y.key)} <span class="note">(${y.win} % sur ${y.n})</span>`).join("<br>"):'<span class="note">pas encore assez</span>'}</td>
-     <td class="wrap">${x.base_kits.slice(0,2).map(y=>`${esc(y.key)} <span class="note">(${y.win} % sur ${y.n})</span>`).join("<br>")}</td></tr>`}).join("")}</tbody></table></div>
-   <p class="note">Toutes cartes confondues. Le détail par carte et par camp (où jouer, quoi acheter) est dans « En partie ».</p>`}
+   <p class="note">Adapté à toi : tes rounds, puis les joueurs de ton profil (${(B.profile||[]).map(esc).join(", ")}), puis la base. Toutes cartes confondues ; le détail par carte et par camp est dans « En partie ».</p>
+   <div class="tbl"><table><thead><tr><th>Round</th><th class="n">Tes rounds</th><th class="n">Gagnés : toi · ton profil</th><th>Conseillé pour toi</th><th>Autres options</th></tr></thead><tbody>
+   ${["pistol","eco","force","full","anti-eco"].filter(k=>T[k]).map(k=>{const x=T[k],b=x.kits[0];return `<tr><td><b>${esc(x.label)}</b></td><td class="n">${x.rounds}</td><td class="n">${x.win??"—"} % · ${x.peer_win??"—"} %</td>
+     <td class="wrap">${b?`<b>${esc(b.key)}</b><br><span class="note">${b.why.map(esc).join(" · ")}</span>`:'<span class="note">pas assez</span>'}</td>
+     <td class="wrap">${x.kits.slice(1).map(y=>esc(y.key)).join("<br>")||"—"}</td></tr>`}).join("")}</tbody></table></div>`}
 function renderProgress(){
   const p=P(),v=$("#v-prog"),PL=p.advice.plan;if(!PL)return noPlan(v);
   const L=PL.level,T=PL.training,X=PL.experiments,Wp=PL.weapons,K=PL.kpis||[];
@@ -1198,7 +1213,7 @@ function buyTip(g,p){if(g.money==null||!g.side)return "";
   if(g.money+bonus>=full)return `Eco conseillé : même en perdant ce round, tu auras ${eur(g.money+bonus)} au suivant.`;
   return `Force seulement si toute l'équipe force (${eur(g.money)}).`}
 function phaseTip(g,p){if(g.round_phase==="freezetime"){const rt=roundType(g),x=(((((p.advice.plan||{}).buys||{}).maps||{})[g.map]||{})[g.side]||{})[rt];
-    return buyTip(g,p)+(x?` ${RT_FR[rt]} : ${x.zone&&x.zone.name?`joue ${x.zone.name}`:""}${x.kit&&x.kit.name?`${x.zone&&x.zone.name?", ":""}achète ${x.kit.name}`:""}.`:"")}if(g.round_phase==="over")return "5 s : pourquoi ce round ? Puis une longue expiration.";
+    return buyTip(g,p)+(x?` ${RT_FR[rt]} : ${x.zone?`joue ${x.zone.key}`:""}${x.kit?`${x.zone?", ":""}achète ${x.kit.key}`:""}.`:"")}if(g.round_phase==="over")return "5 s : pourquoi ce round ? Puis une longue expiration.";
   if(g.bomb==="planted")return g.side==="CT"?"Bombe posée : retake groupé, ou sauve si tu es seul contre 3.":"Bombe posée : tirs croisés, fais venir les CT.";return ""}
 const gsiFresh=()=>gsiLast&&gsiLast.age!=null&&gsiLast.age<75&&gsiLast.map;
 const RT_FR={pistol:"Round pistolet",eco:"Éco",force:"Force-buy",full:"Full buy","anti-eco":"Anti-éco"};
@@ -1207,15 +1222,86 @@ function roundType(g){if(!g||!g.side||g.round==null)return null;if(g.round===1||
   const full=g.side==="CT"?4200:4000,eq=g.equip||0,total=g.money+eq;
   if((g.primary&&FULL_W.has(g.primary))||eq>=3500||total>=full)return "full";   // saved or bought rifle, or enough to buy one
   return total<2000?"eco":"force"}
-function buyRows(p,map,side,cur){const B=(((p.advice.plan||{}).buys||{}).maps||{})[map];const S_=B&&B[side];if(!S_)return "";
-  const cell=(x,unit)=>x&&x.name?`<b>${esc(x.name)}</b><br><span class="note">${x.from==="toi"?"toi":"base"} : ${x.win} % de rounds gagnés sur ${x.n}${x.adr!=null?`, ${x.adr} dégâts`:""}</span>`:'<span class="note">pas assez de rounds</span>';
+function buyRows(p,map,side,cur){const BB=((p.advice.plan||{}).buys)||{},B=(BB.maps||{})[map];const S_=B&&B[side];if(!S_)return "";
+  const cell=(x,alts)=>x?`<b>${esc(x.key)}</b><br><span class="note">${x.why.map(esc).join(" · ")}</span>${alts&&alts.length?`<br><span class="note">autres : ${alts.map(a=>esc(a.key)).join(", ")}</span>`:""}`:'<span class="note">pas assez de rounds</span>';
   const rows=["pistol","eco","force","full","anti-eco"].filter(k=>S_[k]);if(!rows.length)return "";
   return `<h3>Où jouer et quoi acheter selon le round</h3>
+   <p class="note">Adapté à toi : tes propres rounds d'abord, puis les joueurs de ton profil (${(BB.profile||[]).map(esc).join(", ")} : ${BB.n_peers||0} joueurs de la base), puis toute la base. Tes duels dans la zone et avec l'arme ajustent le classement.</p>
    <div class="tbl"><table><thead><tr><th>Round</th><th>Où jouer (15-25 s)</th><th>Quoi acheter</th><th>Toi</th></tr></thead><tbody>
-   ${rows.map(k=>{const x=S_[k],on=k===cur;return `<tr${on?' style="outline:2px solid var(--flash)"':""}><td><b>${esc(x.label)}</b>${on?'<br><span class="pill warn" style="color:var(--flash)">ce round</span>':""}<br><span class="note">base : ${x.base_win??"—"} % gagnés</span></td>
-     <td class="wrap">${cell(x.zone)}${x.avoid_zone?`<br><span class="note bad">à éviter : ${esc(x.avoid_zone.key)} (${x.avoid_zone.win} %)</span>`:""}</td><td class="wrap">${cell(x.kit)}</td>
-     <td class="wrap">${x.n_me?`${x.n_me} round${x.n_me>1?"s":""}, ${x.my_win} % gagnés${x.my_kits.length?`<br><span class="note">ton achat le plus joué : ${esc(x.my_kits[0].key)}</span>`:""}`:'<span class="note">aucun round ici</span>'}</td></tr>`}).join("")}</tbody></table></div>
-   <p class="note">« Base » : joueurs de la base sur la même carte, le même camp et le même type de round. Ta propre donnée prend le relais dès que tu as au moins 3 rounds qui marchent mieux que la base.</p>`}
+   ${rows.map(k=>{const x=S_[k],on=k===cur;return `<tr${on?' style="outline:2px solid var(--flash)"':""}><td><b>${esc(x.label)}</b>${on?'<br><span class="pill" style="color:var(--flash)">ce round</span>':""}<br><span class="note">rounds gagnés : profil ${x.peer_win??"—"} %, base ${x.base_win??"—"} %</span></td>
+     <td class="wrap">${cell(x.zone,x.zones)}${x.avoid?`<br><span class="note bad">à éviter : ${esc(x.avoid.key)}</span>`:""}</td><td class="wrap">${cell(x.kit,x.kits)}</td>
+     <td class="wrap">${x.n_me?`${x.n_me} round${x.n_me>1?"s":""}, ${x.my_win} % gagnés`:'<span class="note">aucun round ici</span>'}</td></tr>`}).join("")}</tbody></table></div>`}
+// ---------- what the T will do (CT side): odds of A / B from the base, adapted to what this team did ----------
+const halfStart=n=>n<=12?1:n<=24?13:25+3*Math.floor((n-25)/3);   // MR12, then overtime halves of 3 rounds
+const sigm=z=>1/(1+Math.exp(-z)),logit=p=>Math.log(p/(1-p));
+function tsidePredict(TS,map,g){const M=TS&&TS.maps&&TS.maps[map];if(!M||!g||g.round==null)return null;
+  const H=g.hist||{},R=H.rounds||{},SI=H.sites||{},cur=g.round_phase==="over"?g.round+1:g.round;
+  if(g.round_phase==="over"&&halfStart(cur)===cur)return null;   // the sides swap: this team will not attack any more
+  const half=[];for(let n=halfStart(cur);n<cur;n++)half.push(n);
+  const rih=half.length+1,C=M.ctx;let mix,econ=null;
+  if(rih===1)mix={pistol:1};
+  else if(rih===2){const w=(R[half[0]]||{}).win;mix=w?{[w==="T"?"r2_win":"r2_loss"]:1}:{r2_win:.5,r2_loss:.5}}
+  else{const last=R[half[half.length-1]]||{};let losses=0;for(let i=half.length-1;i>=0;i--){if((R[half[i]]||{}).win==="CT")losses++;else break}
+    const key=last.win==="T"?"won":last.win==="CT"?(losses>=3?"lost3":"lost"+losses):null;econ=key&&TS.econ[key];
+    mix=econ?{eco:econ.eco/100,force:econ.force/100,full:econ.full/100}:{full:.6,force:.35,eco:.05}}
+  let pA=0,none=0,rush=0,w=0;
+  for(const [c,k] of Object.entries(mix)){const x=C[c];if(!x||!k)continue;pA+=k*x.pA_hit;none+=k*x.none/100;rush+=k*(x.rush??M.all.rush??0)/100;w+=k}
+  if(w){pA/=w;none/=w;rush/=w}else{pA=M.pA_hit;none=M.all.none/100;rush=(M.all.rush||0)/100}
+  pA=Math.min(.97,Math.max(.03,pA));
+  const main=Object.entries(mix).sort((a,b)=>b[1]-a[1])[0][0],X=C[main]||M.all;
+  const why=[];
+  if(rih<=2)why.push(`${TS.ctx_fr[main]} sur ${MAPN(map)} : A ${X.A} %, B ${X.B} %, pas d'attaque claire ${X.none} % (${X.n} rounds de la base).`);
+  else if(econ)why.push(`Achat probable des T, vu leurs derniers rounds : full buy ${econ.full} %, force ${econ.force} %, éco ${econ.eco} %. Sur ${MAPN(map)}, ça donne A ${Math.round(100*pA*(1-none))} %, B ${Math.round(100*(1-pA)*(1-none))} %.`);
+  else why.push(`Sur ${MAPN(map)}, toutes situations : A ${M.all.A} %, B ${M.all.B} % (${M.n_rounds} rounds de la base).`);
+  // what this team did in the half
+  const seq=half.map(n=>({n,site:SI[n]||null,won:(R[n]||{}).win==="T",known:!!(R[n]||{}).win}));
+  const B_=(TS.model||{}).beta||{},x={};const last=seq[seq.length-1];
+  if(last&&(last.site==="A"||last.site==="B")&&last.known){const sg=last.site==="A"?1:-1;if(last.won)x.repeat_won=sg;else x.repeat_lost=sg;
+    let k=0;for(let i=seq.length-1;i>=0&&seq[i].site===last.site;i--)k++;if(k>=2)x.streak2=sg}
+  const nA=seq.filter(q=>q.site==="A").length,nB=seq.filter(q=>q.site==="B").length;if(nA+nB)x.pref=(nA-nB)/Math.sqrt(nA+nB);
+  let z=logit(pA);
+  for(const k of ["repeat_lost","repeat_won","streak2","pref"]){if(!x[k]||!B_[k])continue;const z2=z+B_[k]*x[k],d=Math.round(100*(sigm(z2)-sigm(z))*(1-none));z=z2;if(!d)continue;
+    const toA=d>0,pts=`+${Math.abs(d)} points pour ${toA?"A":"B"}`;
+    if(k==="repeat_lost")why.push(`Ils ont perdu leur dernière attaque en ${last.site} : une équipe qui perd sur un site y retourne moins souvent (${pts}).`);
+    else if(k==="pref")why.push(`Cette mi-temps : A ${nA} fois, B ${nB} fois. Une équipe garde son site préféré (${pts}).`);
+    else why.push(`${TS.model.fr[k]} (${pts}).`)}
+  const pa=sigm(z);
+  if(!seq.some(q=>q.site))why.push(half.length?"Note où ils attaquent après chaque round : la prédiction s'adapte à cette équipe.":"Premier round de la mi-temps : les chiffres viennent de la base.");
+  return {A:Math.round(100*pa*(1-none)),B:Math.round(100*(1-pa)*(1-none)),none:Math.round(100*none),rush:Math.round(100*rush),ctx:main,X,why,seq,rih,cur}}
+function tsideLive(p,g){const TS=(p.advice.plan||{}).tside,r=tsidePredict(TS,g.map,g);if(!r)return "";
+  const top=r.A>=r.B?"A":"B",pt=Math.max(r.A,r.B),X=r.X,det=X[top+"_detail"];
+  const tips=[];
+  if(pt>=55)tips.push(`<b>${top} probable</b> : prépare ta rotation et une grenade vers ${top}, sans quitter ta position avant l'info (${100-pt} % de chances que ce soit ailleurs).`);
+  else tips.push("<b>Pas de site nettement favori</b> : joue ta position par défaut et attends l'info.");
+  if(r.rush>=40)tips.push(`<b>Rush fréquent</b> dans ce type de round (${r.rush} % des prises de site dans les 30 premières secondes) : pas de peek à sec en début de round, écoute.`);
+  if(det&&det.from.length)tips.push(`Ils entrent en ${top} par <b>${det.from.map(f=>esc(f.zone)).join("</b> ou <b>")}</b>, en médiane vers ${det.timer}.`);
+  if(X.first&&X.first.length)tips.push(`Premier contact le plus fréquent : <b>${esc(X.first[0].zone)}</b> (${X.first[0].pct} %), vers ${X.first_timer}.`);
+  const H=g.hist||{},SI=H.sites||{},R=H.rounds||{},done=r.cur-1;
+  const asked=(g.round_phase==="over"||g.round_phase==="freezetime")&&done>=halfStart(r.cur)?done:null;
+  const seqAll=r.seq.map(q=>q.n);
+  const res=n=>{const w=(R[n]||{}).win;return w?(w==="CT"?"won":"lost"):""};   // seen from the CT side: your team
+  const lbl=n=>{const s=SI[n],w=res(n);return `R${n} ${s==="-"?"–":s||"?"}${w?` ${w==="won"?"✓":"✗"}`:""}`};
+  return `<div class="tread" aria-live="polite"><h3>Lecture des T · round ${r.cur}</h3>
+    <div class="odds"><div class="o${top==="A"?" top":""}"><span>A</span><b>${r.A} %</b></div><div class="o${top==="B"?" top":""}"><span>B</span><b>${r.B} %</b></div>
+     <div class="o none"><span>pas d'attaque claire</span><b>${r.none} %</b></div><div class="o none"><span>rush</span><b>${r.rush} %</b></div></div>
+    <ul class="big-list">${tips.map(t=>`<li class="ct">${t}</li>`).join("")}</ul>
+    <p class="note">${r.why.map(esc).join(" ")}</p>
+    ${asked?`<div class="ask" role="group" aria-label="Où les T ont attaqué au round ${asked}"><b>Round ${asked} : où ont-ils attaqué ?</b>
+      ${["A","B","-"].map(v=>`<button type="button" data-site="${v}" data-round="${asked}" aria-pressed="${SI[asked]===v}">${v==="-"?"Pas clair":v}</button>`).join("")}</div>`:""}
+    ${seqAll.length?`<div class="marks" role="group" aria-label="Attaques des T dans la mi-temps"><span class="note">Cette mi-temps (clic pour corriger) :</span>
+      ${seqAll.map(n=>`<button type="button" class="mk ${res(n)}" data-cycle="${n}" title="${res(n)?`Round ${res(n)==="won"?"gagné":"perdu"} par ton équipe. `:""}Clic : A, puis B, puis pas clair, puis effacer.">${lbl(n)}</button>`).join("")}</div>`:""}
+    </div>`}
+function tsideTable(p,map){const TS=(p.advice.plan||{}).tside,M=TS&&TS.maps&&TS.maps[map];if(!M)return "";
+  const C=M.ctx,rows=["pistol","r2_win","r2_loss","eco","force","full"].filter(c=>C[c]);
+  const from=x=>["A","B"].map(L=>{const d=x[L+"_detail"];return d&&d.from.length?`${L} par ${d.from.map(f=>`${esc(f.zone)} (${f.pct} %)`).join(", ")}`:""}).filter(Boolean).join("<br>");
+  return `<h3>Tendances des T sur ${MAPN(map)}</h3>
+   <p class="note">${M.n_rounds} rounds de ${M.n_matches} matchs de la base. Une attaque stoppée avant le site compte pour le site visé. Rush : site pris dans les 30 premières secondes (timer au-dessus de 1:25).${M.n_matches<10?" Peu de matchs sur cette carte : chiffres indicatifs.":""}</p>
+   <div class="tbl"><table><thead><tr><th>Round</th><th class="n">A</th><th class="n">B</th><th class="n">Pas claire</th><th class="n">Rush</th><th>Prise de site</th><th>Par où</th><th>Premier contact</th></tr></thead><tbody>
+   ${rows.map(c=>{const x=C[c];return `<tr><td><b>${esc(TS.ctx_fr[c])}</b><br><span class="note">${x.n} rounds</span></td><td class="n">${x.A} %</td><td class="n">${x.B} %</td><td class="n">${x.none} %</td><td class="n">${x.rush!=null?x.rush+" %":"—"}</td>
+     <td>${x.hit_timer?"vers "+x.hit_timer:"—"}</td><td class="wrap">${from(x)||"—"}</td><td class="wrap">${(x.first||[]).slice(0,2).map(f=>`${esc(f.zone)} (${f.pct} %)`).join(", ")||"—"}</td></tr>`}).join("")}</tbody></table></div>
+   ${(M.after||[]).length?`<h3>Après leur attaque</h3><p class="note">Où va l'attaque suivante de la même équipe, selon la précédente.</p>
+    <div class="tbl"><table><thead><tr><th>Round précédent</th><th class="n">Puis A</th><th class="n">Puis B</th><th class="n">Pas claire</th><th class="n">Cas</th></tr></thead><tbody>
+    ${M.after.map(a=>`<tr><td>${a.twice?`${a.last} au moins 2 fois de suite, le dernier ${a.won?"gagné":"perdu"}`:`${a.last} ${a.won?"gagné":"perdu"}`} par les T</td><td class="n">${a.A} %</td><td class="n">${a.B} %</td><td class="n">${a.none} %</td><td class="n">${a.n}</td></tr>`).join("")}</tbody></table></div>`:""}`}
 function micBtn(){const g=gsiLast||{};if(!D.local)return "";
   if(g.mic)return `${g.mic_silent?`<span class="pill weak" title="Aucun son capté depuis une minute">● Micro muet : <a href="#steam" style="color:inherit">vérifie le micro</a></span>`:`<span class="pill weak" title="Ton micro est enregistré pour analyser tes calls">● Micro</span>`}${g.mic_auto?"":`<button type="button" class="close" data-mic="stop">Arrêter l'enregistrement</button>`}`;
   return g.mic_auto?"":`<button type="button" class="close" data-mic="start" title="Enregistre ton micro pour analyser tes calls après la partie">Enregistrer mes calls</button>`}
@@ -1227,7 +1313,7 @@ function liveStrip(p){if(!D.local)return "";const g=gsiLast;
   return `<div class="live"><span class="dot" aria-hidden="true"></span>${st&&st.installed?"<span>Détection active : la fiche suivra ta partie dès que tu seras en jeu.</span>"
     :`<span>Choisis ta carte et ton camp, ou <a href="#steam" style="color:var(--ct)">active la détection automatique</a> : la fiche suivra ta partie toute seule.</span>`}${micBtn()}</div>`}
 async function gsiPoll(){clearTimeout(gsiTimer);if(!D.local||S.view!=="partie")return;
-  try{const g=await (await fetch("/api/gsi/state")).json();const sig=x=>x?[x.map,x.side,x.round,x.round_phase,x.money,x.bomb,x.age!=null&&x.age<75].join("|"):"";
+  try{const g=await (await fetch("/api/gsi/state")).json();const sig=x=>x?[x.map,x.side,x.round,x.round_phase,x.money,x.bomb,x.age!=null&&x.age<75,JSON.stringify(x.hist||{})].join("|"):"";
     const before=sig(gsiLast)+(gsiLast&&gsiLast.mic);gsiLast=g&&Object.keys(g).length?g:null;if(sig(gsiLast)+(gsiLast&&gsiLast.mic)!==before&&S.view==="partie"&&S.player&&D.players[S.player])renderPartie()}catch(e){}
   gsiTimer=setTimeout(gsiPoll,2000)}
 function renderPartie(){
@@ -1263,6 +1349,7 @@ function renderPartie(){
     <div class="btns side big" role="group" aria-label="Camp"><button type="button" data-side="T" aria-pressed="${S.side==="T"}">T · ${S.map?roleOf(S.map,"T"):"attaque"}</button><button type="button" data-side="CT" aria-pressed="${S.side==="CT"}">CT · ${S.map?roleOf(S.map,"CT"):"défense"}</button></div>
     <button type="button" class="close" id="focus">${focus?"Quitter le mode 2e écran":"Mode 2e écran"}</button>
    </div>
+   ${live&&!partieManual&&S.side==="CT"&&gsiLast.side==="CT"&&gsiLast.map===S.map?tsideLive(p,gsiLast):""}
    ${R0?`<p class="note">Pas encore de match à toi sur ${MAPN(S.map)} : cette fiche vient de ${R0.rounds||"—"} rounds de la base et des démos pros. Elle deviendra personnelle après tes premiers matchs ici.</p>`:""}
    <div class="ig">
     <div class="igcol"><h3 class="good">Tes forces ici</h3>
@@ -1282,13 +1369,17 @@ function renderPartie(){
     <div><b>Économie</b>On achète ensemble. Force seulement si chacun aura 4 000 $ au round suivant.</div>
     ${D.local?`<div><b>Avant la 1re game</b><a href="#routine" style="color:var(--flash)">journal (20 s)</a> · <a href="#prog" style="color:var(--flash)">échauffement du jour</a></div>`:""}
    </div>
-   ${S.map?buyRows(p,S.map,S.side,live&&gsiLast.map===S.map&&gsiLast.side===S.side?roundType(gsiLast):null):""}`;
+   ${S.map?buyRows(p,S.map,S.side,live&&gsiLast.map===S.map&&gsiLast.side===S.side?roundType(gsiLast):null):""}
+   ${S.map&&S.side==="CT"?tsideTable(p,S.map):""}`;
   copyBtn(v);
   $$("[data-map]",v).forEach(b=>b.onclick=()=>{S.map=b.dataset.map;S.level=null;partieManual=true;store("map",S.map);renderPartie()});
   $$("[data-side]",v).forEach(b=>b.onclick=()=>{S.side=b.dataset.side;partieManual=true;store("side",S.side);renderPartie()});
   $$("[data-level]",v).forEach(b=>b.onclick=()=>{S.level=b.dataset.level;renderPartie()});
   $("#focus",v).onclick=()=>{document.body.classList.toggle("focus");store("focus",document.body.classList.contains("focus"));renderPartie()};
   const fl=$("#follow",v);if(fl)fl.onclick=()=>{partieManual=false;renderPartie()};
+  const mark=async(n,site)=>{try{const g=await api("/api/gsi/site",{round:n,site});if(g&&g.map)gsiLast=Object.assign(gsiLast||{},{hist:g.hist});renderPartie()}catch(e){}};
+  $$("[data-site]",v).forEach(b=>b.onclick=()=>mark(+b.dataset.round,b.getAttribute("aria-pressed")==="true"?null:b.dataset.site));
+  $$("[data-cycle]",v).forEach(b=>b.onclick=()=>{const n=+b.dataset.cycle,cur=((gsiLast.hist||{}).sites||{})[n]||null,nx={null:"A",A:"B",B:"-","-":null}[cur];mark(n,nx)});
   $$("[data-mic]",v).forEach(b=>b.onclick=async()=>{b.disabled=true;try{await api("/api/voice/"+b.dataset.mic,{sid:p.steamid});gsiLast=Object.assign(gsiLast||{},{mic:b.dataset.mic==="start"});renderPartie()}catch(e){b.textContent=e.message}});
   if(m){const st={level:S.level,layers:["zones","best","nades"],nades:plan?plan.key_nades:[],sel:null};crossRadar($(".radar-box",v),m,S.side,st)}
   if(R0){const items=[...rifle.map(z=>({px:z.px,level:z.level,label:`${z.name} ${z.duel_win} %`,color:z.duel_win>=53?"var(--good)":z.duel_win<=47?"var(--bad)":"#8a96a3",title:`${z.name} : ${z.duel_win} % de duels gagnés`})),

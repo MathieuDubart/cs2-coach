@@ -129,6 +129,8 @@ def ensure_deep():
     midround.run_all(log=log)
     import buys
     buys.run_all(log=log)
+    import tside
+    tside.run_all(log=log)
 
 
 def _ensure_deep(deep):

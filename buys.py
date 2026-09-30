@@ -49,6 +49,8 @@ def rows_for(ddir):
     d = ddir
     L = pd.read_parquet(os.path.join(d, "loadout.parquet"))
     R = pd.read_parquet(os.path.join(d, "rounds.parquet")).set_index("round")
+    if not len(R) or R.T_n.max() < 4 or R.CT_n.max() < 4:  # wingman (2v2): other habits
+        return pd.DataFrame()
     S = pd.read_parquet(os.path.join(d, "samples.parquet"), columns=["steamid", "round", "t", "zone"])
     import json
     mp = json.load(open(os.path.join(d, "meta.json"), encoding="utf-8")).get("map")
@@ -189,6 +191,146 @@ def advise(sid, maps):
                             **{k: v for k, v in (rk or (bk[0] if bk else {})).items() if k in ("n", "win", "adr")}} if (rk or bk) else None,
                     "base_zones": bz[:4], "base_kits": bk[:4], "my_zones": mz[:3], "my_kits": mk[:3],
                     "avoid_zone": (bz[-1] if len(bz) >= 4 and bz[-1]["win"] <= (base_win or 50) - 8 else None)}
+    return res
+
+
+# ---------- adapted to the player's profile ----------
+ROLE_FR = {"entry": "entry", "trader": "second / trade", "support": "support", "lurker": "lurker", "awper": "AWPer",
+           "anchor": "ancre", "closer": "closer"}
+
+
+def peers(sid, arch):
+    """Players of the base with the same profile: main and second role of the player's archetype."""
+    import archetype
+    _, _, ref, _, _ = archetype.reference()
+    roles = [r for r in ((arch or {}).get("role"), ((arch or {}).get("second") or {}).get("role")) if r]
+    if not roles and str(sid) in ref.index:
+        roles = [ref.loc[str(sid), "role"]]
+    ids = {int(i) for i, r in ref.role.items() if r in roles and int(i) != int(sid)}
+    return ids, roles
+
+
+def _blend(b, p, m, key, by, bonus=None, need=(12, 8, 3)):
+    """Every option scored from your rounds, pulled toward players of your profile, themselves pulled toward the base.
+    With few rounds of your own, your profile decides; with many, your own results do. An option needs enough rounds
+    somewhere (need = base, profile, you) to be proposed at all."""
+    if not len(b) and not len(m):
+        return []
+    agg = lambda df: df.groupby(key).agg(n=("won", "size"), w=("won", "sum"), dmg=("damage", "sum")) if len(df) else pd.DataFrame(columns=["n", "w", "dmg"])
+    B, P, M = agg(b), agg(p), agg(m)
+    p0 = b.won.mean() if len(b) else 0.5
+    a0 = b.damage.mean() if len(b) else 80.0
+    out = []
+    for k in set(B.index) | set(P.index) | set(M.index):
+        if not k:
+            continue
+        nb, wb, db = (int(B.loc[k].n), float(B.loc[k].w), float(B.loc[k].dmg)) if k in B.index else (0, 0.0, 0.0)
+        np_, wp, dp = (int(P.loc[k].n), float(P.loc[k].w), float(P.loc[k].dmg)) if k in P.index else (0, 0.0, 0.0)
+        nm, wm, dm = (int(M.loc[k].n), float(M.loc[k].w), float(M.loc[k].dmg)) if k in M.index else (0, 0.0, 0.0)
+        if nb < need[0] and np_ < need[1] and nm < need[2]:
+            continue
+        if by == "win":
+            s_b = (wb + p0 * 20) / (nb + 20)
+            s_p = (wp + s_b * 30) / (np_ + 30)
+            s_m = (wm + s_p * 10) / (nm + 10)
+        else:  # eco rounds: damage, the round is usually lost anyway
+            s_b = (db + a0 * 20) / (nb + 20)
+            s_p = (dp + s_b * 30) / (np_ + 30)
+            s_m = ((dm + s_p * 10) / (nm + 10)) / 200
+        why = []
+        if nm:
+            why.append(f"toi : {int(wm)} round{'s' if wm > 1 else ''} gagné{'s' if wm > 1 else ''} sur {nm}" if by == "win" else f"toi : {dm / nm:.0f} dégâts par round sur {nm}")
+        if np_ >= 5:
+            why.append(f"joueurs de ton profil : {100 * wp / np_:.0f} % sur {np_}" if by == "win" else f"joueurs de ton profil : {dp / np_:.0f} dégâts sur {np_}")
+        if nb >= 8:
+            why.append(f"base : {100 * wb / nb:.0f} % sur {nb}" if by == "win" else f"base : {db / nb:.0f} dégâts sur {nb}")
+        score = s_m
+        if bonus:
+            add, reason = bonus(k)
+            if add:
+                score += add
+                why.append(reason)
+        out.append({"key": k, "score": round(float(100 * score), 1), "n_me": nm, "n_peer": np_, "n_base": nb,
+                    "me_win": round(100 * wm / nm) if nm else None, "peer_win": round(100 * wp / np_) if np_ else None,
+                    "base_win": round(100 * wb / nb) if nb else None, "why": why})
+    return sorted(out, key=lambda r: -r["score"])
+
+
+# Not buying is not a buy. Over the whole base a full buy without grenades wins less (53 % vs 57 %) and a force buy
+# without kevlar too (30 % vs 41 %): when one tops a small cell it is noise, so it is never recommended.
+NON_BUYS = {"full": "sans grenade", "force": "sans kevlar"}
+
+
+def _real_buys(kits, rt):
+    bad = NON_BUYS.get(rt)
+    kits = [k for k in kits if not bad or bad not in k["key"]]
+    # one AWP per team: when it comes first, say so and keep the best rifle right behind it
+    if kits and kits[0]["key"].startswith("AWP"):
+        kits[0] = dict(kits[0], why=kits[0]["why"] + ["si l'AWP est libre dans ton équipe"])
+        alt = next((i for i, k in enumerate(kits) if not k["key"].startswith("AWP")), None)
+        if alt and alt > 1:
+            kits.insert(1, kits.pop(alt))
+    return kits
+
+
+def adapted(sid, maps, arch=None, zone_duels=None, weapons_info=None):
+    """Where to play and what to buy on each type of round, for YOU: your rounds, players of your profile, your duels
+    in each zone and with each weapon."""
+    Bf = load()
+    if not len(Bf):
+        return None
+    Bf["kit"] = Bf.apply(kit, axis=1)
+    if "util_known" in Bf:
+        Bf.loc[Bf.rtype.isin(["pistol", "eco"]) & ~Bf.util_known.fillna(False).astype(bool), "kit"] = None
+    ids, roles = peers(sid, arch)
+    me = Bf[Bf.steamid == int(sid)]
+    Pf = Bf[Bf.steamid.isin(ids)]
+    zd = zone_duels or {}
+    duels = ((weapons_info or {}).get("duels") or {})
+    ref = ((weapons_info or {}).get("ref_duels") or {})
+
+    def weapon_bonus(k):
+        w = str(k).split(" + ")[0]
+        d, r = duels.get(w), ref.get(w)
+        if not d or r is None or d.get("n", 0) < 10:
+            return 0, None
+        edge = float(max(-0.06, min(0.06, (d["win"] - r) / 100 * 0.3)))
+        return edge, f"ton {w} : {d['win']} % de duels gagnés (base {r} %)"
+    res = {"profile": [ROLE_FR.get(r, r) for r in roles], "n_peers": len(ids), "types": {}, "maps": {}}
+    for rt in TYPES:
+        by = "adr" if rt == "eco" else "win"
+        b, p, m = (fits(x[x.rtype == rt], rt) for x in (Bf, Pf, me))
+        kits = _real_buys(_blend(b, p, m, "kit", by, weapon_bonus, need=(40, 15, 5)), rt)
+        res["types"][rt] = {"label": TYPE_FR[rt], "rounds": int(len(me[me.rtype == rt])),
+                            "win": round(100 * me[me.rtype == rt].won.mean()) if len(me[me.rtype == rt]) else None,
+                            "peer_win": round(100 * Pf[Pf.rtype == rt].won.mean()) if len(Pf[Pf.rtype == rt]) else None,
+                            "kits": kits[:3]}
+    for mp in maps:
+        for side in ("T", "CT"):
+            ok_zone = lambda z: bool(z) and "spawn" not in z.lower() and not (side == "T" and z.lower().startswith("bombsite"))
+            duel_z = zd.get((mp, side), {})
+
+            def zone_bonus(z):
+                kd = duel_z.get(z)
+                if not kd or kd[0] + kd[1] < 4:
+                    return 0, None
+                k, d = kd
+                return float(0.25 * ((k + 3) / (k + d + 6) - 0.5)), f"tes duels ici (tous rounds) : {k}-{d}"
+            for rt in TYPES:
+                by = "adr" if rt == "eco" else "win"
+                sel = lambda x: x[(x["map"] == mp) & (x.side == side) & (x.rtype == rt)]
+                b, p, m = sel(Bf), sel(Pf), sel(me)
+                if len(b) < 20 and len(m) < 2:
+                    continue
+                buy = lambda x: fits(x[~x.weapon.isin(NOT_BUYABLE[side])], rt)
+                zones = _blend(b[b.zone.map(ok_zone)], p[p.zone.map(ok_zone)], m[m.zone.map(ok_zone)], "zone", by, zone_bonus, need=(15, 8, 3))
+                kits = _real_buys(_blend(buy(b), buy(p), buy(m), "kit", by, weapon_bonus, need=(15, 10, 3)), rt)
+                res["maps"].setdefault(mp, {}).setdefault(side, {})[rt] = {
+                    "label": TYPE_FR[rt], "by": by, "n_base": int(len(b)), "n_peer": int(len(p)), "n_me": int(len(m)),
+                    "base_win": round(100 * b.won.mean()) if len(b) else None, "peer_win": round(100 * p.won.mean()) if len(p) else None,
+                    "my_win": round(100 * m.won.mean()) if len(m) else None,
+                    "zone": zones[0] if zones else None, "zones": zones[1:3], "kit": kits[0] if kits else None, "kits": kits[1:3],
+                    "avoid": next((z for z in reversed(zones) if (z["n_base"] + z["n_peer"]) >= 15 and z["score"] < (100 * b.won.mean() if len(b) else 50) - 8), None) if by == "win" else None}
     return res
 
 
