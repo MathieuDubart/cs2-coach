@@ -113,7 +113,7 @@ def side_notes(mp, side, S, nd, regions, n_matches):
                 head, kind = "change ta façon de le jouer", "avoid"
                 txt += f" Tu y prends tes duels en mouvement ({z['my_speed_med']} u/s en médiane)."
                 if ow is not None:
-                    txt += f" Les autres joueurs y gagnent {ow} % de leurs duels, et le spot qui marche le mieux ({spot['k']} kills, {spot['d']} morts) est un angle tenu, vers {spot['t_med']} s de round."
+                    txt += f" Les autres joueurs y gagnent {ow} % de leurs duels, et le spot qui marche le mieux ({_p(spot['k'], 'kill', 'kills')}, {_p(spot['d'], 'mort', 'morts')}) est un angle tenu, vers {spot['t_med']} s de round."
             elif alt:
                 b, az = alt
                 head, kind = (f"recule {at(az['name'])}" if side == "CT" else f"passe plutôt {at(az['name'])}"), "avoid"
@@ -121,7 +121,7 @@ def side_notes(mp, side, S, nd, regions, n_matches):
                 txt += f" {where[:1].upper() + where[1:]}, tu fais {az['k']}-{az['d']}"
                 if b:
                     held = ", tenu posé" if (b.get("hold_pct") or 0) >= 40 else ""
-                    txt += f", et le meilleur spot des autres joueurs y est : {b['k']} kills pour {b['d']} morts{held}."
+                    txt += f", et le meilleur spot des autres joueurs y est : {_p(b['k'], 'kill', 'kills')} pour {_p(b['d'], 'mort', 'morts')}{held}."
                 else:
                     txt += "."
                 if same and kn >= 2:
@@ -183,7 +183,7 @@ def side_notes(mp, side, S, nd, regions, n_matches):
         if z["key"] in used or on + od < 15 or (z.get("others_win") or 100) > 35 or (z.get("presence") or 0) < 2:
             continue
         out.append((z["presence"] * 1.5 + 4, "avoid", f"<b>{cap(z['name'])} : évite-le.</b> Les joueurs de la base y perdent la plupart de leurs duels : "
-                                                     f"{on} kills pour {od} morts ({z['others_win']} %). Toi : {z['k']}-{z['d']}."))
+                                                     f"{_p(on, 'kill', 'kills')} pour {_p(od, 'mort', 'morts')} ({z['others_win']} %). Toi : {z['k']}-{z['d']}."))
         used.add(z["key"])
     # zones you rarely play but win in
     more = [z for z in zones if z["key"] not in used and (z.get("presence") or 0) < 8 and z["k"] + z["d"] >= 3 and (z.get("win") or 0) >= 60]
