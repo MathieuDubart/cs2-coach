@@ -1,0 +1,12 @@
+{
+ "pos_x": -4831.0,
+ "pos_y": 1781.0,
+ "scale": 5.2,
+ "levels": [
+  {
+   "key": "main",
+   "name": "Carte",
+   "image": "maps/de_overpass.png"
+  }
+ ]
+}

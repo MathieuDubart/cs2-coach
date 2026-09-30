@@ -1,0 +1,19 @@
+{
+ "pos_x": -3273.0,
+ "pos_y": 2930.0,
+ "scale": 2.8491137,
+ "levels": [
+  {
+   "key": "upper",
+   "name": "Étage principal",
+   "image": "maps/de_boulder.png",
+   "z_min": 62.0
+  },
+  {
+   "key": "lower",
+   "name": "Étage inférieur",
+   "image": "maps/de_boulder_lower.png",
+   "z_max": 62.0
+  }
+ ]
+}

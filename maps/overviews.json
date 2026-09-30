@@ -1,0 +1,160 @@
+{
+ "ar_baggage": {
+  "pos_x": "-1316",
+  "pos_y": "1288",
+  "scale": "2.539062",
+  "split": [
+   "10000",
+   "-5",
+   "-5",
+   "-10000"
+  ]
+ },
+ "ar_shoots": {
+  "pos_x": "-1368",
+  "pos_y": "1952",
+  "scale": "2.687500",
+  "split": []
+ },
+ "ar_shoots_night": {
+  "pos_x": "-1368",
+  "pos_y": "1952",
+  "scale": "2.687500",
+  "split": []
+ },
+ "cs_italy": {
+  "pos_x": "-2647",
+  "pos_y": "2592",
+  "scale": "4.6",
+  "split": []
+ },
+ "cs_office": {
+  "pos_x": "-1838",
+  "pos_y": "1858",
+  "scale": "4.1",
+  "split": []
+ },
+ "de_ancient": {
+  "pos_x": "-2953",
+  "pos_y": "2164",
+  "scale": "5",
+  "split": []
+ },
+ "de_ancient_night": {
+  "pos_x": "-2953",
+  "pos_y": "2164",
+  "scale": "5",
+  "split": []
+ },
+ "de_ancient_v1": {
+  "pos_x": "-2953",
+  "pos_y": "2164",
+  "scale": "5",
+  "split": []
+ },
+ "de_ancient_v2": {
+  "pos_x": "-2953",
+  "pos_y": "2164",
+  "scale": "5",
+  "split": []
+ },
+ "de_anubis": {
+  "pos_x": "-2796.000000",
+  "pos_y": "3328.000000",
+  "scale": "5.220000",
+  "split": []
+ },
+ "de_cache": {
+  "pos_x": "-2000",
+  "pos_y": "3250",
+  "scale": "5.5",
+  "split": []
+ },
+ "de_dust": {
+  "pos_x": "-2850",
+  "pos_y": "4073",
+  "scale": "6",
+  "split": []
+ },
+ "de_dust2": {
+  "pos_x": "-2476",
+  "pos_y": "3239",
+  "scale": "4.4",
+  "split": []
+ },
+ "de_inferno": {
+  "pos_x": "-2087",
+  "pos_y": "3870",
+  "scale": "4.9",
+  "split": []
+ },
+ "de_inferno_s2": {
+  "pos_x": "-2087",
+  "pos_y": "3870",
+  "scale": "4.9",
+  "split": []
+ },
+ "de_mirage": {
+  "pos_x": "-3230",
+  "pos_y": "1713",
+  "scale": "5.00",
+  "split": []
+ },
+ "de_nuke": {
+  "pos_x": "-3453",
+  "pos_y": "2887",
+  "scale": "7",
+  "split": [
+   "10000",
+   "-495",
+   "-495",
+   "-10000"
+  ]
+ },
+ "de_overpass": {
+  "pos_x": "-4831",
+  "pos_y": "1781",
+  "scale": "5.2",
+  "split": []
+ },
+ "de_overpass_2v2": {
+  "pos_x": "-4831",
+  "pos_y": "1781",
+  "scale": "5.2",
+  "split": []
+ },
+ "de_train": {
+  "pos_x": "-2308",
+  "pos_y": "2078",
+  "scale": "4.082077",
+  "split": [
+   "20000",
+   "-50",
+   "-50",
+   "-5000"
+  ]
+ },
+ "de_vertigo": {
+  "pos_x": "-3168",
+  "pos_y": "1762",
+  "scale": "4.0",
+  "split": [
+   "20000",
+   "11700",
+   "11700",
+   "-10000"
+  ]
+ },
+ "rush_001": {
+  "pos_x": "1744",
+  "pos_y": "7836",
+  "scale": "2.484375",
+  "split": []
+ },
+ "workshop_preview": {
+  "pos_x": "-2071",
+  "pos_y": "711",
+  "scale": "1.699219",
+  "split": []
+ }
+}

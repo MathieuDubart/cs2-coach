@@ -1,0 +1,12 @@
+{
+ "pos_x": -2796.0,
+ "pos_y": 3328.0,
+ "scale": 5.22,
+ "levels": [
+  {
+   "key": "main",
+   "name": "Carte",
+   "image": "maps/de_anubis.png"
+  }
+ ]
+}

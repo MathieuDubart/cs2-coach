@@ -1,0 +1,12 @@
+{
+ "pos_x": -2087.0,
+ "pos_y": 3870.0,
+ "scale": 4.9,
+ "levels": [
+  {
+   "key": "main",
+   "name": "Carte",
+   "image": "maps/de_inferno.png"
+  }
+ ]
+}

@@ -1,0 +1,12 @@
+{
+ "pos_x": -2311.0,
+ "pos_y": 2874.0,
+ "scale": 2.5537856,
+ "levels": [
+  {
+   "key": "main",
+   "name": "Carte",
+   "image": "maps/de_fachwerk.png"
+  }
+ ]
+}

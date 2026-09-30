@@ -1,0 +1,12 @@
+{
+ "pos_x": -2476.0,
+ "pos_y": 3239.0,
+ "scale": 4.4,
+ "levels": [
+  {
+   "key": "main",
+   "name": "Carte",
+   "image": "maps/de_dust2.png"
+  }
+ ]
+}

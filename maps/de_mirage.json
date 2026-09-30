@@ -1,0 +1,12 @@
+{
+ "pos_x": -3230.0,
+ "pos_y": 1713.0,
+ "scale": 5.0,
+ "levels": [
+  {
+   "key": "main",
+   "name": "Carte",
+   "image": "maps/de_mirage.png"
+  }
+ ]
+}

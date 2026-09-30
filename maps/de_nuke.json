@@ -1,0 +1,19 @@
+{
+ "pos_x": -3453.0,
+ "pos_y": 2887.0,
+ "scale": 7.0,
+ "levels": [
+  {
+   "key": "upper",
+   "name": "Étage principal",
+   "image": "maps/de_nuke.png",
+   "z_min": -495.0
+  },
+  {
+   "key": "lower",
+   "name": "Étage inférieur",
+   "image": "maps/de_nuke_lower.png",
+   "z_max": -495.0
+  }
+ ]
+}

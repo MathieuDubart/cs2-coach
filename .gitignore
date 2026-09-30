@@ -1,0 +1,15 @@
+# Données locales (démos, analyses, réglages avec clés/codes perso)
+cache/
+out/
+# Outils et radars téléchargés automatiquement au premier lancement
+tools/
+maps/*.png
+maps/csdm_default_maps.ts
+# Python
+__pycache__/
+*.pyc
+# Démos / archives
+*.dem
+*.bz2
+*.rar
+*.part

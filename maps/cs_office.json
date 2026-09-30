@@ -1,0 +1,12 @@
+{
+ "pos_x": -1838.0,
+ "pos_y": 1858.0,
+ "scale": 4.1,
+ "levels": [
+  {
+   "key": "main",
+   "name": "Carte",
+   "image": "maps/cs_office.png"
+  }
+ ]
+}

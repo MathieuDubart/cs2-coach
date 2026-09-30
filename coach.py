@@ -1,0 +1,109 @@
+"""Fetch recent matches from Valve, download each demo, analyze it, keep the JSON results.
+
+Usage: python coach.py [--no-fetch] [--keep-demos]
+Steam must be running and CS2 closed for the match list fetch.
+"""
+import bz2
+import json
+import os
+import shutil
+import sys
+import traceback
+import urllib.request
+
+import analyze
+import map_analysis
+import matchlist
+from demoparser2 import DemoParser
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+CACHE = os.path.join(HERE, "cache")
+MATCHES = os.path.join(HERE, "out", "matches")
+import config
+ME = config.logged_in_account()[0]
+RANK_TYPES = {11: "Premier", 12: "Compétitif", 7: "Wingman", 10: "Wingman"}
+
+
+def log(*a):
+    print(*a, flush=True)
+
+
+def download(url, dest):
+    tmp = dest + ".part"
+    with urllib.request.urlopen(url, timeout=60) as r, open(tmp, "wb") as f:
+        shutil.copyfileobj(r, f, 1 << 20)
+    os.replace(tmp, dest)
+
+
+def decompress(src, dest):
+    with bz2.open(src, "rb") as i, open(dest, "wb") as o:
+        shutil.copyfileobj(i, o, 1 << 20)
+
+
+def game_mode(path, n_players):
+    p = DemoParser(path)
+    try:
+        ru = p.parse_event("rank_update")
+        types = ru["rank_type_id"].dropna().astype(int).unique().tolist() if "rank_type_id" in ru else []
+        for t in types:
+            if t in RANK_TYPES:
+                return RANK_TYPES[t]
+    except Exception:
+        pass
+    return {4: "Wingman", 6: "3v3"}.get(n_players, "Compétitif / Premier")
+
+
+def process(m, keep=False):
+    mid = m["match_id"]
+    folder = os.path.join(MATCHES, mid)
+    if os.path.exists(os.path.join(folder, "stats.json")):
+        log(f"[{mid}] déjà analysé")
+        return
+    os.makedirs(folder, exist_ok=True)
+    bz = os.path.join(CACHE, f"{mid}.dem.bz2")
+    dem = os.path.join(CACHE, f"{mid}.dem")
+    if not os.path.exists(dem):
+        log(f"[{mid}] téléchargement {m['url']}")
+        download(m["url"], bz)
+        log(f"[{mid}] décompression")
+        decompress(bz, dem)
+        os.remove(bz)
+    log(f"[{mid}] analyse")
+    stats = analyze.analyze(dem, ME)
+    stats["match"] = {k: m[k] for k in ("match_id", "time", "team_scores", "duration_s")}
+    stats["mode"] = game_mode(dem, m.get("players", 10))
+    mapj = map_analysis.analyze(dem, ME)
+    with open(os.path.join(folder, "map.json"), "w", encoding="utf-8") as f:
+        json.dump(mapj, f, ensure_ascii=False, default=lambda o: o.item() if hasattr(o, "item") else str(o))
+    with open(os.path.join(folder, "stats.json"), "w", encoding="utf-8") as f:
+        json.dump(stats, f, ensure_ascii=False, indent=1, default=lambda o: o.item() if hasattr(o, "item") else str(o))
+    if not keep:
+        os.remove(dem)
+    o = stats["overview"]
+    log(f"[{mid}] OK {stats['map']} {stats['mode']} {stats['final_score']} K/D {o['kills']}/{o['deaths']} ADR {o['adr']}")
+
+
+def main():
+    os.makedirs(CACHE, exist_ok=True)
+    os.makedirs(MATCHES, exist_ok=True)
+    if "--no-fetch" in sys.argv:
+        ms = matchlist.parse(open(matchlist.OUT, "rb").read())
+    else:
+        ms = matchlist.fetch()
+    with open(os.path.join(CACHE, "matchlist.json"), "w") as f:
+        json.dump(ms, f, indent=1)
+    log(f"{len(ms)} matchs récents")
+    for m in ms:
+        if not m.get("url"):
+            log(f"[{m['match_id']}] pas de démo disponible")
+            continue
+        try:
+            process(m, keep="--keep-demos" in sys.argv)
+        except Exception as e:
+            log(f"[{m['match_id']}] ERREUR {e}")
+            traceback.print_exc()
+
+
+if __name__ == "__main__":
+    sys.stdout.reconfigure(encoding="utf-8")
+    main()

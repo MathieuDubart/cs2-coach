@@ -1,0 +1,19 @@
+{
+ "pos_x": -2308.0,
+ "pos_y": 2078.0,
+ "scale": 4.082077,
+ "levels": [
+  {
+   "key": "upper",
+   "name": "Étage principal",
+   "image": "maps/de_train.png",
+   "z_min": -50.0
+  },
+  {
+   "key": "lower",
+   "name": "Étage inférieur",
+   "image": "maps/de_train_lower.png",
+   "z_max": -50.0
+  }
+ ]
+}

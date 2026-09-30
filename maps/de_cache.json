@@ -1,0 +1,12 @@
+{
+ "pos_x": -2000.0,
+ "pos_y": 3250.0,
+ "scale": 5.5,
+ "levels": [
+  {
+   "key": "main",
+   "name": "Carte",
+   "image": "maps/de_cache.png"
+  }
+ ]
+}

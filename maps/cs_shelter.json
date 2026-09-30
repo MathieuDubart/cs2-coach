@@ -1,0 +1,12 @@
+{
+ "pos_x": -3448.0,
+ "pos_y": 3805.0,
+ "scale": 3.311857,
+ "levels": [
+  {
+   "key": "main",
+   "name": "Carte",
+   "image": "maps/cs_shelter.png"
+  }
+ ]
+}

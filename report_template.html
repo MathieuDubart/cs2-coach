@@ -1,0 +1,247 @@
+<title>Coach CS2 Patro</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: coaching log — overall priorities, trend table across matches (click a row), then the selected match's debrief with radar */
+:root{
+  --bg:#eef1f4; --panel:#ffffff; --ink:#18212b; --muted:#5b6876; --line:#d5dce3;
+  --ct:#2f6fb3; --t:#c98a1a; --good:#2e8b57; --bad:#c2413a; --warn:#b7791f; --chip:#e3e8ee; --radar-bg:#0e1319;
+  --f-display:"Barlow Condensed","Arial Narrow",sans-serif;
+  --f-body:"IBM Plex Sans",system-ui,sans-serif;
+  --f-mono:"JetBrains Mono",ui-monospace,Consolas,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#12171d; --panel:#1a2129; --ink:#e4e9ee; --muted:#93a0ad; --line:#2b3540;
+  --ct:#5b9be0; --t:#e0a63c; --good:#4cb87a; --bad:#e2665f; --warn:#d9a043; --chip:#232c36; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#12171d; --panel:#1a2129; --ink:#e4e9ee; --muted:#93a0ad; --line:#2b3540;
+  --ct:#5b9be0; --t:#e0a63c; --good:#4cb87a; --bad:#e2665f; --warn:#d9a043; --chip:#232c36; color-scheme:dark}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:15px;line-height:1.55;margin:0}
+.wrap{max-width:1180px;margin:0 auto;padding-inline:16px;padding-block:28px 60px;display:grid;gap:32px}
+h1,h2,h3{font-family:var(--f-display);text-wrap:balance;margin:0;letter-spacing:.01em}
+h1{font-size:clamp(34px,6vw,52px);font-weight:700;line-height:1}
+h2{font-size:26px;font-weight:600;text-transform:uppercase;letter-spacing:.04em}
+h3{font-size:21px;font-weight:600}
+p{margin:0}
+section{display:grid;gap:14px}
+.eyebrow{font-family:var(--f-mono);font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em}
+.num{font-family:var(--f-mono);font-variant-numeric:tabular-nums}
+header{display:flex;flex-wrap:wrap;gap:16px 32px;align-items:end;justify-content:space-between;border-bottom:2px solid var(--ink);padding-bottom:18px}
+.record{display:flex;gap:18px;font-family:var(--f-display);font-size:30px;font-weight:600}
+.record span small{display:block;font:500 11px var(--f-mono);color:var(--muted);text-transform:uppercase;letter-spacing:.08em}
+.lede{max-width:72ch;font-size:16px}
+.finding{background:var(--panel);border:1px solid var(--line);display:grid;grid-template-columns:56px 1fr;min-width:0}
+.finding .rank{font-family:var(--f-display);font-size:36px;font-weight:700;display:flex;justify-content:center;padding-top:14px;border-right:1px solid var(--line);color:var(--muted)}
+.finding.high .rank{color:var(--bad)} .finding.mid .rank{color:var(--warn)}
+.finding .body{padding:16px 20px;display:grid;gap:10px;min-width:0}
+.tag{display:inline-block;font-family:var(--f-mono);font-size:11px;text-transform:uppercase;letter-spacing:.08em;padding:2px 8px;border-radius:3px;background:var(--chip);color:var(--muted);margin-right:6px}
+.tag.T{color:var(--t)} .tag.CT{color:var(--ct)}
+ul,ol{margin:0;padding-left:20px} li{margin:4px 0}
+.fix{border-top:1px dashed var(--line);padding-top:10px;display:grid;gap:6px}
+.fix h4{margin:0;font-family:var(--f-mono);font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:var(--good)}
+.tbl{overflow-x:auto;border:1px solid var(--line);background:var(--panel)}
+table{border-collapse:collapse;width:100%;font-size:13.5px}
+th,td{padding:8px 10px;border-bottom:1px solid var(--line);text-align:left;white-space:nowrap}
+th{font-family:var(--f-mono);font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);font-weight:600;vertical-align:bottom}
+td.n,th.n{text-align:right;font-family:var(--f-mono);font-variant-numeric:tabular-nums}
+td.good{color:var(--good);font-weight:600} td.bad{color:var(--bad);font-weight:600}
+#trend tbody tr{cursor:pointer}
+#trend tbody tr:hover td{background:color-mix(in srgb,var(--ink) 4%,transparent)}
+#trend tbody tr[aria-selected="true"] td{background:color-mix(in srgb,var(--ct) 12%,transparent)}
+#trend tbody tr:focus-visible{outline:2px solid var(--ct);outline-offset:-2px}
+.res{font-family:var(--f-mono);font-size:11px;padding:2px 7px;border-radius:10px}
+.res.win{background:color-mix(in srgb,var(--good) 18%,transparent);color:var(--good)}
+.res.loss{background:color-mix(in srgb,var(--bad) 18%,transparent);color:var(--bad)}
+.res.draw{background:var(--chip);color:var(--muted)}
+.note{font-size:13px;color:var(--muted);max-width:80ch}
+.match-head{display:flex;flex-wrap:wrap;gap:10px 28px;align-items:baseline;border-bottom:1px solid var(--line);padding-bottom:12px}
+.match-head .score{font-family:var(--f-display);font-size:40px;font-weight:700}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:1px;background:var(--line);border:1px solid var(--line)}
+.stat{background:var(--panel);padding:12px 14px;display:grid;gap:2px}
+.stat>b{font-family:var(--f-display);font-size:28px;font-weight:600;line-height:1.1}
+.stat>span{font-size:12px;color:var(--muted)}
+.stage{display:grid;grid-template-columns:minmax(0,540px) minmax(0,1fr);gap:24px;align-items:start}
+@media (max-width:900px){.stage{grid-template-columns:1fr}}
+.radar-box{background:var(--radar-bg);border:1px solid var(--line);display:grid}
+.btns{display:flex;flex-wrap:wrap;gap:6px;padding:8px 10px;background:var(--panel);border-bottom:1px solid var(--line)}
+.btns button{font:500 13px var(--f-body);padding:5px 10px;border:1px solid var(--line);background:var(--bg);color:var(--ink);border-radius:3px;cursor:pointer}
+.btns button[aria-pressed="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.btns button:focus-visible{outline:2px solid var(--ct);outline-offset:2px}
+svg.radar{display:block;width:100%;height:auto}
+.caption{background:var(--panel);padding:10px 12px;font-size:13px;color:var(--muted);border-top:1px solid var(--line);display:grid;gap:6px}
+.legend{display:flex;flex-wrap:wrap;gap:12px;font-size:12px}
+.legend i{display:inline-block;width:12px;height:12px;border-radius:50%;vertical-align:-2px;margin-right:5px}
+.col{display:grid;gap:18px;min-width:0}
+.timeline-wrap{overflow-x:auto}
+.timeline{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(30px,1fr);gap:3px}
+.rd{background:var(--panel);border:1px solid var(--line);border-top:4px solid var(--muted);padding:4px 2px;text-align:center;font-family:var(--f-mono);font-size:11px;display:grid;gap:1px}
+.rd.T{border-top-color:var(--t)} .rd.CT{border-top-color:var(--ct)}
+.rd .w{color:var(--good);font-weight:600} .rd .l{color:var(--bad);font-weight:600}
+.pill{font-family:var(--f-mono);font-size:11px;padding:2px 7px;border-radius:10px}
+.pill.strong{background:color-mix(in srgb,var(--good) 18%,transparent);color:var(--good)}
+.pill.weak{background:color-mix(in srgb,var(--bad) 18%,transparent);color:var(--bad)}
+.pill.even{background:var(--chip);color:var(--muted)}
+.empty{background:var(--panel);border:1px dashed var(--line);padding:16px;color:var(--muted)}
+.zl{font:600 12px var(--f-display);fill:#fff;paint-order:stroke;stroke:#000;stroke-width:3px}
+.zs{font:500 10px var(--f-mono);fill:#fff;paint-order:stroke;stroke:#000;stroke-width:3px}
+</style>
+
+<div class="wrap">
+<header>
+  <div style="display:grid;gap:6px">
+    <span class="eyebrow" id="eyebrow"></span>
+    <h1>Coach CS2</h1>
+  </div>
+  <div class="record" id="record"></div>
+</header>
+
+<section id="overall"></section>
+
+<section>
+  <h2>Match par match</h2>
+  <p class="note">Clique sur un match pour ouvrir son débrief. Vert = bon niveau, rouge = à travailler.</p>
+  <div class="tbl"><table id="trend">
+    <thead><tr>
+      <th>Date</th><th>Carte</th><th>Mode</th><th>Score</th>
+      <th class="n">K-M-A</th><th class="n">ADR</th><th class="n">HS %</th><th class="n">KAST</th>
+      <th class="n">Morts<br>vengées</th><th class="n">Grenades<br>perdues</th><th class="n">1re balle<br>touche</th>
+      <th class="n">Tirs pistolet<br>en mouvement</th><th class="n">Écart<br>viseur</th><th class="n">Ouvertures<br>G-P</th>
+    </tr></thead>
+    <tbody></tbody>
+  </table></div>
+</section>
+
+<section id="match"></section>
+</div>
+
+<script>
+const D=__DATA__;
+const $=s=>document.querySelector(s);
+const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const MAPN=m=>{const n=m.replace(/^(de|cs|ar)_/,"");return n.charAt(0).toUpperCase()+n.slice(1)};
+const fmtDate=t=>new Date(t).toLocaleString("fr-FR",{weekday:"short",day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"});
+const RES={win:"Victoire",loss:"Défaite",draw:"Nul"};
+const sideRole=(m,s)=>m.hostage?(s==="T"?"défense":"attaque"):(s==="T"?"attaque":"défense");
+
+// header
+const ms=D.matches;
+$("#eyebrow").textContent=`${D.player} · ${ms.length} matchs récents · récupérés automatiquement chez Valve`;
+const rec={win:0,draw:0,loss:0};ms.forEach(m=>rec[m.result]++);
+$("#record").innerHTML=`<span>${rec.win}<small>victoires</small></span><span>${rec.draw}<small>nuls</small></span><span>${rec.loss}<small>défaites</small></span>`;
+
+function findings(list){return (list||[]).map((f,i)=>`<article class="finding ${f.level||""}"><div class="rank">${i+1}</div><div class="body">
+  <div>${(f.tags||[]).map(t=>`<span class="tag ${t==="T"||t==="CT"?t:""}">${esc(t)}</span>`).join("")}</div>
+  <h3>${esc(f.title)}</h3>${f.evidence?`<ul>${f.evidence.map(e=>`<li>${e}</li>`).join("")}</ul>`:""}
+  ${f.fix?`<div class="fix"><h4>Solution</h4><ol>${f.fix.map(e=>`<li>${e}</li>`).join("")}</ol></div>`:""}</div></article>`).join("")}
+
+if(D.overall){$("#overall").innerHTML=`<h2>Tes priorités sur les ${ms.length} derniers matchs</h2><p class="lede">${D.overall.summary||""}</p>${findings(D.overall.priorities)}`}
+else $("#overall").innerHTML=`<div class="empty">L'analyse d'ensemble apparaîtra ici une fois les notes du coach rédigées.</div>`;
+
+// trend table
+const cls=(v,good,bad,higher=true)=>v==null?"":(higher?(v>=good?"good":v<=bad?"bad":""):(v<=good?"good":v>=bad?"bad":""));
+const f1=v=>v==null?"—":String(v).replace(".",",");
+const tb=$("#trend tbody");
+ms.forEach((m,i)=>{const s=m.sum;const tr=document.createElement("tr");tr.tabIndex=0;tr.dataset.i=i;
+  tr.innerHTML=`<td>${fmtDate(m.time)}</td><td>${MAPN(m.map)}</td><td>${esc(m.mode)}</td>
+  <td><span class="res ${m.result}">${m.score.me}-${m.score.them}</span></td>
+  <td class="n">${s.kills}-${s.deaths}-${s.assists}</td>
+  <td class="n ${cls(s.adr,85,65)}">${f1(s.adr)}</td><td class="n ${cls(s.hs,55,35)}">${f1(s.hs)}</td>
+  <td class="n ${cls(s.kast,72,62)}">${f1(s.kast)}</td><td class="n ${cls(s.traded_pct,25,10)}">${s.traded_pct==null?"—":f1(s.traded_pct)+" %"}</td>
+  <td class="n ${cls(s.nades_unused,4,10,false)}">${s.nades_unused}</td><td class="n ${cls(s.first_bullet,30,20)}">${s.first_bullet==null?"—":f1(s.first_bullet)+" %"}</td>
+  <td class="n ${cls(s.pistol_moving,25,45,false)}">${s.pistol_moving==null?"—":f1(s.pistol_moving)+" %"}</td>
+  <td class="n ${cls(s.xhair,4,8,false)}">${s.xhair==null?"—":f1(s.xhair)+"°"}</td><td class="n">${s.open_won}-${s.open_lost}</td>`;
+  tr.addEventListener("click",()=>select(i));tr.addEventListener("keydown",e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();select(i)}});
+  tb.appendChild(tr)});
+
+// match detail
+const NS="http://www.w3.org/2000/svg";
+function el(t,a,p){const e=document.createElementNS(NS,t);for(const k in a)e.setAttribute(k,a[k]);p.appendChild(e);return e}
+let cur=null, st={layer:"control",level:null,side:"all"};
+function select(i){
+  cur=ms[i];st={layer:"control",level:cur.map_data.levels[0].key,side:"all"};
+  tb.querySelectorAll("tr").forEach(r=>r.setAttribute("aria-selected",r.dataset.i==i));
+  const m=cur,s=m.sum,md=m.map_data;
+  const lv=md.levels.length>1?`<div class="btns" role="group" aria-label="Étage">${md.levels.map(l=>`<button type="button" data-level="${l.key}" aria-pressed="${l.key===st.level}">${esc(l.name)}</button>`).join("")}</div>`:"";
+  $("#match").innerHTML=`
+  <div class="match-head"><span class="score">${m.score.me}-${m.score.them}</span>
+    <h2>${MAPN(m.map)} · ${esc(m.mode)}</h2><span class="eyebrow">${fmtDate(m.time)} · ${m.rounds} rounds · ${RES[m.result]}${m.hostage?" · carte à otages : les CT attaquent":""}</span></div>
+  <div class="stats">
+    <div class="stat"><b class="num">${s.kills}/${s.deaths}/${s.assists}</b><span>K / M / A</span></div>
+    <div class="stat"><b class="num">${f1(s.adr)}</b><span>ADR</span></div>
+    <div class="stat"><b class="num">${f1(s.kast)} %</b><span>KAST</span></div>
+    <div class="stat"><b class="num">${s.traded_pct==null?"—":f1(s.traded_pct)+" %"}</b><span>de tes morts vengées</span></div>
+    <div class="stat"><b class="num">${s.nades_unused}</b><span>grenades mortes avec toi</span></div>
+    <div class="stat"><b class="num">${s.clutches_won}/${s.clutches}</b><span>clutchs gagnés</span></div>
+  </div>
+  ${m.notes?`<p class="lede">${m.notes.summary||""}</p>${findings(m.notes.priorities)}`:`<div class="empty">Pas encore de notes du coach pour ce match.</div>`}
+  <h3>Round par round</h3>
+  <div class="timeline-wrap"><div class="timeline">${m.per_round.map(r=>`<div class="rd ${r.side}" title="Round ${r.round} (${r.side}, ${sideRole(m,r.side)}) : ${r.won?"gagné":"perdu"}, ${r.kills} kill(s), ${r.deaths} mort(s), achat ${r.my_buy} / équipe ${r.team_buy}"><span>${r.round}</span><span class="${r.won?"w":"l"}">${r.won?"V":"D"}</span><span>${r.kills}-${r.deaths}</span></div>`).join("")}</div></div>
+  <div class="stage">
+    <div class="radar-box">
+      <div class="btns" role="group" aria-label="Calque">
+        <button type="button" data-layer="control" aria-pressed="true">Contrôle des zones</button>
+        <button type="button" data-layer="mine" aria-pressed="false">Tes kills et morts</button>
+        <button type="button" data-layer="heatT" aria-pressed="false">Ta présence T</button>
+        <button type="button" data-layer="heatCT" aria-pressed="false">Ta présence CT</button>
+        <button type="button" data-layer="open" aria-pressed="false">Premiers duels</button>
+      </div>
+      ${lv}
+      <div class="btns" id="sidef" role="group" aria-label="Camp" hidden>
+        <button type="button" data-side="all" aria-pressed="true">Les deux camps</button><button type="button" data-side="T" aria-pressed="false">En T</button><button type="button" data-side="CT" aria-pressed="false">En CT</button>
+      </div>
+      <svg class="radar" viewBox="${(D.viewboxes[m.map]||[0,0,1024,1024]).join(" ")}" role="img" aria-label="Radar"><image id="rimg" x="0" y="0" width="1024" height="1024"></image><g id="ov"></g></svg>
+      <div class="caption" id="cap"></div>
+    </div>
+    <div class="col"><h3>Zones de la carte</h3><div class="tbl"><table id="zt"><thead><tr><th>Zone</th><th class="n">Duels</th><th class="n">K/D T</th><th class="n">K/D CT</th><th class="n">Toi</th></tr></thead><tbody></tbody></table></div>
+    <p class="note">K/D d'un camp dans une zone = kills faits depuis la zone ÷ morts dans la zone. « Toi » = tes kills-morts dans la zone.${md.zone_mode==="callouts"?" Noms de zones du jeu (en anglais).":""}</p></div>
+  </div>`;
+  $("#match").querySelectorAll("[data-layer]").forEach(b=>b.onclick=()=>{st.layer=b.dataset.layer;press("[data-layer]",b);draw()});
+  $("#match").querySelectorAll("[data-level]").forEach(b=>b.onclick=()=>{st.level=b.dataset.level;press("[data-level]",b);draw()});
+  $("#match").querySelectorAll("[data-side]").forEach(b=>b.onclick=()=>{st.side=b.dataset.side;press("[data-side]",b);draw()});
+  const myZ={};["T","CT"].forEach(sd=>Object.entries(md.me[sd]?.zones||{}).forEach(([k,v])=>{const o=myZ[k]||(myZ[k]={k:0,d:0});o.k+=v.kills;o.d+=v.deaths}));
+  const kd=v=>v==null?"—":v.toFixed(2).replace(".",",");
+  const pill=v=>v==null?"":v>=1.4?' <span class="pill strong">forte</span>':v<=0.75?' <span class="pill weak">faible</span>':"";
+  $("#zt tbody").innerHTML=md.zones.map(z=>({z,g:md.general[z.key]})).filter(x=>x.g&&x.g.duels).sort((a,b)=>b.g.duels-a.g.duels).slice(0,18)
+    .map(({z,g})=>`<tr><td>${esc(z.name)}</td><td class="n">${g.duels}</td><td class="n">${kd(g.T.kd)}${pill(g.T.kd)}</td><td class="n">${kd(g.CT.kd)}${pill(g.CT.kd)}</td><td class="n">${myZ[z.key]?myZ[z.key].k+"-"+myZ[z.key].d:"—"}</td></tr>`).join("");
+  draw();
+}
+function press(sel,b){$("#match").querySelectorAll(sel).forEach(x=>x.setAttribute("aria-pressed",x===b))}
+const CAPS={
+ control:["Taille = nombre de duels dans la zone. Couleur = camp qui les gagne.",'<span><i style="background:var(--t)"></i>T gagnent ≥ 60 %</span><span><i style="background:var(--ct)"></i>CT gagnent ≥ 60 %</span><span><i style="background:#8a96a3"></i>disputé</span>'],
+ mine:["Rond vert = ta position quand tu tues, trait vers la victime. Croix rouge = ta position quand tu meurs, pointillés depuis ton tueur. Le chiffre est le round.",'<span><i style="background:var(--good)"></i>ton kill</span><span><i style="background:var(--bad)"></i>ta mort</span>'],
+ heatT:["Où tu passes ton temps en T.",'<span><i style="background:var(--t)"></i>présence</span>'],
+ heatCT:["Où tu passes ton temps en CT.",'<span><i style="background:var(--ct)"></i>présence</span>'],
+ open:["Premier kill de chaque round, tous joueurs : trait du tueur vers la victime, couleur du camp du tueur.",'<span><i style="background:var(--t)"></i>ouverture T</span><span><i style="background:var(--ct)"></i>ouverture CT</span>'],
+};
+function draw(){
+  const md=cur.map_data, L=st.level, ov=$("#ov");
+  $("#rimg").setAttribute("href",D.radars[`${cur.map}:${L}`]||"");
+  $("#sidef").hidden=st.layer!=="mine";
+  $("#cap").innerHTML=`<span>${CAPS[st.layer][0]}</span><div class="legend">${CAPS[st.layer][1]}</div>`;
+  ov.replaceChildren();
+  const zones=md.zones.filter(z=>z.level===L);
+  if(st.layer==="control") zones.forEach(z=>{const g=md.general[z.key];if(!g||!g.duels)return;
+    const r=6+Math.sqrt(g.duels)*4,tw=g.t_win_pct,col=tw>=60?"var(--t)":tw<=40?"var(--ct)":"#8a96a3";
+    const c=el("circle",{cx:z.px[0],cy:z.px[1],r,style:`fill:${col};fill-opacity:.72;stroke:#fff;stroke-width:1.5`},ov);
+    const t=document.createElementNS(NS,"title");t.textContent=`${z.name} : ${g.duels} duels, T gagnent ${tw} %`;c.appendChild(t);
+    el("text",{x:z.px[0],y:z.px[1]-r-3,"text-anchor":"middle",class:"zl"},ov).textContent=z.name;});
+  if(st.layer==="heatT"||st.layer==="heatCT"){const cells=(md.heat[st.layer==="heatT"?"me_T":"me_CT"]||{})[L]||[],col=st.layer==="heatT"?"var(--t)":"var(--ct)";
+    cells.forEach(([x,y,v])=>el("rect",{x,y,width:24,height:24,style:`fill:${col};fill-opacity:${(0.12+0.8*Math.sqrt(v)).toFixed(2)}`},ov));
+    zones.forEach(z=>el("text",{x:z.px[0],y:z.px[1]+4,"text-anchor":"middle",class:"zs"},ov).textContent=z.name);}
+  if(st.layer==="open") md.openings.filter(k=>(k.a_level||L)===L||(k.v_level||L)===L).forEach(k=>{const col=k.side==="T"?"var(--t)":"var(--ct)";
+    el("line",{x1:k.a[0],y1:k.a[1],x2:k.v[0],y2:k.v[1],style:`stroke:${col};stroke-width:2.5`},ov);
+    el("circle",{cx:k.a[0],cy:k.a[1],r:5,style:`fill:${col};stroke:#fff`},ov);el("circle",{cx:k.v[0],cy:k.v[1],r:3,style:"fill:#fff"},ov);});
+  if(st.layer==="mine"){const ok=k=>(st.side==="all"||k.side===st.side);
+    md.my_kills.filter(k=>ok(k)&&(k.level||L)===L).forEach(k=>{el("line",{x1:k.px[0],y1:k.px[1],x2:k.victim_px[0],y2:k.victim_px[1],style:"stroke:var(--good);stroke-width:2"},ov);
+      const c=el("circle",{cx:k.px[0],cy:k.px[1],r:7,style:"fill:var(--good);stroke:#fff;stroke-width:1.5"},ov);
+      const t=document.createElementNS(NS,"title");t.textContent=`Round ${k.round} (${k.side}) : kill depuis ${k.zone} à ${k.t} s`;c.appendChild(t);
+      el("text",{x:k.px[0]+9,y:k.px[1]+4,class:"zs"},ov).textContent=k.round;});
+    md.my_deaths.filter(k=>ok(k)&&(k.level||L)===L).forEach(k=>{el("line",{x1:k.killer_px[0],y1:k.killer_px[1],x2:k.px[0],y2:k.px[1],style:"stroke:var(--bad);stroke-width:2;stroke-dasharray:5 4"},ov);
+      const g=el("g",{},ov);const t=document.createElementNS(NS,"title");t.textContent=`Round ${k.round} (${k.side}) : mort en ${k.zone} à ${k.t} s, tué depuis ${k.killer_zone} (${k.weapon})`;g.appendChild(t);
+      el("path",{d:`M${k.px[0]-6} ${k.px[1]-6}L${k.px[0]+6} ${k.px[1]+6}M${k.px[0]+6} ${k.px[1]-6}L${k.px[0]-6} ${k.px[1]+6}`,style:"stroke:var(--bad);stroke-width:3.5;stroke-linecap:round"},g);
+      el("text",{x:k.px[0]+9,y:k.px[1]+4,class:"zs",style:"fill:#ffb3ae"},ov).textContent=k.round;});}
+}
+if(ms.length)select(0);
+</script>
