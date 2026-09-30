@@ -85,6 +85,12 @@ class Handler(BaseHTTPRequestHandler):
             # standards mode (the claude.ai host adds this wrapper itself when publishing)
             head = '<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head><body style="margin:0">'
             return self.send(200, head + build_app.shell_html(load_index(), local=True) + "</body></html>", "text/html; charset=utf-8")
+        if u.path == "/api/gsi/state":
+            import gsi
+            return self.send(200, gsi.state())
+        if u.path == "/api/gsi/status":
+            import gsi
+            return self.send(200, gsi.status())
         if u.path == "/api/team/suggest":
             import team
             sid = (q.get("sid") or [""])[0]
@@ -149,6 +155,15 @@ class Handler(BaseHTTPRequestHandler):
             body = json.loads(self.rfile.read(n) or b"{}")
         except (ValueError, json.JSONDecodeError):
             return self.send(400, {"error": "requête invalide"})
+        if u.path == "/api/gsi":  # CS2 Game State Integration: the game itself, many times per round
+            import gsi
+            return self.send(200 if gsi.update(body) else 403, {})
+        if u.path in ("/api/gsi/install", "/api/gsi/uninstall"):
+            import gsi
+            try:
+                return self.send(200, gsi.install(PORT) if u.path.endswith("install") and not u.path.endswith("uninstall") else gsi.uninstall())
+            except (ValueError, OSError) as e:
+                return self.send(400, {"error": str(e)})
         sid = str(body.get("sid") or "")
         if not sid.isdigit():
             return self.send(400, {"error": "joueur manquant"})

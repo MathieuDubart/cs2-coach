@@ -297,4 +297,10 @@ def build(steamid, adv, cross=None, deep=None, light=False):
                 mid_rows[st["match"]["match_id"]] = r.iloc[0].to_dict()
     plan["kpis"] = kpis(sid, stats, mid_rows)
     plan["experiments"] = experiments.report(sid, adv, mb, wp, ctx, cross)
+    try:
+        import review
+        plan["review"] = review.build(sid, stats, mid_rows, ctx, plan["experiments"], adv)
+    except Exception as e:  # the review is a bonus: never block the plan
+        plan["review"] = None
+        print("bilan indisponible :", e)
     return plan

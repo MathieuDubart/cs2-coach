@@ -280,31 +280,70 @@ pre.cli{background:var(--radar-bg);color:#dfe6ec;padding:12px 14px;overflow-x:au
 .insights.wide{grid-template-columns:repeat(auto-fill,minmax(390px,1fr));align-items:start}
 .insights.wide .card{align-content:start}
 .insights>.card{align-content:start}
+/* v2 navigation: moments of use */
+.subnav{max-width:1400px;margin:0 auto;padding:0 16px 8px;display:flex;flex-wrap:wrap;gap:4px}
+.subnav a{font:500 13px var(--f-body);color:var(--muted);text-decoration:none;padding:4px 10px;border-radius:12px;border:1px solid var(--line)}
+.subnav a[aria-current="page"]{background:var(--chip);color:var(--ink);border-color:var(--ink)}
+.gear{font-size:20px;text-decoration:none;color:var(--muted);padding:2px 8px;border-radius:3px}
+.gear[aria-current="page"]{background:var(--ink);color:var(--bg)}
+.whochip{font:500 12.5px var(--f-body);color:var(--muted);display:flex;gap:6px;align-items:center}
+.whochip button{font:500 12px var(--f-body);background:none;border:1px solid var(--line);color:var(--ct);border-radius:10px;padding:1px 8px;cursor:pointer}
+/* en partie */
+.live{display:flex;flex-wrap:wrap;gap:6px 16px;align-items:center;background:var(--panel);border:1px solid var(--line);border-left:5px solid var(--muted);padding:8px 14px;font-size:14px}
+.live.on{border-left-color:var(--good)}
+.live .dot{width:10px;height:10px;border-radius:50%;background:var(--muted);display:inline-block}
+.live.on .dot{background:var(--good);box-shadow:0 0 0 4px color-mix(in srgb,var(--good) 25%,transparent)}
+.live b{font-family:var(--f-display);font-size:18px}
+.live .tip{font-weight:600;color:var(--ink)}
+.ig{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.1fr) minmax(0,1fr);gap:16px;align-items:start}
+@media (max-width:1100px){.ig{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}.ig .ig-radar{grid-column:1/-1;order:-1}}
+@media (max-width:700px){.ig{grid-template-columns:1fr}}
+.igcol{display:grid;gap:10px;align-content:start;min-width:0}
+.igcol h3{font-size:22px;text-transform:uppercase;letter-spacing:.04em}
+.igcol h3.good{color:var(--good)} .igcol h3.bad{color:var(--bad)} .igcol h3.warn{color:var(--warn)}
+.big-list{list-style:none;padding:0;margin:0;display:grid;gap:8px}
+.big-list li{background:var(--panel);border:1px solid var(--line);border-left:5px solid var(--muted);padding:9px 12px;font-size:15.5px;line-height:1.4;margin:0}
+.big-list li.exploit,.big-list li.good{border-left-color:var(--good)} .big-list li.avoid,.big-list li.bad{border-left-color:var(--bad)}
+.big-list li.try{border-left-color:var(--flash)} .big-list li.timing{border-left-color:var(--warn)} .big-list li.coach,.big-list li.ct{border-left-color:var(--ct)}
+.reminders{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:10px}
+.reminders div{background:var(--ink);color:var(--bg);padding:10px 14px;border-radius:2px;font-size:14px}
+.reminders div b{display:block;font:600 11px var(--f-mono);text-transform:uppercase;letter-spacing:.08em;opacity:.7;margin-bottom:2px}
+body.focus .bar,body.focus .jobpanel{display:none}
+body.focus main{max-width:none;padding:10px 14px}
+body.focus .big-list li{font-size:17px}
+.focus-exit{position:fixed;top:8px;right:10px;z-index:9;font:600 12px var(--f-body);padding:4px 10px;border:1px solid var(--line);background:var(--panel);color:var(--ink);border-radius:12px;cursor:pointer;display:none}
+body.focus .focus-exit{display:block}
+/* bilan */
+.chg{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px;align-items:start}
+.chg article{background:var(--panel);border:1px solid var(--line);border-top:4px solid var(--muted);padding:12px 14px;display:grid;gap:6px}
+.chg article.better{border-top-color:var(--good)} .chg article.worse{border-top-color:var(--bad)}
+.chg .ba{font-family:var(--f-display);font-size:28px;font-weight:600}
+.chg .ba small{font:500 12px var(--f-mono);color:var(--muted)}
+.welcome{max-width:760px;display:grid;gap:14px}
+.welcome .search{max-width:none}
 </style>
 
 <div class="bar"><div class="bar-in">
   <span class="brand">Coach CS2</span>
   <nav aria-label="Vues">
-    <a href="#avant" data-view="avant">Avant la game</a>
-    <a href="#synthese" data-view="synthese">Synthèse</a>
-    <a href="#routine" data-view="routine">Routine</a>
-    <a href="#mid" data-view="mid">Mi-round</a>
-    <a href="#prog" data-view="prog">Progresser</a>
+    <a href="#partie" data-view="partie">En partie</a>
+    <a href="#bilan" data-view="bilan">Bilan</a>
     <a href="#equipe" data-view="equipe">Équipe</a>
-    <a href="#matchs" data-view="matchs">Matchs</a>
-    <a href="#cartes" data-view="cartes">Cartes</a>
-    <a href="#joueurs" data-view="joueurs">Joueurs</a>
-    <a href="#pros" data-view="pros">Pros</a>
-    <a href="#steam" data-view="steam">Steam</a>
+    <a href="#joueurs" data-view="joueurs">Explorer</a>
   </nav>
+  <span class="whochip" id="whochip"></span>
   <form class="search" id="search" role="search" autocomplete="off">
     <input id="q" name="q" type="search" placeholder="Lien Steam, SteamID64, pseudo ou code de partage CSGO-…" aria-label="Rechercher un joueur : lien de profil Steam, SteamID64 ou pseudo">
     <button type="submit" id="qbtn">Analyser</button>
   </form>
-</div></div>
+  <a href="#steam" class="gear" data-view="steam" aria-label="Réglages" title="Réglages : Steam, détection de la partie">⚙</a>
+</div><div class="subnav" id="subnav" hidden></div></div>
+<button type="button" class="focus-exit" id="focusx">Quitter le mode 2e écran</button>
 <div class="jobpanel" id="job" hidden><div class="in" role="status" aria-live="polite"></div></div>
 <main>
-  <section class="view" id="v-avant"></section>
+  <section class="view" id="v-partie"></section>
+  <section class="view" id="v-bilan" hidden></section>
+  <section class="view" id="v-avant" hidden></section>
   <section class="view" id="v-synthese" hidden></section>
   <section class="view" id="v-routine" hidden></section>
   <section class="view" id="v-mid" hidden></section>
@@ -903,15 +942,20 @@ function midCard(p){const M=(p.advice.plan||{}).mid;if(!M||(!M.weak.length&&!M.s
 let steamForget=false;
 async function renderSteam(){
   const v=$("#v-steam");
-  const head=`<div class="head"><div style="display:grid;gap:4px"><span class="eyebrow">Connexion facultative · tout reste sur ce PC</span><h2>Compte Steam</h2></div></div>`;
+  const head=`<div class="head"><div style="display:grid;gap:4px"><span class="eyebrow">Tout reste sur ce PC</span><h2>Réglages</h2></div></div>`;
   if(!D.local){v.innerHTML=head+`<div class="empty">La connexion Steam se fait dans l'app locale : double-clic sur <code>Coach CS2.bat</code>, puis onglet « Steam ».</div>`;return}
   v.innerHTML=head+`<div class="empty"><span class="spin" aria-hidden="true"></span>Lecture de ta connexion Steam…</div>`;
   let st;try{st=await (await fetch("/api/steam/status"+(D.own?`?sid=${D.own}`:""))).json()}catch(e){v.innerHTML=head+`<div class="empty">Le serveur local ne répond pas : relance « Coach CS2.bat ».</div>`;return}
+  let gs=null;try{gs=await (await fetch("/api/gsi/status")).json()}catch(e){}
   const flag=new URLSearchParams(location.search).get("steam");
   const ok=b=>b?`<span class="pill strong">fait</span>`:`<span class="pill">à faire</span>`;
   const pt=st.playtime,L=st.links||{};
   v.innerHTML=head+`
   ${flag==="ok"?`<div class="jobpanel" style="padding:0"><div class="in ok">Connexion Steam confirmée par Steam.</div></div>`:flag==="refus"?`<div class="jobpanel" style="padding:0"><div class="in err">Steam n'a pas confirmé la connexion. Réessaie.</div></div>`:""}
+  <article class="card"><h3>Détection de la partie ${ok(gs&&gs.installed)}</h3>
+   <p>CS2 envoie à l'app la carte, ton camp, le round, le score et ton argent : l'écran « En partie » suit ta game tout seul et te donne le bon conseil au bon moment (achat pendant le freeze time, bombe posée, fin de round).</p>
+   <p class="note">C'est le Game State Integration de Valve, la fonction officielle qu'utilisent les HUD et les claviers RGB (Logitech en a déjà un sur ce PC). Pendant une partie, CS2 n'envoie que tes propres infos, jamais celles des adversaires.${gs&&gs.path?` Fichier : <code>${esc(gs.path)}</code>.`:""}${gs&&gs.installed?(gs.receiving?" CS2 envoie bien ses données.":" Relance CS2 pour qu'il le prenne en compte."):""}</p>
+   <div class="btns">${gs&&gs.installed?`<button type="button" id="gsi-off">Désactiver la détection</button>`:`<button type="button" class="primary" id="gsi-on" ${gs&&gs.cfg_dir?"":"disabled"}>Activer la détection</button>`}${gs&&!gs.cfg_dir?`<span class="note">Dossier de CS2 introuvable sur ce PC.</span>`:""}</div></article>
   <div class="insights">
    <article class="card"><h3>1. Qui es-tu ? ${ok(st.login)}</h3>
     ${st.login?`<p>Connecté avec Steam : <b>${esc(st.login.name||st.login.steamid)}</b> <span class="num note">${esc(st.login.steamid)}</span>, le ${fmtDate(st.login.time)}. Ce compte est ton profil par défaut dans l'app.</p>`
@@ -943,6 +987,9 @@ async function renderSteam(){
    <p class="note">Tes codes restent dans <code>out/settings.json</code> sur ce PC : ce fichier n'est pas versionné et les codes ne partent que vers l'API officielle de Steam. Tu peux tout retirer à tout moment.</p>
    <div class="btns"><button type="button" id="st-forget">${steamForget?"Confirmer : retirer la connexion et les codes":"Tout déconnecter"}</button></div></article>`;
   const msg=$("#st-msg",v),sid=st.steamid;
+  const gon=$("#gsi-on",v),goff=$("#gsi-off",v);
+  if(gon)gon.onclick=async()=>{gon.disabled=true;try{gsiStatus=await api("/api/gsi/install",{});renderSteam()}catch(e){msg.textContent=e.message;gon.disabled=false}};
+  if(goff)goff.onclick=async()=>{goff.disabled=true;try{gsiStatus=await api("/api/gsi/uninstall",{});renderSteam()}catch(e){msg.textContent=e.message;goff.disabled=false}};
   $("#st-save",v).onclick=async()=>{const b=$("#st-save",v);b.disabled=true;msg.textContent="Vérification auprès de Steam…";
     try{const j=await api("/api/steam/credentials",{sid,api_key:$("#st-key",v).value.trim(),auth_code:$("#st-auth",v).value.trim(),known_code:$("#st-known",v).value.trim()});
       msg.textContent=j.saved.length?`Enregistré : ${j.saved.join(" et ")}.`:"Rien de nouveau à enregistrer.";setTimeout(renderSteam,900)}
@@ -1084,6 +1131,135 @@ function teamPlanView(host){
    <article class="card"><h3>Déclencheurs en ${teamSide}</h3><ul>${(T.playbook||[]).filter(x=>x.side===teamSide||x.side==="tous").slice(0,5).map(x=>`<li><b>Si ${esc(lc(x.if))}</b> → ${esc(x.then)}</li>`).join("")}</ul>${P.videos&&P.videos.length?`<p class="note">Vidéos sur ${MAPN(teamMap)} :</p>${srcLinks(P.videos,true)}`:""}</article>`;
 }
 
+// ---------- navigation v2: two main moments (during the game, cold review) ----------
+const GROUP={partie:"partie",bilan:"bilan",matchs:"bilan",cartes:"bilan",mid:"bilan",prog:"bilan",synthese:"bilan",routine:"bilan",equipe:"equipe",joueurs:"joueurs",pros:"joueurs",steam:"steam"};
+const SUB={bilan:[["bilan","Résumé"],["matchs","Matchs"],["cartes","Cartes"],["mid","Mi-round"],["prog","Progression"],["synthese","Analyse complète"],["routine","Routine"]],joueurs:[["joueurs","Joueurs"],["pros","Pros"]]};
+const PLAYER_VIEWS=["partie","bilan","matchs","cartes","mid","prog","synthese","routine"];
+function navUpdate(view){const g=GROUP[view]||view;
+  $$("nav a, .gear").forEach(a=>{if(a.dataset.view===g)a.setAttribute("aria-current","page");else a.removeAttribute("aria-current")});
+  const sn=$("#subnav"),items=SUB[g];sn.hidden=!items;
+  if(items)sn.innerHTML=items.map(([k,t])=>`<a href="#${k}" ${k===view?'aria-current="page"':""}>${t}</a>`).join("");
+  const w=$("#whochip"),p=S.player&&D.players[S.player];
+  w.innerHTML=p&&PLAYER_VIEWS.includes(view)?`Profil : <b>${esc(p.name)}</b>${D.own&&S.player!==D.own&&IDX()[D.own]?` <button type="button" id="backme">Revenir à mon profil</button>`:""}`:"";
+  const bm=$("#backme");if(bm)bm.onclick=()=>setPlayer(D.own)}
+function welcome(v){const own=D.own;
+  v.innerHTML=`<div class="welcome"><h2>Bienvenue sur Coach CS2</h2>
+   <p style="font-size:16px">Le coach analyse tes matchs de CS2 et te donne deux choses :</p>
+   <ul style="font-size:15px"><li><b>En partie</b> : une fiche à garder sur un 2e écran, qui suit ta game (tes forces sur la carte, ce qu'il faut éviter, tes réflexes, tes rotations).</li>
+     <li><b>Bilan</b> : après ta session ou le lendemain, ce qui change, pourquoi, ce que tu testes et ce que tu pourrais tester.</li></ul>
+   ${D.local&&own?`<p><button type="button" class="primary" id="w-own">Analyser le compte Steam de ce PC</button></p>`:""}
+   <form class="search" id="w-form" autocomplete="off"><input id="w-q" type="search" placeholder="Ton lien de profil Steam ou ton SteamID64" aria-label="Ton lien de profil Steam"><button type="submit">Analyser</button></form>
+   <p class="note">${D.local?"L'analyse se fait sur ce PC (Steam ouvert, CS2 fermé pour récupérer tes derniers matchs) : un aperçu en quelques secondes, le profil complet en quelques minutes.":"L'analyse se fait dans l'app locale : double-clic sur Coach CS2.bat."} Tu peux aussi regarder n'importe quel joueur dans <a href="#joueurs" style="color:var(--ct)">Explorer</a>.</p></div>`;
+  const wo=$("#w-own",v);if(wo)wo.onclick=()=>{partialShown=null;startAnalysis(own)};
+  $("#w-form",v).onsubmit=e=>{e.preventDefault();const q=$("#w-q",v).value.trim();if(!q)return;$("#q").value=q;$("#search").requestSubmit()}}
+
+// ---------- view: en partie (2nd screen, follows the game) ----------
+let gsiLast=null,gsiTimer=null,gsiStatus=null,partieManual=false;
+function buyTip(g,p){if(g.money==null||!g.side)return "";
+  if(g.round===1||g.round===13){const ps=(((p.advice.plan||{}).weapons||{}).suggestions)||[];
+    return ps.some(s=>s.kind==="pistol_strong")?"Round pistolet : tes duels au pistolet sont une force, prends l'ouverture.":"Round pistolet : achetez ensemble et jouez groupés."}
+  const full=g.side==="CT"?4200:4000,bonus=[1400,1900,2400,2900,3400][Math.min(g.losses||0,4)],eur=x=>x.toLocaleString("fr-FR")+" $";
+  if(g.money>=full)return `Full buy possible (${eur(g.money)}).`;
+  if(g.money+bonus>=full)return `Eco conseillé : même en perdant ce round, tu auras ${eur(g.money+bonus)} au suivant.`;
+  return `Force seulement si toute l'équipe force (${eur(g.money)}).`}
+function phaseTip(g,p){if(g.round_phase==="freezetime")return buyTip(g,p);if(g.round_phase==="over")return "5 s : pourquoi ce round ? Puis une longue expiration.";
+  if(g.bomb==="planted")return g.side==="CT"?"Bombe posée : retake groupé, ou sauve si tu es seul contre 3.":"Bombe posée : tirs croisés, fais venir les CT.";return ""}
+const gsiFresh=()=>gsiLast&&gsiLast.age!=null&&gsiLast.age<75&&gsiLast.map;
+function liveStrip(p){if(!D.local)return "";const g=gsiLast;
+  if(gsiFresh())return `<div class="live on" role="status"><span class="dot" aria-hidden="true"></span><b>${MAPN(g.map)}</b><span>${g.side?`${g.side} · ${roleOf(g.map,g.side)}`:"en spectateur"}</span>
+    <span>Round ${g.round??"—"}${g.score_ct!=null?` · CT ${g.score_ct} - ${g.score_t} T`:""}</span>${g.money!=null?`<span>${g.money.toLocaleString("fr-FR")} $</span>`:""}
+    <span class="tip">${esc(phaseTip(g,p))}</span>${partieManual?`<button type="button" class="close" id="follow">Suivre la partie</button>`:""}</div>`;
+  const st=gsiStatus;
+  return `<div class="live"><span class="dot" aria-hidden="true"></span>${st&&st.installed?"<span>Détection active : la fiche suivra ta partie dès que tu seras en jeu.</span>"
+    :`<span>Choisis ta carte et ton camp, ou <a href="#steam" style="color:var(--ct)">active la détection automatique</a> : la fiche suivra ta partie toute seule.</span>`}</div>`}
+async function gsiPoll(){clearTimeout(gsiTimer);if(!D.local||S.view!=="partie")return;
+  try{const g=await (await fetch("/api/gsi/state")).json();const sig=x=>x?[x.map,x.side,x.round,x.round_phase,x.money,x.bomb,x.age!=null&&x.age<75].join("|"):"";
+    const before=sig(gsiLast);gsiLast=g&&Object.keys(g).length?g:null;if(sig(gsiLast)!==before&&S.view==="partie"&&S.player&&D.players[S.player])renderPartie()}catch(e){}
+  gsiTimer=setTimeout(gsiPoll,2000)}
+function renderPartie(){
+  const p=P(),v=$("#v-partie"),maps=mapsOf(p),PL=p.advice.plan||{},live=gsiFresh();
+  if(live&&!partieManual){S.map=gsiLast.map;if(gsiLast.side)S.side=gsiLast.side}
+  if(!S.map||(!maps.some(m=>m.map===S.map)&&!(live&&!partieManual)))S.map=maps[0]?.map||null;
+  const m=S.map?crossMap(p,S.map):null;
+  if(m&&!m.levels.some(l=>l.key===S.level))S.level=m.levels[0].key;
+  const plan=((p.advice.maps||{})[S.map]||{})[S.side],coach=((p.cross_notes||{})[S.map]||{})[S.side],bl=plan?plan.bullets:[];
+  const cAvoid=coach?coach.plan.filter(t=>/[ée]vite/i.test(t)):[],cGood=coach?coach.plan.filter(t=>!/[ée]vite/i.test(t)):[];
+  const good=bl.filter(b=>b.kind==="exploit"),bad=bl.filter(b=>b.kind==="avoid"),tries=bl.filter(b=>b.kind==="try"),times=bl.filter(b=>b.kind==="timing");
+  const strong=((PL.mid||{}).strong||[]).slice(0,2),rules=(p.advice.rules||[]).slice(0,2);
+  const reflex=(PL.playbook||[]).filter(x=>x.side===S.side||x.side==="tous").slice().sort((a,b)=>(b.prio||0)-(a.prio||0)).slice(0,3);
+  const rot=S.side==="CT"?Object.entries((PL.routes||{})[S.map]||{}).sort().map(([s,r])=>{const b=r.pro.best||r.base.best;return b?{site:s,route:b.route,travel:b.travel,died:b.died,who:r.pro.best?"pros":"joueurs de la base"}:null}).filter(Boolean):[];
+  const exps=((PL.experiments||{}).experiments||[]).filter(e=>e.status==="active"),recs=((PL.context||{}).recs||[]).filter(r=>r.kind==="stop"||r.kind==="tilt");
+  const Sd=m?m.sides[S.side]:null,focus=document.body.classList.contains("focus");
+  v.innerHTML=`${liveStrip(p)}
+   <div class="pg-top">
+    <div class="chips" role="group" aria-label="Carte">${maps.map(x=>`<button type="button" data-map="${x.map}" aria-pressed="${x.map===S.map}">${MAPN(x.map)}<small>${x.n}</small></button>`).join("")}${S.map&&!maps.some(x=>x.map===S.map)?`<button type="button" aria-pressed="true">${MAPN(S.map)}<small>0</small></button>`:""}</div>
+    <div class="btns side big" role="group" aria-label="Camp"><button type="button" data-side="T" aria-pressed="${S.side==="T"}">T · ${S.map?roleOf(S.map,"T"):"attaque"}</button><button type="button" data-side="CT" aria-pressed="${S.side==="CT"}">CT · ${S.map?roleOf(S.map,"CT"):"défense"}</button></div>
+    <button type="button" class="close" id="focus">${focus?"Quitter le mode 2e écran":"Mode 2e écran"}</button>
+   </div>
+   <div class="ig">
+    <div class="igcol"><h3 class="good">Tes forces ici</h3>
+     <ul class="big-list">${[...cGood.map(t=>`<li class="coach">${t}</li>`),...good.map(b=>`<li class="exploit">${b.text}</li>`),
+       ...tries.slice(0,1).map(b=>`<li class="try">${b.text}</li>`),...times.slice(0,2).map(b=>`<li class="timing">${b.text}</li>`),...strong.map(s=>`<li class="good">${esc(s.text)}</li>`)].join("")
+       ||`<li>Pas encore assez de matchs ${S.map?`sur ${MAPN(S.map)} `:""}en ${S.side} : appuie-toi sur tes rappels ci-dessous.</li>`}</ul></div>
+    <div class="igcol ig-radar">${m?radarShell(levelBtns(m,S.level)):`<div class="empty">Pas encore de radar pour cette carte.</div>`}
+     ${Sd&&plan&&plan.key_nades.length?`<ul class="big-list">${plan.key_nades.slice(0,3).map(i=>{const l=Sd.lineups[i];return `<li class="ct"><b>${TYPE[l.type]}</b> ${esc(l.from_zone)} → ${esc(l.to_zone||"?")} · ${esc(l.how)}${l.t!=null?` · vers ${Math.round(l.t)} s`:""}</li>`}).join("")}</ul>`:""}</div>
+    <div class="igcol"><h3 class="bad">À éviter</h3>
+     <ul class="big-list">${[...cAvoid.map(t=>`<li class="avoid">${t}</li>`),...bad.map(b=>`<li class="avoid">${b.text}</li>`),...rules.map(r=>`<li class="bad"><b>${esc(r.short)}</b>${r.standing?`<br><span class="note">${esc(r.standing)}</span>`:""}</li>`)].join("")}</ul>
+     ${reflex.length?`<h3 class="warn">Réflexes</h3><ul class="big-list">${reflex.map(x=>`<li class="timing"><b>Si ${esc(lc(x.if))}</b> → ${esc(x.then)}</li>`).join("")}</ul>`:""}
+     ${rot.length?`<h3>Rotations</h3><ul class="big-list">${rot.map(r=>`<li class="ct">Vers ${r.site} : <b>${esc(r.route)}</b> (${String(r.travel).replace(".",",")} s, ${r.died} % de morts en route chez les ${r.who})</li>`).join("")}</ul>`:""}</div>
+   </div>
+   <div class="reminders">
+    ${exps.map(e=>`<div><b>Expérience en cours</b>${esc(e.title)}</div>`).join("")}
+    <div><b>Règle de session</b>${recs.length?esc(recs[0].text):"Pause de 10 à 15 min après une défaite, stop après 2 défaites d'affilée."}</div>
+    <div><b>Économie</b>On achète ensemble. Force seulement si chacun aura 4 000 $ au round suivant.</div>
+    ${D.local?`<div><b>Avant la 1re game</b><a href="#routine" style="color:var(--flash)">journal (20 s)</a> · <a href="#prog" style="color:var(--flash)">échauffement du jour</a></div>`:""}
+   </div>`;
+  copyBtn(v);
+  $$("[data-map]",v).forEach(b=>b.onclick=()=>{S.map=b.dataset.map;S.level=null;partieManual=true;store("map",S.map);renderPartie()});
+  $$("[data-side]",v).forEach(b=>b.onclick=()=>{S.side=b.dataset.side;partieManual=true;store("side",S.side);renderPartie()});
+  $$("[data-level]",v).forEach(b=>b.onclick=()=>{S.level=b.dataset.level;renderPartie()});
+  $("#focus",v).onclick=()=>{document.body.classList.toggle("focus");store("focus",document.body.classList.contains("focus"));renderPartie()};
+  const fl=$("#follow",v);if(fl)fl.onclick=()=>{partieManual=false;renderPartie()};
+  if(m){const st={level:S.level,layers:["zones","best","nades"],nades:plan?plan.key_nades:[],sel:null};crossRadar($(".radar-box",v),m,S.side,st)}
+}
+
+// ---------- view: bilan à froid ----------
+function wireExp(v,X,p){const msg=$("#xmsg",v);
+  $$("[data-xstart]",v).forEach(b=>b.onclick=async()=>{const s=X.suggested[+b.dataset.xstart];b.disabled=true;
+    try{await api("/api/experiment",{sid:p.steamid,action:"start",template:s.template,params:s.params});await reloadPlayer()}catch(e){if(msg)msg.textContent="Échec : "+e.message;b.disabled=false}});
+  $$("[data-xstop]",v).forEach(b=>b.onclick=async()=>{b.disabled=true;
+    try{await api("/api/experiment",{sid:p.steamid,action:"stop",id:b.dataset.xstop});await reloadPlayer()}catch(e){if(msg)msg.textContent="Échec : "+e.message;b.disabled=false}})}
+function renderBilan(){const p=P(),v=$("#v-bilan"),PL=p.advice.plan||{},R=PL.review,X=PL.experiments||{};
+  const head=`<div class="head"><div style="display:grid;gap:4px"><span class="eyebrow">${esc(p.name)}${R?` · ${esc(R.label)}, comparé${R.session.games>1?"s":""} à tes ${R.n_before} matchs d'avant`:""}</span><h2>Bilan à froid</h2></div>
+    ${R?`<div class="record"><span>${R.session.wins}<small>victoires</small></span><span>${R.session.losses}<small>défaites</small></span></div>`:""}</div>`;
+  if(!R){v.innerHTML=head+`<div class="empty">Le bilan compare tes derniers matchs aux précédents : il faut au moins 3 matchs analysés avec leur démo.${p.light?" Ce profil n'a pas encore de démo.":""}</div>
+    ${(p.advice.rules||[]).length?`<h3>Tes axes</h3>${findings(p.advice.rules.slice(0,3).map((r,i)=>({level:i<1?"high":"mid",title:r.title,evidence:r.why,fix:r.do,drills:r.drills,sources:r.sources})))}`:""}`;return}
+  const f=(x,u)=>fmtU(x,u);
+  v.innerHTML=head+`
+   ${R.next?`<div class="always"><h3>Pour ta prochaine session</h3><p style="font-size:16px">${esc(R.next)}</p></div>`:""}
+   <h3>Ce qui change</h3>
+   ${R.changes.length?`<div class="chg">${R.changes.map(c=>`<article class="${c.better?"better":"worse"}"><span class="eyebrow">${esc(c.label)}</span>
+     <span class="ba">${f(c.before,c.unit)} → <span class="${c.better?"good":"bad"}">${f(c.after,c.unit)}</span> <small>${c.level==="net"?"écart net":"tendance"}</small></span>
+     <span>${c.better?"En progrès":"En recul"} sur ${esc(R.label)} par rapport aux ${c.n_before} matchs d'avant.</span>
+     ${c.why.length?`<span class="note"><b>Pistes</b> (à vérifier sur les prochains matchs) : ${c.why.map(esc).join(" ; ")}.</span>`:`<span class="note">Pas d'explication évidente dans tes données : à surveiller.</span>`}</article>`).join("")}</div>`
+     :`<p>Rien n'a bougé nettement : tes chiffres sont stables.</p>`}
+   ${R.stable.length?`<p class="note">Stable : ${R.stable.map(esc).join(" · ")}.</p>`:""}
+   <h3>Ta dernière session</h3>
+   <div class="tbl"><table><thead><tr><th>Date</th><th>Carte</th><th>Score</th><th class="n">Note</th></tr></thead><tbody>${R.session.matches.map(x=>`<tr class="click" data-mid="${x.id}" tabindex="0"><td>${fmtDate(x.time)}</td><td>${MAPN(x.map)}</td><td><span class="res ${x.result}">${x.score.me}-${x.score.them}</span></td><td class="n">${f1(x.rating)}</td></tr>`).join("")}</tbody></table></div>
+   <h3>Tes axes du moment</h3>
+   <div class="insights">${R.axes.map(a=>`<article class="card"><h3>${esc(a.short||a.title)}</h3><p class="note">${esc(a.title)}</p>
+     ${a.kpi&&a.before!=null?`<p>${esc(a.kpi_label)} : ${f(a.before,a.unit)} → <b>${f(a.after,a.unit)}</b> ${a.trend?`<span class="pill ${a.trend==="mieux"?"strong":a.trend==="moins bien"?"weak":""}">${a.trend}</span>`:""}</p>`:""}
+     ${a.do.length?`<ul>${a.do.map(d=>`<li>${esc(d)}</li>`).join("")}</ul>`:""}${a.drills.length?`<p class="note">Exercice : ${esc(a.drills[0])}</p>`:""}${srcLinks(a.sources,true)}</article>`).join("")}</div>
+   <h3>Ce que tu testes, ce que tu pourrais tester</h3>
+   ${R.tests.active.length?`<div class="exps">${R.tests.active.map(expCard).join("")}</div>`:`<p class="note">Aucune expérience en cours.</p>`}
+   ${R.tests.done.length?`<span class="lbl4" style="color:var(--muted)">Terminées</span><div class="exps">${R.tests.done.map(expCard).join("")}</div>`:""}
+   ${(X.suggested||[]).length?`<span class="lbl4" style="color:var(--muted)">À tester</span><div class="exps">${X.suggested.slice(0,3).map((s,i)=>`<article class="card exp"><div class="top"><span class="tag">${esc(s.category)}</span></div><span class="ttl">${esc(s.title)}</span><p>${esc(s.why)}</p><span class="note">Mesure : ${esc(s.metric)}</span>${D.local?`<div class="btns"><button type="button" data-xstart="${i}">Lancer</button></div>`:""}</article>`).join("")}</div>`:""}
+   <p class="note" id="xmsg" role="status"></p>
+   <p class="note">Pour aller plus loin : <a href="#synthese" style="color:var(--ct)">analyse complète</a> · <a href="#mid" style="color:var(--ct)">mi-round</a> · <a href="#prog" style="color:var(--ct)">progression et suivi</a> · <a href="#matchs" style="color:var(--ct)">tous les matchs</a>.</p>`;
+  wireExp(v,X,p);
+  $$("tr[data-mid]",v).forEach(r=>{r.onclick=()=>{const i=p.matches.findIndex(x=>x.id===r.dataset.mid);S.match=i<0?0:i;go("matchs")};r.onkeydown=e=>{if(e.key==="Enter")r.click()}});
+}
+
 // ---------- data loading (profiles and radars are separate files) ----------
 D.players={};D.radars={};D.viewboxes={};
 const IDX=()=>Object.fromEntries(D.index.map(e=>[e.steamid,e]));
@@ -1113,7 +1289,7 @@ function renderJoueurs(){
     <p class="note">Sources de démos : celles déjà téléchargées, ses matchs de matchmaking récents via Leetify (moins d'un mois environ), ses codes de partage (<code>--sharecode</code>) ou tout son historique avec son code d'authentification (<code>--authcode</code>). Sans démo, un profil allégé est construit à partir de ses stats Leetify.</p></div>`;
   const jf=$("#jf",v);jf.oninput=()=>{jq=jf.value.trim().toLowerCase();const pos=jf.selectionStart;renderJoueurs();const n=$("#jf");n.focus();n.setSelectionRange(pos,pos)};
   $$("[data-sort]",v).forEach(b=>b.onclick=()=>{jsort=b.dataset.sort;renderJoueurs()});
-  $$("[data-pid]",v).forEach(b=>b.onclick=()=>{setPlayer(b.dataset.pid).then(()=>go("avant"))});
+  $$("[data-pid]",v).forEach(b=>b.onclick=()=>{setPlayer(b.dataset.pid).then(()=>go(b.dataset.pid===D.own?"partie":"synthese"))});
 }
 
 // ---------- view: pros ----------
@@ -1167,16 +1343,16 @@ function poll(){clearTimeout(polling);polling=setTimeout(async()=>{
   let j;try{j=await (await fetch("/api/job")).json()}catch(e){return poll()}
   const logs=(j.log||[]).slice(-60).map(esc).join("\n");
   if(j.running){
-    if(j.partial&&partialShown!==j.partial){partialShown=j.partial;try{D.index=await (await fetch(`index.json?t=${Date.now()}`)).json();playerOptions();delete D.players[j.partial];await setPlayer(j.partial,true);go("avant")}catch(e){}}
+    if(j.partial&&partialShown!==j.partial){partialShown=j.partial;try{D.index=await (await fetch(`index.json?t=${Date.now()}`)).json();playerOptions();delete D.players[j.partial];await setPlayer(j.partial,true);go(j.partial===D.own?"partie":"synthese")}catch(e){}}
     jobPanel(`<div class="row"><b><span class="spin" aria-hidden="true"></span>${partialShown?"Premier aperçu affiché. Analyse complète des démos en cours…":`Analyse de ${esc(j.query)}…`}</b><span class="note">Le profil se complète tout seul à la fin (de quelques secondes à quelques minutes).</span></div><pre>${logs||"Démarrage…"}</pre>`);poll();return}
   $("#qbtn").disabled=false;
   if(j.error){jobPanel(`<b>${esc(j.error)}</b><pre>${logs}</pre>`,"err");return}
   if(j.players&&j.players.length){D.index=await (await fetch(`index.json?t=${Date.now()}`)).json();
     jobPanel(`<b>${j.players.length} joueurs analysés dans ce match.</b><div class="btns">${j.players.map(p=>`<button type="button" data-mp="${p.steamid}">${esc(p.name)}</button>`).join("")}</div><pre>${logs}</pre>`,"ok");
-    $$("[data-mp]",$("#job")).forEach(b=>b.onclick=()=>{delete D.players[b.dataset.mp];setPlayer(b.dataset.mp,true).then(()=>go("avant"))});return}
+    $$("[data-mp]",$("#job")).forEach(b=>b.onclick=()=>{delete D.players[b.dataset.mp];setPlayer(b.dataset.mp,true).then(()=>go("synthese"))});return}
   if(j.steamid){try{D.index=await (await fetch(`index.json?t=${Date.now()}`)).json();playerOptions();delete D.players[j.steamid];
       await setPlayer(j.steamid,true);S.map=null;const p=P();
-      jobPanel(`<b>${esc(p.name)} est analysé.</b> ${p.light?"Profil allégé (stats Leetify, pas de démo disponible).":`${p.matches.length} démo(s) analysée(s).`}<pre>${logs}</pre>`,"ok");go("avant")}
+      jobPanel(`<b>${esc(p.name)} est analysé.</b> ${p.light?"Profil allégé (stats Leetify, pas de démo disponible).":`${p.matches.length} démo(s) analysée(s).`}<pre>${logs}</pre>`,"ok");go(j.steamid===D.own?"partie":"synthese")}
     catch(e){jobPanel(`<b>Rien à afficher pour ce joueur.</b><pre>${logs}</pre>`,"err")}}},1000)}
 $("#search").addEventListener("submit",async e=>{e.preventDefault();const q=$("#q").value.trim();if(!q)return;
   const ps=await loadPros(),ql=q.toLowerCase(),idm=(q.match(/7656\d{13}/)||[])[0];
@@ -1193,23 +1369,28 @@ $("#search").addEventListener("submit",async e=>{e.preventDefault();const q=$("#
     <p class="note">Il faut que l'app locale tourne : double-clic sur <code>Coach CS2.bat</code> dans <code>E:\dev\cs2-coach</code>, ou active son démarrage automatique avec <code>autostart.bat</code>.</p>`)});
 
 // ---------- routing ----------
-const RENDER={avant:renderAvant,synthese:renderSynthese,routine:renderRoutine,mid:renderMid,prog:renderProgress,equipe:renderTeam,matchs:renderMatchs,cartes:renderCartes,joueurs:renderJoueurs,pros:renderPros,steam:renderSteam};
+const RENDER={partie:renderPartie,bilan:renderBilan,avant:renderAvant,synthese:renderSynthese,routine:renderRoutine,mid:renderMid,prog:renderProgress,equipe:renderTeam,matchs:renderMatchs,cartes:renderCartes,joueurs:renderJoueurs,pros:renderPros,steam:renderSteam};
 function go(view){if(location.hash!=="#"+view)history.replaceState(null,"","#"+view);show(view)}
-function show(view){if(!RENDER[view])view="avant";S.view=view;$$("main>.view").forEach(x=>x.hidden=x.id!=="v-"+view);
-  $$("nav a").forEach(a=>{if(a.dataset.view===view)a.setAttribute("aria-current","page");else a.removeAttribute("aria-current")});
+function show(view){if(view==="avant")view="partie";if(!RENDER[view])view="partie";S.view=view;$$("main>.view").forEach(x=>x.hidden=x.id!=="v-"+view);
+  navUpdate(view);if(view!=="partie")clearTimeout(gsiTimer);
   if(view==="joueurs"){renderJoueurs();return}
   if(view==="pros"){renderPros();window.scrollTo(0,0);return}
   if(view==="steam"){renderSteam();window.scrollTo(0,0);return}
   if(view==="equipe"){renderTeam();window.scrollTo(0,0);return}
-  if(!S.player||!D.players[S.player]){$("#v-"+view).innerHTML=S.player?`<div class="empty"><span class="spin" aria-hidden="true"></span>Chargement du profil…</div>`:`<div class="empty">Aucune donnée. Lance <code>python cs2coach.py</code> sur ton PC.</div>`;return}
-  RENDER[view]();window.scrollTo(0,0)}
-async function setPlayer(id,force){S.player=id;store("player",id);S.match=0;
+  if(!S.player){if(view==="partie"||view==="bilan")welcome($("#v-"+view));else $("#v-"+view).innerHTML=`<div class="empty">Choisis d'abord un profil : le tien depuis l'accueil, ou n'importe qui dans Explorer.</div>`;return}
+  if(!D.players[S.player]){$("#v-"+view).innerHTML=`<div class="empty"><span class="spin" aria-hidden="true"></span>Chargement du profil…</div>`;return}
+  RENDER[view]();navUpdate(view);window.scrollTo(0,0);
+  if(view==="partie"&&D.local){if(!gsiStatus)fetch("/api/gsi/status").then(r=>r.json()).then(j=>{gsiStatus=j;if(S.view==="partie"&&D.players[S.player])renderPartie()}).catch(()=>{});gsiPoll()}}
+async function setPlayer(id,force){S.player=id;store("player",id);S.match=0;if(!id){show(S.view);return}
   if(!D.players[id]||force){show(S.view);try{await loadPlayer(id,force)}catch(e){$("#v-"+S.view).innerHTML=`<div class="empty">Impossible de charger ce profil (${esc(e.message)}).</div>`;return}}
   show(S.view)}
 S.map=store("map");S.side=store("side")||"T";
 window.addEventListener("hashchange",()=>show(location.hash.slice(1)));
-S.view=RENDER[location.hash.slice(1)]?location.hash.slice(1):"avant";
-const sp=store("player");setPlayer(sp&&IDX()[sp]?sp:(D.default||(D.index[0]||{}).steamid||null));
+S.view=location.hash.slice(1)||"partie";if(S.view==="avant"||!RENDER[S.view])S.view="partie";
+if(store("focus"))document.body.classList.add("focus");
+$("#focusx").onclick=()=>{document.body.classList.remove("focus");store("focus",false);if(S.view==="partie"&&S.player&&D.players[S.player])renderPartie()};
+const sp=store("player");
+setPlayer(sp&&IDX()[sp]?sp:(D.own&&IDX()[D.own]?D.own:(D.local&&D.own?null:(D.default||(D.index[0]||{}).steamid||null))));
 if(D.local){
   const q0=new URLSearchParams(location.search).get("q");
   if(q0){history.replaceState(null,"",location.pathname+location.hash);$("#q").value=q0;$("#search").requestSubmit()}

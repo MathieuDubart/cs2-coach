@@ -2,6 +2,14 @@
 
 Coach personnel pour Counter-Strike 2 : il récupère automatiquement tes démos de matchmaking (sans téléchargement manuel), les analyse en profondeur et génère une application locale avec des conseils précis, sourcés et directement applicables.
 
+## Deux usages principaux
+
+- **En partie** (2e écran) : la fiche de la carte jouée, qui suit ta game toute seule grâce au Game State Integration de CS2 (carte, camp, round, argent). Tes forces et tes positions fortes, ce qu'il faut éviter, tes réflexes, tes rotations, tes stuffs clés, et le bon conseil au bon moment (achat pendant le freeze time, bombe posée, fin de round). Bouton « Mode 2e écran » pour un affichage plein écran.
+- **Bilan** (à froid, après la session ou le lendemain) : ce qui change par rapport à tes matchs d'avant, de combien, les pistes d'explication (horaires, longueur de session, cartes, groupe, expériences lancées), tes axes du moment, ce que tu testes et ce que tu pourrais tester. L'analyse complète (matchs, cartes, mi-round, progression, routine) est accessible depuis le Bilan.
+- Aussi : **Équipe** (plan de jeu à plusieurs), **Explorer** (n'importe quel joueur, pros), **⚙ Réglages** (connexion Steam, détection de la partie). À la première ouverture, l'accueil propose d'analyser son propre profil.
+
+La détection de la partie s'active dans les Réglages : l'app écrit `gamestate_integration_coachcs2.cfg` dans le dossier `cfg` de CS2 (fonction officielle de Valve, utilisée par les HUD et claviers RGB ; en partie, CS2 n'envoie que tes propres infos). Relancer CS2 après l'activation.
+
 ## Ce que ça analyse
 
 - **Économie** : achats, force-buys, sauvegardes, argent gaspillé.
