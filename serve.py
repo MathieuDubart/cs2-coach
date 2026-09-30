@@ -177,7 +177,7 @@ class Handler(BaseHTTPRequestHandler):
             if ok:
                 try:
                     import voice
-                    if voice.settings().get("auto"):
+                    if voice.settings().get("auto") or voice.REC.recording():
                         voice.on_gsi(gsi.state())
                 except Exception as e:
                     print("calls :", e, flush=True)
@@ -343,6 +343,12 @@ if __name__ == "__main__":
         sys.exit(0)
     url = f"http://127.0.0.1:{PORT}/#avant"
     print(f"Coach CS2 : {url}  (Ctrl+C pour arrêter)")
+    try:
+        import gsi
+        if gsi.refresh(PORT):
+            print("Détection de la partie mise à jour : relance CS2 pour qu'il la prenne en compte.")
+    except Exception as e:
+        print("détection de la partie :", e)
     threading.Thread(target=auto_sync, daemon=True).start()
     threading.Thread(target=voice_watch, daemon=True).start()
     if "--no-browser" not in sys.argv:

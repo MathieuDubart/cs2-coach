@@ -13,6 +13,12 @@ import time
 import config
 
 NAME = "gamestate_integration_coachcs2.cfg"
+LOG_DIR = os.path.join(config.OUT, "gsi")
+WEAPON_FR = {"ak47": "AK-47", "m4a1": "M4A4", "m4a1_silencer": "M4A1-S", "awp": "AWP", "aug": "AUG", "sg556": "SG 553",
+             "famas": "FAMAS", "galilar": "Galil AR", "ssg08": "SSG 08", "g3sg1": "G3SG1", "scar20": "SCAR-20", "mac10": "MAC-10",
+             "mp9": "MP9", "mp7": "MP7", "mp5sd": "MP5-SD", "ump45": "UMP-45", "p90": "P90", "bizon": "PP-Bizon", "nova": "Nova",
+             "xm1014": "XM1014", "mag7": "MAG-7", "sawedoff": "Sawed-Off", "negev": "Negev", "m249": "M249"}
+PRIMARY_TYPES = {"Rifle", "SniperRifle", "Submachine Gun", "Shotgun", "Machine Gun"}
 LOCK = threading.Lock()
 STATE = {}
 
@@ -61,6 +67,7 @@ def config_text(port):
         "player_id"          "1"
         "player_state"       "1"
         "player_match_stats" "1"
+        "player_weapons"     "1"
     }}
 }}
 '''
@@ -79,6 +86,41 @@ def install(port):
         raise ValueError("Dossier de CS2 introuvable : CS2 est-il installé avec Steam sur ce PC ?")
     open(os.path.join(d, NAME), "w", encoding="utf-8").write(config_text(port))
     return status()
+
+
+def refresh(port):
+    """An installed config from an older version or another port is rewritten (CS2 reads it at its next start)."""
+    d = cfg_dir()
+    f = os.path.join(d, NAME) if d else None
+    if f and os.path.exists(f) and open(f, encoding="utf-8").read() != config_text(port):
+        open(f, "w", encoding="utf-8").write(config_text(port))
+        return True
+    return False
+
+
+def log_event(ev):
+    """Timeline of the match (map, round, phase, side) with the time: lets any recording be aligned on the rounds later."""
+    import json
+    os.makedirs(LOG_DIR, exist_ok=True)
+    with open(os.path.join(LOG_DIR, time.strftime("%Y%m%d") + ".jsonl"), "a", encoding="utf-8") as f:
+        f.write(json.dumps(dict(ev, t=round(time.time(), 2)), ensure_ascii=False) + "\n")
+
+
+def timeline(start, end):
+    """Round events logged between two times (seconds since epoch)."""
+    import json
+    out = []
+    if not os.path.exists(LOG_DIR):
+        return out
+    for fn in sorted(os.listdir(LOG_DIR)):
+        for line in open(os.path.join(LOG_DIR, fn), encoding="utf-8"):
+            try:
+                e = json.loads(line)
+            except ValueError:
+                continue
+            if start <= e.get("t", 0) <= end:
+                out.append(e)
+    return out
 
 
 def uninstall():
@@ -113,15 +155,25 @@ def update(payload):
         STATE.update({"steamid": me, "round_phase": rd.get("phase"), "bomb": rd.get("bomb"), "win_team": rd.get("win_team"),
                       "activity": pl.get("activity"), "_t": time.time()})
         if own:
+            prim = None
+            for w in (pl.get("weapons") or {}).values():
+                if w.get("type") in PRIMARY_TYPES:
+                    n = str(w.get("name", "")).replace("weapon_", "")
+                    prim = WEAPON_FR.get(n, n)
             STATE.update({"side": side or STATE.get("side"), "money": st.get("money"), "equip": st.get("equip_value"),
+                          "armor": st.get("armor"), "helmet": st.get("helmet"), "primary": prim if pl.get("weapons") else STATE.get("primary"),
                           "health": st.get("health"), "round_kills": st.get("round_kills"),
                           "stats": pl.get("match_stats")})
+        key = (STATE.get("map"), STATE.get("round"), STATE.get("round_phase"), STATE.get("side"))
+        if STATE.get("map") and key != STATE.get("_key"):
+            STATE["_key"] = key
+            log_event({"map": key[0], "round": key[1], "phase": key[2], "side": key[3], "steamid": me})
     return True
 
 
 def state():
     with LOCK:
-        s = dict(STATE)
+        s = {k: v for k, v in STATE.items() if k != "_key"}
     if s:
         s["age"] = round(time.time() - s.pop("_t", 0), 1)
     return s

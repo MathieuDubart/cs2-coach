@@ -126,11 +126,13 @@ LAST = {"key": None, "gameover": None}
 
 
 def on_gsi(g):
-    """Called for every message of the game: start with the match, mark the rounds, stop at the end."""
-    if not settings().get("auto") or not g:
+    """Called for every message of the game: start with the match (automatic mode), mark the rounds of any
+    recording, stop at the end (automatic mode)."""
+    if not g:
         return
+    auto = bool(settings().get("auto"))
     phase = g.get("map_phase")
-    if phase == "live" and g.get("map") and not REC.recording():
+    if auto and phase == "live" and g.get("map") and not REC.recording():
         try:
             pause_transcription()  # all the power for the game
             REC.start(g.get("map"), g.get("steamid"), "auto")
@@ -143,6 +145,8 @@ def on_gsi(g):
             LAST["key"] = key
             REC.mark(round=g.get("round"), phase=g.get("round_phase"), side=g.get("side"), map=g.get("map"),
                      score=[g.get("score_ct"), g.get("score_t")])
+        if not auto:
+            return
         if phase == "gameover":
             LAST["gameover"] = LAST["gameover"] or time.time()
             if time.time() - LAST["gameover"] > 20:  # keep the last words
@@ -329,8 +333,14 @@ def analyze(rid, sid):
         u.update(classify(u["text"], pos_re))
     mid = _match_for(meta, sid)
     # round windows from the game's marks: live start of each round, in seconds of recording
+    marks = meta.get("rounds") or []
+    if not any(e.get("phase") == "live" for e in marks):  # manual recording: take the rounds from the game's timeline
+        import gsi
+        marks = [dict(e, t=round(e["t"] - meta["start"], 2)) for e in gsi.timeline(meta["start"] - 5, meta.get("end") or meta["start"] + 4 * 3600)]
+        if marks and not meta.get("map"):
+            meta["map"] = next((e.get("map") for e in marks if e.get("map")), None)
     live = {}
-    for e in meta.get("rounds", []):
+    for e in marks:
         if e.get("phase") == "live" and e.get("round") and e["round"] not in live:
             live[e["round"]] = e["t"]
     starts = sorted(live.items())

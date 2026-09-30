@@ -1189,6 +1189,10 @@ function buyTip(g,p){if(g.money==null||!g.side)return "";
   if(g.round===1||g.round===13){const ps=(((p.advice.plan||{}).weapons||{}).suggestions)||[];
     return ps.some(s=>s.kind==="pistol_strong")?"Round pistolet : tes duels au pistolet sont une force, prends l'ouverture.":"Round pistolet : achetez ensemble et jouez groupés."}
   const full=g.side==="CT"?4200:4000,bonus=[1400,1900,2400,2900,3400][Math.min(g.losses||0,4)],eur=x=>x.toLocaleString("fr-FR")+" $";
+  if(g.primary&&FULL_W.has(g.primary)){const need=g.helmet?0:(g.armor>0?350:1000);
+    return need?(g.money>=need?`Tu as ${g.primary} : complète avec ${g.armor>0?"le casque":"kevlar + casque"}, puis tes grenades.`:`Tu as ${g.primary} mais pas de quoi prendre ${g.armor>0?"le casque":"le kevlar"} (${eur(g.money)}) : joue-le prudemment.`)
+      :`Tu as ${g.primary} et ton armure : complète tes grenades (${eur(g.money)}).`}
+  if((g.equip||0)+g.money>=full&&g.money<full)return `Avec ton équipement, tu es en full buy : complète ce qu'il manque (${eur(g.money)}).`;
   if(g.money>=full)return `Full buy possible (${eur(g.money)}).`;
   if(g.money+bonus>=full)return `Eco conseillé : même en perdant ce round, tu auras ${eur(g.money+bonus)} au suivant.`;
   return `Force seulement si toute l'équipe force (${eur(g.money)}).`}
@@ -1197,8 +1201,11 @@ function phaseTip(g,p){if(g.round_phase==="freezetime"){const rt=roundType(g),x=
   if(g.bomb==="planted")return g.side==="CT"?"Bombe posée : retake groupé, ou sauve si tu es seul contre 3.":"Bombe posée : tirs croisés, fais venir les CT.";return ""}
 const gsiFresh=()=>gsiLast&&gsiLast.age!=null&&gsiLast.age<75&&gsiLast.map;
 const RT_FR={pistol:"Round pistolet",eco:"Éco",force:"Force-buy",full:"Full buy","anti-eco":"Anti-éco"};
+const FULL_W=new Set(["AK-47","M4A4","M4A1-S","AUG","SG 553","AWP","G3SG1","SCAR-20"]);
 function roundType(g){if(!g||!g.side||g.round==null)return null;if(g.round===1||g.round===13)return "pistol";if(g.money==null)return null;
-  const full=g.side==="CT"?4200:4000;return g.money>=full?"full":g.money<2000?"eco":"force"}
+  const full=g.side==="CT"?4200:4000,eq=g.equip||0,total=g.money+eq;
+  if((g.primary&&FULL_W.has(g.primary))||eq>=3500||total>=full)return "full";   // saved or bought rifle, or enough to buy one
+  return total<2000?"eco":"force"}
 function buyRows(p,map,side,cur){const B=(((p.advice.plan||{}).buys||{}).maps||{})[map];const S_=B&&B[side];if(!S_)return "";
   const cell=(x,unit)=>x&&x.name?`<b>${esc(x.name)}</b><br><span class="note">${x.from==="toi"?"toi":"base"} : ${x.win} % de rounds gagnés sur ${x.n}${x.adr!=null?`, ${x.adr} dégâts`:""}</span>`:'<span class="note">pas assez de rounds</span>';
   const rows=["pistol","eco","force","full","anti-eco"].filter(k=>S_[k]);if(!rows.length)return "";
