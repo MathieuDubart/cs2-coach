@@ -20,6 +20,19 @@ TYPE_FR = {"pistol": "Round pistolet", "eco": "Éco", "force": "Force-buy", "ful
 ARMOR_FR = {"none": "sans kevlar", "kevlar": "kevlar", "helmet": "kevlar + casque"}
 DEFAULT_PISTOLS = {"Glock-18", "USP-S", "P2000"}
 # weapons a side cannot buy: holding one means it was picked up (often after winning), not a buy choice
+FULL_WEAPONS = {"AK-47", "M4A4", "M4A1-S", "AUG", "SG 553", "AWP", "G3SG1", "SCAR-20"}
+
+
+def fits(df, rt):
+    """Only the buys that belong to this type of round: a player who can afford an AK with armour is not forcing,
+    and a Galil in a full-buy round is a downgrade, not a full buy."""
+    if rt == "full":
+        return df[df.weapon.isin(FULL_WEAPONS)]
+    if rt == "force":
+        return df[~df.weapon.isin(FULL_WEAPONS)]
+    return df
+
+
 NOT_BUYABLE = {"T": {"M4A4", "M4A1-S", "AUG", "FAMAS", "MP9", "Five-SeveN", "USP-S", "P2000", "MAG-7"},
                "CT": {"AK-47", "SG 553", "Galil AR", "MAC-10", "Tec-9", "Glock-18", "Sawed-Off"}}
 
@@ -146,7 +159,7 @@ def advise(sid, maps):
         b = B[B.rtype == rt]
         res["types"][rt] = {"label": TYPE_FR[rt], "rounds": int(len(m)), "win": round(100 * m.won.mean()) if len(m) else None,
                             "adr": round(m.damage.mean()) if len(m) else None, "base_win": round(100 * b.won.mean()) if len(b) else None,
-                            "my_kits": _table(m, "kit", 2)[:4], "base_kits": _table(b, "kit", 40)[:4]}
+                            "my_kits": _table(fits(m, rt), "kit", 2)[:4], "base_kits": _table(fits(b, rt), "kit", 40)[:4]}
     for mp in maps:
         for side in ("T", "CT"):
             for rt in TYPES:
@@ -159,8 +172,8 @@ def advise(sid, maps):
                 ok_zone = lambda z: bool(z) and "spawn" not in z.lower() and not (side == "T" and z.lower().startswith("bombsite"))
                 buyable = lambda df: df[~df.weapon.isin(NOT_BUYABLE[side])]
                 kn = 20 if rt in ("force", "full") else 12
-                bz, bk = _table(b[b.zone.map(ok_zone)], "zone", 12, by), _table(buyable(b), "kit", kn, by)
-                mz, mk = _table(m[m.zone.map(ok_zone)], "zone", 2, by), _table(buyable(m), "kit", 2, by)
+                bz, bk = _table(b[b.zone.map(ok_zone)], "zone", 12, by), _table(fits(buyable(b), rt), "kit", kn, by)
+                mz, mk = _table(m[m.zone.map(ok_zone)], "zone", 2, by), _table(fits(buyable(m), rt), "kit", 2, by)
                 base_win = round(100 * b.won.mean()) if len(b) else None
                 # recommendation: your own zone/buy when it has worked at least as well as the base, else the base's best
                 base_adr = b.damage.mean() if len(b) else None
