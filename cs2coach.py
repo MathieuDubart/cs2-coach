@@ -352,7 +352,7 @@ def minimal_profile(sid, ex):
         delta = cur["current"] - prev["current"]
         rules.append({"id": "premier", "score": 15, "short": "Premier: " + ("improving" if delta > 0 else "dropping"),
                       "title": f"Premier {cur['season']}: {cur['current']:,} (best {cur['best']:,}), vs {prev['current']:,} in {prev['season']}".replace(",", " "),
-                      "why": [f"{cur['wins']} victoires cette saison."], "do": []})
+                      "why": [f"{cur['wins']} wins this season."], "do": []})
     rules.append({"id": "unlock", "score": 1, "short": "Unlock the full analysis",
                   "title": "No demo and no Leetify profile: analysis limited to public rankings",
                   "why": ["Valve doesn't give a player's history from their SteamID alone."],

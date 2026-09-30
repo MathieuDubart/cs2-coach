@@ -603,7 +603,7 @@ def build(ids, owner=None):
                          "t_lanes": lanes, "executes": ex, "callouts": callouts(ref, regions), "plants": plants,
                          "levels": ref.get("levels"), "site_px": (meta.get(mp) or {}).get("site_px"),
                          "videos": K.src(*K.MAP_VIDEOS.get(mp, []))}
-    ct_summary = {sid: ", ".join(f"{humanize(mp.split('_')[-1]).capitalize()} : {lab}" for mp, lab in d.items()) for sid, d in ct_by_member.items()}
+    ct_summary = {sid: ", ".join(f"{humanize(mp.split('_')[-1]).capitalize()}: {lab}" for mp, lab in d.items()) for sid, d in ct_by_member.items()}
     plan = {"id": team_id(ids), "created": dt.datetime.now().isoformat(timespec="minutes"), "owner": str(owner or ids[0]),
             "members": [{"steamid": m["steamid"], "name": m["name"], "archetype": m["arch"].get("name"), "icon": m["arch"].get("icon"),
                          "light": m["light"], "has_scores": m["has_scores"], "scores": m["scores"],

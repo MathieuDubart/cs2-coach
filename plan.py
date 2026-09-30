@@ -247,7 +247,7 @@ ZONE_PX = os.path.join(config.OUT, "population", "zone_px.json")
 def zone_refs():
     """Radar position of every zone and the floors of each map, from the analyzed player with the most data there."""
     import weapons
-    n = weapons._n_demos()
+    n = f"v2-{weapons._n_demos()}"   # v2: English level names
     if os.path.exists(ZONE_PX):
         cur = json.load(open(ZONE_PX, encoding="utf-8"))
         if cur.get("_n") == n:
