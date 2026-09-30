@@ -274,6 +274,11 @@ def attach_plan(sid):
         traceback.print_exc()
         return
     json.dump(adv, open(p, "w", encoding="utf-8"), ensure_ascii=False, indent=1, default=str)
+    try:  # coach notes per map and side (zones to change or keep, grenades), from the cross-match analysis
+        import coach_notes
+        coach_notes.write(sid, load("cross.json"), adv.get("plan"))
+    except Exception as e:
+        log(f"Notes par carte indisponibles : {e}")
 
 
 PARTIAL_HOOK = None  # called with the SteamID once a first profile can be displayed

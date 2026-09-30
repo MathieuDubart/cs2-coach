@@ -2,6 +2,7 @@
 
 Usage: python profile_all.py [min_demos=3] [--workers N] [--force]
        python profile_all.py --plans      # rebuild only the coaching plans of every existing profile
+       python profile_all.py --existing   # full analysis again for every existing profile (after the base grew)
 """
 import os
 import sys
@@ -42,13 +43,18 @@ def work(sid):
 
 
 PLANS_ONLY = "--plans" in sys.argv  # only (re)build the coaching plan of existing profiles
+EXISTING = "--existing" in sys.argv  # full analysis of every existing profile
 
 
 def main(min_demos=3, workers=None, force=False):
-    if PLANS_ONLY:
+    if PLANS_ONLY or EXISTING:
         todo = [(sid, (config.settings().get("players", {}).get(sid) or {}).get("name") or sid, 0) for sid in os.listdir(config.PLAYERS)
                 if os.path.exists(os.path.join(config.player_dir(sid), "advice.json"))]
         force = True
+        if EXISTING:  # the most played first, and yours before everything
+            own = str(config.settings().get("own_steamid") or "")
+            n_demos = dict((str(sid), n) for sid, _, n in candidates(1))
+            todo = sorted(((sid, name, n_demos.get(str(sid), 0)) for sid, name, _ in todo), key=lambda t: (str(t[0]) != own, -t[2]))
     else:
         todo = candidates(min_demos)
     if not force:
