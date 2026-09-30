@@ -182,7 +182,7 @@ class Handler(BaseHTTPRequestHandler):
                     if voice.settings().get("auto") or voice.REC.recording():
                         voice.on_gsi(gsi.state())
                 except Exception as e:
-                    print("calls :", e, flush=True)
+                    print("calls:", e, flush=True)
             return self.send(200 if ok else 403, {})
         if u.path.startswith("/api/voice/"):
             import gsi
@@ -207,12 +207,15 @@ class Handler(BaseHTTPRequestHandler):
                 else:
                     return self.send(404, {"error": "not found"})
             except Exception as e:
-                return self.send(400, {"error": f"Micro : {e}"})
+                return self.send(400, {"error": f"Microphone: {e}"})
             return self.send(200, voice_status())
-        if u.path == "/api/gsi/site":  # the player marks where the T attacked
+        if u.path == "/api/gsi/site":  # the player marks where the T attacked, and what they saw in the round
             import gsi
             try:
-                ok = gsi.set_site(int(body.get("round")), body.get("site"))
+                rnd = int(body.get("round"))
+                ok = gsi.set_site(rnd, body.get("site")) if "site" in body else True
+                mark = {k: body[k] for k in ("contact", "alone", "contact_t", "site_t", "dyn", "lone") if k in body}
+                ok = ok and (gsi.set_mark(rnd, mark) if mark else True)
             except (TypeError, ValueError):
                 return self.send(400, {"error": "invalid round"})
             return self.send(200 if ok else 409, gsi.state())
@@ -273,7 +276,7 @@ class Handler(BaseHTTPRequestHandler):
                     if act == "sync":
                         if not LOCK.acquire(blocking=False):
                             return self.send(409, {"error": "An analysis is already running", "query": JOB["query"]})
-                        threading.Thread(target=run_job, args=("Synchronisation Steam", lambda: cs2coach.sync_steam(sid)), daemon=True).start()
+                        threading.Thread(target=run_job, args=("Steam sync", lambda: cs2coach.sync_steam(sid)), daemon=True).start()
                         return self.send(200, {"started": True})
                 except steamlink.SteamError as e:
                     return self.send(400, {"error": str(e)})
@@ -331,8 +334,8 @@ def auto_sync(every=1800):
         sid = str(s.get("own_steamid") or "")
         p = s.get("players", {}).get(sid, {})
         if sid.isdigit() and p.get("authcode") and p.get("auto_sync", True) and LOCK.acquire(blocking=False):
-            print("Synchronisation Steam automatique…", flush=True)
-            run_job("Synchronisation Steam", lambda: cs2coach.sync_steam(sid))  # releases LOCK
+            print("Automatic Steam sync…", flush=True)
+            run_job("Steam sync", lambda: cs2coach.sync_steam(sid))  # releases LOCK
         time.sleep(every)
 
 

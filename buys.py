@@ -96,7 +96,7 @@ def run_all(log=print):
             rows_for(d).to_parquet(f)
             n += 1
         except Exception as e:
-            log(f"[{mid}] achats : {e}")
+            log(f"[{mid}] buys: {e}")
     return n
 
 

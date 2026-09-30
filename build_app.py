@@ -25,6 +25,16 @@ def jload(p, default=None):
     return json.load(open(p, encoding="utf-8")) if os.path.exists(p) else default
 
 
+def _story(mid):
+    """Round by round from the demo: where the Ts went and how fast, who died where and when."""
+    try:
+        import tside
+        return tside.match_story(mid)
+    except Exception as e:
+        print(f"[{mid}] round story: {e}")
+        return None
+
+
 def player_data(sid):
     pdir = config.player_dir(sid)
     adv = jload(os.path.join(pdir, "advice.json"))
@@ -50,6 +60,7 @@ def player_data(sid):
             "map_data": _names(mp) and {k: mp[k] for k in ("zones", "general", "me", "my_deaths", "my_kills", "heat", "levels", "zone_mode")}
                         | {"openings": [k for k in mp["all_kills"] if k["opening"]]},
             "notes": manual or adv["match_notes"].get(mid), "notes_manual": bool(manual),
+            "story": _story(mid),
         })
     matches.sort(key=lambda m: m["time"] or "", reverse=True)
     if names:
@@ -169,11 +180,11 @@ def build(out_dir=SITE, local=False, players=None):
         import proref
         json.dump(proref.pro_profiles(), open(os.path.join(out_dir, "pros.json"), "w", encoding="utf-8"), ensure_ascii=False)
     except Exception as e:
-        print("pros.json :", e)
+        print("pros.json:", e)
     try:
         write_teams(out_dir)
     except Exception as e:
-        print("teams :", e)
+        print("teams:", e)
     open(os.path.join(out_dir, "index.html"), "w", encoding="utf-8").write(shell_html(index, local))
     return index
 

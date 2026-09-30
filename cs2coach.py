@@ -467,7 +467,7 @@ def sync_steam(sid=None):
                 s.setdefault("players", {}).setdefault(str(sid), {})["playtime"] = pt
                 config.save_settings(s)
         except steamlink.SteamError as e:
-            log(f"Steam : {e}")
+            log(f"Steam: {e}")
     before = registry()
     args = SimpleNamespace(steamid=sid, sharecode=codes, authcode=None, knowncode=None, no_fetch=False, own=(sid == own_id))
     reg = collect(args, own_id)

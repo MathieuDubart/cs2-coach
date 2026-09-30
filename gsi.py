@@ -158,7 +158,7 @@ def _hist(mp, rd, side):
     changed = False
     if HIST.get("map") != name or mp.get("phase") == "warmup" or rnum + 1 < HIST.get("_max", 0):
         HIST.clear()
-        HIST.update({"map": name, "start": time.time(), "rounds": {}, "sites": {}, "_max": 0})
+        HIST.update({"map": name, "start": time.time(), "rounds": {}, "sites": {}, "marks": {}, "_max": 0})
         changed = True
     R = HIST["rounds"]
     for k, v in (mp.get("round_wins") or {}).items():
@@ -192,6 +192,66 @@ def set_site(rnd, site):
     return True
 
 
+DYNS = ("rush", "fast", "exec", "late", "none")
+
+
+def set_mark(rnd, fields):
+    """What the player saw in a round: the first contact (zone, one T alone or several, when), when they saw the
+    Ts on a site, the shape of the attack (rush, execute...) and whether the Ts lost a player alone.
+    A field set to None is erased."""
+    def num(v):
+        return round(float(v), 1) if isinstance(v, (int, float)) and 0 <= v < 1000 else None
+    clean = {}
+    for k, v in fields.items():
+        if k == "contact":
+            clean[k] = str(v)[:40] if v else None
+        elif k in ("alone", "lone"):
+            clean[k] = bool(v) if v is not None else None
+        elif k in ("contact_t", "site_t"):
+            clean[k] = num(v)
+        elif k == "dyn":
+            clean[k] = v if v in DYNS else None
+    if not clean:
+        return True
+    with LOCK:
+        if not HIST:
+            return False
+        m = HIST.setdefault("marks", {}).setdefault(str(int(rnd)), {})
+        for k, v in clean.items():
+            if v is None:
+                m.pop(k, None)
+            else:
+                m[k] = v
+        _hist_save()
+        log_event({"map": HIST.get("map"), "round": int(rnd), "mark": clean})
+    return True
+
+
+def _hist_times(cur, phase, bomb, prev_phase, prev_bomb, health, prev_health, kills, prev_kills, now):
+    """Seconds since the end of the freeze time, per round: the plant, the end of the round, your death, your kills.
+    Read the Ts' tempo from them (a plant 35 s in is a fast hit) without any click."""
+    if not HIST or not cur:
+        return
+    r = HIST.setdefault("rounds", {}).setdefault(str(cur), {})
+    changed = False
+    if phase == "live" and prev_phase != "live" and "live" not in r:
+        r["live"], changed = round(now, 2), True
+    t0 = r.get("live")
+    if t0:
+        el = round(now - t0, 1)
+        if bomb == "planted" and prev_bomb != "planted" and "plant" not in r:
+            r["plant"], changed = el, True
+        if phase == "over" and prev_phase == "live" and "end" not in r:
+            r["end"], changed = el, True
+        if phase == "live" and health == 0 and (prev_health or 0) > 0 and "dead" not in r:
+            r["dead"], changed = el, True
+        if phase == "live" and kills and prev_kills is not None and kills > prev_kills:
+            r.setdefault("kills", []).extend([el] * min(5, kills - prev_kills))
+            changed = True
+    if changed:
+        _hist_save()
+
+
 NADE_KEY = {"flashbang": "flash", "smokegrenade": "smoke", "hegrenade": "he", "molotov": "molotov", "incgrenade": "molotov", "decoy": "decoy"}
 
 
@@ -222,6 +282,15 @@ def update(payload):
         elif pl.get("activity") == "menu":
             STATE.update({"map": None, "map_phase": None})
         now = time.time()
+        alive = bool(own and (st.get("health") or 0) > 0)   # when dead, the game shows the teammate you spectate
+        try:
+            if STATE.get("map") and HIST.get("map") == STATE.get("map"):
+                _hist_times(STATE.get("round"), rd.get("phase"), rd.get("bomb"), STATE.get("round_phase"), STATE.get("bomb"),
+                            1 if alive else 0, 1 if STATE.get("_alive") else 0,
+                            st.get("round_kills") if own else None, STATE.get("round_kills"), now)
+        except Exception as e:
+            print("round times:", e, flush=True)
+        STATE["_alive"] = alive
         if rd.get("phase") == "live" and STATE.get("round_phase") != "live":
             STATE["live_since"] = now      # end of the freeze time: the round clock starts
         if rd.get("bomb") == "planted" and STATE.get("bomb") != "planted":
@@ -254,9 +323,9 @@ def update(payload):
 
 def state():
     with LOCK:
-        s = {k: v for k, v in STATE.items() if k != "_key"}
+        s = {k: v for k, v in STATE.items() if k not in ("_key", "_alive")}
         if HIST and HIST.get("map") == s.get("map"):
-            s["hist"] = {"rounds": HIST.get("rounds", {}), "sites": HIST.get("sites", {})}
+            s["hist"] = {"rounds": HIST.get("rounds", {}), "sites": HIST.get("sites", {}), "marks": HIST.get("marks", {})}
     if s:
         s["age"] = round(time.time() - s.pop("_t", 0), 1)
         if s.get("round_phase") == "live" and s.get("live_since"):

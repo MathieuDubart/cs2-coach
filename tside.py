@@ -16,8 +16,12 @@ import config
 import midround
 
 OUT = os.path.join(config.OUT, "population", "tside")
+ZONES = os.path.join(config.OUT, "population", "tside_zones.json")   # which zones lead to which site, per map
 RUSH = 30.0          # site taken in the first 30 s (timer above 1:25): a rush
+LATE = 75.0          # site taken after 75 s (timer under 0:40): a late hit
+LONE = 1000.0        # a T with no teammate within 1000 units (about 25 m) is alone
 ROUND_TIME = 115.0
+DYN_FR = {"rush": "rush", "fast": "fast push by 1-2 Ts", "exec": "execute", "late": "late hit", "none": "no attack"}
 CONTEXTS = ["pistol", "r2_win", "r2_loss", "eco", "force", "full"]
 CTX_FR = {"pistol": "Pistol round", "r2_win": "Round 2, Ts won the pistol", "r2_loss": "Round 2, Ts lost the pistol",
           "eco": "T eco", "force": "T force-buy", "full": "T full buy"}
@@ -48,7 +52,8 @@ def analyze(ddir):
     S = pd.read_parquet(os.path.join(ddir, "samples.parquet"), columns=["steamid", "side", "round", "t", "X", "Y", "Z", "zone", "health"])
     S = S[(S.steamid != 0) & (S.health > 0)]
     fd = os.path.join(ddir, "duels.parquet")
-    D = pd.read_parquet(fd, columns=["round", "t", "killer_side", "victim_side", "victim_zone", "killer_zone"]) if os.path.exists(fd) else pd.DataFrame()
+    dcols = ["round", "t", "killer_side", "victim_side", "victim_zone", "killer_zone", "victim_mate_dist", "killer_mate_dist", "traded"]
+    D = pd.read_parquet(fd).reindex(columns=dcols) if os.path.exists(fd) else pd.DataFrame()
     # teams: the T of the first round are team a, whatever side they play later
     first = S[S["round"] == R["round"].min()]
     team_a = set(first[first.side == "T"].steamid)
@@ -97,12 +102,31 @@ def analyze(ddir):
                "score_t": score[team], "score_ct": score["b" if team == "a" else "a"],
                "T_buy": r.T_buy, "CT_buy": r.CT_buy, "winner": r.winner, "reason": r.reason,
                "T_won": r.winner == "T", "plant_site": plant_site, "plant_t": plant_t, "end_t": float(r.end_t) if pd.notna(r.end_t) else None,
-               "site": "-", "hit_t": None, "n_exec": None, "lurk_other": None, "approaches": None, "pre_zones": None,
+               "site": "-", "hit_t": None, "n_exec": None, "n_push": None, "lurk_other": None, "approaches": None, "pre_zones": None,
                "t_events": ";".join(f"{z}@{t:.1f}" for z, t in t_events if isinstance(z, str) and z) or None,
-               "first_zone": None, "first_t": None, "first_t_side_won": None, "t_alive_hit": None, "ct_alive_hit": None}
+               "first_zone": None, "first_t": None, "first_t_side_won": None, "t_alive_hit": None, "ct_alive_hit": None,
+               "fc_alone": None, "t_deaths": None, "ct_deaths": None, "bunch_t": None, "bunch_zone": None}
         if len(kd):
             k0 = kd.iloc[0]
-            rec.update(first_zone=humanize(k0.victim_zone), first_t=float(k0.t), first_t_side_won=k0.killer_side == "T")
+            # the T of the first duel: alone (no teammate within LONE units) or with others
+            md = k0.victim_mate_dist if k0.victim_side == "T" else k0.killer_mate_dist if k0.killer_side == "T" else None
+            rec.update(first_zone=humanize(k0.victim_zone), first_t=float(k0.t), first_t_side_won=k0.killer_side == "T",
+                       fc_alone=bool(md > LONE) if md is not None and md == md else None)
+            # who died where and when: a T killed alone and not traded is flagged
+            td = kd[kd.victim_side == "T"]
+            lone = (td.victim_mate_dist.fillna(0) > LONE) & ~td.traded.fillna(False).astype(bool)
+            rec["t_deaths"] = ";".join(f"{humanize(z) if isinstance(z, str) and z != '?' else '?'}@{t:.1f}@{int(l)}"
+                                       for z, t, l in zip(td.victim_zone, td.t, lone)) or None
+            cd = kd[kd.victim_side == "CT"]
+            rec["ct_deaths"] = ";".join(f"{humanize(z) if isinstance(z, str) and z != '?' else '?'}@{t:.1f}"
+                                        for z, t in zip(cd.victim_zone, cd.t)) or None
+            # 3 Ts down within 10 s: the push died there
+            tt = td.t.to_numpy()
+            for i in range(len(tt) - 2):
+                if tt[i + 2] - tt[i] <= 10:
+                    zz = td[(td.t >= tt[i]) & (td.t <= tt[i] + 10)].victim_zone.dropna()
+                    rec.update(bunch_t=float(tt[i]), bunch_zone=humanize(zz.mode().iloc[0]) if len(zz) else None)
+                    break
         if hit:
             site, ht = hit
             other = "B" if site == "A" else "A"
@@ -120,7 +144,10 @@ def analyze(ddir):
             at = T_[(T_.t >= ht - 1) & (T_.t <= ht + 1) & ~T_.steamid.isin(hitters)]
             lurk = bool((midround._dist(at.X.values, at.Y.values, at.Z.values, oc) <= orad).any()) if len(at) else False
             deaths_before = kd[kd.t < ht] if len(kd) else kd
-            rec.update(site=site, hit_t=round(ht, 1), n_exec=int(len(hitters)), lurk_other=lurk, pre_zones=pre_zones,
+            # the Ts of the push: the ones who got in, plus the ones killed on the way in the last 10 s
+            died_on_way = int(((deaths_before.victim_side == "T") & (deaths_before.t >= ht - 10)).sum()) if len(kd) else 0
+            rec.update(site=site, hit_t=round(ht, 1), n_exec=int(len(hitters)), n_push=int(len(hitters)) + died_on_way,
+                       lurk_other=lurk, pre_zones=pre_zones,
                        approaches=",".join(humanize(z) for z in came.values) if len(came) else None,
                        t_alive_hit=int(r.T_n) - int((deaths_before.victim_side == "T").sum()) if len(kd) else int(r.T_n),
                        ct_alive_hit=int(r.CT_n) - int((deaths_before.victim_side == "CT").sum()) if len(kd) else int(r.CT_n))
@@ -128,6 +155,16 @@ def analyze(ddir):
         if r.winner in ("T", "CT"):
             score[team if r.winner == "T" else ("b" if team == "a" else "a")] += 1
     return pd.DataFrame(rows)
+
+
+def _outdated(f):
+    """A file written by an older version (no deaths per round yet) is analyzed again."""
+    import pyarrow.parquet as pq
+    try:
+        names = pq.read_schema(f).names
+    except Exception:
+        return True
+    return "map" in names and "t_deaths" not in names
 
 
 def run_all(log=print, force=False):
@@ -139,7 +176,7 @@ def run_all(log=print, force=False):
         src = os.path.join(d, "rounds.parquet")
         if not os.path.exists(src) or not os.path.exists(os.path.join(d, "samples.parquet")):
             continue
-        if not force and os.path.exists(f) and os.path.getmtime(f) >= os.path.getmtime(src):
+        if not force and os.path.exists(f) and os.path.getmtime(f) >= os.path.getmtime(src) and not _outdated(f):
             continue
         try:
             analyze(d).to_parquet(f)
@@ -160,7 +197,15 @@ def load():
     if not dfs:
         return pd.DataFrame()
     df = pd.concat(dfs, ignore_index=True)
-    return _sequences(_directions(df))
+    zs = zone_sites(df)
+    try:   # kept for the round-by-round story of a single match (no need to load the whole base)
+        import json
+        tmp = ZONES + f".{os.getpid()}.tmp"
+        json.dump(zs, open(tmp, "w", encoding="utf-8"), ensure_ascii=False)
+        os.replace(tmp, ZONES)
+    except OSError:
+        pass
+    return _sequences(_dynamics(_directions(df, zs=zs)))
 
 
 def zone_sites(df):
@@ -177,11 +222,11 @@ def zone_sites(df):
     return out
 
 
-def _directions(df, lean=0.7):
+def _directions(df, lean=0.7, zs=None):
     """An attack stopped before the site still has a side: where the T fought, when those zones lead to one site
-    in at least 70 % of the rounds where the T got in."""
-    zs = zone_sites(df)
-    site, when = df.site.tolist(), [None] * len(df)
+    in at least 70 % of the rounds where the T got in. Also counts the fights of that push in its first 10 s."""
+    zs = zone_sites(df) if zs is None else zs
+    site, when, many = df.site.tolist(), [None] * len(df), [None] * len(df)
     for i, (mp, ent, evs) in enumerate(zip(df["map"], df.entered, df.t_events)):
         if ent or not isinstance(evs, str):
             continue
@@ -200,10 +245,53 @@ def _directions(df, lean=0.7):
                     votes["B"].append(float(t))
         top = max(votes, key=lambda k: len(votes[k]))
         if len(votes[top]) >= 2 and len(votes[top]) > len(votes["B" if top == "A" else "A"]):
-            site[i], when[i] = top, min(votes[top])
+            t0 = min(votes[top])
+            site[i], when[i], many[i] = top, t0, sum(1 for t in votes[top] if t <= t0 + 10)
     df["site"] = site
     df["stop_t"] = when
+    df["stop_n"] = many
     df["entered"] = df.entered.fillna(False).astype(bool)
+    return df
+
+
+def _deaths_list(s, lone_flag=True):
+    """'zone@t@1;...' -> [(zone, t, alone)]"""
+    out = []
+    for e in str(s or "").split(";"):
+        p = e.split("@")
+        if len(p) >= 2:
+            try:
+                out.append((p[0], float(p[1]), p[2] == "1" if lone_flag and len(p) > 2 else False))
+            except ValueError:
+                pass
+    return out
+
+
+def _dynamics(df):
+    """The shape of each attack, as the CT side sees it in the kill feed: a rush (3+ Ts on a site in the first 30 s),
+    a fast push by 1-2 Ts, an execute, a late hit (after 75 s), or no attack; and the Ts lost alone before it
+    (no teammate within 1000 units, not traded)."""
+    if "t_deaths" not in df:
+        df["t_deaths"] = None
+    ent = df.entered.to_numpy(dtype=bool)
+    ht = pd.to_numeric(df.hit_t, errors="coerce").to_numpy(dtype=float)
+    stt = pd.to_numeric(df.stop_t, errors="coerce").to_numpy(dtype=float)
+    commit = np.where(ent, ht, stt)
+    push = df.n_push if "n_push" in df else df.n_exec
+    grp = np.where(ent, pd.to_numeric(push, errors="coerce").to_numpy(dtype=float),
+                   pd.to_numeric(df.get("stop_n"), errors="coerce").to_numpy(dtype=float) if "stop_n" in df else np.nan)
+    has = df.site.isin(["A", "B"]).to_numpy() & ~np.isnan(commit)
+    dyn = np.where(~has, "none", np.where(commit <= RUSH, np.where(np.nan_to_num(grp) >= 3, "rush", "fast"),
+                                          np.where(commit <= LATE, "exec", "late")))
+    lone_n, lone_zone, lone_t = [], [], []
+    for c, s in zip(commit, df.t_deaths):
+        lim = c if c == c else 60.0
+        lo = [(z, t) for z, t, a in _deaths_list(s) if a and t < lim]
+        lone_n.append(len(lo))
+        lone_zone.append(lo[0][0] if lo else None)
+        lone_t.append(lo[0][1] if lo else None)
+    df["commit"], df["grp"], df["dyn"] = commit, grp, dyn
+    df["lone_n"], df["lone_zone"], df["lone_t"] = lone_n, lone_zone, lone_t
     return df
 
 
@@ -218,9 +306,11 @@ def _context(r):
 def _sequences(df):
     """What the same T team did before, in the same half: last site, won or lost, streak, how often each site."""
     df = df.sort_values(["match", "half", "round"]).reset_index(drop=True)
-    cols = {k: [] for k in ("prev_site", "prev_won", "streak", "nA", "nB", "pistol_won", "losses")}
+    cols = {k: [] for k in ("prev_site", "prev_won", "streak", "nA", "nB", "pistol_won", "losses", "prev_dyn", "prev_lone",
+                            "rush_before", "n_before")}
     for _, g in df.groupby(["match", "half"], sort=False):
         last_site, last_won, streak, nA, nB, pw, losses = None, None, 0, 0, 0, None, 0
+        last_dyn, last_lone, rushes, nb = None, None, 0, 0
         for _, r in g.iterrows():
             cols["prev_site"].append(last_site)
             cols["prev_won"].append(last_won)
@@ -229,6 +319,13 @@ def _sequences(df):
             cols["nB"].append(nB)
             cols["pistol_won"].append(pw)
             cols["losses"].append(losses)
+            cols["prev_dyn"].append(last_dyn)
+            cols["prev_lone"].append(last_lone)
+            cols["rush_before"].append(rushes)
+            cols["n_before"].append(nb)
+            last_dyn, last_lone = r.get("dyn"), bool(r.get("lone_n") or 0)
+            rushes += r.get("dyn") == "rush"
+            nb += 1
             if r.rih == 1:
                 pw = bool(r.T_won)
             losses = 0 if r.T_won else losses + 1
@@ -277,6 +374,11 @@ def _profile(g):
     if len(g.first_zone.dropna()) >= 8:
         out["first"] = [{"zone": z, "pct": _pct(p)} for z, p in fz.head(3).items()]
         out["first_timer"] = _timer(g.first_t.dropna().median())
+    if "dyn" in g:   # the shape of the attacks, and how often they lose a T alone before it
+        vc = g.dyn.value_counts(normalize=True)
+        out["dyn"] = {k: _pct(vc.get(k, 0.0)) for k in DYN_FR}
+        out["rush_all"] = out["dyn"]["rush"]
+        out["lone"] = _pct((g.lone_n > 0).mean())
     return out
 
 
@@ -358,6 +460,104 @@ def model(df):
             "n": int(len(h)), "fr": FEATURES_FR}
 
 
+TEMPO = ["rush_won", "half_excess"]
+TEMPO_FR = {"rush_won": "they rushed and won the last round", "half_excess": "they rushed more than usual this half"}
+
+
+def _rush_rates(df):
+    """P(rush) per map, and per map and kind of round (pulled toward the map's rate when there are few rounds)."""
+    r_map = df.groupby("map").dyn.agg(lambda s: (s == "rush").mean()).to_dict()
+    r_ctx = {}
+    for (mp, c), g in df[df.ctx.notna()].groupby(["map", "ctx"]):
+        r_ctx[(mp, c)] = float(((g.dyn == "rush").sum() + 10 * r_map[mp]) / (len(g) + 10))
+    return r_map, r_ctx
+
+
+def _tempo_x(d, r_map):
+    """The features of the tempo model: a rush they won last round, and how many more rushes than the map's usual
+    rate they did in the half so far (0 before the 3rd round of the half)."""
+    rm = d["map"].map(r_map).fillna(0.2).to_numpy(dtype=float)
+    nb = d.n_before.to_numpy(dtype=float)
+    rw = ((d.prev_dyn == "rush") & d.prev_won.fillna(False).astype(bool)).to_numpy(dtype=float)
+    ex = np.where(nb >= 2, (d.rush_before.to_numpy(dtype=float) - nb * rm) / np.sqrt(np.maximum(nb, 1)), 0.0)
+    return np.column_stack([rw, ex])
+
+
+def tempo_model(df):
+    """Will the T rush this round? The map's rate for this kind of round, moved by what this team did in the half
+    (fit on every map together). Rushes do not predict the next site, but a team that rushes keeps rushing."""
+    if "dyn" not in df:
+        return None
+    d = df[(df.n_before >= 1) & df.ctx.notna()]
+    if len(d) < 300:
+        return None
+    r_map, r_ctx = _rush_rates(df)
+    p0 = np.clip(np.array([r_ctx[(m, c)] for m, c in zip(d["map"], d.ctx)]), .02, .98)
+    off = np.log(p0 / (1 - p0))
+    X = _tempo_x(d, r_map)
+    y = (d.dyn == "rush").to_numpy(dtype=float)
+    b, se = _fit(X, y, off)
+    return {"beta": {k: round(float(v), 3) if abs(v) >= 1.5 * e else 0.0 for k, v, e in zip(TEMPO, b, se)},
+            "raw": {k: round(float(v), 3) for k, v in zip(TEMPO, b)}, "se": {k: round(float(v), 3) for k, v in zip(TEMPO, se)},
+            "n": int(len(d)), "fr": TEMPO_FR}
+
+
+def alone_gamma(df):
+    """A T alone at the first duel (no teammate within 1000 units) is often a lurker or an info player: the team is
+    elsewhere. Pooled over every map: how much of the zone's usual lean such a contact keeps
+    (1 = the same as a group, 0 = no information, below 0 = the other way)."""
+    if "fc_alone" not in df:
+        return None
+    f = df[df.first_zone.notna() & df.site.isin(["A", "B"]) & df.fc_alone.notna()]
+    xs, ys, offs = [], [], []
+    lo = lambda p: np.log(p / (1 - p))
+    for mp, g in f.groupby("map"):
+        alone = g.fc_alone.astype(bool)
+        grp = g[~alone]
+        if len(grp) < 30:
+            continue
+        prior = float((grp.site == "A").mean())
+        lean = grp.groupby("first_zone").site.agg(lambda s: ((s == "A").sum() + 4 * prior) / (len(s) + 4))
+        a = g[alone & g.first_zone.isin(lean.index)]
+        if not len(a):
+            continue
+        pg = a.first_zone.map(lean).clip(.03, .97).to_numpy(dtype=float)
+        xs += list(lo(pg) - lo(prior))
+        ys += list((a.site == "A").to_numpy(dtype=float))
+        offs += [lo(prior)] * len(a)
+    if len(xs) < 100:
+        return None
+    b, se = _fit(np.array(xs)[:, None], np.array(ys), np.array(offs), l2=0.1)
+    return {"gamma": round(float(b[0]), 3), "se": round(float(se[0]), 3), "n": len(xs),
+            "share": _pct(f.fc_alone.astype(bool).mean())}
+
+
+def _dyn_after(df):
+    """What the same team does on the next round after each kind of attack (every map together)."""
+    if "dyn" not in df:
+        return None
+    d = df[df.prev_dyn.notna() & df.prev_won.notna()]
+    if len(d) < 300:
+        return None
+    rows = []
+    for key in ("rush", "fast", "exec", "late", "none"):
+        for won in (True, False):
+            x = d[(d.prev_dyn == key) & (d.prev_won == won)]
+            if len(x) < 40:
+                continue
+            s = x[x.prev_site.isin(["A", "B"])]
+            rows.append({"dyn": key, "won": won, "n": int(len(x)), "rush": _pct((x.dyn == "rush").mean()),
+                         "same": _pct((s.site == s.prev_site).mean()) if len(s) >= 30 else None,
+                         "other": _pct((s.site.isin(["A", "B"]) & (s.site != s.prev_site)).mean()) if len(s) >= 30 else None})
+    lone = []
+    for flag in (True, False):
+        x = d[(d.prev_lone == flag) & (d.prev_won == False)]
+        s = x[x.prev_site.isin(["A", "B"])]
+        if len(s) >= 40:
+            lone.append({"lone": flag, "n": int(len(s)), "same": _pct((s.site == s.prev_site).mean()), "rush": _pct((x.dyn == "rush").mean())})
+    return {"rows": rows, "lone": lone, "base_rush": _pct((d.dyn == "rush").mean()), "dyn_fr": DYN_FR}
+
+
 def econ_table(df):
     """What the T probably buy, from what the CT side can see: pistol won or lost, last round, losses in a row."""
     out = {}
@@ -373,7 +573,7 @@ def econ_table(df):
 
 
 SUMMARY = os.path.join(config.OUT, "population", "tside_summary.json")
-VERSION = 2   # bump when the summary changes shape: the cache is rebuilt
+VERSION = 3   # bump when the summary changes shape: the cache is rebuilt
 
 
 def _stamp():
@@ -384,25 +584,32 @@ def _stamp():
 def tendencies(maps, df=None):
     """Per map: odds by kind of round, habits after a win or a loss, and what the live predictor needs."""
     import json
-    if df is None:
-        try:
-            cur = json.load(open(SUMMARY, encoding="utf-8"))
-            if cur.get("_stamp") == _stamp() and set(maps) <= set(cur.get("_maps", [])):
-                cur["maps"] = {m: v for m, v in cur["maps"].items() if m in maps}
-                return cur
-        except (OSError, ValueError):
-            pass
-    res = _tendencies(maps, load() if df is None else df)
-    if df is None and res:
-        json.dump(dict(res, _stamp=_stamp(), _maps=sorted(maps)), open(SUMMARY, "w", encoding="utf-8"), ensure_ascii=False)
+    if df is not None:
+        return _tendencies(maps, df)
+    try:
+        cur = json.load(open(SUMMARY, encoding="utf-8"))
+        if cur.get("_stamp") == _stamp():
+            cur["maps"] = {m: v for m, v in cur["maps"].items() if m in maps}
+            return cur
+    except (OSError, ValueError):
+        pass
+    df = load()
+    # every map of the base at once: the cache then serves any player, whatever their maps
+    res = _tendencies(sorted(set(df["map"].unique()) | set(maps)) if len(df) else maps, df)
+    if res:
+        tmp = SUMMARY + f".{os.getpid()}.tmp"
+        json.dump(dict(res, _stamp=_stamp()), open(tmp, "w", encoding="utf-8"), ensure_ascii=False)
+        os.replace(tmp, SUMMARY)   # never a half-written file for the other processes
+        res["maps"] = {m: v for m, v in res["maps"].items() if m in maps}
     return res
 
 
 def _tendencies(maps, df):
     if not len(df):
         return None
-    res = {"model": model(df), "econ": econ_table(df), "switch_all": _switch_table(df), "rush_s": RUSH, "maps": {},
-           "ctx_fr": CTX_FR}
+    res = {"model": model(df), "econ": econ_table(df), "switch_all": _switch_table(df), "rush_s": RUSH, "late_s": LATE, "maps": {},
+           "ctx_fr": CTX_FR, "tempo": tempo_model(df), "alone": alone_gamma(df), "dyn_after": _dyn_after(df), "dyn_fr": DYN_FR}
+    r_map, r_ctx = _rush_rates(df) if "dyn" in df else ({}, {})
     dirs = _map_dirs()
     pool = []
     for mp in maps:
@@ -418,8 +625,11 @@ def _tendencies(maps, df):
                 ctx[c] = _profile(x)
                 hx = hits[hits.ctx == c]
                 ctx[c]["pA_hit"] = round(float(((hx.site == "A").sum() + 3 * allA) / (len(hx) + 3)), 3)
+                if (mp, c) in r_ctx:
+                    ctx[c]["rush_p"] = round(r_ctx[(mp, c)], 3)
         res["maps"][mp] = {"n_rounds": int(len(g)), "n_matches": int(g.match.nunique()), "all": _profile(g), "ctx": ctx,
-                           "after": _after_table(g), "pA_hit": round(float(allA), 3)}
+                           "after": _after_table(g), "pA_hit": round(float(allA), 3),
+                           "rush_p": round(float(r_map[mp]), 3) if mp in r_map else None}
         try:
             res["maps"][mp]["evidence"] = evidence(mp, g, dirs.get(mp, []), pool)
         except Exception as e:  # the rest of the reading stays usable
@@ -466,14 +676,17 @@ def _contact(g, top=8):
     if len(f) < 30:
         return None
     zones = f.first_zone.value_counts().head(top).index.tolist()
-    res = {"zones": zones, "lik": {}, "t": {}}
-    for site in ("A", "B", "-"):
-        x = f[f.site == site]
-        if len(x) < 10:
-            continue
-        vc = x.first_zone.where(x.first_zone.isin(zones), "other").value_counts()
-        tot = len(x) + len(zones) + 1
-        res["lik"]["none" if site == "-" else site] = {z: round(float((vc.get(z, 0) + 1) / tot), 4) for z in zones + ["other"]}
+    res = {"zones": zones, "lik": {}, "lik_g": {}, "t": {}}
+    # lik: every first duel; lik_g: only the ones where the T had a teammate close (the user said "2+ Ts")
+    grp = f[f.fc_alone.notna() & ~f.fc_alone.fillna(False).astype(bool)] if "fc_alone" in f else f.iloc[0:0]
+    for key, src in (("lik", f), ("lik_g", grp)):
+        for site in ("A", "B", "-"):
+            x = src[src.site == site]
+            if len(x) < 10:
+                continue
+            vc = x.first_zone.where(x.first_zone.isin(zones), "other").value_counts()
+            tot = len(x) + len(zones) + 1
+            res[key]["none" if site == "-" else site] = {z: round(float((vc.get(z, 0) + 1) / tot), 4) for z in zones + ["other"]}
     for z in zones:
         res["t"][z] = _timer(f[f.first_zone == z].first_t.median())
     return res
@@ -598,6 +811,36 @@ def retake_table(pool):
             out.append({"ct": int(ct), "t": int(tt), "n": int(len(s)), "ct_win": round(100 * (1 - float(s.win_t.mean())))})
     return sorted(out, key=lambda x: (-x["ct"], x["t"]))
 
+
+def match_story(mid):
+    """Round by round, for one match: where the Ts went and how (rush, execute...), who died where and when (the Ts
+    killed alone flagged), the plant and the result. Times in seconds since the end of the freeze time."""
+    import json
+    f = os.path.join(OUT, f"{mid}.parquet")
+    if not os.path.exists(f):
+        return None
+    df = pd.read_parquet(f)
+    if not len(df) or "t_deaths" not in df:
+        return None
+    try:
+        zs = json.load(open(ZONES, encoding="utf-8"))
+    except (OSError, ValueError):
+        zs = {}
+    df = _dynamics(_directions(df, zs=zs))
+    num = lambda v: round(float(v), 1) if v is not None and v == v else None
+    out = []
+    for _, r in df.sort_values("round").iterrows():
+        out.append({"r": int(r["round"]), "team": r.t_team, "site": r.site, "in": bool(r.entered), "dyn": r.dyn,
+                    "at": num(r.commit), "grp": int(r.grp) if r.grp == r.grp and r.grp is not None else None,
+                    "plant": [r.plant_site, num(r.plant_t)] if r.plant_site in ("A", "B") else None,
+                    "tw": bool(r.T_won), "why": r.reason, "end": num(r.end_t),
+                    "lurk": bool(r.lurk_other) if isinstance(r.lurk_other, (bool, np.bool_)) else None,
+                    "td": [[z, round(t, 1), a] for z, t, a in _deaths_list(r.t_deaths)],
+                    "cd": [[z, round(t, 1)] for z, t, _ in _deaths_list(r.get("ct_deaths"), lone_flag=False)],
+                    "fc": [r.first_zone, num(r.first_t), None if r.fc_alone is None or r.fc_alone != r.fc_alone else bool(r.fc_alone)]
+                          if isinstance(r.first_zone, str) else None,
+                    "bunch": [r.bunch_zone, num(r.bunch_t)] if r.bunch_t is not None and r.bunch_t == r.bunch_t else None})
+    return out
 
 
 if __name__ == "__main__":

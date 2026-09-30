@@ -410,6 +410,17 @@ body.focus.ingame .tread .why{font-size:14.5px}
 .linkrow{display:flex;flex-wrap:wrap;gap:8px}
 .linkrow a{font:600 13px var(--f-body);color:var(--ink);text-decoration:none;border:1px solid var(--line);border-radius:14px;padding:5px 12px;background:var(--panel)}
 .linkrow a:hover{border-color:var(--ink)}
+.ask button[aria-pressed="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.ask button.site-A[aria-pressed="true"]{background:var(--siteA);border-color:var(--siteA);color:#fff}
+.ask button.site-B[aria-pressed="true"]{background:var(--siteB);border-color:var(--siteB);color:#fff}
+.ask.sm button{font:600 14px var(--f-body);padding:5px 12px;min-height:36px}
+.ask button.auto{border:2px dashed var(--flash)}
+.story td.feed{font-size:13px;line-height:1.6}
+.story .kt,.story .kc{font:700 10.5px var(--f-mono);padding:1px 4px;border-radius:4px;color:#fff}
+.story .kt{background:var(--t);color:#1a1206}
+.story .kc{background:var(--ct)}
+.story .kt.alone{outline:2px solid var(--flash);outline-offset:1px}
+.story i{color:var(--flash);font-style:normal;font-weight:600}
 </style>
 
 <div class="bar"><div class="bar-in">
@@ -642,6 +653,21 @@ const CAPS={control:["Size = number of duels in the zone. Color = side that wins
  mine:["Green dot = your position when you kill. Red cross = your position when you die, dashed from your killer. Number = round.",'<span><i style="background:var(--good)"></i>kill</span><span><i style="background:var(--bad)"></i>death</span>'],
  heatT:["Your presence as T.",'<span><i style="background:var(--t)"></i>presence</span>'],heatCT:["Your presence as CT.",'<span><i style="background:var(--ct)"></i>presence</span>'],
  open:["First kill of each round, all players.",'<span><i style="background:var(--t)"></i>T opening</span><span><i style="background:var(--ct)"></i>CT opening</span>']};
+// round by round from the demo: where the Ts went and how fast, who died where and when
+function storyBlock(m){const side={};m.per_round.forEach(r=>side[r.round]=r.side);
+  const rows=m.story.filter(s=>side[s.r]),ct=rows.filter(s=>side[s.r]==="CT"),tt=rows.filter(s=>side[s.r]==="T");
+  const lone=s=>s.td.filter(d=>d[2]&&d[1]<(s.at??60)).length;
+  const pl=(k,w,ws)=>`${k} ${k===1?w:ws}`;
+  const sum=(xs,who)=>{if(!xs.length)return "";const c=k=>xs.filter(s=>s.dyn===k).length,A=xs.filter(s=>s.site==="A").length,B=xs.filter(s=>s.site==="B").length,L=xs.filter(s=>lone(s)).length;
+    const parts=[pl(c("rush"),"rush","rushes"),pl(c("exec"),"execute","executes"),pl(c("late"),"late hit","late hits")];if(c("fast"))parts.push(pl(c("fast"),"fast push by 1-2 Ts","fast pushes by 1-2 Ts"));if(c("none"))parts.push(pl(c("none"),"round without a real attack","rounds without a real attack"));
+    return `<li><b>${who}</b>: ${parts.join(", ")} in ${xs.length} rounds. A ${A}, B ${B}. A T lost alone before the attack in ${pl(L,"round","rounds")}.</li>`};
+  const feed=s=>[...s.td.map(d=>({t:d[1],h:`<span class="kt${d[2]?" alone":""}">T</span> ${esc(d[0])} ${clock(d[1])}${d[2]?" <i>alone</i>":""}`})),...s.cd.map(d=>({t:d[1],h:`<span class="kc">CT</span> ${esc(d[0])} ${clock(d[1])}`}))].sort((a,b)=>a.t-b.t).map(e=>e.h).join(" · ")||"—";
+  const att=s=>{if(s.site!=="A"&&s.site!=="B")return "<b>No clear attack</b>";const b=[`<b>${s.site} · ${esc(DYN_EN[s.dyn]||"")}</b>`];
+    if(s.at!=null)b.push(`${s.in?"on the site":"stopped"} at ${clock(s.at)}${s.grp?`, ${pl(s.grp,"T","Ts")}`:""}`);if(s.plant)b.push(`bomb ${clock(s.plant[1])}`);if(s.lurk)b.push("a T stayed near the other site");if(s.bunch)b.push(`3 Ts down in 10 s at ${esc(s.bunch[0])}`);return b.join("<br>")};
+  return `<h3>How each round went</h3><p class="note">From the demo: where the Ts went and how fast, who died where and when. A T killed with no teammate close (about 25 m) and not traded is marked <i>alone</i>. Clock times as in game.</p>
+   <ul class="big-list">${sum(ct,"The Ts you faced")}${sum(tt,"Your team as T")}</ul>
+   <div class="tbl"><table class="story"><thead><tr><th>Round</th><th>The Ts</th><th>Who died where</th><th>Won by</th></tr></thead><tbody>
+   ${rows.map(s=>`<tr><td><b>${s.r}</b><br><span class="note">you ${side[s.r]}</span></td><td class="wrap">${att(s)}</td><td class="wrap feed">${feed(s)}</td><td>${s.tw?"Ts":"CTs"}</td></tr>`).join("")}</tbody></table></div>`}
 function renderMatches(){
   const p=P(),v=$("#v-matches"),ms=p.matches;if(S.match>=ms.length)S.match=0;
   const m=ms[S.match];
@@ -655,7 +681,8 @@ function renderMatches(){
     <div class="stat"><b class="num">${f1(s.kast)}%</b><span>KAST</span></div><div class="stat"><b class="num">${s.traded_pct==null?"—":f1(s.traded_pct)+"%"}</b><span>deaths traded</span></div>
     <div class="stat"><b class="num">${s.nades_unused}</b><span>grenades wasted</span></div><div class="stat"><b class="num">${s.clutches_won}/${s.clutches}</b><span>clutches won</span></div></div>
   ${m.notes?`<p style="max-width:75ch;font-size:16px">${m.notes.summary||""}</p>${findings(m.notes.priorities)}`:""}
-  <h3>Round by round</h3><div class="timeline-wrap"><div class="timeline">${m.per_round.map(r=>`<div class="rd ${r.side}" title="Round ${r.round} (${r.side}, ${roleOf(m.map,r.side)}): ${r.won?"won":"lost"}, ${r.kills} kill(s), ${r.deaths} death(s), your buy ${r.my_buy} / team ${r.team_buy}"><span>${r.round}</span><span class="${r.won?"w":"l"}">${r.won?"W":"L"}</span><span>${r.kills}-${r.deaths}</span></div>`).join("")}</div></div>
+  ${m.story&&m.story.length?storyBlock(m):""}
+  <h3>Your rounds</h3><div class="timeline-wrap"><div class="timeline">${m.per_round.map(r=>`<div class="rd ${r.side}" title="Round ${r.round} (${r.side}, ${roleOf(m.map,r.side)}): ${r.won?"won":"lost"}, ${r.kills} kill(s), ${r.deaths} death(s), your buy ${r.my_buy} / team ${r.team_buy}"><span>${r.round}</span><span class="${r.won?"w":"l"}">${r.won?"W":"L"}</span><span>${r.kills}-${r.deaths}</span></div>`).join("")}</div></div>
   <div class="stage"><div class="radar-box">
       <div class="btns" role="group" aria-label="Layer">${[["control","Zone control"],["mine","Your kills and deaths"],["heatT","Your T presence"],["heatCT","Your CT presence"],["open","Opening duels"]].map(([k,t])=>`<button type="button" data-layer="${k}" aria-pressed="${k==="control"}">${t}</button>`).join("")}</div>
       ${levelBtns(md,st.level)}
@@ -1271,7 +1298,16 @@ const WIN_OF=t=>t<20?"early":t<40?"setup":t<70?"hit":"late";
 const WIN_EN={early:"start of the round (1:55-1:35)",setup:"info phase (1:35-1:15)",hit:"site attack (1:15-0:45)",late:"end of the round (after 0:45)"};
 const WIN_SHORT={early:["start of the round","1:55-1:35"],setup:["info phase","1:35-1:15"],hit:["site attack","1:15-0:45"],late:["end of the round","after 0:45"]};
 const clock=t=>{const s=Math.max(0,115-t);return `${Math.floor(s/60)}:${String(Math.floor(s%60)).padStart(2,"0")}`};
-function evFor(g){const key=`${g.map}|${g.round}`;if(igEv.key!==key)igEv={key,contact:null,site:null};return igEv}
+function evFor(g){const key=`${g.map}|${g.round}`;if(igEv.key!==key){const H=g.hist||{},mk=(H.marks||{})[g.round]||{},s=(H.sites||{})[g.round];   // what you marked survives a reload
+  igEv={key,contact:mk.contact||null,alone:mk.alone??null,site:g.round_phase==="live"&&(s==="A"||s==="B")?s:null}}return igEv}
+const DYN_EN={rush:"rush",fast:"fast push by 1-2 Ts",exec:"execute",late:"late hit",none:"no attack"},DYN_SHORT={rush:"rush",fast:"fast",exec:"exec",late:"late",none:""};
+// the shape of a finished round: what you marked, or read from the clock (the bomb goes down about 7 s after the site is taken)
+function roundDyn(TS,H,n){const R=(H.rounds||{})[n]||{},mk=(H.marks||{})[n]||{},site=(H.sites||{})[n],rs=(TS&&TS.rush_s)||30,ls=(TS&&TS.late_s)||75;
+  if(mk.dyn)return {dyn:mk.dyn,how:"marked by you",lone:!!mk.lone};
+  let c=null,how="";
+  if(R.plant!=null){c=R.plant-7;how=`bomb down at ${clock(R.plant)}`}else if(mk.site_t!=null){c=mk.site_t;how=`seen on the site at ${clock(mk.site_t)}`}
+  if(c==null)return site==="-"?{dyn:"none",how:"marked not clear",lone:!!mk.lone}:mk.lone?{dyn:null,how:"",lone:true}:null;
+  return {dyn:c<=rs?"rush":c<=ls?"exec":"late",how,lone:!!mk.lone,auto:true}}
 function tsidePredict(TS,map,g,ev){const M=TS&&TS.maps&&TS.maps[map];if(!M||!g||g.round==null)return null;
   const H=g.hist||{},R=H.rounds||{},SI=H.sites||{},cur=g.round_phase==="over"?g.round+1:g.round;
   if(g.round_phase==="over"&&halfStart(cur)===cur)return null;   // the sides swap: this team will not attack any more
@@ -1282,9 +1318,10 @@ function tsidePredict(TS,map,g,ev){const M=TS&&TS.maps&&TS.maps[map];if(!M||!g||
   else{const last=R[half[half.length-1]]||{};let losses=0;for(let i=half.length-1;i>=0;i--){if((R[half[i]]||{}).win==="CT")losses++;else break}
     const key=last.win==="T"?"won":last.win==="CT"?(losses>=3?"lost3":"lost"+losses):null;econ=key&&TS.econ[key];
     mix=econ?{eco:econ.eco/100,force:econ.force/100,full:econ.full/100}:{full:.6,force:.35,eco:.05}}
+  const rOf=x=>x.rush_p??(x.rush_all!=null?x.rush_all/100:null)??M.rush_p??((x.rush??M.all.rush??0)/100);   // share of rounds that are rushes
   let pA=0,none=0,rush=0,w=0;
-  for(const [c,k] of Object.entries(mix)){const x=C[c];if(!x||!k)continue;pA+=k*x.pA_hit;none+=k*x.none/100;rush+=k*(x.rush??M.all.rush??0)/100;w+=k}
-  if(w){pA/=w;none/=w;rush/=w}else{pA=M.pA_hit;none=M.all.none/100;rush=(M.all.rush||0)/100}
+  for(const [c,k] of Object.entries(mix)){const x=C[c];if(!x||!k)continue;pA+=k*x.pA_hit;none+=k*x.none/100;rush+=k*rOf(x);w+=k}
+  if(w){pA/=w;none/=w;rush/=w}else{pA=M.pA_hit;none=M.all.none/100;rush=rOf(M.all)}
   pA=Math.min(.97,Math.max(.03,pA));
   const main=Object.entries(mix).sort((a,b)=>b[1]-a[1])[0][0],X=C[main]||M.all,CTX=TS.ctx_fr||{};
   const why=[];
@@ -1297,12 +1334,20 @@ function tsidePredict(TS,map,g,ev){const M=TS&&TS.maps&&TS.maps[map];if(!M||!g||
   if(last&&(last.site==="A"||last.site==="B")&&last.known){const sg=last.site==="A"?1:-1;if(last.won)x.repeat_won=sg;else x.repeat_lost=sg;
     let k=0;for(let i=seq.length-1;i>=0&&seq[i].site===last.site;i--)k++;if(k>=2)x.streak2=sg}
   const nA=seq.filter(q=>q.site==="A").length,nB=seq.filter(q=>q.site==="B").length;if(nA+nB)x.pref=(nA-nB)/Math.sqrt(nA+nB);
+  // the tempo: a team that rushes keeps rushing, above all after a rush that worked (model fit on the base)
+  const dyns=half.map(n=>roundDyn(TS,H,n)),TB=((TS.tempo||{}).beta)||{},whyT=[],rush0=rush;let zr=logit(Math.min(.95,Math.max(.02,rush)));
+  const lastDy=dyns[dyns.length-1];
+  if(TB.rush_won&&last&&last.known&&last.won&&lastDy&&lastDy.dyn==="rush"){zr+=TB.rush_won;whyT.push("they rushed and won the last round, and teams often do it again")}
+  const kn=dyns.filter(d=>d&&d.dyn),nR=kn.filter(d=>d.dyn==="rush").length;
+  if(TB.half_excess&&kn.length>=2){const ex=(nR-kn.length*(M.rush_p??.2))/Math.sqrt(kn.length);if(Math.abs(ex)>.3){zr+=TB.half_excess*ex;whyT.push(nR?`${nR} rush${nR>1?"es":""} in the ${kn.length} rounds you know of this half`:`no rush in the ${kn.length} rounds you know of this half`)}}
+  rush=sigm(zr);
   let z=logit(pA);
   for(const k of ["repeat_lost","repeat_won","streak2","pref"]){if(!x[k]||!B_[k])continue;const z2=z+B_[k]*x[k],d=Math.round(100*(sigm(z2)-sigm(z))*(1-none));z=z2;if(!d)continue;
     const pts=`+${Math.abs(d)} pts for ${d>0?"A":"B"}`;
     if(k==="repeat_lost")why.push(`They lost their last attack on ${last.site}: a team that loses on a site goes back less often (${pts}).`);
-    else if(k==="pref")why.push(`This half: A ${nA} times, B ${nB} times. Teams keep their favorite site (${pts}).`);
+    else if(k==="pref")why.push(`This half: A ${nA} time${nA===1?"":"s"}, B ${nB} time${nB===1?"":"s"}. Teams keep their favorite site (${pts}).`);
     else why.push(`${(TS.model.fr||{})[k]||k} (${pts}).`)}
+  if(whyT.length)why.push(`Rush this round: ${Math.round(100*rush)}% (usually ${Math.round(100*rush0)}% here): ${whyT.join("; ")}.`);
   let a=sigm(z)*(1-none),b=(1-sigm(z))*(1-none),n=none;
   // in the round: what you can see changes the odds (likelihoods measured in the base)
   const E=M.evidence||{},live=g.round_phase==="live"&&cur===g.round,planted=live&&g.bomb==="planted",ev0=ev||{};
@@ -1314,10 +1359,26 @@ function tsidePredict(TS,map,g,ev){const M=TS&&TS.maps&&TS.maps[map];if(!M||!g||
     if(planted){n=0;norm();evid.push("the bomb is down")}
     else if(g.elapsed!=null&&g.elapsed>=15&&E.survival&&E.survival.A&&E.survival.B){const S_=E.survival,i=Math.min(S_.t.length-1,Math.round(g.elapsed/5));
       shift(`${Math.round(g.elapsed)} s in and no site taken yet: late attacks go ${S_.A[i]<S_.B[i]?"B":"A"} more often`,S_.A[i],S_.B[i],(S_.none||[])[i]||.5);evid.push(`${clock(g.elapsed)} on the clock, no site taken`)}
-    if(!planted&&ev0.contact&&E.contact&&E.contact.lik){const L=E.contact.lik,zc=ev0.contact,g_=(o)=>((L[o]||{})[zc]??(L[o]||{}).other);
-      const la=g_("A"),lb=g_("B"),ln=g_("none")??((la+lb)/2);if(la&&lb){shift(`First contact at ${zc}: in the base, first duels there come before ${la>lb?"A":"B"} attacks ${Math.round(100*Math.max(la,lb)/(la+lb))}% of the time`,la,lb,ln);evid.push(`first contact at ${zc}`)}}}
+    if(!planted&&ev0.contact&&E.contact&&E.contact.lik){const zc=ev0.contact,G=E.contact.lik_g&&E.contact.lik_g.A&&E.contact.lik_g.B?E.contact.lik_g:null,gm=(TS.alone||{}).gamma;
+      const L=ev0.alone!=null&&G?G:E.contact.lik,g_=(o)=>((L[o]||{})[zc]??(L[o]||{}).other);
+      let la=g_("A"),lb=g_("B"),ln=g_("none")??((la+lb)/2);
+      if(la&&lb){if(ev0.alone===true&&gm!=null){const q=Math.pow(la/lb,gm/2);   // a lone T: the zone's usual lean, turned around (measured in the base, A against B only)
+          shift(`One T alone at ${zc}: a lone T is often a lurker or an info player, the others tend to be on the other side`,q,1/q,1);evid.push(`one T alone at ${zc}`)}
+        else{shift(`First contact at ${zc}${ev0.alone===false?" with 2+ Ts":""}: in the base, first duels there come before ${la>lb?"A":"B"} attacks ${Math.round(100*Math.max(la,lb)/(la+lb))}% of the time`,la,lb,ln);evid.push(`first contact at ${zc}${ev0.alone===false?", 2+ Ts":""}`)}}}}
   if(!seq.some(q=>q.site)&&!evid.length)why.push(half.length?"Mark where they hit after each round: the reading adapts to this team.":"First round of the half: the numbers come from the base.");
-  return {A:Math.round(100*a),B:Math.round(100*b),none:Math.round(100*n),rush:Math.round(100*rush),ctx:main,X,why,seq,rih,cur,evid,live,planted,E}}
+  return {A:Math.round(100*a),B:Math.round(100*b),none:Math.round(100*n),rush:Math.round(100*rush),rush0:Math.round(100*rush0),dyns,ctx:main,X,why,seq,rih,cur,evid,live,planted,E}}
+function askDyn(TS,H,n){const d=roundDyn(TS,H,n)||{},R=(H.rounds||{})[n]||{},mk=(H.marks||{})[n]||{};
+  const hint=!d.dyn&&R.win==="CT"&&R.plant==null&&R.end!=null&&R.end<=35?`All the Ts were dead at ${clock(R.end)}: a rush?`:d.auto?`Read from the clock (${d.how}). Fix it if you saw otherwise.`:"";
+  return `<div class="ask sm" role="group" aria-label="How the Ts played round ${n}"><b>How?</b>
+    ${["rush","fast","exec","late"].map(k=>`<button type="button" data-dyn="${k}" data-round="${n}" aria-pressed="${mk.dyn===k}"${d.auto&&d.dyn===k?' class="auto" title="Read from the clock"':""}>${k==="fast"?"1-2 Ts early":DYN_EN[k][0].toUpperCase()+DYN_EN[k].slice(1)}</button>`).join("")}
+    <button type="button" data-lone="${n}" aria-pressed="${!!mk.lone}" title="A T died with no teammate close, and was not traded, before their attack">They lost a T alone</button>
+    ${hint?`<span class="note">${esc(hint)}</span>`:""}</div>`}
+function roundDetail(TS,H,n){const R=(H.rounds||{})[n]||{},mk=(H.marks||{})[n]||{},d=roundDyn(TS,H,n),bits=[];
+  if(d&&d.dyn)bits.push(`${DYN_EN[d.dyn]} (${d.how})`);
+  if(mk.contact)bits.push(`first contact ${mk.contact}${mk.alone===true?", 1 T alone":mk.alone===false?", 2+ Ts":""}${mk.contact_t!=null?` at ${clock(mk.contact_t)}`:""}`);
+  if(d&&d.lone)bits.push("they lost a T alone");
+  if(R.dead!=null)bits.push(`you died at ${clock(R.dead)}`);if((R.kills||[]).length)bits.push(`your kills at ${R.kills.map(clock).join(", ")}`);
+  if(R.end!=null)bits.push(`round over at ${clock(R.end)}`);return bits.join(" · ")}
 function oddsBar(r){return `<div class="obar" role="img" aria-label="A ${r.A}%, B ${r.B}%, no clear hit ${r.none}%"><i class="A" style="width:${r.A}%">${r.A>=12?`A ${r.A}%`:""}</i><i class="B" style="width:${r.B}%">${r.B>=12?`B ${r.B}%`:""}</i><i class="N" style="width:${r.none}%">${r.none>=10?`${r.none}%`:""}</i></div>
   <div class="olegend"><span>A ${r.A}%</span><span>B ${r.B}%</span><span>no clear hit ${r.none}%</span><span>rush ${r.rush}%</span></div>`}
 function dangerNow(E,side,site,t){const D_=((E||{}).deaths||{})[side];if(!D_)return "";const w=WIN_OF(t||0),src=(site&&D_[site]&&D_[site][w])||(D_.all||{})[w];
@@ -1328,25 +1389,27 @@ function tsideLive(p,g){const TS=(p.advice.plan||{}).tside,ev=evFor(g),r=tsidePr
   if(r.live&&(ev.site||r.planted)){}
   else if(pt>=55)tips.push(`<b>${top} likely</b>: get your rotation and a grenade ready toward ${top}, but don't leave your spot before the info (${100-pt}% it goes elsewhere).`);
   else tips.push("<b>No clear favorite</b>: play your default position and wait for the info.");
-  if(!r.live&&r.rush>=40)tips.push(`<b>Rushes are common</b> in this kind of round (${r.rush}% of site takes in the first 30 s): no dry peek early, listen.`);
+  if(!r.live&&r.rush>=30)tips.push(`<b>Rush likely (${r.rush}%)</b>${r.rush>=r.rush0+5?`, more than usual here (${r.rush0}%)`:""}: no dry peek in the first 30 s, keep a grenade for the entrance, listen.`);
   if(det&&det.from.length&&!(r.live&&ev.site))tips.push(`They enter ${top} through <b>${det.from.map(f=>esc(f.zone)).join("</b> or <b>")}</b>, median around ${det.timer}.`);
   if(X.first&&X.first.length&&!r.live)tips.push(`Most common first contact: <b>${esc(X.first[0].zone)}</b> (${X.first[0].pct}%), around ${X.first_timer}.`);
   const H=g.hist||{},SI=H.sites||{},R=H.rounds||{},done=r.cur-1;
   const asked=(g.round_phase==="over"||g.round_phase==="freezetime")&&done>=halfStart(r.cur)?done:null;
   const res=n=>{const w=(R[n]||{}).win;return w?(w==="CT"?"won":"lost"):""};   // seen from your side (CT)
-  const lbl=n=>{const s=SI[n],w=res(n);return `R${n} ${s==="-"?"–":s||"?"}${w?` ${w==="won"?"✓":"✗"}`:""}`};
+  const lbl=n=>{const s=SI[n],w=res(n),d=roundDyn(TS,H,n);return `R${n} ${s==="-"?"–":s||"?"}${d&&d.dyn&&DYN_SHORT[d.dyn]?` ${DYN_SHORT[d.dyn]}`:""}${d&&d.lone?" ·1":""}${w?` ${w==="won"?"✓":"✗"}`:""}`};
   const zones=((E.contact||{}).zones)||[];
   return `<div class="tread" aria-live="polite"><h3><span>T read · round ${r.cur}</span><small>${esc((TS.ctx_fr||{})[r.ctx]||"")}</small></h3>
     ${oddsBar(r)}
     ${r.live?`<div class="ev" role="group" aria-label="They are on"><span class="l">They're on</span>${["A","B"].map(s=>`<button type="button" class="site-${s}" data-evsite="${s}" aria-pressed="${ev.site===s}">${s}</button>`).join("")}</div>
-     ${zones.length&&!ev.site&&!r.planted?`<div class="ev" role="group" aria-label="First contact"><span class="l">First contact</span>${zones.map(z=>`<button type="button" data-evz="${esc(z)}" aria-pressed="${ev.contact===z}">${esc(z)}</button>`).join("")}</div>`:""}`:""}
+     ${zones.length&&!ev.site&&!r.planted?`<div class="ev" role="group" aria-label="First contact"><span class="l">First contact</span>${zones.map(z=>`<button type="button" data-evz="${esc(z)}" aria-pressed="${ev.contact===z}">${esc(z)}</button>`).join("")}</div>
+      ${ev.contact?`<div class="ev" role="group" aria-label="How many Ts at the first contact"><span class="l">How many</span><button type="button" data-evalone="1" aria-pressed="${ev.alone===true}">1 T alone</button><button type="button" data-evalone="0" aria-pressed="${ev.alone===false}">2+ Ts</button></div>`:""}`:""}`:""}
     ${tips.length?`<ul class="big-list">${tips.map(t=>`<li class="ct">${t}</li>`).join("")}</ul>`:""}
     ${r.live&&!ev.site&&!r.planted?dangerNow(E,"CT",null,g.elapsed):""}
     <details${r.live?"":" open"}><summary class="mini" style="cursor:pointer">Why these odds</summary><ul class="why">${r.why.map(w=>`<li>${esc(w)}</li>`).join("")}</ul></details>
     ${asked?`<div class="ask" role="group" aria-label="Where the Ts hit in round ${asked}"><b>Round ${asked}: where did they hit?</b>
-      ${["A","B","-"].map(v=>`<button type="button" data-site="${v}" data-round="${asked}" aria-pressed="${SI[asked]===v}">${v==="-"?"Not clear":v}</button>`).join("")}</div>`:""}
+      ${["A","B","-"].map(v=>`<button type="button" data-site="${v}" data-round="${asked}" aria-pressed="${SI[asked]===v}"${v!=="-"?` class="site-${v}"`:""}>${v==="-"?"Not clear":v}</button>`).join("")}</div>
+     ${askDyn(TS,H,asked)}`:""}
     ${r.seq.length?`<div class="marks" role="group" aria-label="T attacks this half"><span class="note">This half (click to fix):</span>
-      ${r.seq.map(q=>q.n).map(n=>`<button type="button" class="mk ${res(n)}" data-cycle="${n}" title="${res(n)?`Round ${res(n)==="won"?"won":"lost"} by your team. `:""}Click: A, then B, then not clear, then clear.">${lbl(n)}</button>`).join("")}</div>`:""}
+      ${r.seq.map(q=>q.n).map(n=>{const dt=roundDetail(TS,H,n);return `<button type="button" class="mk ${res(n)}" data-cycle="${n}" title="${res(n)?`Round ${res(n)==="won"?"won":"lost"} by your team. `:""}${dt?esc(dt)+". ":""}Click: A, then B, then not clear, then clear.">${lbl(n)}</button>`}).join("")}</div>`:""}
     </div>`}
 function retakeCard(p,g,site){const TS=(p.advice.plan||{}).tside,M=TS&&TS.maps&&TS.maps[g.map];if(!M)return "";const E=M.evidence||{},PL=(E.plants||{})[site];
   const ct=g.side==="CT",own=(E.retakes||{})[site]||[],all=TS.retake_all||[];
@@ -1363,12 +1426,23 @@ function tsideTable(p,map){const TS=(p.advice.plan||{}).tside,M=TS&&TS.maps&&TS.
   const C=M.ctx,rows=["pistol","r2_win","r2_loss","eco","force","full"].filter(c=>C[c]),E=M.evidence||{},CTX=TS.ctx_fr||{};
   const from=x=>["A","B"].map(L=>{const d=x[L+"_detail"];return d&&d.from.length?`${L} through ${d.from.map(f=>`${esc(f.zone)} (${f.pct}%)`).join(", ")}`:""}).filter(Boolean).join("<br>");
   const deaths=(side)=>{const D_=((E.deaths||{})[side]||{}).all||{};return ["early","setup","hit","late"].filter(w=>D_[w]).map(w=>`<tr><td>${WIN_EN[w]}</td><td class="wrap">${D_[w].zones.map(z=>`${esc(z.zone)} ${z.pct}%`).join(", ")}</td><td class="n">${D_[w].n}</td></tr>`).join("")};
-  const sv=E.survival;
-  return `<p class="note">${M.n_rounds} rounds from ${M.n_matches} matches of the base. An attack stopped before the site counts for the site it was going to. Rush: site taken in the first 30 seconds (clock above 1:25).${M.n_matches<10?" Few matches on this map: take the numbers as indications.":""}</p>
+  const sv=E.survival,DA=TS.dyn_after,AL=TS.alone,G=(E.contact||{}).lik_g;
+  return `<p class="note">${M.n_rounds} rounds from ${M.n_matches} matches of the base. An attack stopped before the site counts for the site it was going to. Rush: 3+ Ts on a site in the first 30 seconds (clock above 1:25).${M.n_matches<10?" Few matches on this map: take the numbers as indications.":""}</p>
    <h3>Where they attack, by kind of round</h3>
    <div class="tbl"><table><thead><tr><th>Round</th><th class="n">A</th><th class="n">B</th><th class="n">No clear hit</th><th class="n">Rush</th><th>Site taken</th><th>Through</th><th>First contact</th></tr></thead><tbody>
-   ${rows.map(c=>{const x=C[c];return `<tr><td><b>${esc(CTX[c]||c)}</b><br><span class="note">${x.n} rounds</span></td><td class="n">${x.A}%</td><td class="n">${x.B}%</td><td class="n">${x.none}%</td><td class="n">${x.rush!=null?x.rush+"%":"—"}</td>
+   ${rows.map(c=>{const x=C[c];return `<tr><td><b>${esc(CTX[c]||c)}</b><br><span class="note">${x.n} rounds</span></td><td class="n">${x.A}%</td><td class="n">${x.B}%</td><td class="n">${x.none}%</td><td class="n">${x.rush_all!=null?x.rush_all+"%":x.rush!=null?x.rush+"%":"—"}</td>
      <td>${x.hit_timer?"around "+x.hit_timer:"—"}</td><td class="wrap">${from(x)||"—"}</td><td class="wrap">${(x.first||[]).slice(0,2).map(f=>`${esc(f.zone)} (${f.pct}%)`).join(", ")||"—"}</td></tr>`}).join("")}</tbody></table></div>
+   ${rows.some(c=>C[c].dyn)?`<h3>How they attack</h3><p class="note">Share of rounds, by kind of round. Execute: site taken between 1:25 and 0:40 on the clock. Late hit: after 0:40. Lost a T alone: a T died with no teammate close (about 25 m) and was not traded, before their attack.</p>
+    <div class="tbl"><table><thead><tr><th>Round</th><th class="n">Rush</th><th class="n">1-2 Ts early</th><th class="n">Execute</th><th class="n">Late hit</th><th class="n">No attack</th><th class="n">Lost a T alone</th></tr></thead><tbody>
+    ${rows.filter(c=>C[c].dyn).map(c=>{const x=C[c],d=x.dyn;return `<tr><td><b>${esc(CTX[c]||c)}</b></td><td class="n">${d.rush}%</td><td class="n">${d.fast}%</td><td class="n">${d.exec}%</td><td class="n">${d.late}%</td><td class="n">${d.none}%</td><td class="n">${x.lone!=null?x.lone+"%":"—"}</td></tr>`}).join("")}</tbody></table></div>`:""}
+   ${DA&&DA.rows&&DA.rows.length?`<h3>After each kind of attack</h3><p class="note">What the same team does on the next round, all maps together (${DA.base_rush}% of rounds are rushes). The shape of an attack says little about the next site, but a team that rushes keeps rushing, above all after a rush that worked. Mark the shape of each round on the T read (or let the clock do it): the rush odds follow.</p>
+    <div class="tbl"><table><thead><tr><th>Their last round</th><th class="n">Rush next</th><th class="n">Same site next</th><th class="n">Other site next</th><th class="n">Cases</th></tr></thead><tbody>
+    ${DA.rows.filter(a=>a.dyn!=="none").map(a=>`<tr><td>${esc(DYN_EN[a.dyn][0].toUpperCase()+DYN_EN[a.dyn].slice(1))}, ${a.won?"won":"lost"} by the Ts</td><td class="n">${a.rush}%</td><td class="n">${a.same!=null?a.same+"%":"—"}</td><td class="n">${a.other!=null?a.other+"%":"—"}</td><td class="n">${a.n}</td></tr>`).join("")}
+    ${(DA.lone||[]).filter(a=>a.lone).map(a=>`<tr><td>Lost, after losing a T alone before their attack</td><td class="n">${a.rush}%</td><td class="n">${a.same}%</td><td class="n">—</td><td class="n">${a.n}</td></tr>`).join("")}</tbody></table></div>`:""}
+   ${AL&&AL.gamma<0&&G&&G.A&&G.B&&E.contact.zones?`<h3>One T alone, or several?</h3><p class="note">At the first duel, a T with no teammate within about 25 m is often a lurker or an info player, and the others tend to be on the other side (${AL.share}% of first duels are like that, ${AL.n} in the base). During the round, tap the zone, then "1 T alone" or "2+ Ts". Odds of A or B from the zone of the first duel:</p>
+    <div class="tbl"><table><thead><tr><th>First duel at</th><th class="n">2+ Ts: A</th><th class="n">2+ Ts: B</th><th class="n">1 T alone: A</th><th class="n">1 T alone: B</th></tr></thead><tbody>
+    ${E.contact.zones.map(z=>{const la=G.A[z]??G.A.other,lb=G.B[z]??G.B.other,o0=(M.all.A||50)/(M.all.B||50),o1=o0*la/lb,o2=o0*Math.pow(la/lb,AL.gamma),p1=Math.round(100*o1/(1+o1)),p2=Math.round(100*o2/(1+o2));
+      return `<tr><td>${esc(z)}</td><td class="n">${p1}%</td><td class="n">${100-p1}%</td><td class="n">${p2}%</td><td class="n">${100-p2}%</td></tr>`}).join("")}</tbody></table></div>`:""}
    ${(M.after||[]).length?`<h3>After their attack</h3><p class="note">Where the same team's next attack goes, depending on the previous one.</p>
     <div class="tbl"><table><thead><tr><th>Previous round</th><th class="n">Then A</th><th class="n">Then B</th><th class="n">No clear hit</th><th class="n">Cases</th></tr></thead><tbody>
     ${M.after.map(a=>`<tr><td>${a.twice?`${a.last} 2+ times in a row, the last one ${a.won?"won":"lost"}`:`${a.last} ${a.won?"won":"lost"}`} by the Ts</td><td class="n">${a.A}%</td><td class="n">${a.B}%</td><td class="n">${a.none}%</td><td class="n">${a.n}</td></tr>`).join("")}</tbody></table></div>`:""}
@@ -1545,12 +1619,18 @@ function renderIngame(){
   $$("[data-level]",v).forEach(b=>b.onclick=()=>{S.level=b.dataset.level;renderIngame()});
   const fb=$("#focus",v);if(fb)fb.onclick=()=>{document.body.classList.toggle("focus");store("focus",document.body.classList.contains("focus"));renderIngame()};
   const fl=$("#follow",v);if(fl)fl.onclick=()=>{igManual=false;renderIngame()};
-  const mark=async(n,site)=>{try{const g=await api("/api/gsi/site",{round:n,site});if(g&&g.map)gsiLast=Object.assign(gsiLast||{},{hist:g.hist});renderIngame()}catch(e){}};
+  const post=async body=>{try{const g=await api("/api/gsi/site",body);if(g&&g.map)gsiLast=Object.assign(gsiLast||{},{hist:g.hist})}catch(e){}};
+  const mark=async(n,site,extra)=>{await post(Object.assign({round:n,site},extra||{}));renderIngame()};
+  const here=()=>following&&gsiLast.round?gsiLast.round:null,el_=()=>gsiLast.elapsed!=null?gsiLast.elapsed:null;
   $$("[data-site]",v).forEach(b=>b.onclick=()=>mark(+b.dataset.round,b.getAttribute("aria-pressed")==="true"?null:b.dataset.site));
   $$("[data-cycle]",v).forEach(b=>b.onclick=()=>{const n=+b.dataset.cycle,cur=((gsiLast.hist||{}).sites||{})[n]||null,nx={null:"A",A:"B",B:"-","-":null}[cur];mark(n,nx)});
-  $$("[data-evz]",v).forEach(b=>b.onclick=()=>{igEv.contact=igEv.contact===b.dataset.evz?null:b.dataset.evz;renderIngame()});
+  $$("[data-evz]",v).forEach(b=>b.onclick=()=>{const z=igEv.contact===b.dataset.evz?null:b.dataset.evz;igEv.contact=z;if(!z)igEv.alone=null;renderIngame();
+    if(here())post(z?{round:here(),contact:z,contact_t:el_()}:{round:here(),contact:null,contact_t:null,alone:null})});   // kept with the round
+  $$("[data-evalone]",v).forEach(b=>b.onclick=()=>{const a=b.dataset.evalone==="1";igEv.alone=igEv.alone===a?null:a;renderIngame();if(here())post({round:here(),alone:igEv.alone})});
+  $$("[data-dyn]",v).forEach(b=>b.onclick=async()=>{await post({round:+b.dataset.round,dyn:b.getAttribute("aria-pressed")==="true"?null:b.dataset.dyn});renderIngame()});
+  $$("[data-lone]",v).forEach(b=>b.onclick=async()=>{await post({round:+b.dataset.lone,lone:b.getAttribute("aria-pressed")==="true"?null:true});renderIngame()});
   $$("[data-evsite]",v).forEach(b=>b.onclick=()=>{const s=b.dataset.evsite,on=igEv.site===s;igEv.site=on?null:s;
-    if(following&&gsiLast.side==="CT"&&gsiLast.round)mark(gsiLast.round,on?null:s);else renderIngame()});   // also marks the round for the history
+    if(following&&gsiLast.side==="CT"&&gsiLast.round)mark(gsiLast.round,on?null:s,{site_t:on?null:el_()});else renderIngame()});   // also marks the round for the history
   $$("[data-mic]",v).forEach(b=>b.onclick=async()=>{b.disabled=true;try{await api("/api/voice/"+b.dataset.mic,{sid:p.steamid});gsiLast=Object.assign(gsiLast||{},{mic:b.dataset.mic==="start"});renderIngame()}catch(e){b.textContent=e.message}});
   // radar: your data, or the base's positions; plant spots when the bomb site is known
   const plantSpots=()=>{const TS=PL.tside,M=TS&&TS.maps&&TS.maps[S.map],site=following&&(igEv.site||null);if(!M||!site||!(M.evidence||{}).plants)return [];

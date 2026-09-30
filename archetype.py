@@ -240,7 +240,7 @@ def profile(steamid, xhair_pct=None):
     desc = [f"{'Versatile profile' if versatile else role['name']}: {role['what']}"]
     desc.append(f"Weapons: {weapons['shares']['rifles']}% of your kills with rifles, {weapons['shares']['AWP']}% with the AWP, "
                 f"{weapons['shares']['SMG']}% with SMGs, {weapons['shares']['pistols']}% with pistols. "
-                + ("Favorites : " + ", ".join(f"{t['weapon']} ({t['kills']})" for t in weapons["top"][:3]) + "." if weapons["top"] else ""))
+                + ("Favorites: " + ", ".join(f"{t['weapon']} ({t['kills']})" for t in weapons["top"][:3]) + "." if weapons["top"] else ""))
     desc.append(f"Movement: {'you often engage while moving' if (r.move_share or 0) > 0.4 else 'you mostly play standing still'}, "
                 f"{fmt(r.iso_T, 'u')} from your nearest teammate on attack and {fmt(r.iso_CT, 'u')} on defense.")
     desc.append(f"Game sense: {fmt(r.util_pr, 'n')} grenade(s) and {fmt(r.blind_pr, 'n')} enemy(ies) flashed per round, "

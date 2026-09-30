@@ -76,7 +76,7 @@ def main(min_demos=3, workers=None, force=False):
                 print(f"[{done}/{len(todo)}] {name} ({n} demos) {'OK' if ok else 'nothing'} {secs}s", flush=True)
             except Exception as e:
                 print(f"[{done}/{len(todo)}] {name} ERROR {e}", flush=True)
-    print("FINI", flush=True)
+    print("DONE", flush=True)
 
 
 if __name__ == "__main__":

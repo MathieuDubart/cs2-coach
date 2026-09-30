@@ -27,4 +27,4 @@ if __name__ == "__main__":
                 print(f.result(), flush=True)
             except Exception as e:
                 print("ERROR", e, flush=True)
-    print("FINI", flush=True)
+    print("DONE", flush=True)
