@@ -421,6 +421,19 @@ body.focus.ingame .tread .why{font-size:14.5px}
 .story .kc{background:var(--ct)}
 .story .kt.alone{outline:2px solid var(--flash);outline-offset:1px}
 .story i{color:var(--flash);font-style:normal;font-weight:600}
+.plays{display:grid;gap:3px;margin:8px 0 4px}
+.plays .pl{display:flex;gap:10px;align-items:baseline;font-size:14.5px;line-height:1.35}
+.plays .pl b{font:700 15px var(--f-mono);min-width:46px;text-align:right}
+.plays .pl.s-A b{color:var(--siteA)}
+.plays .pl.s-B b{color:var(--siteB)}
+.plays .pl.s-none b{color:var(--muted)}
+body.focus.ingame .plays .pl{font-size:16px}
+svg.radar .rbt{font:700 13px var(--f-body);fill:#fff}
+svg.radar .rb.mk .rbt{fill:#1a1206}
+svg.radar .rsite{font:800 24px var(--f-display);fill:#fff;paint-order:stroke;stroke:#0b0f14;stroke-width:5px}
+svg.radar .you-pulse{animation:youp 1.6s ease-out infinite;transform-box:fill-box;transform-origin:center}
+@keyframes youp{0%{opacity:1;transform:scale(.6)}100%{opacity:0;transform:scale(1.8)}}
+@media (prefers-reduced-motion:reduce){svg.radar .you-pulse{animation:none}}
 </style>
 
 <div class="bar"><div class="bar-in">
@@ -660,9 +673,12 @@ function storyBlock(m){const side={};m.per_round.forEach(r=>side[r.round]=r.side
   const pl=(k,w,ws)=>`${k} ${k===1?w:ws}`;
   const sum=(xs,who)=>{if(!xs.length)return "";const c=k=>xs.filter(s=>s.dyn===k).length,A=xs.filter(s=>s.site==="A").length,B=xs.filter(s=>s.site==="B").length,L=xs.filter(s=>lone(s)).length;
     const parts=[pl(c("rush"),"rush","rushes"),pl(c("exec"),"execute","executes"),pl(c("late"),"late hit","late hits")];if(c("fast"))parts.push(pl(c("fast"),"fast push by 1-2 Ts","fast pushes by 1-2 Ts"));if(c("none"))parts.push(pl(c("none"),"round without a real attack","rounds without a real attack"));
-    return `<li><b>${who}</b>: ${parts.join(", ")} in ${xs.length} rounds. A ${A}, B ${B}. A T lost alone before the attack in ${pl(L,"round","rounds")}.</li>`};
+    const pc={};xs.forEach(s=>{if(s.play_name&&s.play!=="none")pc[s.play_name]=(pc[s.play_name]||0)+1});
+    const top=Object.entries(pc).sort((a,b)=>b[1]-a[1]).slice(0,3).map(([k,n])=>`${esc(k)} ×${n}`).join(", ");
+    return `<li><b>${who}</b>: ${parts.join(", ")} in ${xs.length} rounds. A ${A}, B ${B}. A T lost alone before the attack in ${pl(L,"round","rounds")}.${top?` Most used: ${top}.`:""}</li>`};
   const feed=s=>[...s.td.map(d=>({t:d[1],h:`<span class="kt${d[2]?" alone":""}">T</span> ${esc(d[0])} ${clock(d[1])}${d[2]?" <i>alone</i>":""}`})),...s.cd.map(d=>({t:d[1],h:`<span class="kc">CT</span> ${esc(d[0])} ${clock(d[1])}`}))].sort((a,b)=>a.t-b.t).map(e=>e.h).join(" · ")||"—";
-  const att=s=>{if(s.site!=="A"&&s.site!=="B")return "<b>No clear attack</b>";const b=[`<b>${s.site} · ${esc(DYN_EN[s.dyn]||"")}</b>`];
+  const att=s=>{if(s.site!=="A"&&s.site!=="B")return "<b>No clear attack</b>";
+    const b=[s.play_name?`<b>${esc(s.play_name)}</b>${/^Rush/.test(s.play_name)?"":` · ${esc(DYN_EN[s.dyn]||"")}`}`:`<b>${s.site} · ${esc(DYN_EN[s.dyn]||"")}</b>`];
     if(s.at!=null)b.push(`${s.in?"on the site":"stopped"} at ${clock(s.at)}${s.grp?`, ${pl(s.grp,"T","Ts")}`:""}`);if(s.plant)b.push(`bomb ${clock(s.plant[1])}`);if(s.lurk)b.push("a T stayed near the other site");if(s.bunch)b.push(`3 Ts down in 10 s at ${esc(s.bunch[0])}`);return b.join("<br>")};
   return `<h3>How each round went</h3><p class="note">From the demo: where the Ts went and how fast, who died where and when. A T killed with no teammate close (about 25 m) and not traded is marked <i>alone</i>. Clock times as in game.</p>
    <ul class="big-list">${sum(ct,"The Ts you faced")}${sum(tt,"Your team as T")}</ul>
@@ -1366,7 +1382,7 @@ function tsidePredict(TS,map,g,ev){const M=TS&&TS.maps&&TS.maps[map];if(!M||!g||
           shift(`One T alone at ${zc}: a lone T is often a lurker or an info player, the others tend to be on the other side`,q,1/q,1);evid.push(`one T alone at ${zc}`)}
         else{shift(`First contact at ${zc}${ev0.alone===false?" with 2+ Ts":""}: in the base, first duels there come before ${la>lb?"A":"B"} attacks ${Math.round(100*Math.max(la,lb)/(la+lb))}% of the time`,la,lb,ln);evid.push(`first contact at ${zc}${ev0.alone===false?", 2+ Ts":""}`)}}}}
   if(!seq.some(q=>q.site)&&!evid.length)why.push(half.length?"Mark where they hit after each round: the reading adapts to this team.":"First round of the half: the numbers come from the base.");
-  return {A:Math.round(100*a),B:Math.round(100*b),none:Math.round(100*n),rush:Math.round(100*rush),rush0:Math.round(100*rush0),dyns,ctx:main,X,why,seq,rih,cur,evid,live,planted,E}}
+  return {A:Math.round(100*a),B:Math.round(100*b),none:Math.round(100*n),rush:Math.round(100*rush),rush0:Math.round(100*rush0),dyns,ctx:main,mix,X,why,seq,rih,cur,evid,live,planted,E}}
 function askDyn(TS,H,n){const d=roundDyn(TS,H,n)||{},R=(H.rounds||{})[n]||{},mk=(H.marks||{})[n]||{};
   const hint=!d.dyn&&R.win==="CT"&&R.plant==null&&R.end!=null&&R.end<=35?`All the Ts were dead at ${clock(R.end)}: a rush?`:d.auto?`Read from the clock (${d.how}). Fix it if you saw otherwise.`:"";
   return `<div class="ask sm" role="group" aria-label="How the Ts played round ${n}"><b>How?</b>
@@ -1380,10 +1396,12 @@ function roundDetail(TS,H,n){const R=(H.rounds||{})[n]||{},mk=(H.marks||{})[n]||
   if(R.dead!=null)bits.push(`you died at ${clock(R.dead)}`);if((R.kills||[]).length)bits.push(`your kills at ${R.kills.map(clock).join(", ")}`);
   if(R.end!=null)bits.push(`round over at ${clock(R.end)}`);return bits.join(" · ")}
 function oddsBar(r){return `<div class="obar" role="img" aria-label="A ${r.A}%, B ${r.B}%, no clear hit ${r.none}%"><i class="A" style="width:${r.A}%">${r.A>=12?`A ${r.A}%`:""}</i><i class="B" style="width:${r.B}%">${r.B>=12?`B ${r.B}%`:""}</i><i class="N" style="width:${r.none}%">${r.none>=10?`${r.none}%`:""}</i></div>
-  <div class="olegend"><span>A ${r.A}%</span><span>B ${r.B}%</span><span>no clear hit ${r.none}%</span><span>rush ${r.rush}%</span></div>`}
+  <div class="olegend"><span>A ${r.A}%</span><span>B ${r.B}%</span><span>no clear hit ${r.none}%</span><span>rush ${r.rushNow!=null?r.rushNow:r.rush}%</span></div>`}
 function dangerNow(E,side,site,t){const D_=((E||{}).deaths||{})[side];if(!D_)return "";const w=WIN_OF(t||0),src=(site&&D_[site]&&D_[site][w])||(D_.all||{})[w];
   if(!src||!src.zones.length)return "";const [nm,rg]=WIN_SHORT[w];return `<p class="danger">${nm[0].toUpperCase()+nm.slice(1)} (${rg}): ${side}s die most at <b>${src.zones.map(z=>`${esc(z.zone)}</b> ${z.pct}%`).join(", <b>")}.</p>`}
 function tsideLive(p,g){const TS=(p.advice.plan||{}).tside,ev=evFor(g),r=tsidePredict(TS,g.map,g,ev);if(!r)return "";
+  const PLs=tsidePlays(TS,g.map,g,ev,r),NN=PLs&&!r.planted?nadesNow(p.advice.plan||{},g.map,g,PLs,r.live):[];
+  if(PLs&&r.live)r.rushNow=Math.round(100*PLs.rush);   // a rush is less and less likely as the clock runs
   const top=r.A>=r.B?"A":"B",pt=Math.max(r.A,r.B),X=r.X,det=X[top+"_detail"],E=r.E||{};
   const tips=[];
   if(r.live&&(ev.site||r.planted)){}
@@ -1392,6 +1410,7 @@ function tsideLive(p,g){const TS=(p.advice.plan||{}).tside,ev=evFor(g),r=tsidePr
   if(!r.live&&r.rush>=30)tips.push(`<b>Rush likely (${r.rush}%)</b>${r.rush>=r.rush0+5?`, more than usual here (${r.rush0}%)`:""}: no dry peek in the first 30 s, keep a grenade for the entrance, listen.`);
   if(det&&det.from.length&&!(r.live&&ev.site))tips.push(`They enter ${top} through <b>${det.from.map(f=>esc(f.zone)).join("</b> or <b>")}</b>, median around ${det.timer}.`);
   if(X.first&&X.first.length&&!r.live)tips.push(`Most common first contact: <b>${esc(X.first[0].zone)}</b> (${X.first[0].pct}%), around ${X.first_timer}.`);
+  if(NN.length)tips.push(`<b>${r.live?"Grenade now":"Grenade plan"}</b>: ${NN.slice(0,2).map(x=>`${nadeName(x.type,"CT")} ${esc(x.from)} → ${esc(x.to)} (${esc(x.why)})`).join("; ")}. It's on the radar.`);
   const H=g.hist||{},SI=H.sites||{},R=H.rounds||{},done=r.cur-1;
   const asked=(g.round_phase==="over"||g.round_phase==="freezetime")&&done>=halfStart(r.cur)?done:null;
   const res=n=>{const w=(R[n]||{}).win;return w?(w==="CT"?"won":"lost"):""};   // seen from your side (CT)
@@ -1399,6 +1418,7 @@ function tsideLive(p,g){const TS=(p.advice.plan||{}).tside,ev=evFor(g),r=tsidePr
   const zones=((E.contact||{}).zones)||[];
   return `<div class="tread" aria-live="polite"><h3><span>T read · round ${r.cur}</span><small>${esc((TS.ctx_fr||{})[r.ctx]||"")}</small></h3>
     ${oddsBar(r)}
+    ${PLs&&PLs.list.length?`<div class="plays" aria-label="Likely plays">${PLs.list.filter(x=>x.v>=0.03).slice(0,5).map(x=>`<div class="pl s-${x.site}"><b>${Math.round(100*x.v)}%</b><span>${esc(x.label)}</span></div>`).join("")}</div>`:""}
     ${r.live?`<div class="ev" role="group" aria-label="They are on"><span class="l">They're on</span>${["A","B"].map(s=>`<button type="button" class="site-${s}" data-evsite="${s}" aria-pressed="${ev.site===s}">${s}</button>`).join("")}</div>
      ${zones.length&&!ev.site&&!r.planted?`<div class="ev" role="group" aria-label="First contact"><span class="l">First contact</span>${zones.map(z=>`<button type="button" data-evz="${esc(z)}" aria-pressed="${ev.contact===z}">${esc(z)}</button>`).join("")}</div>
       ${ev.contact?`<div class="ev" role="group" aria-label="How many Ts at the first contact"><span class="l">How many</span><button type="button" data-evalone="1" aria-pressed="${ev.alone===true}">1 T alone</button><button type="button" data-evalone="0" aria-pressed="${ev.alone===false}">2+ Ts</button></div>`:""}`:""}`:""}
@@ -1432,6 +1452,11 @@ function tsideTable(p,map){const TS=(p.advice.plan||{}).tside,M=TS&&TS.maps&&TS.
    <div class="tbl"><table><thead><tr><th>Round</th><th class="n">A</th><th class="n">B</th><th class="n">No clear hit</th><th class="n">Rush</th><th>Site taken</th><th>Through</th><th>First contact</th></tr></thead><tbody>
    ${rows.map(c=>{const x=C[c];return `<tr><td><b>${esc(CTX[c]||c)}</b><br><span class="note">${x.n} rounds</span></td><td class="n">${x.A}%</td><td class="n">${x.B}%</td><td class="n">${x.none}%</td><td class="n">${x.rush_all!=null?x.rush_all+"%":x.rush!=null?x.rush+"%":"—"}</td>
      <td>${x.hit_timer?"around "+x.hit_timer:"—"}</td><td class="wrap">${from(x)||"—"}</td><td class="wrap">${(x.first||[]).slice(0,2).map(f=>`${esc(f.zone)} (${f.pct}%)`).join(", ")||"—"}</td></tr>`}).join("")}</tbody></table></div>
+   ${M.plays&&M.plays.prior?(()=>{const P=M.plays,cs=["all",...rows.filter(c=>P.prior[c])],ps=Object.keys(P.prior.all).sort((a,b)=>P.prior.all[b]-P.prior.all[a]);
+     return `<h3>Plays and entrances</h3><p class="note">The play of every round of the base: a rush (3+ Ts on a site in the first 30 s), a split (two entrances of the site at once), or one entrance. An entrance is where the Ts of the push stood a few seconds before the site was taken; "mid" when it comes from mid. On the radar, as CT, the odds of each entrance update during the round.</p>
+     <div class="cols3">${["A","B"].filter(s=>(P.lanes[s]||[]).length).map(s=>`<article class="card"><h3>Entrances of ${s}</h3><ul>${P.lanes[s].map(L=>`<li><b>${esc(L.name)}</b>${L.mid?" (mid)":L.main?" (main)":""}: used in ${L.share??"—"}% of the ${s} attacks<br><span class="note">${esc((L.zones||[]).join(", "))}</span></li>`).join("")}</ul></article>`).join("")}</div>
+     <div class="tbl"><table><thead><tr><th>Play</th>${cs.map(c=>`<th class="n">${c==="all"?"All rounds":esc(CTX[c]||c)}</th>`).join("")}</tr></thead><tbody>
+     ${ps.map(p=>`<tr><td>${esc(P.label[p]||p)}</td>${cs.map(c=>`<td class="n">${P.prior[c]&&P.prior[c][p]!=null?Math.round(100*P.prior[c][p])+"%":"—"}</td>`).join("")}</tr>`).join("")}</tbody></table></div>`})():""}
    ${rows.some(c=>C[c].dyn)?`<h3>How they attack</h3><p class="note">Share of rounds, by kind of round. Execute: site taken between 1:25 and 0:40 on the clock. Late hit: after 0:40. Lost a T alone: a T died with no teammate close (about 25 m) and was not traded, before their attack.</p>
     <div class="tbl"><table><thead><tr><th>Round</th><th class="n">Rush</th><th class="n">1-2 Ts early</th><th class="n">Execute</th><th class="n">Late hit</th><th class="n">No attack</th><th class="n">Lost a T alone</th></tr></thead><tbody>
     ${rows.filter(c=>C[c].dyn).map(c=>{const x=C[c],d=x.dyn;return `<tr><td><b>${esc(CTX[c]||c)}</b></td><td class="n">${d.rush}%</td><td class="n">${d.fast}%</td><td class="n">${d.exec}%</td><td class="n">${d.late}%</td><td class="n">${d.none}%</td><td class="n">${x.lone!=null?x.lone+"%":"—"}</td></tr>`}).join("")}</tbody></table></div>`:""}
@@ -1526,7 +1551,7 @@ function liveBar(){if(!D.local)return "";const g=gsiLast,focus=document.body.cla
   return `<div class="live"><span class="dot" aria-hidden="true"></span>${st&&st.installed?"<span>Detection is on: this page follows your match as soon as you're in game.</span>"
     :`<span>Pick your map and side, or <a href="#settings" style="color:var(--ct)">turn on game detection</a>: this page will follow your match by itself.</span>`}<span class="sp">${micBtn()}${fb}</span></div>`}
 async function gsiPoll(){clearTimeout(gsiTimer);if(!D.local||S.view!=="ingame")return;
-  try{const g=await (await fetch("/api/gsi/state")).json();const sig=x=>x?[x.map,x.side,x.round,x.round_phase,x.money,x.bomb,x.age!=null&&x.age<75,JSON.stringify(x.hist||{}),JSON.stringify(x.nades||{}),x.health===0,x.elapsed==null?"":Math.floor(x.elapsed/5)].join("|"):"";
+  try{const g=await (await fetch("/api/gsi/state")).json();const sig=x=>x?[x.map,x.side,x.round,x.round_phase,x.money,x.bomb,x.age!=null&&x.age<75,JSON.stringify(x.hist||{}),JSON.stringify(x.nades||{}),x.health===0,x.elapsed==null?"":Math.floor(x.elapsed/5),x.pos?x.pos.map(c=>Math.round(c/100)).join(","):""].join("|"):"";
     const before=sig(gsiLast)+(gsiLast&&gsiLast.mic);gsiLast=g&&Object.keys(g).length?g:null;if(sig(gsiLast)+(gsiLast&&gsiLast.mic)!==before&&S.view==="ingame"&&S.player&&D.players[S.player])renderIngame()}catch(e){}
   gsiTimer=setTimeout(gsiPoll,2000)}
 
@@ -1598,6 +1623,9 @@ function renderIngame(){
   {const TS_=PL.tside,M_=TS_&&TS_.maps&&TS_.maps[S.map],site_=live&&!igManual&&gsiLast.map===S.map&&igEv.key===`${gsiLast.map}|${gsiLast.round}`&&igEv.site;   // show the plant spots' level
    const sp_=site_&&M_&&(((M_.evidence||{}).plants||{})[site_]||{}).spots;if(m&&sp_&&sp_.length&&sp_[0].level&&m.levels.some(l=>l.key===sp_[0].level))S.level=sp_[0].level}
   const R0=!m?refs[S.map]:null,following=!!(live&&!igManual&&gsiLast.map===S.map&&gsiLast.side===S.side),focus=document.body.classList.contains("focus");
+  const TSm=PL.tside&&PL.tside.maps&&PL.tside.maps[S.map],GEOm=TSm&&TSm.geo,liveR=!!(S.side==="CT"&&TSm&&TSm.plays&&GEOm&&GEOm.sites);
+  const LVs=(m&&m.levels)||(R0&&R0.levels)||((GEOm&&GEOm.radar&&GEOm.radar.levels)||[]).map(l=>({key:l.key,name:l.key==="lower"?"Lower level":l.key==="upper"?"Main level":"Map"}));
+  if(liveR&&LVs.length&&!LVs.some(l=>l.key===S.level))S.level=LVs[0].key;
   const TABS=[["plan","Game plan"],["buys","Buys"],["nades","Grenades"],...(S.side==="CT"?[["t","T habits"]]:[])];
   let tab=store("igtab")||"plan";if(!TABS.some(t=>t[0]===tab))tab="plan";
   const cols=planColumns(p,m,R0);
@@ -1609,7 +1637,7 @@ function renderIngame(){
     ${D.local?"":`<button type="button" class="close" id="focus">${focus?"Exit 2nd screen":"2nd screen mode"}</button>`}
    </div>`}
    <div class="ig2"><div class="now" id="now">${nowPanel(p,gsiLast,following)}</div>
-    <div class="igcol ig-radar">${m?radarShell(levelBtns(m,S.level)):R0?radarShell((R0.levels||[]).length>1?`<div class="btns" role="group" aria-label="Level">${R0.levels.map(l=>`<button type="button" data-blevel="${l.key}">${esc(l.name)}</button>`).join("")}</div>`:""):`<div class="empty">No radar for this map yet.</div>`}</div></div>
+    <div class="igcol ig-radar">${liveR?radarShell(layerBtns()+levelBtns({levels:LVs},S.level)):m?radarShell(levelBtns(m,S.level)):R0?radarShell((R0.levels||[]).length>1?`<div class="btns" role="group" aria-label="Level">${R0.levels.map(l=>`<button type="button" data-blevel="${l.key}">${esc(l.name)}</button>`).join("")}</div>`:""):`<div class="empty">No radar for this map yet.</div>`}</div></div>
    ${tabs(v,"Map guide",TABS,tab)}
    <div class="tabpanel" role="tabpanel">${body}</div>`;
   copyBtn(v);
@@ -1635,9 +1663,14 @@ function renderIngame(){
   // radar: your data, or the base's positions; plant spots when the bomb site is known
   const plantSpots=()=>{const TS=PL.tside,M=TS&&TS.maps&&TS.maps[S.map],site=following&&(igEv.site||null);if(!M||!site||!(M.evidence||{}).plants)return [];
     return (((M.evidence.plants||{})[site]||{}).spots||[]).map(s=>({px:s.px,level:s.level,label:`plant ${s.share}%`,color:"var(--bad)",title:`Plant spot on ${site}: ${s.share}% of plants, Ts win ${s.t_win}% after it`}))};
-  if(m){const st={level:S.level,layers:["zones","best","nades"],nades:cols.plan?cols.plan.key_nades:[],sel:null},box=$(".radar-box",v);crossRadar(box,m,S.side,st);
+  if(liveR){const draw=()=>{const box=$(".radar-box",v);if(!box||S.view!=="ingame")return;
+      liveRadar(box,p,S.map,S.level,gsiLast,{side:S.side,layers:liveLayers(),following,site:following?igEv.site:null})};
+    if(D.viewboxes[S.map])draw();else loadRadar(S.map).then(draw);
+    $$("[data-rlayer]",v).forEach(b=>b.onclick=()=>{const k=b.dataset.rlayer,L=liveLayers();store("rlayers",L.includes(k)?L.filter(x=>x!==k):[...L,k]);renderIngame()})}
+  else if(m){const st={level:S.level,layers:["zones","best","nades"],nades:cols.plan?cols.plan.key_nades:[],sel:null},box=$(".radar-box",v);crossRadar(box,m,S.side,st);
+    spotStars(box,((PL.spots||{})[S.map]||{})[S.side],S.level);
     const ps=plantSpots().filter(x=>!x.level||x.level===S.level);if(ps.length){const g_=$("g",box);ps.forEach(it=>{tip(el("rect",{x:it.px[0]-9,y:it.px[1]-9,width:18,height:18,rx:3,style:"fill:var(--bad);stroke:#fff;stroke-width:2"},g_),it.title);el("text",{x:it.px[0],y:it.px[1]-13,"text-anchor":"middle",class:"zlabel"},g_).textContent=it.label})}}
-  if(R0){const items=[...cols.rifle.map(z=>({px:z.px,level:z.level,label:`${z.name} ${z.duel_win}%`,color:z.duel_win>=53?"var(--good)":z.duel_win<=47?"var(--bad)":"#8a96a3",title:`${z.name}: ${z.duel_win}% of duels won`})),
+  if(R0&&!liveR){const items=[...cols.rifle.map(z=>({px:z.px,level:z.level,label:`${z.name} ${z.duel_win}%`,color:z.duel_win>=53?"var(--good)":z.duel_win<=47?"var(--bad)":"#8a96a3",title:`${z.name}: ${z.duel_win}% of duels won`})),
       ...cols.proAwp.map(z=>({px:z.px,level:z.level,label:`Pro AWP · ${z.name}`,color:"var(--ct)",title:"Pro AWPers' position"})),...plantSpots()].filter(x=>x.px);
     const cnt={};items.forEach(x=>{if(x.level)cnt[x.level]=(cnt[x.level]||0)+1});
     const lv=(S.blevel&&cnt[S.blevel]?S.blevel:null)||Object.keys(cnt).sort((a,b)=>cnt[b]-cnt[a])[0]||((R0.levels||[])[0]||{}).key;
@@ -1645,6 +1678,143 @@ function renderIngame(){
       $(".caption",box).innerHTML=`<span>Positions of ${S.side}s in the base: green = duels often won, red = often lost. Blue: pro AWPers.</span>`;
       $$("[data-blevel]",box).forEach(b=>{b.setAttribute("aria-pressed",b.dataset.blevel===lv);b.onclick=()=>{S.blevel=b.dataset.blevel;renderIngame()}})})}
 }
+
+// ---------- live radar: the Ts' plays and entrances, your spots, grenades for now, rotations after the plant ----------
+const playSite=p=>p==="none"?"none":p.startsWith("rush")||p.startsWith("split")?p.slice(-1):p[0];
+const isRushPlay=p=>p.startsWith("rush");
+// odds of every play this round: the base's plays for this kind of round, the team's rushes, what you see in the
+// round (clock, first contact), then scaled to the site reading (which also knows this team's habits)
+function tsidePlays(TS,map,g,ev,r){const M=TS&&TS.maps&&TS.maps[map],P=M&&M.plays;if(!P||!r)return null;
+  let pr={},w=0;
+  for(const [c,k] of Object.entries(r.mix||{})){const x=P.prior[c]||P.prior.all;if(!x||!k)continue;for(const [p,v] of Object.entries(x))pr[p]=(pr[p]||0)+k*v;w+=k}
+  if(!w)pr=Object.assign({},P.prior.all);
+  let R0=0;for(const p in pr)if(isRushPlay(p))R0+=pr[p];
+  const RP=r.rush/100;if(R0>0.005&&R0<0.995){const k1=RP/R0,k0=(1-RP)/(1-R0);for(const p in pr)pr[p]*=isRushPlay(p)?k1:k0}
+  const t=g&&g.elapsed!=null?g.elapsed:0,ev0=ev||{};
+  if(r.live&&!r.planted&&t>=5&&P.surv&&P.surv.t){const i=Math.min(P.surv.t.length-1,Math.round(t/5));for(const p in pr){const s=P.surv[p];if(s)pr[p]*=s[i]}}
+  if(r.live&&!r.planted&&ev0.contact&&P.contact)for(const p in pr){const L=P.contact[p];if(L)pr[p]*=(L[ev0.contact]??L.other??1)}
+  const tot={A:0,B:0,none:0},want={A:r.A/100,B:r.B/100,none:r.none/100};for(const p in pr)tot[playSite(p)]+=pr[p];
+  for(const p in pr){const s=playSite(p);pr[p]=tot[s]>1e-9?pr[p]*want[s]/tot[s]:0}
+  const sum=Object.values(pr).reduce((a,b)=>a+b,0)||1;for(const p in pr)pr[p]/=sum;
+  // each entrance: chance it is used this round, chance it gets pushed in the next 15 s, the rushes through it
+  const lanes=[];
+  ["A","B"].forEach(s=>((P.lanes||{})[s]||[]).forEach((L,i)=>{let use=0,haz=0,rush=0;
+    for(const p in pr){if(playSite(p)!==s)continue;const u=(P.use[p]||{})[i]||0;if(!u||!pr[p])continue;use+=pr[p]*u;if(isRushPlay(p))rush+=pr[p]*u;
+      const sv=P.surv[p];if(sv){const i0=Math.min(sv.length-1,Math.floor(t/5)),i1=Math.min(sv.length-1,i0+3);if(sv[i0]>0.002)haz+=pr[p]*u*Math.max(0,(sv[i0]-sv[i1])/sv[i0])}}
+    lanes.push(Object.assign({},L,{site:s,i,key:s+i,p:use,haz,rush}))}));
+  const list=Object.entries(pr).map(([p,v])=>({p,v,label:P.label[p]||p,site:playSite(p)})).sort((a,b)=>b.v-a.v);
+  return {list,lanes,rush:list.filter(x=>isRushPlay(x.p)).reduce((a,x)=>a+x.v,0),pr}}
+
+// grenades worth throwing now, at the entrances (time-aware): anti-rush only while a rush is still possible,
+// blocking when the base says the Ts usually push that entrance in the next seconds
+function nadesNow(PL,map,g,PLs,live){const E=((((PL.nades||{}).maps||{})[map])||{}).CT,LP=E&&E.lanes;if(!LP||!PLs)return [];
+  const t=live&&g&&g.elapsed!=null?g.elapsed:0,held=live&&g&&g.nades?g.nades:null,out=[];
+  PLs.lanes.forEach(L=>{const picks=LP[L.key]||{};
+    Object.entries(picks).forEach(([type,x])=>{if(held&&!(held[type]>0))return;
+      let why=null,score=0;
+      const nm=L.name.split(" / ")[0];
+      if(x.role==="anti_rush"){if(t<=32&&L.rush>=0.05){why=`anti-rush on ${nm}: ${Math.round(100*L.rush)}% they rush through here`;score=L.rush*1.2}}
+      else if(x.role==="block"){if(L.haz>=0.1||(!live&&L.p>=0.3&&type==="smoke")){why=live?`block ${nm}: ${Math.round(100*L.haz)}% they push it in the next 15 s`:`block ${nm} (${Math.round(100*L.p)}% of attacks use it)`;score=live?L.haz:L.p*0.5}}
+      else if(x.role==="flash"){if(L.haz>=0.12){why=`flash ${nm} as they push: blinds an enemy ${x.blind}% of the time`;score=L.haz*0.7}}
+      else if(L.haz>=0.12){why=`HE on ${nm} as they push`;score=L.haz*0.6}
+      if(why)out.push(Object.assign({},x,{type,why,score,lane:L.key,laneName:L.name}))})});
+  out.sort((a,b)=>b.score-a.score);
+  const seen=new Set();return out.filter(x=>{const k=x.type+x.lane;if(seen.has(k))return false;seen.add(k);return true}).slice(0,4)}
+
+// your live position on the radar (world units -> radar pixels), and the zone you are in
+function worldPx(GEO,pos){const R=GEO&&GEO.radar;if(!R||!pos)return null;
+  const px=[(pos[0]-R.pos_x)/R.scale*(R.f||1),(R.pos_y-pos[1])/R.scale*(R.f||1)];
+  let lv=(R.levels[0]||{}).key;for(const L of R.levels){if(L.z_min!=null&&pos[2]<L.z_min)continue;if(L.z_max!=null&&pos[2]>=L.z_max)continue;lv=L.key;break}
+  return {px,level:lv}}
+function nearestZone(GEO,px,level){let best=null,bd=1e9;Object.entries((GEO&&GEO.zones)||{}).forEach(([n,z])=>{if(level&&z.level&&z.level!==level)return;const d=Math.hypot(z.px[0]-px[0],z.px[1]-px[1]);if(d<bd){bd=d;best=n}});return best}
+// rotation to the bomb site from where you are (or your usual spot): the ways players of the base take
+function rotationFor(M,site,from,GEO){const R=((M.rotations||{})[site])||{};if(!Object.keys(R).length||!from)return null;
+  let k=R[from]?from:null;
+  if(!k&&GEO&&GEO.zones&&GEO.zones[from]){const f=GEO.zones[from].px;k=Object.keys(R).filter(z=>GEO.zones[z]).sort((a,b)=>Math.hypot(GEO.zones[a].px[0]-f[0],GEO.zones[a].px[1]-f[1])-Math.hypot(GEO.zones[b].px[0]-f[0],GEO.zones[b].px[1]-f[1]))[0]}
+  return k?{from:k,...R[k]}:null}
+
+const PLACED=new WeakMap();   // labels already on a radar: a new one that would cover one moves down
+function rbadge(ov,x,y,text,fill,cls){const w=7.2*text.length+12;let L=PLACED.get(ov);if(!L){L=[];PLACED.set(ov,L)}
+  for(let k=0;k<5&&L.some(b=>Math.abs(b.x-x)<(b.w+w)/2+2&&Math.abs(b.y-y)<22);k++)y+=24;
+  L.push({x,y,w});const gg=el("g",{class:"rb"+(cls?" "+cls:"")},ov);
+  el("rect",{x:x-w/2,y:y-11,width:w,height:22,rx:11,style:`fill:${fill};stroke:#0b0f14;stroke-width:1.5`},gg);
+  el("text",{x,y:y+4.5,"text-anchor":"middle",class:"rbt"},gg).textContent=text;return gg}
+// T side (no live reading of the Ts): the multi-kill stars on top of your zones
+function spotStars(box,spots,level){const ov=$("g",box);PLACED.set(ov,[]);(spots||[]).filter(s=>s.multi2&&s.px&&(!s.level||!level||s.level===level)).forEach(s=>
+  tip(rbadge(ov,s.px[0],s.px[1]-30,`★ ${s.multi2}× 2K+${s.best>=3?` · ${s.best}K`:""}`,"#ffd24a","mk"),`${s.name}: ${s.multi2} round${s.multi2>1?"s":""} with 2+ kills from here (best ${s.best} kills)`))}
+const RLAYERS=[["odds","T odds"],["spots","Your spots"],["nades","Grenades now"],["rot","Rotation"]];
+function liveLayers(){let L=store("rlayers");if(!Array.isArray(L))L=RLAYERS.map(x=>x[0]);return L}
+function layerBtns(){const L=liveLayers();return `<div class="btns" role="group" aria-label="What the radar shows">${RLAYERS.map(([k,t])=>`<button type="button" data-rlayer="${k}" aria-pressed="${L.includes(k)}">${t}</button>`).join("")}</div>`}
+
+function liveRadar(box,p,map,level,g,o){
+  const PL=p.advice.plan||{},TS=PL.tside,M=TS&&TS.maps&&TS.maps[map],GEO=M&&M.geo,ct=o.side==="CT",on=k=>o.layers.includes(k);
+  const svg=$("svg",box),img=$("image",svg),ov=$("g",svg),cap=$(".caption",box);
+  img.setAttribute("href",D.radars[`${map}:${level}`]||"");svg.setAttribute("viewBox",(D.viewboxes[map]||[0,0,1024,1024]).join(" "));ov.replaceChildren();PLACED.set(ov,[]);
+  const here=x=>x&&x.px&&(!x.level||!level||x.level===level),legend=[];
+  const badge=(x,y,text,fill,cls)=>rbadge(ov,x,y,text,fill,cls);
+  // your spots: how much you play them, your duels there, and the rounds with 2+ kills from there
+  const SP=((PL.spots||{})[map]||{})[o.side]||[];
+  if(on("spots")&&SP.length){SP.filter(here).forEach(s=>{const r=7+Math.sqrt(s.presence||1)*3.2,col=s.win==null?"#8a96a3":s.win>=58?"var(--good)":s.win<=42?"var(--bad)":"#c9a227";
+      tip(el("circle",{cx:s.px[0],cy:s.px[1],r,style:`fill:${col};fill-opacity:.35;stroke:${col};stroke-width:2.5`},ov),
+        `${s.name}: ${Math.round(s.presence)}% of your time as ${o.side}, you ${s.k}-${s.d}${s.win!=null?` (${s.win}% of duels won, others ${s.others_win??"—"}%)`:""}${s.multi2?`, ${s.multi2} round${s.multi2>1?"s":""} with 2+ kills from here (best: ${s.best} kills)`:""}`);
+      if(s.multi2)badge(s.px[0],s.px[1]-r-13,`★ ${s.multi2}× 2K+${s.best>=3?` · ${s.best}K`:""}`,"#ffd24a","mk")});
+    legend.push(`<span><i style="background:var(--good)"></i>your strong spots</span><span><i style="background:var(--bad)"></i>spots where you lose duels</span><span>★ rounds with 2+ kills from there</span>`)}
+  let PLs=null;const planted=o.following&&g&&g.round_phase==="live"&&g.bomb==="planted";
+  if(ct&&M&&M.plays&&!planted){const ev=o.following?evFor(g):{},r=o.read||(o.following?tsidePredict(TS,map,g,ev):{A:M.all.A,B:M.all.B,none:M.all.none,rush:Math.round(100*(M.rush_p??.2)),live:false});PLs=r&&tsidePlays(TS,map,o.following?g:{},ev,r);
+    if(on("odds")&&PLs&&GEO&&GEO.sites){
+      // entrances: arrow toward the site, width = chance they come through it
+      PLs.lanes.filter(L=>L.px&&L.p>=0.02).forEach(L=>{const S_=GEO.sites[L.site];if(!S_)return;
+        const dim=!here(L)||!here(S_),gl=el("g",{style:dim?"opacity:.4":""},ov);   // another floor (Nuke): shown faded
+        const [x1,y1]=L.px,[x2,y2]=S_.px,d=Math.hypot(x2-x1,y2-y1)||1,ux=(x2-x1)/d,uy=(y2-y1)/d,ex=x2-ux*34,ey=y2-uy*34,wd=2+16*L.p,col=L.site==="A"?"var(--siteA)":"var(--siteB)";
+        el("line",{x1,y1,x2:ex,y2:ey,style:`stroke:${col};stroke-width:${wd};stroke-opacity:.55;stroke-linecap:round`},gl);
+        el("path",{d:`M${ex+ux*12} ${ey+uy*12}L${ex-uy*(wd/2+6)} ${ey+ux*(wd/2+6)}L${ex+uy*(wd/2+6)} ${ey-ux*(wd/2+6)}Z`,style:`fill:${col};fill-opacity:.8`},gl);
+        const lb=badge(x1,y1,`${L.name.split(" / ")[0]}${L.mid?" (mid)":""} ${Math.round(100*L.p)}%`,L.site==="A"?"var(--siteA)":"var(--siteB)","lane");if(dim)lb.setAttribute("style","opacity:.5");
+        tip(lb,
+          `${Math.round(100*L.p)}% the Ts come through ${L.name} this round${L.rush>=0.02?` (rush through it: ${Math.round(100*L.rush)}%)`:""}${o.following&&L.haz>=0.05?`. Pushed in the next 15 s: ${Math.round(100*L.haz)}%`:""}. Zones: ${(L.zones||[]).join(", ")}`)});
+      // sites: the odds of each, and its most likely play
+      ["A","B"].forEach(s=>{const S_=GEO.sites[s];if(!S_||!S_.px)return;const ps=PLs.list.filter(x=>x.site===s),tot=ps.reduce((a,x)=>a+x.v,0),top=ps[0];   // rush and split shares of this site under it
+        const other=!here(S_);
+        el("circle",{cx:S_.px[0],cy:S_.px[1],r:30,style:`fill:${s==="A"?"var(--siteA)":"var(--siteB)"};fill-opacity:.25;stroke:${s==="A"?"var(--siteA)":"var(--siteB)"};stroke-width:3;${other?"stroke-dasharray:6 5":""}`},ov);
+        el("text",{x:S_.px[0],y:S_.px[1]+7,"text-anchor":"middle",class:"rsite"},ov).textContent=`${s} ${Math.round(100*tot)}%${other?" ↕":""}`;
+        if(top&&top.v>=0.03){const rr=ps.filter(x=>x.p.startsWith("rush")).reduce((a,x)=>a+x.v,0),sp=ps.filter(x=>x.p.startsWith("split")).reduce((a,x)=>a+x.v,0);
+          const bits=[rr>=0.03?`rush ${Math.round(100*rr)}%`:"",sp>=0.03?`split ${Math.round(100*sp)}%`:""].filter(Boolean).join(" · ");
+          if(bits)badge(S_.px[0],S_.px[1]+46,bits,"#1b2430","play")}});
+      legend.push(`<span><i style="background:var(--siteA)"></i><i style="background:var(--siteB)"></i>arrow = an entrance of the Ts, thicker = more likely this round</span>`)}}
+  // grenades for now (or the plan before the round)
+  if(ct&&on("nades")&&planted&&o.site&&GEO&&GEO.sites&&GEO.sites[o.site]){const E=((((PL.nades||{}).maps||{})[map])||{}).CT,S_=GEO.sites[o.site].px,held=g.nades||null;
+    Object.entries((E&&E.types)||{}).forEach(([type,T])=>(T.post||[]).filter(x=>x.to_px&&Math.hypot(x.to_px[0]-S_[0],x.to_px[1]-S_[1])<=230&&(!held||held[type]>0)).slice(0,1).forEach(x=>{
+      if(!here({px:x.to_px,level:x.land_level||x.level}))return;const col=`var(--${type})`;
+      el("line",{x1:x.from_px[0],y1:x.from_px[1],x2:x.to_px[0],y2:x.to_px[1],style:`stroke:${col};stroke-width:3;stroke-dasharray:7 5`},ov);
+      el("circle",{cx:x.from_px[0],cy:x.from_px[1],r:5,style:`fill:#fff;stroke:${col};stroke-width:2.5`},ov);
+      tip(el("circle",{cx:x.to_px[0],cy:x.to_px[1],r:12,style:`fill:${col};fill-opacity:.8;stroke:#0b0f14;stroke-width:1.5`},ov),`Retake ${nadeName(type,"CT")}: ${x.from} → ${x.to}. ${x.how||""}`);
+      badge(x.to_px[0],x.to_px[1]-22,`retake ${nadeName(type,"CT")}`,"#0b0f14","nd")}));
+    legend.push(`<span>dashed line = a retake grenade for ${o.site}, from where it is thrown (white dot)</span>`)}
+  if(ct&&on("nades")&&PLs){const NN=nadesNow(PL,map,g,PLs,o.following&&g&&g.round_phase==="live");
+    NN.forEach(x=>{if(!here({px:x.to_px,level:x.land_level||x.level})&&!here({px:x.from_px,level:x.level}))return;const col=`var(--${x.type})`;
+      el("line",{x1:x.from_px[0],y1:x.from_px[1],x2:x.to_px[0],y2:x.to_px[1],style:`stroke:${col};stroke-width:3;stroke-dasharray:7 5`},ov);
+      el("circle",{cx:x.from_px[0],cy:x.from_px[1],r:5,style:`fill:#fff;stroke:${col};stroke-width:2.5`},ov);
+      tip(el("circle",{cx:x.to_px[0],cy:x.to_px[1],r:12,style:`fill:${col};fill-opacity:.8;stroke:#0b0f14;stroke-width:1.5`},ov),
+        `${nadeName(x.type,"CT")} ${x.from} → ${x.to}: ${x.why}. ${x.how||""}${x.click?`, ${x.click} click`:""}${x.yours?"":" (from a spot you don't play)"}`);
+      badge(x.to_px[0],x.to_px[1]-22,`${nadeName(x.type,"CT")}${x.role==="anti_rush"?" · anti-rush":x.role==="block"?" · block":x.role==="flash"?" · as they push":""}`,"#0b0f14","nd")});
+    o.nadesOut&&o.nadesOut(NN);
+    legend.push(`<span>dashed line = a grenade worth throwing now, from your spot (white dot) to where it lands</span>`)}
+  // after the plant: the way to the site from where you are, and where the bomb usually is
+  const live=o.following&&g&&g.round_phase==="live",site=o.site;
+  const you=o.following&&g&&g.pos&&GEO?worldPx(GEO,g.pos):null;
+  if(ct&&on("rot")&&live&&g.bomb==="planted"&&site&&M&&GEO){const from=you?nearestZone(GEO,you.px,you.level):(SP[0]||{}).name;
+    const R=rotationFor(M,site,from,GEO);
+    if(R&&R.routes){R.routes.forEach((rt,i)=>{const pts=[GEO.zones[R.from],...rt.route.map(z=>GEO.zones[z]),GEO.sites[site]].filter(Boolean).map(z=>z.px);
+        if(you&&i===0)pts.unshift(you.px);if(pts.length<2)return;const col=rt.died>=40?"var(--bad)":rt.died>=20?"#e0a526":"var(--good)";
+        el("polyline",{points:pts.map(p=>p.join(",")).join(" "),style:`fill:none;stroke:${col};stroke-width:${i?3:5};stroke-opacity:${i?.55:.9};stroke-linejoin:round;stroke-linecap:round${i?";stroke-dasharray:8 6":""}`},ov);
+        const m_=pts[Math.floor(pts.length/2)];tip(badge(m_[0],m_[1]-16,`${rt.travel!=null?`${Math.round(rt.travel)} s · `:""}${rt.died}% die`,"#0b0f14","rot"),`From ${R.from} to ${site}: ${rt.route.join(" > ")} (${rt.n} rotations in the base, ${rt.died}% died on the way)`)});
+      legend.push(`<span>rotation to ${site} from ${esc(R.from)}: green = safe, red = players often die on the way</span>`)}}
+  // plant spots of the site
+  const PLT=site&&M&&M.evidence&&M.evidence.plants&&M.evidence.plants[site];
+  if(PLT&&live&&g.bomb==="planted")(PLT.spots||[]).filter(s=>!s.level||s.level===level).forEach(s=>{tip(el("rect",{x:s.px[0]-9,y:s.px[1]-9,width:18,height:18,rx:3,style:"fill:var(--bad);stroke:#fff;stroke-width:2"},ov),`Plant spot: ${s.share}% of plants, Ts win ${s.t_win}% after it`)});
+  if(you&&you.level===level){el("circle",{cx:you.px[0],cy:you.px[1],r:16,class:"you-pulse",style:"fill:none;stroke:#fff;stroke-width:2"},ov);
+    el("circle",{cx:you.px[0],cy:you.px[1],r:7,style:"fill:#fff;stroke:#0b0f14;stroke-width:2"},ov)}
+  cap.innerHTML=legend.join("");
+  return PLs}
 
 // ---------- view: review (after the session, or the next day) ----------
 function callsBlock(PL){const C=PL.calls||[];if(!C.length)return D.local?`<h3>Your calls</h3><p class="note">No recording yet: turn on "Your calls" in <a href="#settings" style="color:var(--ct)">Settings</a>, play, and the coach analyzes your communication after the match.</p>`:"";
