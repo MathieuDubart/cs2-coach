@@ -1,7 +1,10 @@
 """Paths, Steam detection and user settings (out/settings.json)."""
+import copy
 import json
 import os
 import re
+import threading
+import time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 OUT = os.path.join(HERE, "out")
@@ -35,13 +38,113 @@ def logged_in_account():
     return (best[1], best[2]) if best else (None, None)
 
 
+# ---------- files shared between the server, its threads and the worker processes ----------
+def _retry(fn, what, tries=100, wait=0.05):
+    """Windows: a file open in another process can't be replaced or is being replaced: wait a little."""
+    for i in range(tries):
+        try:
+            return fn()
+        except (PermissionError, json.JSONDecodeError):
+            if i == tries - 1:
+                raise
+            time.sleep(wait)
+
+
+def read_json(path, default=None):
+    if not os.path.exists(path):
+        return default
+    return _retry(lambda: json.load(open(path, encoding="utf-8")), path)
+
+
+def write_json(path, obj, **kw):
+    """All or nothing: a reader sees the old file or the new one, never half of it (and a crash leaves the old one)."""
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    tmp = f"{path}.{os.getpid()}.{threading.get_ident()}.tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(obj, f, **({"ensure_ascii": False} | kw))
+        f.flush()
+        os.fsync(f.fileno())
+    try:
+        _retry(lambda: os.replace(tmp, path), path)
+    finally:
+        if os.path.exists(tmp):
+            os.remove(tmp)
+
+
+class Settings(dict):
+    """The settings as read: remembers that state, so a save only writes what the caller changed."""
+    def __init__(self, d):
+        super().__init__(d)
+        self._base = copy.deepcopy(d)
+
+
+_MISSING = object()
+
+
+def _merge(base, mine, cur):
+    """Apply the changes made from base to mine onto cur (dicts key by key, any other value replaced)."""
+    for k in set(base) | set(mine):
+        b, m = base.get(k, _MISSING), mine.get(k, _MISSING)
+        if m is _MISSING:
+            cur.pop(k, None)   # removed by the caller
+        elif isinstance(m, dict) and isinstance(b, dict) and isinstance(cur.get(k), dict):
+            _merge(b, m, cur[k])
+        elif b is _MISSING or m != b:
+            cur[k] = copy.deepcopy(m)
+    return cur
+
+
+_SLOCK = threading.Lock()
+
+
+class _FileLock:
+    """Between processes (the profile workers write the settings too)."""
+    def __init__(self, path):
+        self.path = path
+
+    def __enter__(self):
+        os.makedirs(os.path.dirname(self.path), exist_ok=True)
+        self.f = open(self.path, "a+")
+        end = time.time() + 30
+        while True:
+            try:
+                if os.name == "nt":
+                    import msvcrt
+                    self.f.seek(0)
+                    msvcrt.locking(self.f.fileno(), msvcrt.LK_NBLCK, 1)
+                else:
+                    import fcntl
+                    fcntl.flock(self.f.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+                return self
+            except OSError:
+                if time.time() > end:
+                    self.f.close()
+                    raise TimeoutError("settings.json is locked by another process")
+                time.sleep(0.05)
+
+    def __exit__(self, *a):
+        try:
+            if os.name == "nt":
+                import msvcrt
+                self.f.seek(0)
+                msvcrt.locking(self.f.fileno(), msvcrt.LK_UNLCK, 1)
+        finally:
+            self.f.close()
+
+
 def settings():
-    return json.load(open(SETTINGS, encoding="utf-8")) if os.path.exists(SETTINGS) else {}
+    return Settings(read_json(SETTINGS, {}) or {})
 
 
 def save_settings(s):
-    os.makedirs(OUT, exist_ok=True)
-    json.dump(s, open(SETTINGS, "w", encoding="utf-8"), indent=1, ensure_ascii=False)
+    """Saves what the caller changed since it read the settings, on top of what other threads or processes
+    saved in the meantime (an API key saved during a sync is not lost), in one atomic write."""
+    with _SLOCK, _FileLock(SETTINGS + ".lock"):
+        cur = read_json(SETTINGS, {}) or {}
+        new = _merge(s._base, s, cur) if isinstance(s, Settings) else dict(s)
+        write_json(SETTINGS, new, indent=1)
+    if isinstance(s, Settings):
+        s._base = copy.deepcopy(dict(s))
 
 
 def player_dir(steamid):

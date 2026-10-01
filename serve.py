@@ -22,6 +22,7 @@ import cs2coach
 PORT = int(os.environ.get("COACH_PORT", 8765))
 JOB = {"running": False, "log": [], "done": False, "error": None, "steamid": None, "query": None, "partial": None, "players": None}
 LOCK = threading.Lock()
+LOCAL_HOSTS = {f"127.0.0.1:{PORT}", f"localhost:{PORT}"}
 
 
 def run_job(query, task=None, extra=None):
@@ -36,7 +37,7 @@ def run_job(query, task=None, extra=None):
         ids = [p["steamid"] for p in res["match_players"]] if isinstance(res, dict) else [str(res)]
         entries = {i: build_app.write_player(i) for i in ids}
         idx = [x for x in load_index() if x["steamid"] not in entries] + [e for e in entries.values() if e]
-        json.dump(idx, open(os.path.join(build_app.SITE, "index.json"), "w", encoding="utf-8"), ensure_ascii=False)
+        config.write_json(os.path.join(build_app.SITE, "index.json"), idx)
         if isinstance(res, dict):
             JOB["players"] = [p for p in res["match_players"] if entries.get(p["steamid"])]
         else:
@@ -60,16 +61,30 @@ def publish_partial(sid):
     e = build_app.write_player(sid)
     if e:
         idx = [x for x in load_index() if x["steamid"] != sid] + [e]
-        json.dump(idx, open(os.path.join(build_app.SITE, "index.json"), "w", encoding="utf-8"), ensure_ascii=False)
+        config.write_json(os.path.join(build_app.SITE, "index.json"), idx)
         JOB["partial"] = sid
 
 
 def load_index():
-    p = os.path.join(build_app.SITE, "index.json")
-    return json.load(open(p, encoding="utf-8")) if os.path.exists(p) else []
+    return config.read_json(os.path.join(build_app.SITE, "index.json"), [])
 
 
 class Handler(BaseHTTPRequestHandler):
+    def foreign(self, write=False):
+        """True for a request coming from another site. Without this, a page you visit could start the microphone,
+        change or remove your Steam access, delete data or launch analyses (a form or a fetch sent to 127.0.0.1),
+        or read your data through a domain name pointed at 127.0.0.1 (DNS rebinding: the Host is then that name).
+        The page of the app, CS2 (Game State Integration) and command-line tools pass."""
+        host = self.headers.get("Host")
+        if host is not None and host.lower() not in LOCAL_HOSTS:
+            return True
+        if write:   # a change: the browser says where the request comes from (Origin, else Sec-Fetch-Site)
+            origin = self.headers.get("Origin")
+            if origin is not None:
+                return origin.lower() not in {f"http://{h}" for h in LOCAL_HOSTS}
+            return self.headers.get("Sec-Fetch-Site") not in (None, "same-origin", "none")
+        return False
+
     def send(self, code, body, ctype="application/json; charset=utf-8"):
         data = body if isinstance(body, bytes) else (body if isinstance(body, str) else json.dumps(body, ensure_ascii=False)).encode("utf-8")
         self.send_response(code)
@@ -85,9 +100,11 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         u = urlparse(self.path)
         q = parse_qs(u.query)
+        if self.foreign(write=u.path == "/api/analyze"):   # the only GET that starts something
+            return self.send(403, {"error": "request from another site refused"})
         if u.path in ("/", "/index.html"):
             # standards mode (the claude.ai host adds this wrapper itself when publishing)
-            head = '<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head><body style="margin:0">'
+            head = '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head><body style="margin:0">'
             return self.send(200, head + build_app.shell_html(load_index(), local=True) + "</body></html>", "text/html; charset=utf-8")
         if u.path == "/api/voice/status":
             return self.send(200, voice_status())
@@ -117,8 +134,8 @@ class Handler(BaseHTTPRequestHandler):
             return self.send(200, team.suggestions(sid) if sid.isdigit() else [])
         if u.path in ("/index.json", "/pros.json") or u.path.startswith(("/players/", "/radars/", "/replays/", "/teams/")):
             f = os.path.normpath(os.path.join(build_app.SITE, u.path.lstrip("/")))
-            if f.startswith(os.path.normpath(build_app.SITE)) and os.path.exists(f):
-                return self.send(200, open(f, "rb").read())
+            if f.startswith(os.path.normpath(build_app.SITE) + os.sep) and os.path.isfile(f):
+                return self.send(200, config._retry(lambda: open(f, "rb").read(), f))
             return self.send(404, {"error": "not found"})
         if u.path == "/api/ping":
             return self.send(200, {"ok": True})
@@ -170,6 +187,8 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self):
         """Journal check-ins and experiments: saved in out/, then the player's plan and page are rebuilt."""
         u = urlparse(self.path)
+        if self.foreign(write=True):
+            return self.send(403, {"error": "request from another site refused"})
         try:
             n = int(self.headers.get("Content-Length") or 0)
             body = json.loads(self.rfile.read(n) or b"{}")

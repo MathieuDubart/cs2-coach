@@ -88,8 +88,7 @@ def map_meta(rebuild=False):
             entry["rounds"] = int(len(R))
             entry["plant_rate"] = round(100 * len(pl) / len(R))
         out[mp] = entry
-    os.makedirs(os.path.dirname(META), exist_ok=True)
-    json.dump(out, open(META, "w", encoding="utf-8"), ensure_ascii=False)
+    config.write_json(META, out)
     return out
 
 
@@ -269,15 +268,18 @@ def _candidates(ref, side):
 
 
 # ---------- the base's plays on a map (lanes.py): what the CTs face, what the Ts can run ----------
-_TDF = None
+_TDF = (None, None)
 
 
 def _tdf():
+    """The T-side rounds of the base, kept while the data doesn't change (the server lives for days: new demos
+    must show up in the next plan)."""
     global _TDF
-    if _TDF is None:
-        import tside
-        _TDF = tside.load()
-    return _TDF
+    import tside
+    st = tside._stamp()
+    if _TDF[0] != st:
+        _TDF = (st, tside.load())
+    return _TDF[1]
 
 
 def _tside_maps(maps):
@@ -894,8 +896,7 @@ def build(ids, owner=None):
                          if set(p["tags"]) & {"rotation", "retake", "advantage", "postplant"}],
             "party": {k: {"title": v["title"], "items": v["items"], "src": K.src(*v["src"])} for k, v in K.PARTY.items()}}
     plan["party_key"] = {2: "duo", 3: "trio", 4: "quatuor", 5: "five"}[len(M)]
-    os.makedirs(TEAMS, exist_ok=True)
-    json.dump(plan, open(os.path.join(TEAMS, f"{plan['id']}.json"), "w", encoding="utf-8"), ensure_ascii=False, default=str)
+    config.write_json(os.path.join(TEAMS, f"{plan['id']}.json"), json.loads(json.dumps(plan, default=str)))
     return plan
 
 

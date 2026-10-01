@@ -118,8 +118,7 @@ def radar_file(map_name, out_dir):
         return False
     x0, y0 = max(min(b[0] for b in boxes) - 16, 0), max(min(b[1] for b in boxes) - 16, 0)
     x1, y1 = min(max(b[2] for b in boxes) + 16, 1024), min(max(b[3] for b in boxes) + 16, 1024)
-    os.makedirs(os.path.dirname(path), exist_ok=True)
-    json.dump({"levels": levels, "viewbox": [x0, y0, x1 - x0, y1 - y0]}, open(path, "w"))
+    config.write_json(path, {"levels": levels, "viewbox": [x0, y0, x1 - x0, y1 - y0]})
     return True
 
 
@@ -127,8 +126,8 @@ def write_player(sid, out_dir=SITE):
     p = player_data(str(sid))
     if not p:
         return None
-    os.makedirs(os.path.join(out_dir, "players"), exist_ok=True)
-    json.dump(p, open(os.path.join(out_dir, "players", f"{sid}.json"), "w", encoding="utf-8"), ensure_ascii=False, separators=(",", ":"))
+    # atomic: the page may be loading this profile while a job rewrites it
+    config.write_json(os.path.join(out_dir, "players", f"{sid}.json"), p, separators=(",", ":"))
     for m in index_entry(p)["maps"]:
         radar_file(m, out_dir)
     rp = os.path.join(config.player_dir(sid), "replays")
@@ -149,12 +148,12 @@ def write_teams(out_dir=SITE):
     if os.path.exists(team.TEAMS):
         for f in os.listdir(team.TEAMS):
             if f.endswith(".json"):
-                shutil.copy(os.path.join(team.TEAMS, f), os.path.join(dst, f))
+                config.write_json(os.path.join(dst, f), config.read_json(os.path.join(team.TEAMS, f)))
                 keep.add(f)
     for f in os.listdir(dst):
         if f.endswith(".json") and f != "index.json" and f not in keep:
             os.remove(os.path.join(dst, f))
-    json.dump(team.index(), open(os.path.join(dst, "index.json"), "w", encoding="utf-8"), ensure_ascii=False)
+    config.write_json(os.path.join(dst, "index.json"), team.index())
 
 
 def shell_html(index, local=False):
@@ -175,10 +174,10 @@ def build(out_dir=SITE, local=False, players=None):
         if e:
             index.append(e)
     index.sort(key=lambda e: (e["steamid"] != str(config.settings().get("own_steamid")), -e["n"], e["name"].lower()))
-    json.dump(index, open(os.path.join(out_dir, "index.json"), "w", encoding="utf-8"), ensure_ascii=False)
+    config.write_json(os.path.join(out_dir, "index.json"), index)
     try:
         import proref
-        json.dump(proref.pro_profiles(), open(os.path.join(out_dir, "pros.json"), "w", encoding="utf-8"), ensure_ascii=False)
+        config.write_json(os.path.join(out_dir, "pros.json"), proref.pro_profiles())
     except Exception as e:
         print("pros.json:", e)
     try:
