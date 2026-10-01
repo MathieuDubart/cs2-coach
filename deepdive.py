@@ -167,7 +167,7 @@ def grenade_audit(steamid, my_matches):
             pro_cells = pd.Series(cell(pr)).value_counts() if len(pr) else pd.Series(dtype=int)
             for c, g in me.groupby("cell"):
                 b = g.iloc[0]
-                res["mine"].append({"type": b["type"], "from": humanize(str(b.zone)), "to": humanize(str(b.land_zone)) if b.land_zone else None,
+                res["mine"].append({"type": b["type"], "from": humanize(str(b.zone), m), "to": humanize(str(b.land_zone), m) if b.land_zone else None,
                                     "count": int(len(g)), "pro_uses": int(pro_cells.get(c, 0)),
                                     "enemies_blind": float(g.enemies_blind.fillna(0).mean()) if "enemies_blind" in g and b["type"] == "flash" else None,
                                     "mates_blind": float(g.mates_blind.fillna(0).mean()) if "mates_blind" in g and b["type"] == "flash" else None,
@@ -185,7 +185,7 @@ def grenade_audit(steamid, my_matches):
                 rep = g[(g.speed < 20) | g.jump]
                 b = (rep if len(rep) else g).iloc[0]
                 how = " + ".join(x for x, ok in (("jump", b.jump), ("running", b.speed > 150), ("crouching", b.crouch)) if ok) or "standing still"
-                res["missing"].append({"type": b["type"], "from": humanize(str(b.zone)), "to": humanize(str(b.land_zone)) if b.land_zone else None,
+                res["missing"].append({"type": b["type"], "from": humanize(str(b.zone), m), "to": humanize(str(b.land_zone), m) if b.land_zone else None,
                                        "pro_uses": int(len(g)), "side": b.side, "t": round(float(g.t.median())), "how": how,
                                        "by": str(b.thrower_name), "setpos": f"setpos {b.X:.1f} {b.Y:.1f} {b.Z:.1f}; setang {b.pitch:.2f} {b.yaw:.2f} 0",
                                        "from_px": [round(b.px), round(b.py)], "to_px": [round(b.land_px), round(b.land_py)], "level": b.level})
@@ -231,7 +231,7 @@ def zones_vs_pros(steamid, my_matches):
         pg = pr[(pr["map"] == m) & (pr.side == side) & (pr.zone == z)]
         if len(pg) < 10:
             continue
-        out.append({"map": m, "side": side, "zone": humanize(z), "my_duels": int(len(g)), "my_win": round(100 * g.won.mean()),
+        out.append({"map": m, "side": side, "zone": humanize(z, m), "my_duels": int(len(g)), "my_win": round(100 * g.won.mean()),
                     "pro_duels": int(len(pg)), "pro_win": round(100 * pg.won.mean()),
                     "my_hold": round(100 * (g.speed < 40).mean()), "pro_hold": round(100 * (pg.speed < 40).mean())})
     return sorted(out, key=lambda x: -x["my_duels"])

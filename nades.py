@@ -42,7 +42,7 @@ def _timer(t):
     return f"{int(left // 60)}:{int(left % 60):02d}"
 
 
-VERSION = 2   # bump when the summary changes (texts, fields): the cache is rebuilt
+VERSION = 3   # bump when the summary changes (texts, fields): the cache is rebuilt
 
 
 def _stamp():
@@ -198,7 +198,7 @@ def groups(df, side_rounds):
                 elif typ in ("he", "molotov"):
                     cand = cand.sort_values("damage", ascending=False)
                 b = cand.iloc[0]
-                lst.append({"from_key": z, "from": humanize(z), "to_key": lz, "to": humanize(lz), "score": round(float(score), 3), **e,
+                lst.append({"from_key": z, "from": humanize(z, mp), "to_key": lz, "to": humanize(lz, mp), "score": round(float(score), 3), **e,
                             "t_med": round(float(c.t.median()), 1), "timer": _timer(c.t.median()),
                             "timer_span": [_timer(c.t.quantile(0.25)), _timer(c.t.quantile(0.75))],
                             "windows": wins, "usual": usual, "best": best, "post": round(100 * float(c.post.mean())),
@@ -338,7 +338,7 @@ def for_player(sid, maps, cross=None, stats=None, lanes=None):
                 continue
             zones, pres = _my_zones(cross, mp, side)
             own = mine[(mine["map"] == mp) & (mine.side == side)]
-            entry = {"zones": [humanize(z) for z in zones], "personal": bool(zones), "types": {}}
+            entry = {"zones": [humanize(z, mp) for z in zones], "personal": bool(zones), "types": {}}
             share = {}
             for typ, T in M["types"].items():
                 gs = T["groups"]

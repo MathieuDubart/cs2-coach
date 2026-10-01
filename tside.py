@@ -134,22 +134,22 @@ def analyze(ddir):
             k0 = kd.iloc[0]
             # the T of the first duel: alone (no teammate within LONE units) or with others
             md = k0.victim_mate_dist if k0.victim_side == "T" else k0.killer_mate_dist if k0.killer_side == "T" else None
-            rec.update(first_zone=humanize(k0.victim_zone), first_t=float(k0.t), first_t_side_won=k0.killer_side == "T",
+            rec.update(first_zone=humanize(k0.victim_zone, mname), first_t=float(k0.t), first_t_side_won=k0.killer_side == "T",
                        fc_alone=bool(md > LONE) if md is not None and md == md else None)
             # who died where and when: a T killed alone and not traded is flagged
             td = kd[kd.victim_side == "T"]
             lone = (td.victim_mate_dist.fillna(0) > LONE) & ~td.traded.fillna(False).astype(bool)
-            rec["t_deaths"] = ";".join(f"{humanize(z) if isinstance(z, str) and z != '?' else '?'}@{t:.1f}@{int(l)}"
+            rec["t_deaths"] = ";".join(f"{humanize(z, mname) if isinstance(z, str) and z != '?' else '?'}@{t:.1f}@{int(l)}"
                                        for z, t, l in zip(td.victim_zone, td.t, lone)) or None
             cd = kd[kd.victim_side == "CT"]
-            rec["ct_deaths"] = ";".join(f"{humanize(z) if isinstance(z, str) and z != '?' else '?'}@{t:.1f}"
+            rec["ct_deaths"] = ";".join(f"{humanize(z, mname) if isinstance(z, str) and z != '?' else '?'}@{t:.1f}"
                                         for z, t in zip(cd.victim_zone, cd.t)) or None
             # 3 Ts down within 10 s: the push died there
             tt = td.t.to_numpy()
             for i in range(len(tt) - 2):
                 if tt[i + 2] - tt[i] <= 10:
                     zz = td[(td.t >= tt[i]) & (td.t <= tt[i] + 10)].victim_zone.dropna()
-                    rec.update(bunch_t=float(tt[i]), bunch_zone=humanize(zz.mode().iloc[0]) if len(zz) else None)
+                    rec.update(bunch_t=float(tt[i]), bunch_zone=humanize(zz.mode().iloc[0], mname) if len(zz) else None)
                     break
         if hit:
             site, ht = hit
@@ -172,7 +172,7 @@ def analyze(ddir):
             died_on_way = int(((deaths_before.victim_side == "T") & (deaths_before.t >= ht - 10)).sum()) if len(kd) else 0
             rec.update(site=site, hit_t=round(ht, 1), n_exec=int(len(hitters)), n_push=int(len(hitters)) + died_on_way,
                        lurk_other=lurk, pre_zones=pre_zones,
-                       approaches=",".join(humanize(z) for z in came.values) if len(came) else None,
+                       approaches=",".join(humanize(z, mname) for z in came.values) if len(came) else None,
                        t_alive_hit=int(r.T_n) - int((deaths_before.victim_side == "T").sum()) if len(kd) else int(r.T_n),
                        ct_alive_hit=int(r.CT_n) - int((deaths_before.victim_side == "CT").sum()) if len(kd) else int(r.CT_n))
         rows.append(rec)
@@ -622,7 +622,7 @@ def econ_table(df):
 
 
 SUMMARY = os.path.join(config.OUT, "population", "tside_summary.json")
-VERSION = 5   # bump when the summary changes shape: the cache is rebuilt
+VERSION = 6   # bump when the summary changes shape: the cache is rebuilt
 
 
 def _stamp():
@@ -846,7 +846,7 @@ def _deaths(mp, dirs, site_of):
                 if len(xw) < 15:
                     continue
                 vc = xw.victim_zone.value_counts(normalize=True).head(3)
-                wins[str(w)] = {"n": int(len(xw)), "zones": [{"zone": humanize(z), "pct": _pct(p)} for z, p in vc.items()]}
+                wins[str(w)] = {"n": int(len(xw)), "zones": [{"zone": humanize(z, mp), "pct": _pct(p)} for z, p in vc.items()]}
             res[key] = wins
         out[side] = res
     return out

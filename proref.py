@@ -149,11 +149,11 @@ def for_player(steamid):
                 overlap = sum(min(v, pd_.get(z, 0)) for z, v in dist.items())
                 top = sorted(pd_.items(), key=lambda x: -x[1])[:3]
                 cands.append({"steamid": psid, "name": agg.loc[psid, "handle"], "team": agg.loc[psid, "team"], "overlap": round(overlap * 100),
-                              "zones": [{"zone": humanize(z), "share": round(v * 100)} for z, v in top]})
+                              "zones": [{"zone": humanize(z, m), "share": round(v * 100)} for z, v in top]})
             if cands:
                 cands.sort(key=lambda x: -x["overlap"])
                 my_top = sorted(dist.items(), key=lambda x: -x[1])[:3]
-                maps.setdefault(m, {})[side] = {"pros": cands[:4], "mine": [{"zone": humanize(z), "share": round(v * 100)} for z, v in my_top]}
+                maps.setdefault(m, {})[side] = {"pros": cands[:4], "mine": [{"zone": humanize(z, m), "share": round(v * 100)} for z, v in my_top]}
     return {"similar": rows[:6], "same_role": same_role, "role": my_role, "role_name": archetype.ROLES[my_role]["name"],
             "maps": maps, "n_pros": int(len(agg)), "n_maps": n_maps,
             "note": "Official demos of recent pro matches (HLTV). Similarity = average closeness over 15 style indicators, in base percentiles."}
@@ -187,7 +187,7 @@ def pro_profiles():
                   "pistols": (r.pistol_share or 0) + (r.deagle_share or 0)}
         zones = {}
         for m, sides in zp.get(sid, {}).items():
-            zones[m] = {sd: [{"zone": humanize(z), "share": round(v * 100)} for z, v in sorted(d.items(), key=lambda x: -x[1])[:5]]
+            zones[m] = {sd: [{"zone": humanize(z, m), "share": round(v * 100)} for z, v in sorted(d.items(), key=lambda x: -x[1])[:5]]
                         for sd, d in sides.items()}
         f = lambda v, k=1: None if v is None or v != v else (round(float(v) * k) if k == 100 else round(float(v), 2))
         out.append({"steamid": sid, "handle": r.handle, "real_name": r.real_name, "team": r.team, "prole": r.prole, "hltv": r.hltv,

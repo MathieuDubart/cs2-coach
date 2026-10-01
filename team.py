@@ -338,7 +338,7 @@ def rotations(mp, slots):
                     best = dict(best, who=who)
                     break
             if best:
-                out.append({"member": sl["member"], "name": sl["name"], "to": L, "route": " → ".join(humanize(z) for z in best["route"].split(" > ")),
+                out.append({"member": sl["member"], "name": sl["name"], "to": L, "route": " → ".join(humanize(z, mp) for z in best["route"].split(" > ")),
                             "travel": best["travel"], "died": best["died"], "n": best["n"], "who": best["who"]})
     return out
 

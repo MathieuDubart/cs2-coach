@@ -33,6 +33,7 @@ Game detection is turned on in Settings: the app writes `gamestate_integration_c
 - **Routine**: before, during and after the round and the game, and outside the game (sleep, caffeine, breaks), by group (solo, duo, trio, 4-stack, 5-stack), with the latest game changes. Measured habits: times, game number in the session, loss streaks, partners, and the pre-session journal (sleep, energy, warm-up).
 - **Progress**: priorities by level and experience, role tips, targeted warm-up, stats per weapon, match-by-match tracking, and **experiments** (a weapon, a position, a habit…) evaluated automatically over the next matches.
 - **Team**: you + 1 to 4 analyzed teammates. The coach crosses their data (roles, zones, known lineups, weapons, mid-round, matches played together) with the base and pros: T roles, CT setup per map (who plays where, on the radar), A and B executes (who throws which grenade, with the `setpos` command), rotations, suggested IGL, maps to pick in Premier, shared vocabulary and calls, economy (AWP, drop order, everyone's force-buy), synergies (trades between you), team goals and individual work for the team.
+- Zone names are the callouts used by pros and on FACEIT (Short, Upper Tunnels, Apps, Window, Donut, Popdog...), not the game's default place names (`callouts.py`, with its sources).
 - Every piece of advice cites its sources: guides, pro videos, scientific studies, patch notes (see `knowledge.py`).
 - Comparison with a reference population (random players + HLTV pro demos).
 

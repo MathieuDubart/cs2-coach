@@ -41,7 +41,7 @@ def geo(rebuild=False):
     """Per map: where each zone is (world and radar), the T spawn, the site centers, and the radar transform
     (so the app can put your live position on the radar)."""
     by = _maps_demos()
-    n = sum(len(v) for v in by.values())
+    n = f"v2-{sum(len(v) for v in by.values())}"   # v2: callouts (callouts.py)
     if os.path.exists(GEO) and not rebuild:
         try:
             cur = json.load(open(GEO, encoding="utf-8"))
@@ -71,7 +71,7 @@ def geo(rebuild=False):
             x, y, zz = (float(g[c].median()) for c in ("X", "Y", "Z"))
             px, py = zm.px(x, y)
             zones[z] = {"c": [round(x), round(y), round(zz)], "px": [round(float(px)), round(float(py))],
-                        "level": zm.level(zz)[0], "name": humanize(z)}
+                        "level": zm.level(zz)[0], "name": humanize(z, mp)}
         spw = pd.concat(sp)
         st = {}
         for L, v in (sites.get(mp) or {}).items():
@@ -223,7 +223,7 @@ def learn(df, G):
             c1, c2 = (zinfo.get(top) or {}).get("c"), (zinfo.get(second) or {}).get("c") if second else None
             if second and (not c1 or not c2 or math.hypot(c1[0] - c2[0], c1[1] - c2[1]) > 1300):
                 second = None   # two zones far apart: the name of the first one says where the lane is
-            L["name"] = humanize(top) + (f" / {humanize(second)}" if second else "")
+            L["name"] = humanize(top, mp) + (f" / {humanize(second, mp)}" if second else "")
             L["px"], L["level"] = (zinfo.get(top) or {}).get("px"), (zinfo.get(top) or {}).get("level")
             L["theta"] = round(L["theta"])
         lanes.setdefault(mp, {})[site] = ls
@@ -349,12 +349,13 @@ def summary(g, lanes_mp, contact_zones=None, k=10):
     label = {p: name(p, lanes_mp, [int(i) for i, _ in sorted(use.get(p, {}).items(), key=lambda kv: -kv[1])]) for p in plays}
     n = len(g)
     from map_analysis import humanize
+    mp = g["map"].iloc[0] if len(g) else None
     share = {}   # how often each lane is used when this site is attacked
     for site in ("A", "B"):
         x = g[g.play.str.endswith(site) | g.play.str.startswith(site)] if len(g) else g
         for i in range(len((lanes_mp or {}).get(site) or [])):
             share[(site, i)] = _pct(x.play_lanes.map(lambda u: str(i) in str(u).split(",")).mean()) if len(x) else None
-    return {"lanes": {s: [{k: L[k] for k in ("name", "px", "level", "main", "mid", "theta")} | {"share": share.get((s, i)), "zones": [humanize(z) for z in L.get("core") or L["zones"]]}
+    return {"lanes": {s: [{k: L[k] for k in ("name", "px", "level", "main", "mid", "theta")} | {"share": share.get((s, i)), "zones": [humanize(z, mp) for z in L.get("core") or L["zones"]]}
                           for i, L in enumerate(ls)] for s, ls in lanes_mp.items()},
             "prior": prior, "use": use, "surv": {"t": ts, **surv}, "contact": contact, "label": label,
             "n": {p: int((g.play == p).sum()) for p in plays}, "rounds": int(n)}

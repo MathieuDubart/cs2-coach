@@ -73,7 +73,7 @@ def rows_for(ddir):
                      "armor": "helmet" if x.helmet else "kevlar" if (x.armor or 0) > 0 else "none", "util": ",".join(util),
                      "util_n": len(util) if known else int(x.nades or 0), "util_known": known,
                      "defuser": bool(x.defuser), "equip": float(x.equip or 0),
-                     "zone": humanize(setup.get((r, int(x.steamid)), "")) if setup.get((r, int(x.steamid))) else None,
+                     "zone": humanize(setup.get((r, int(x.steamid)), ""), mp) if setup.get((r, int(x.steamid))) else None,
                      "kills": int(x.kills), "damage": int(x.damage), "died": bool(pd.notna(x.died_t)), "won": bool(x.won)})
     return pd.DataFrame(rows)
 

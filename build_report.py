@@ -32,7 +32,7 @@ def _names(mp):
     """Re-derive display names from raw callout keys (older runs used a cruder formatter)."""
     if mp.get("zone_mode") == "callouts":
         for z in mp["zones"]:
-            z["name"] = humanize(z["key"])
+            z["name"] = humanize(z["key"], mp.get("map"))
     return True
 
 

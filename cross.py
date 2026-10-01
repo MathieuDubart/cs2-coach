@@ -64,7 +64,7 @@ def zone_name(meta, key):
     for z in meta["zones"]:
         if z["key"] == key:
             return z["name"]
-    return humanize(key) if isinstance(key, str) else str(key)
+    return humanize(key, meta.get("map")) if isinstance(key, str) else str(key)
 
 
 def my_duels(d):

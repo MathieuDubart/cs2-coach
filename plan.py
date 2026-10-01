@@ -37,8 +37,8 @@ MID_FIX = {
 }
 
 
-def _zone(z):
-    return humanize(z) if z else z
+def _zone(z, mp=None):
+    return humanize(z, mp) if z else z
 
 
 def _route(r):
@@ -164,7 +164,7 @@ def weapon_positions(wz, maps):
                     zones = sorted(zones, key=lambda z: -(z["duel_win"] or 0))
                 out.setdefault(mp, {}).setdefault(side, {})[wc] = {
                     "label": "Pro AWPers (HLTV demos)" if wc == "pro_awp" else K_CLASS.get(wc, wc), "rounds": v["rounds"],
-                    "zones": [{**z, "name": _zone(z["zone"])} for z in zones[:5]]}
+                    "zones": [{**z, "name": _zone(z["zone"], mp)} for z in zones[:5]]}
     return out
 
 
@@ -249,7 +249,7 @@ ZONE_PX = os.path.join(config.OUT, "population", "zone_px.json")
 def zone_refs():
     """Radar position of every zone and the floors of each map, from the analyzed player with the most data there."""
     import weapons
-    n = f"v2-{weapons._n_demos()}"   # v2: English level names
+    n = f"v3-{weapons._n_demos()}"   # v3: callouts
     if os.path.exists(ZONE_PX):
         cur = json.load(open(ZONE_PX, encoding="utf-8"))
         if cur.get("_n") == n:
@@ -292,7 +292,7 @@ def map_refs(maps):
                     continue
                 zs = []
                 for zz in v["zones"][:6]:
-                    name = _zone(zz["zone"])
+                    name = _zone(zz["zone"], mp)
                     p = px.get(name) or {}
                     zs.append({"name": name, "share": zz["share"], "duel_win": zz.get("duel_win"), "duels": zz.get("duels"),
                                "round_win": zz.get("round_win"), "px": p.get("px"), "level": p.get("level")})

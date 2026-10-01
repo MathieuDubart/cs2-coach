@@ -513,13 +513,13 @@ def retake_routes(min_n=3):
             if len(gg) < 2:
                 continue
             tr = gg.travel.dropna()
-            rs.append({"route": [humanize(z) for z in r], "n": int(len(gg)), "died": round(100 * gg.died_way.mean()),
+            rs.append({"route": [humanize(z, mp) for z in r], "n": int(len(gg)), "died": round(100 * gg.died_way.mean()),
                        "travel": round(float(tr.median()), 1) if len(tr) else None})
         if not rs:
             continue
         rs.sort(key=lambda x: (-x["n"], x["died"]))
         tr = g.travel.dropna()
-        out.setdefault(mp, {}).setdefault(to, {})[humanize(sz)] = {
+        out.setdefault(mp, {}).setdefault(to, {})[humanize(sz, mp)] = {
             "n": int(len(g)), "died": round(100 * g.died_way.mean()), "travel": round(float(tr.median()), 1) if len(tr) else None,
             "routes": rs[:2]}
     return out

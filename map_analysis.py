@@ -29,7 +29,13 @@ def sid(x):
         return 0
 
 
-def humanize(place):
+def humanize(place, mp=None):
+    """A place of the game as players call it: the pro / FACEIT callout on that map when there is one (callouts.py),
+    else the game's name spaced out ("BackofB" -> "Back of B")."""
+    import callouts
+    c = callouts.name(place, mp)
+    if c:
+        return c
     s = re.sub(r"(?<=[a-z])(?=[A-Z0-9])|(?<=[A-Z])(?=[A-Z][a-z])", " ", place)
     s = re.sub(r"\b(Back|Top|Bottom|Side)of\b", r"\1 of", s)
     return s.strip() or "?"
@@ -39,6 +45,7 @@ class ZoneMap:
     """Zones from hand-made anchors (zones_<map>.py) or from the game's callouts (last_place_name)."""
 
     def __init__(self, map_name):
+        self.map = map_name
         self.cfg = mapdata.get(map_name)
         try:
             mod = importlib.import_module(f"zones_{map_name.split('_', 1)[1]}")
@@ -61,7 +68,7 @@ class ZoneMap:
                 continue
             level = g.level.value_counts().index[0]
             g = g[g.level == level]
-            self.zones.append((place, humanize(place), float(g.px.median()), float(g.py.median()), level))
+            self.zones.append((place, humanize(place, self.map), float(g.px.median()), float(g.py.median()), level))
 
     def _auto_sectors(self, pos, k=14, iters=30):
         """No callouts on this map: k-means on where players actually go, sectors numbered north to south."""
@@ -91,7 +98,7 @@ class ZoneMap:
         return [self.zones[i][0] for i in idx]
 
     def name(self, key):
-        return next((z[1] for z in self.zones if z[0] == key), humanize(key))
+        return next((z[1] for z in self.zones if z[0] == key), humanize(key, self.map))
 
     def level(self, z):
         return [mapdata.level_of(self.cfg, v) for v in np.atleast_1d(z)]
