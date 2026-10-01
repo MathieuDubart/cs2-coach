@@ -462,6 +462,9 @@ def run_for(query, fetch=True):
     import style
     population.run_all()
     style.run_all(workers=4)
+    if sid and not own and not (s.get("players", {}).get(str(sid)) or {}).get("authcode"):
+        log("Only the matches already on this PC (played with you, or added by a share code) can be analyzed for this player. "
+            "For a match he played without you: paste its share code (CSGO-…) here, or add his history code in his Analysis tab.")
     if sid:
         if not analyze_player(sid, reg):
             if not ex.get("steam") and not ex.get("csstats"):

@@ -347,6 +347,11 @@ def auto_sync(every=1800):
         if sid.isdigit() and p.get("authcode") and p.get("auto_sync", True) and LOCK.acquire(blocking=False):
             print("Automatic Steam sync…", flush=True)
             run_job("Steam sync", lambda: cs2coach.sync_steam(sid))  # releases LOCK
+        # teammates whose history code you added: their matches without you too
+        for other, op in list(config.settings().get("players", {}).items()):
+            if other != sid and other.isdigit() and op.get("authcode") and op.get("auto_sync", True) and LOCK.acquire(blocking=False):
+                print(f"Automatic Steam sync of {op.get('name') or other}…", flush=True)
+                run_job(f"Steam sync of {op.get('name') or other}", lambda o=other: cs2coach.sync_steam(o))
         time.sleep(every)
 
 

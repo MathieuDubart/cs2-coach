@@ -214,19 +214,23 @@ def set_credentials(sid, key=None, auth=None, known=None):
         p["authcode"] = auth
         p["last_code"] = start
         p.setdefault("auto_sync", True)
-        saved.append("code d'historique")
+        saved.append("history code")
     config.save_settings(s)
     return saved
 
 
 def forget(sid):
+    """Remove a player's history code. For your own account, the sign-in and the API key go too (a teammate's
+    removal keeps your key: it is the one used for everyone)."""
     s = config.settings()
     p = s.get("players", {}).get(str(sid), {})
     for k in ("authcode", "last_code", "auto_sync", "last_sync", "pending_codes"):
         p.pop(k, None)
+    own = str(s.get("own_steamid") or "") == str(sid)
     if s.get("steam_login", {}).get("steamid") == str(sid):
         s.pop("steam_login", None)
-    s.pop("steam_api_key", None)
+    if own:
+        s.pop("steam_api_key", None)
     config.save_settings(s)
     f = os.path.join(FRIENDS_DIR, f"{sid}_friends.json")
     if os.path.exists(f):
