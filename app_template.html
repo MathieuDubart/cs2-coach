@@ -439,6 +439,31 @@ svg.radar .mkt{font:800 13px var(--f-mono);fill:#ffd24a;paint-order:stroke;strok
 svg.radar .het{font:800 9.5px var(--f-mono);fill:#0b0f14}
 svg.radar .c4t{font:800 10.5px var(--f-mono);fill:#fff}
 .caption span svg{vertical-align:middle;margin-right:5px}
+body.igfull .bar,body.igfull .jobpanel,body.igfull #job{display:none}
+body.igfull main{max-width:none;padding:0}
+.ig-full{position:fixed;inset:0;z-index:40;background:#0b0f14;overflow:hidden}
+.ig-map,.ig-map .radar-box{position:absolute;inset:0}
+.ig-map .radar-box{display:block;border:0;background:#0b0f14}
+.ig-map svg.radar{width:100%;height:100%}
+.ig-map .radar-box>.btns{position:absolute;top:58px;right:10px;z-index:3;display:flex;flex-wrap:wrap;gap:4px;justify-content:flex-end;max-width:46vw}
+.ig-map .radar-box>.btns button:not([aria-pressed="true"]){background:color-mix(in srgb,var(--bg) 85%,transparent);color:var(--ink)}
+.ig-map .caption{position:absolute;right:10px;bottom:10px;z-index:3;max-width:min(420px,36vw);max-height:26vh;overflow:auto;opacity:.92;background:color-mix(in srgb,var(--bg) 88%,transparent);padding:6px 10px;border-radius:var(--radius);font-size:12px}
+.ig-hud{position:absolute;top:8px;left:8px;right:8px;z-index:4;display:flex;gap:8px;align-items:flex-start}
+.ig-hud .live{flex:1;margin:0;background:color-mix(in srgb,var(--bg) 92%,transparent)}
+.ig-hud .hudbtns{display:flex;gap:6px;flex-shrink:0}
+.ig-hud .hudbtns .close{background:color-mix(in srgb,var(--bg) 92%,transparent)}
+.ig-side{position:absolute;left:8px;top:64px;bottom:8px;z-index:3;width:min(370px,30vw);overflow:auto;display:grid;align-content:start;gap:8px;
+  background:color-mix(in srgb,var(--bg) 90%,transparent);border-radius:var(--radius);padding:8px;box-shadow:0 6px 24px #0008}
+.ig-side .tread,.ig-side .now-empty{font-size:14px}
+.ig-toast{position:absolute;top:64px;left:50%;transform:translateX(-50%);z-index:5;width:min(470px,60vw);max-height:48vh;font-size:14px;overflow:auto;
+  background:var(--bg);border-left:5px solid var(--flash);border-radius:var(--radius);padding:10px 12px;box-shadow:0 10px 32px #000a;animation:toastin .25s ease-out}
+.ig-toast .tx{position:sticky;top:0;float:right;margin-left:8px}
+@keyframes toastin{from{opacity:0;transform:translate(-50%,-12px)}to{opacity:1;transform:translate(-50%,0)}}
+@media (prefers-reduced-motion:reduce){.ig-toast{animation:none}}
+.ig-fullbtn{display:flex;justify-content:flex-end;margin:4px 0}
+@media (max-width:820px){.ig-side{top:auto;width:auto;right:8px;max-height:38vh}.ig-map .radar-box>.btns{top:auto;bottom:calc(38vh + 16px);max-width:none}.ig-map .caption{display:none}}
+.ig-toast .tread{border:0;padding:0;box-shadow:none}
+@media (max-width:820px){.ig-toast{width:92vw}}
 </style>
 
 <div class="bar"><div class="bar-in">
@@ -1288,7 +1313,7 @@ function welcome(v){const own=D.own;
   $("#w-form",v).onsubmit=e=>{e.preventDefault();const q=$("#w-q",v).value.trim();if(!q)return;$("#q").value=q;$("#search").requestSubmit()}}
 
 // ---------- view: in game (2nd screen, follows the game) ----------
-let gsiLast=null,gsiTimer=null,gsiStatus=null,igManual=false,igEv={key:null,contact:null,site:null};
+let igToastOff=null,gsiLast=null,gsiTimer=null,gsiStatus=null,igManual=false,igEv={key:null,contact:null,site:null};
 const money=x=>"$"+Math.round(x).toLocaleString("en-US");
 const RT_EN={pistol:"Pistol round",eco:"Eco",force:"Force-buy",full:"Full buy","anti-eco":"Anti-eco"};
 const FULL_W=new Set(["AK-47","M4A4","M4A1-S","AUG","SG 553","AWP","G3SG1","SCAR-20"]);
@@ -1607,13 +1632,13 @@ function planColumns(p,m,R0){const PL=p.advice.plan||{};
     <div><b>Economy</b>We buy together. Force only if everyone still has $4,000 next round.</div>
     ${D.local?`<div><b>Before the 1st game</b><a href="#routine" style="color:var(--flash)">journal (20 s)</a> · <a href="#progress" style="color:var(--flash)">today's warm-up</a></div>`:""}
    </div>`}}
-function nowPanel(p,g,following){
+function nowPanel(p,g,following,opt){const noBuy=opt&&opt.noBuy;
   if(!following){const TS=(p.advice.plan||{}).tside,M=S.side==="CT"&&TS&&TS.maps&&TS.maps[S.map];
     return `<div class="now-empty"><b>${gsiFresh()?"You picked a map by hand":"Waiting for your match"}</b>
      <span class="mini">${gsiFresh()?"This page shows your pick, not the live game.":"As soon as CS2 sends the round, this panel shows what matters now: what to buy, where the Ts are likely to go, what to do with your grenades."}</span>
      ${M?`<span class="mini">Ts on ${MAPN(S.map)}: pistol round A ${(M.ctx.pistol||M.all).A}% / B ${(M.ctx.pistol||M.all).B}%, full buys A ${(M.ctx.full||M.all).A}% / B ${(M.ctx.full||M.all).B}%. More in the "T habits" tab.</span>`:""}</div>`}
   const ph=g.round_phase,ct=g.side==="CT",ev=evFor(g),out=[];
-  if(ph==="freezetime"){out.push(buyCard(p,g));if(ct)out.push(tsideLive(p,g))}
+  if(ph==="freezetime"){if(!noBuy)out.push(buyCard(p,g));if(ct)out.push(tsideLive(p,g))}
   else if(ph==="live"){
     if(g.bomb==="planted"){const site=ev.site||null;
       if(site)out.push(retakeCard(p,g,site));
@@ -1640,17 +1665,30 @@ function renderIngame(){
   let tab=store("igtab")||"plan";if(!TABS.some(t=>t[0]===tab))tab="plan";
   const cols=planColumns(p,m,R0);
   const body={plan:()=>cols.html,buys:()=>S.map?buyRows(p,S.map,S.side,following?roundType(gsiLast):null):"",nades:()=>S.map?nadeTable(p,S.map,S.side):"",t:()=>S.map?tsideTable(p,S.map):""}[tab]();
-  v.innerHTML=`${liveBar()}
+  const radarHTML=liveR?radarShell(layerBtns()+levelBtns({levels:LVs},S.level)):m?radarShell(levelBtns(m,S.level)):R0?radarShell((R0.levels||[]).length>1?`<div class="btns" role="group" aria-label="Level">${R0.levels.map(l=>`<button type="button" data-blevel="${l.key}">${esc(l.name)}</button>`).join("")}</div>`:""):`<div class="empty">No radar for this map yet.</div>`;
+  const full=!!(following&&store("igfull")!==false),tkey=gsiLast?`${gsiLast.map}|${gsiLast.round}`:"";
+  document.body.classList.toggle("igfull",full);
+  if(full){const ph=gsiLast.round_phase,buy=ph==="freezetime"&&igToastOff!==tkey?buyCard(p,gsiLast):"";
+    v.innerHTML=`<div class="ig-full">
+     <div class="ig-map">${radarHTML}</div>
+     <div class="ig-hud">${liveBar()}<span class="hudbtns"><button type="button" class="close" id="fsbtn">${document.fullscreenElement?"Exit full screen":"⛶ Full screen"}</button><button type="button" class="close" id="igfull">Normal view</button></span></div>
+     ${buy?`<div class="ig-toast" role="status" aria-live="polite"><button type="button" class="close tx" id="toastx" aria-label="Hide the buy advice">✕</button>${buy}</div>`:""}
+     <div class="now ig-side" id="now">${nowPanel(p,gsiLast,following,{noBuy:true})}</div></div>`}
+  else v.innerHTML=`${liveBar()}
    ${following&&focus?"":`<div class="ig-top">
     <div class="chips" role="group" aria-label="Map">${maps.map(x=>`<button type="button" data-map="${x.map}" aria-pressed="${x.map===S.map}">${MAPN(x.map)}<small>${x.n||"base"}</small></button>`).join("")}${S.map&&!maps.some(x=>x.map===S.map)?`<button type="button" aria-pressed="true">${MAPN(S.map)}<small>0</small></button>`:""}</div>
     <div class="btns side big" role="group" aria-label="Side"><button type="button" data-side="T" aria-pressed="${S.side==="T"}">T · ${S.map?roleOf(S.map,"T"):"attack"}</button><button type="button" data-side="CT" aria-pressed="${S.side==="CT"}">CT · ${S.map?roleOf(S.map,"CT"):"defense"}</button></div>
     ${D.local?"":`<button type="button" class="close" id="focus">${focus?"Exit 2nd screen":"2nd screen mode"}</button>`}
    </div>`}
+   ${following?`<div class="ig-fullbtn"><button type="button" class="close" id="igfull">⛶ Full map</button></div>`:""}
    <div class="ig2"><div class="now" id="now">${nowPanel(p,gsiLast,following)}</div>
-    <div class="igcol ig-radar">${liveR?radarShell(layerBtns()+levelBtns({levels:LVs},S.level)):m?radarShell(levelBtns(m,S.level)):R0?radarShell((R0.levels||[]).length>1?`<div class="btns" role="group" aria-label="Level">${R0.levels.map(l=>`<button type="button" data-blevel="${l.key}">${esc(l.name)}</button>`).join("")}</div>`:""):`<div class="empty">No radar for this map yet.</div>`}</div></div>
+    <div class="igcol ig-radar">${radarHTML}</div></div>
    ${tabs(v,"Map guide",TABS,tab)}
    <div class="tabpanel" role="tabpanel">${body}</div>`;
   copyBtn(v);
+  const fbt=$("#igfull",v);if(fbt)fbt.onclick=()=>{store("igfull",!full);renderIngame()};
+  const fsb=$("#fsbtn",v);if(fsb)fsb.onclick=async()=>{try{if(document.fullscreenElement)await document.exitFullscreen();else await document.documentElement.requestFullscreen()}catch(e){}renderIngame()};
+  const tx=$("#toastx",v);if(tx)tx.onclick=()=>{igToastOff=tkey;tx.parentElement.remove()};
   $$("[data-tab]",v).forEach(b=>b.onclick=()=>{store("igtab",b.dataset.tab.split(":")[1]);renderIngame()});
   $$("[data-map]",v).forEach(b=>b.onclick=()=>{S.map=b.dataset.map;S.level=null;igManual=true;store("map",S.map);renderIngame()});
   $$("[data-side]",v).forEach(b=>b.onclick=()=>{S.side=b.dataset.side;igManual=true;store("side",S.side);renderIngame()});
@@ -2031,7 +2069,7 @@ $("#search").addEventListener("submit",async e=>{e.preventDefault();const q=$("#
 // ---------- routing ----------
 const RENDER={ingame:renderIngame,review:renderReview,analysis:renderAnalysis,routine:renderRoutine,midround:renderMidround,progress:renderProgress,team:renderTeam,matches:renderMatches,maps:renderMaps,players:renderPlayers,pros:renderPros,settings:renderSettings};
 function go(view){view=ALIAS[view]||view;if(location.hash!=="#"+view)history.replaceState(null,"",location.pathname+location.search+"#"+view);show(view)}
-function show(view){view=ALIAS[view]||view;if(!RENDER[view])view="ingame";if(location.hash.slice(1)!==view)history.replaceState(null,"",location.pathname+location.search+"#"+view);
+function show(view){view=ALIAS[view]||view;if(!RENDER[view])view="ingame";if(view!=="ingame")document.body.classList.remove("igfull");if(location.hash.slice(1)!==view)history.replaceState(null,"",location.pathname+location.search+"#"+view);
   S.view=view;$$("main>.view").forEach(x=>x.hidden=x.id!=="v-"+view);
   navUpdate(view);if(view!=="ingame")clearTimeout(gsiTimer);
   if(view==="players"){renderPlayers();return}
