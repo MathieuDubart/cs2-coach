@@ -37,7 +37,7 @@ def work(sid):
     t = time.time()
     with contextlib.redirect_stdout(buf), contextlib.redirect_stderr(buf):
         ok = cs2coach.analyze_player(int(sid), cs2coach.registry()) if not PLANS_ONLY else True
-        if ok:
+        if ok or os.path.exists(os.path.join(config.player_dir(sid), "advice.json")):   # profiles without demos too
             cs2coach.attach_plan(int(sid))
     return sid, bool(ok), round(time.time() - t)
 
