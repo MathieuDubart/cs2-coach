@@ -22,9 +22,16 @@ def _p(n, one, many):
     return f"{n} {one if abs(n) == 1 else many}"
 
 
+def _site(name):
+    """'A' for the A bomb site, whatever its name ('A Site' callout, 'Bombsite A' from older analyses)."""
+    if isinstance(name, str) and (name in ("A Site", "B Site") or name in ("Bombsite A", "Bombsite B")):
+        return "A" if "A" in name.replace("Bombsite", "") else "B"
+    return None
+
+
 def nm(name):
-    """Bombsite A -> A site."""
-    return f"{name[-1]} site" if isinstance(name, str) and name.startswith("Bombsite ") else name
+    """A Site -> A site (in a sentence)."""
+    return f"{_site(name)} site" if _site(name) else name
 
 
 def cap(name):
@@ -34,7 +41,7 @@ def cap(name):
 
 def at(name):
     """'on A site', 'at Outside'."""
-    return f"on {name[-1]} site" if isinstance(name, str) and name.startswith("Bombsite ") else f"at {name}"
+    return f"on {_site(name)} site" if _site(name) else f"at {name}"
 
 
 def _nade_to(nd, zone_key, to_name, types=("smoke", "flash", "molotov")):
@@ -107,7 +114,7 @@ def side_notes(mp, side, S, nd, regions, n_matches):
                         alt = (None, az)
                         break
             txt = f"You spend {round(z['presence'])}% of your time there for {_p(k, 'kill', 'kills')} and {_p(d, 'death', 'deaths')}"
-            src = f"{nm(kz)}" if str(kz).startswith("Bombsite") else kz
+            src = nm(kz)
             txt += f", {kn} of them from {src}." if kz and kn >= 2 else "."
             if moving and spot and (spot.get("hold_pct") or 0) >= 35:
                 head, kind = "change how you play it", "avoid"
@@ -172,7 +179,7 @@ def side_notes(mp, side, S, nd, regions, n_matches):
         t, x = nade
         verb = {"smoke": f"smoke {nm(kz)}", "flash": f"flash {nm(kz)}", "molotov": f"molotov {nm(kz)}"}[t]
         goal = "setting up" if side == "CT" else "pushing"
-        src = f"{nm(kz)}" if str(kz).startswith("Bombsite") else kz
+        src = nm(kz)
         out.append((z["presence"] * 0.8, "tip", f"<b>{cap(z['name'])}: {verb} before {goal}.</b> You spend {round(z['presence'])}% of your time there "
                                                 f"({z['k']}-{z['d']}), and you get killed {kn} times from {src}. {_nade_txt(t, x, side)}"))
         cited.add((t, x["from"], x["to"]))

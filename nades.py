@@ -32,9 +32,9 @@ COLS = ["map", "match", "round", "t", "type", "thrower", "side", "zone", "land_z
         "enemies_blind", "mates_blind", "kills_after", "post", "won", "buy"]
 
 
-def humanize(z):
+def humanize(z, mp=None):
     from map_analysis import humanize as h
-    return h(z) if isinstance(z, str) and z else None
+    return h(z, mp) if isinstance(z, str) and z else None
 
 
 def _timer(t):

@@ -29,9 +29,9 @@ CTX_FR = {"pistol": "Pistol round", "r2_win": "Round 2, Ts won the pistol", "r2_
 BUY_FR = {"eco": "eco", "force": "force-buy", "full": "full buy"}
 
 
-def humanize(z):
+def humanize(z, mp=None):
     from map_analysis import humanize as h
-    return h(z) if z else z
+    return h(z, mp) if z else z
 
 
 def five_v_five(R):
