@@ -901,9 +901,8 @@ def build(ids, owner=None):
 
 
 def suggestions(sid, limit=8):
-    """Likely teammates of a player: partners seen in his team, then players met most often."""
+    """Likely teammates of a player: partners seen in their team, then players met most often."""
     sid = int(sid)
-    names = config.settings().get("players", {})
     cnt = defaultdict(int)
     for mid in os.listdir(config.DEEP):
         f = os.path.join(config.DEEP, mid, "samples.parquet")
@@ -916,7 +915,7 @@ def suggestions(sid, limit=8):
         for p, sd in r1.items():
             if p != sid and sd == r1[sid] and p:
                 cnt[int(p)] += 1
-    rows = [{"steamid": str(p), "name": (names.get(str(p)) or {}).get("name") or str(p), "together": n,
+    rows = [{"steamid": str(p), "name": config.display_name(p), "together": n,
              "analyzed": os.path.exists(os.path.join(config.player_dir(p), "advice.json"))} for p, n in cnt.items()]
     rows.sort(key=lambda r: (-r["together"], not r["analyzed"]))
     return rows[:limit]

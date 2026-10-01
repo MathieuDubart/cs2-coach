@@ -366,16 +366,20 @@ def attach_plan(sid):
     load = lambda n: json.load(open(os.path.join(pdir, n), encoding="utf-8")) if os.path.exists(os.path.join(pdir, n)) else None
     try:
         adv["plan"] = plan.build(sid, adv, load("cross.json"), load("deepdive.json"), light=bool(adv.get("light")))
+        adv.pop("plan_error", None)
     except Exception as e:
         log(f"Progress plan unavailable: {e}")
         traceback.print_exc()
+        adv["plan_error"] = f"{type(e).__name__}: {e}"[:200]   # the previous plan stays; the page says it is not up to date
+        config.write_json(p, adv, indent=1, default=str)
         return
-    json.dump(adv, open(p, "w", encoding="utf-8"), ensure_ascii=False, indent=1, default=str)
     try:  # coach notes per map and side (zones to change or keep, grenades), from the cross-match analysis
         import coach_notes
         coach_notes.write(sid, load("cross.json"), adv.get("plan"))
     except Exception as e:
         log(f"Map notes unavailable: {e}")
+        adv["plan"].setdefault("unavailable", []).append("map notes")
+    config.write_json(p, adv, indent=1, default=str)
 
 
 PARTIAL_HOOK = None  # called with the SteamID once a first profile can be displayed
@@ -508,7 +512,7 @@ def run_for(query, fetch=True):
     style.run_all(workers=4)
     if sid and not own and not (s.get("players", {}).get(str(sid)) or {}).get("authcode"):
         log("Only the matches already on this PC (played with you, or added by a share code) can be analyzed for this player. "
-            "For a match he played without you: paste its share code (CSGO-…) here, or add his history code in his Analysis tab.")
+            "For a match they played without you: paste its share code (CSGO-…) here, or add their history code in their Analysis tab.")
     if sid:
         if not analyze_player(sid, reg):
             if not ex.get("steam") and not ex.get("csstats"):

@@ -225,7 +225,6 @@ def analyze(steamid):
     except Exception:
         steam_friends = set()
     friends = {p for p, c in cnt.items() if c >= 2} | (set(cnt) & steam_friends)
-    names = config.settings().get("players", {})
     for m in ms:
         m["party"] = [p for p in m["mates"] if p in friends]
         m["party_size"] = 1 + len(m["party"]) if m["source"] in ("demo", "steam") else None
@@ -283,7 +282,7 @@ def analyze(steamid):
     for p in friends:
         g = [m for m in ms if p in m["party"]]
         st = _stats(g)
-        partners.append({"steamid": str(p), "name": (names.get(str(p)) or {}).get("name") or _name_of(p, g), **{a: b for a, b in st.items() if a != "sd"}})
+        partners.append({"steamid": str(p), "name": config.display_name(p, _name_of(p, g)), **{a: b for a, b in st.items() if a != "sd"}})
     partners.sort(key=lambda x: -x["n"])
     unknown = [p["steamid"] for p in partners if p["name"] == p["steamid"]]
     if unknown:  # partners seen only in Valve's match info: ask Steam for their names (needs the API key)

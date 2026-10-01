@@ -197,8 +197,8 @@ def extract(path, out):
                "jump": bool(g.user_is_airborne) or abs(float(g.user_velocity_Z)) > 1,
                "speed": float(np.hypot(g.user_velocity_X, g.user_velocity_Y)), "crouch": bool(g.user_ducking),
                "walk": bool(g.user_is_walking),
-               "click": None if b is None else ("droit" if (b & IN_ATTACK2 and not b & IN_ATTACK) else
-                                                ("milieu" if (b & IN_ATTACK2 and b & IN_ATTACK) else "gauche"))}
+               "click": None if b is None else ("right" if (b & IN_ATTACK2 and not b & IN_ATTACK) else
+                                                ("middle" if (b & IN_ATTACK2 and b & IN_ATTACK) else "left"))}
         if land is not None:
             lx, ly = zm.px(land.x, land.y)
             rec.update({"land_X": float(land.x), "land_Y": float(land.y), "land_Z": float(land.z), "land_px": float(lx), "land_py": float(ly),

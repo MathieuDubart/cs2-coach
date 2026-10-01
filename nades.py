@@ -128,7 +128,7 @@ def _how(b):
     elif b.walk or 20 < b.speed <= 150:
         how.append("walking")
     if b.crouch:
-        how.append("accroupi")
+        how.append("crouching")
     return " + ".join(how) or "standing still"
 
 

@@ -183,6 +183,13 @@ def weapon_positions(wz, maps):
 K_CLASS = {"awp": "AWP", "scout": "Scout", "rifle": "Rifles (AK, M4, AUG, SG)", "rifle_eco": "Galil / FAMAS", "smg": "SMG", "shotgun": "Shotguns"}
 
 
+def _miss(plan, what, e):
+    """A part of the plan could not be computed: the log says why, the page says which part is missing (it used
+    to just disappear)."""
+    print(f"{what} unavailable:", e, flush=True)
+    plan.setdefault("unavailable", []).append(what)
+
+
 def training(adv, deep, mb):
     """15-minute warm-up built on the player's weak points, plus a weekly routine."""
     B = ((adv or {}).get("bench") or {}).get("metrics", {})
@@ -399,12 +406,12 @@ def build(steamid, adv, cross=None, deep=None, light=False):
         try:
             plan["map_refs"] = map_refs(PREMIER)
         except Exception as e:
-            print("map references unavailable:", e)
+            _miss(plan, "map references", e)
         try:
             import tside
             plan["tside"] = tside.tendencies(PREMIER)
         except Exception as e:
-            print("T tendencies unavailable:", e)
+            _miss(plan, "T tendencies", e)
         return plan
     import cs2coach
     import midround
@@ -419,12 +426,12 @@ def build(steamid, adv, cross=None, deep=None, light=False):
     try:
         plan["spots"] = my_spots(sid, cross, maps)
     except Exception as e:
-        print("spots unavailable:", e)
+        _miss(plan, "spots", e)
     plan["weapon_positions"] = weapon_positions(weapons.weapon_zones(), maps)
     try:
         plan["map_refs"] = map_refs(sorted(set(PREMIER) | set(maps)))
     except Exception as e:
-        print("map references unavailable:", e)
+        _miss(plan, "map references", e)
     wp = weapons.player(sid, mids)
     plan["weapons"] = wp
     try:
@@ -433,12 +440,12 @@ def build(steamid, adv, cross=None, deep=None, light=False):
               for m in (cross or {}).get("maps", []) for side, S in m.get("sides", {}).items()}
         plan["buys"] = buys.adapted(sid, sorted(set(PREMIER) | set(maps)), adv.get("archetype"), zd, wp)
     except Exception as e:
-        print("buys by round type unavailable:", e)
+        _miss(plan, "buys by round type", e)
     try:
         import tside
         plan["tside"] = tside.tendencies(sorted(set(PREMIER) | set(maps)))
     except Exception as e:
-        print("T tendencies unavailable:", e)
+        _miss(plan, "T tendencies", e)
     try:
         import nades
         stats_n = []
@@ -453,7 +460,7 @@ def build(steamid, adv, cross=None, deep=None, light=False):
         lanes = {mp: (M.get("plays") or {}).get("lanes") for mp, M in ((plan.get("tside") or {}).get("maps") or {}).items()}
         plan["nades"] = nades.for_player(sid, sorted(set(PREMIER) | set(maps)), cross, stats_n, lanes=lanes)
     except Exception as e:
-        print("grenades unavailable:", e)
+        _miss(plan, "grenades", e)
     ctx = context.analyze(sid)
     if ctx:
         ctx["matches"] = ctx["matches"][-40:]
@@ -488,11 +495,11 @@ def build(steamid, adv, cross=None, deep=None, light=False):
         if os.path.exists(voice.DIR):
             plan["calls"] = voice.summary(sid)
     except Exception as e:
-        print("calls unavailable:", e)
+        _miss(plan, "calls", e)
     try:
         import review
         plan["review"] = review.build(sid, stats, mid_rows, ctx, plan["experiments"], adv)
     except Exception as e:  # the review is a bonus: never block the plan
         plan["review"] = None
-        print("review unavailable:", e)
+        _miss(plan, "session review", e)
     return plan

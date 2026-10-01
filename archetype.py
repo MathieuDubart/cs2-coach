@@ -236,7 +236,7 @@ def profile(steamid, xhair_pct=None):
         peer_rows.append({"metric": m, "label": label, "you": fmt(r[m], KIND.get(m, "n")),
                           "peers": fmt(peers[m].median(), KIND.get(m, "n")), "best": fmt(top[m].median(), KIND.get(m, "n"))})
     role = ROLES[main]
-    name = ("Rifler polyvalent, tendance " + role["name"]) if versatile else role["name"]
+    name = ("Versatile rifler, leaning " + role["name"]) if versatile else role["name"]
     desc = [f"{'Versatile profile' if versatile else role['name']}: {role['what']}"]
     desc.append(f"Weapons: {weapons['shares']['rifles']}% of your kills with rifles, {weapons['shares']['AWP']}% with the AWP, "
                 f"{weapons['shares']['SMG']}% with SMGs, {weapons['shares']['pistols']}% with pistols. "

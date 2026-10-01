@@ -190,5 +190,22 @@ def low_priority():
         pass
 
 
+_NAMES = {"mtime": None, "map": {}}
+
+
+def display_name(sid, fallback=None):
+    """One name per player everywhere: the one of the player list (their latest in-game name), else the Steam name
+    remembered in the settings, else the fallback."""
+    p = os.path.join(OUT, "site", "index.json")
+    try:
+        mt = os.path.getmtime(p)
+        if mt != _NAMES["mtime"]:
+            _NAMES.update(mtime=mt, map={e["steamid"]: e["name"] for e in read_json(p, []) or [] if e.get("name")})
+    except OSError:
+        pass
+    sid = str(sid)
+    return _NAMES["map"].get(sid) or (settings().get("players", {}).get(sid) or {}).get("name") or fallback or sid
+
+
 def player_dir(steamid):
     return os.path.join(PLAYERS, str(steamid))

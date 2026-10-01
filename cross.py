@@ -125,7 +125,7 @@ def contexts(mine, others):
                                         ("moving, you peek (> 110 u/s)", lambda x: x.speed > 110)]),
         ("Enemy movement", [("the enemy peeks at you (> 110 u/s)", lambda x: x.opp_speed > 110),
                                        ("the enemy is still (< 40 u/s)", lambda x: x.opp_speed < 40)]),
-        ("Flashs", [("enemy flashed by your team", lambda x: x.opp_flashed == True),
+        ("Flashes", [("enemy flashed by your team", lambda x: x.opp_flashed == True),
                     ("you flashed", lambda x: x.me_flashed == True),
                     ("nobody flashed", lambda x: (x.opp_flashed == False) & (x.me_flashed == False))]),
         ("Balance of power", [("with a man advantage", lambda x: x.mates_alive > x.opp_mates_alive),
@@ -133,10 +133,10 @@ def contexts(mine, others):
                               ("outnumbered", lambda x: x.mates_alive < x.opp_mates_alive)]),
         ("Moment of the round", [("0-20 s", lambda x: x.t <= 20), ("20-45 s", lambda x: (x.t > 20) & (x.t <= 45)),
                              ("after 45 s", lambda x: x.t > 45)]),
-        ("Distance", [("courte (< 10 m)", lambda x: x.distance < 10), ("moyenne (10-20 m)", lambda x: (x.distance >= 10) & (x.distance < 20)),
-                      ("longue (> 20 m)", lambda x: x.distance >= 20)]),
+        ("Distance", [("short (< 10 m)", lambda x: x.distance < 10), ("medium (10-20 m)", lambda x: (x.distance >= 10) & (x.distance < 20)),
+                      ("long (> 20 m)", lambda x: x.distance >= 20)]),
         ("Health at the start of the duel", [("more than 80 HP", lambda x: x.hp > 80), ("less than 50 HP", lambda x: x.hp < 50)]),
-        ("Accroupi", [("accroupi", lambda x: x.crouch == True), ("debout", lambda x: x.crouch == False)]),
+        ("Stance", [("crouched", lambda x: x.crouch == True), ("standing", lambda x: x.crouch == False)]),
     ]
     out = []
     for name, masks in specs:
@@ -216,7 +216,7 @@ def lineups(nades, side, zones_of_interest, meta, top=4):
             elif b.walk or 20 < b.speed <= 150:
                 how.append("walking")
             if b.crouch:
-                how.append("accroupi")
+                how.append("crouching")
             out.append({
                 "type": typ, "side": side, "relevant": bool(rel), **metric,
                 "from_zone": zone_name(meta, b.zone), "to_zone": zone_name(meta, b.land_zone) if b.land_zone else None,

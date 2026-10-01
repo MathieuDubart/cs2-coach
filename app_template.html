@@ -475,6 +475,14 @@ body.igfull main{max-width:none;padding:0}
 .nlist .cmd button{font-size:11px;padding:1px 6px}
 .insights>article{min-width:0}
 .pl-list .nlist li{background:none;border:0;padding:0;font-size:13px}
+.chip-sep{flex-basis:100%;font:600 11px var(--f-mono);letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin:4px 0 0}
+/* two-column sheets (radar + text): the text column never pushes past the screen, one column below 1100px,
+   and the radar stays in view while the text scrolls when the screen is tall enough */
+.stage>*{min-width:0;grid-template-columns:minmax(0,1fr)}
+.stage>*>*{min-width:0}
+@media (max-width:1100px){.stage{grid-template-columns:1fr}}
+@media (min-width:1101px) and (min-height:760px){.stage>:first-child{position:sticky;top:96px}}
+.miss{margin:8px 0;padding:8px 12px;border-left:4px solid var(--warn);background:color-mix(in srgb,var(--warn) 10%,var(--panel));border-radius:var(--radius);font-size:14px}
 </style>
 
 <div class="bar"><div class="bar-in">
@@ -532,9 +540,13 @@ function tabs(host,key,items,cur){ // accessible tab bar; items [[key,label]]
 // ---------- state ----------
 const S={player:null,view:"ingame",map:null,side:"T",level:null,match:0,cmap:null};
 const P=()=>D.players[S.player];
+// hostage maps (cs_*) play differently (no bomb sites): after the bomb maps, under their own label
+const HOST=m=>/^cs_/.test(m||"");
+const bombFirst=(a,f=x=>x)=>[...a.filter(x=>!HOST(f(x))),...a.filter(x=>HOST(f(x)))];
+const chipSep=(a,i,f=x=>x)=>HOST(f(a[i]))&&(i===0||!HOST(f(a[i-1])))?`<span class="chip-sep">Hostage maps</span>`:"";
 function mapsOf(p){let c=(p.cross.maps||[]).map(m=>({map:m.map,n:m.matches}));
   const lb=(p.advice.leetify||{}).by_map||{};if(!c.length)c=Object.entries(lb).map(([map,b])=>({map,n:b.n}));
-  if(!c.length)c=((p.advice.csstats||{}).maps||[]).map(m=>({map:m.map,n:m.wins}));return c.sort((a,b)=>b.n-a.n)}
+  if(!c.length)c=((p.advice.csstats||{}).maps||[]).map(m=>({map:m.map,n:m.wins}));return bombFirst(c.sort((a,b)=>b.n-a.n),x=>x.map)}
 function extrasBlock(p,compact){const st=p.advice.steam,cs=p.advice.csstats;if(!st&&!cs)return "";
   const fmtR=v=>v==null?"—":v.toLocaleString("en-US");
   return `<div class="card"><div style="display:flex;gap:12px;align-items:center">${st&&st.avatar?`<img src="${esc(st.avatar)}" alt="" width="48" height="48" style="border-radius:3px">`:""}
@@ -623,13 +635,18 @@ function benchSection(p){const B=p.advice.bench;if(!B||!B.metrics)return "";
     <div class="pbar" title="Better than ${Math.round(m.percentile)}% of players"><i style="width:${Math.max(2,m.percentile)}%;background:${col(m.percentile)}"></i><b></b></div>
     <span class="v">you ${fmtU(m.you,m.unit)} · med. ${fmtU(m.median,m.unit)}${m.higher_rank_median!=null?` · higher ranks ${fmtU(m.higher_rank_median,m.unit)}`:""}</span></div>`).join("")}</div>`}
 const cls=(v,good,bad,higher=true)=>v==null?"":(higher?(v>=good?"good":v<=bad?"bad":""):(v<=good?"good":v>=bad?"bad":""));
-function trendRows(ms,selIdx){return ms.map((m,i)=>{const s=m.sum;return `<tr class="click" data-i="${i}" tabindex="0" aria-selected="${i===selIdx}">
+// green / red against the base, match by match: in its best quarter / its worst quarter (fixed thresholds made
+// nearly every match red on grenades, where the whole base is). Fixed thresholds only without base data.
+function qcls(v,k,fb){if(v==null)return "";const m=(((P().advice||{}).bench||{}).metrics||{})[k];
+  if(!m||m.p25==null||m.p75==null)return fb;return m.higher_better?(v>=m.p75?"good":v<=m.p25?"bad":""):(v<=m.p25?"good":v>=m.p75?"bad":"")}
+function trendRows(ms,selIdx){return ms.map((m,i)=>{const s=m.sum,nr=typeof m.rounds==="number"?m.rounds:(m.per_round||[]).length,
+  n24=s.nades_unused!=null&&nr?s.nades_unused*24/nr:null;return `<tr class="click" data-i="${i}" tabindex="0" aria-selected="${i===selIdx}">
   <td>${fmtDate(m.time)}</td><td>${MAPN(m.map)}</td><td>${esc(m.mode)}</td><td><span class="res ${m.result}">${m.score.me}-${m.score.them}</span></td>
-  <td class="n">${s.kills}-${s.deaths}-${s.assists}</td><td class="n ${cls(s.adr,85,65)}">${f1(s.adr)}</td><td class="n ${cls(s.hs,55,35)}">${f1(s.hs)}</td>
-  <td class="n ${cls(s.kast,72,62)}">${f1(s.kast)}</td><td class="n ${cls(s.traded_pct,25,10)}">${s.traded_pct==null?"—":f1(s.traded_pct)+"%"}</td>
-  <td class="n ${cls(s.nades_unused,4,10,false)}">${s.nades_unused}</td><td class="n ${cls(s.first_bullet,30,20)}">${s.first_bullet==null?"—":f1(s.first_bullet)+"%"}</td>
-  <td class="n ${cls(s.pistol_moving,25,45,false)}">${s.pistol_moving==null?"—":f1(s.pistol_moving)+"%"}</td>
-  <td class="n ${cls(s.xhair,4,8,false)}">${s.xhair==null?"—":f1(s.xhair)+"°"}</td><td class="n">${s.open_won}-${s.open_lost}</td></tr>`}).join("")}
+  <td class="n">${s.kills}-${s.deaths}-${s.assists}</td><td class="n ${qcls(s.adr,"adr",cls(s.adr,85,65))}">${f1(s.adr)}</td><td class="n ${qcls(s.hs,"hs_pct",cls(s.hs,55,35))}">${f1(s.hs)}</td>
+  <td class="n ${cls(s.kast,72,62)}">${f1(s.kast)}</td><td class="n ${qcls(s.traded_pct,"traded_pct",cls(s.traded_pct,25,10))}">${s.traded_pct==null?"—":f1(s.traded_pct)+"%"}</td>
+  <td class="n ${qcls(n24,"nades_unused_24",cls(s.nades_unused,4,10,false))}">${s.nades_unused}</td><td class="n ${qcls(s.first_bullet,"b1_hit",cls(s.first_bullet,30,20))}">${s.first_bullet==null?"—":f1(s.first_bullet)+"%"}</td>
+  <td class="n ${qcls(s.pistol_moving,"pistol_moving",cls(s.pistol_moving,25,45,false))}">${s.pistol_moving==null?"—":f1(s.pistol_moving)+"%"}</td>
+  <td class="n ${qcls(s.xhair,"xhair",cls(s.xhair,4,8,false))}">${s.xhair==null?"—":f1(s.xhair)+"°"}</td><td class="n">${s.open_won}-${s.open_lost}</td></tr>`}).join("")}
 const TREND_HEAD=`<thead><tr><th>Date</th><th>Map</th><th>Mode</th><th>Score</th><th class="n">K-D-A</th><th class="n">ADR</th><th class="n">HS %</th><th class="n">KAST</th><th class="n">Deaths<br>traded</th><th class="n">Grenades<br>wasted</th><th class="n">1st bullet<br>hits</th><th class="n">Pistol<br>moving</th><th class="n">Crosshair<br>offset</th><th class="n">Openings<br>W-L</th></tr></thead>`;
 const WCOL={"rifles":"var(--t)","AWP":"var(--ct)","SMG":"var(--good)","shotguns":"var(--molotov)","pistols":"var(--muted)","fusils à pompe":"var(--molotov)","pistolets":"var(--muted)"};
 function archCard(p){const A=p.advice.archetype;if(!A)return "";
@@ -682,33 +699,38 @@ function deepCard(p){const X=p.deep;if(!X)return "";const r=X.reaction,a=X.preai
 function midCard(p){const M=(p.advice.plan||{}).mid;if(!M||(!M.weak.length&&!M.strong.length))return "";
   return `<article class="card"><h3>Mid-round at a glance</h3><ul>${M.weak.slice(0,3).map(w=>`<li>${esc(w.text)}${w.fix?` <b>${esc(w.fix)}</b>`:""}</li>`).join("")}${M.strong.slice(0,2).map(s=>`<li class="good">${esc(s.text)}</li>`).join("")}</ul>
    <p><a href="#midround" style="color:var(--ct)">Rotation routes, positions by weapon and reflexes: Mid-round tab</a></p></article>`}
-// a teammate's whole history (his matches without you too): his Steam history code, given by him
+// a teammate's whole history (their matches without you too): their Steam history code, given by them
 async function fillFollow(p){const box=$("#follow-card");if(!box)return;let st;
   try{st=await (await fetch(`/api/steam/status?sid=${p.steamid}`)).json()}catch(e){box.querySelector(".note").textContent="The local server doesn't answer.";return}
   const inp="font:14px var(--f-mono);background:var(--bg);color:var(--ink);border:1px solid var(--line);border-radius:3px;padding:5px 8px";
   box.innerHTML=`<h3>Follow ${esc(p.name)}'s matches ${st.has_auth?'<span class="pill" style="color:var(--good)">on</span>':""}</h3>
-   <p>Only the matches already on this PC are analyzed for ${esc(p.name)}: the ones you played together. To find <b>every match he plays, even without you</b>, he can give you two codes from <a href="${esc((st.links||{}).auth||"https://help.steampowered.com/en/wizard/HelpWithGameIssue/?appid=730&issueid=128")}" target="_blank" rel="noopener" style="color:var(--ct)">Steam's CS2 help page</a> (signed in to <b>his</b> account): his authentication code, and the code of one of his matches. For a single match, he can also send you its share code (CSGO-…): paste it in the search bar.</p>
+   <p>Only the matches already on this PC are analyzed for ${esc(p.name)}: the ones you played together. To find <b>every match ${esc(p.name)} plays, even without you</b>, they can give you two codes from <a href="${esc((st.links||{}).auth||"https://help.steampowered.com/en/wizard/HelpWithGameIssue/?appid=730&issueid=128")}" target="_blank" rel="noopener" style="color:var(--ct)">Steam's CS2 help page</a> (signed in to <b>their own</b> account): their authentication code, and the code of one of their matches. For a single match, they can also send you its share code (CSGO-…): paste it in the search bar.</p>
    ${st.has_key?"":`<p class="note">First add your own Steam API key in <a href="#settings" style="color:var(--ct)">Settings</a>: it is used to read everyone's history.</p>`}
-   <div class="row"><input id="fo-auth" type="password" autocomplete="off" spellcheck="false" placeholder="${st.has_auth?"already saved":"His authentication code XXXX-XXXXX-XXXX"}" style="width:270px;${inp}">
-     <input id="fo-known" type="text" autocomplete="off" spellcheck="false" placeholder="Code of one of his matches CSGO-…" style="flex:1;min-width:240px;${inp}"></div>
+   <div class="row"><input id="fo-auth" type="password" autocomplete="off" spellcheck="false" placeholder="${st.has_auth?"already saved":"Their authentication code XXXX-XXXXX-XXXX"}" style="width:270px;${inp}">
+     <input id="fo-known" type="text" autocomplete="off" spellcheck="false" placeholder="Code of one of their matches CSGO-…" style="flex:1;min-width:240px;${inp}"></div>
    <div class="row"><button type="button" class="primary" id="fo-save" ${st.has_key?"":"disabled"}>Save and check</button>
-     <button type="button" class="primary" id="fo-sync" ${st.has_auth?"":"disabled"}>Find his new matches</button>
+     <button type="button" class="primary" id="fo-sync" ${st.has_auth?"":"disabled"}>Find their new matches</button>
      ${st.has_auth?`<button type="button" class="close" id="fo-forget">Stop following</button>`:""}<span class="note" id="fo-msg" role="status"></span></div>
    ${st.has_auth?`<p class="note">Checked automatically when the app starts, then every 30 minutes. Last check: ${st.last_sync?fmtDate(st.last_sync):"never"}${st.pending?` · ${st.pending} match(es) waiting (Steam must be open and CS2 closed)`:""}.</p>`:""}
-   <p class="note">His codes stay in <code>out/settings.json</code> on this PC (not versioned) and only go to Steam's official API. Ask him first: they let you read his match history.</p>`;
+   <p class="note">Their codes stay in <code>out/settings.json</code> on this PC (not versioned) and only go to Steam's official API. Ask them first: these codes let you read their match history.</p>`;
   const msg=$("#fo-msg",box),sid=p.steamid;
   $("#fo-save",box).onclick=async()=>{const b=$("#fo-save",box);b.disabled=true;msg.textContent="Checking with Steam…";
     try{const j=await api("/api/steam/credentials",{sid,auth_code:$("#fo-auth",box).value.trim(),known_code:$("#fo-known",box).value.trim()});
       msg.textContent=j.saved.length?`Saved: ${j.saved.join(" and ")}.`:"Nothing new to save.";setTimeout(()=>fillFollow(p),900)}
     catch(e){msg.textContent=e.message;b.disabled=false}};
   $("#fo-sync",box).onclick=async()=>{msg.textContent="";try{await api("/api/steam/sync",{sid});poll()}catch(e){msg.textContent=e.message}};
-  const fg=$("#fo-forget",box);if(fg)fg.onclick=async()=>{if(fg.dataset.ok!=="1"){fg.dataset.ok="1";fg.textContent="Confirm: remove his codes";return}
+  const fg=$("#fo-forget",box);if(fg)fg.onclick=async()=>{if(fg.dataset.ok!=="1"){fg.dataset.ok="1";fg.textContent="Confirm: remove their codes";return}
     try{await api("/api/steam/forget",{sid});fillFollow(p)}catch(e){msg.textContent=e.message}}}
+// parts of the plan that failed at the last analysis: said, instead of silently missing
+function missNote(p){const a=p.advice||{},u=[...new Set(((a.plan||{}).unavailable)||[])];
+  if(a.plan_error)return `<p class="miss" role="status">The coaching plan could not be updated at the last analysis (${esc(a.plan_error)}): what you see is the previous one. It is rebuilt at the next analysis.</p>`;
+  return u.length?`<p class="miss" role="status">Not computed at the last analysis: ${u.map(esc).join(", ")}. These parts come back at the next analysis.</p>`:""}
 function renderAnalysis(){
   const p=P(),v=$("#v-analysis"),ms=p.matches;const rec={win:0,draw:0,loss:0};ms.forEach(m=>rec[m.result]++);
   const auto=p.advice.rules.map((r,i)=>({level:i<2?"high":"mid",title:r.title,evidence:r.why,fix:r.do,standing:r.standing,target:r.target,bench:r.bench,drills:r.drills,sources:r.sources}));
   v.innerHTML=`<div class="head"><div style="display:grid;gap:4px"><span class="eyebrow">${esc(p.name)} · ${ms.length} matches analyzed</span><h2>Full analysis</h2></div>
     <div class="record"><span>${rec.win}<small>wins</small></span><span>${rec.draw}<small>draws</small></span><span>${rec.loss}<small>losses</small></span></div></div>
+    ${missNote(p)}
     ${p.advice.strengths.length?`<div class="strengths">${p.advice.strengths.map(s=>`<span>${esc(s)}</span>`).join("")}</div>`:""}
     ${D.local&&p.steamid!==D.own?`<article class="card form" id="follow-card"><h3>Follow ${esc(p.name)}'s matches</h3><p class="note">Loading…</p></article>`:""}
     ${archCard(p)}
@@ -775,7 +797,7 @@ function renderMatches(){
     <div style="display:grid;gap:10px;min-width:0"><h3>Zones of the match</h3><div class="tbl"><table><thead><tr><th>Zone</th><th class="n">Duels</th><th class="n">K/D T</th><th class="n">K/D CT</th><th class="n">You</th></tr></thead><tbody id="mzt"></tbody></table></div></div></div>`;
   $$("tr.click",v).forEach(r=>{r.onclick=()=>{S.match=+r.dataset.i;renderMatches();$("#mhead").scrollIntoView({behavior:"smooth"})};r.onkeydown=e=>{if(e.key==="Enter")r.click()}});
   const rb=$("#reanalyze",v);if(rb)rb.onclick=async()=>{rb.disabled=true;rb.textContent="Re-analysis running…";
-    try{const r=await fetch("/api/reanalyze",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({sid:p.steamid,mid:m.id})});const j=await r.json();
+    jobFrom=S.view;try{const r=await fetch("/api/reanalyze",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({sid:p.steamid,mid:m.id})});const j=await r.json();
       if(!r.ok){jobPanel(`<b>${esc(j.error||"Error")}</b>${j.query?` (${esc(j.query)})`:""}`,"err");rb.disabled=false;rb.textContent="Re-analyze this match";if(r.status===409)poll();return}
       poll()}catch(e){jobPanel(`<b>The local server doesn't answer.</b> Restart "Coach CS2.bat".`,"err");rb.disabled=false;rb.textContent="Re-analyze this match"}};
   const box=$(".radar-box",v),ov=$("g",box);
@@ -862,7 +884,7 @@ function renderMaps(){
     ["Play the advantage","At 5v4, move up with your team to take space. Don't hold alone."]];
   if(!S.cmap||!maps.some(x=>x.map===S.cmap))S.cmap=maps[0]?.map;
   v.innerHTML=`<div class="head"><div style="display:grid;gap:4px"><span class="eyebrow">${esc(p.name)} · ${c.totals.my_duels} duels compared with ${c.totals.others_duels} duels of other players</span><h2>Maps and grenades</h2></div></div>
-  <div class="chips" role="group" aria-label="Map">${maps.map(x=>`<button type="button" data-cmap="${x.map}" aria-pressed="${x.map===S.cmap}">${MAPN(x.map)}<small>${x.n}</small></button>`).join("")}</div>
+  <div class="chips" role="group" aria-label="Map">${maps.map((x,i)=>`${chipSep(maps,i,y=>y.map)}<button type="button" data-cmap="${x.map}" aria-pressed="${x.map===S.cmap}">${MAPN(x.map)}<small>${x.n}</small></button>`).join("")}</div>
   <div id="cmap"></div>
   <h3>How your duels go</h3>
   <div class="insights">${INS.map(([t,r])=>`<article class="card"><h3>${t}</h3>${cmp(r)}</article>`).join("")}</div>
@@ -1021,8 +1043,8 @@ function renderMidround(){
   const p=P(),v=$("#v-midround"),PL=p.advice.plan;if(!PL)return noPlan(v);
   const M=PL.mid,all=PL.playbook||[],anyMe=all.some(x=>x.prio>0);if(pbSide==="me"&&!anyMe)pbSide="all";
   const pb=all.filter(x=>pbSide==="all"||(pbSide==="me"?x.prio>0:(x.side===pbSide||isBoth(x))));
-  const maps=[...new Set([...Object.keys(PL.routes||{}),...Object.keys(PL.weapon_positions||{})])];
-  if(!midMap||!maps.includes(midMap))midMap=maps.includes(S.map)?S.map:maps[0];
+  const maps=bombFirst([...new Set([...Object.keys(PL.routes||{}),...Object.keys(PL.weapon_positions||{})])]);
+  if(!midMap||!maps.includes(midMap))midMap=maps.includes(S.map)&&!HOST(S.map)?S.map:maps[0];
   const R=(PL.routes||{})[midMap]||{},W=(PL.weapon_positions||{})[midMap],ws=W?Object.keys(W).sort():[];
   if(!wpSide||!ws.includes(wpSide))wpSide=ws.includes(S.side)?S.side:ws[0];
   const B=M&&M.bench;
@@ -1038,7 +1060,7 @@ function renderMidround(){
    <div class="pb">${pb.map(x=>`<article class="pbc ${isBoth(x)?"":x.side}">${x.prio>0?`<span class="you">Priority for you</span>`:""}<span class="eyebrow">${isBoth(x)?"CT and T":x.side}</span>
      <span class="if">If ${esc(lc(x.if))}</span><span>→ ${esc(x.then)}</span><span class="why">${esc(x.why)}</span>${srcLinks(x.src,true)}</article>`).join("")}</div>
    ${maps.length?`<h3>Per map: rotations and positions by weapon</h3>
-   <div class="chips" role="group" aria-label="Map">${maps.map(m=>`<button type="button" data-mm="${m}" aria-pressed="${m===midMap}">${MAPN(m)}</button>`).join("")}</div>
+   <div class="chips" role="group" aria-label="Map">${maps.map((m,i)=>`${chipSep(maps,i)}<button type="button" data-mm="${m}" aria-pressed="${m===midMap}">${MAPN(m)}</button>`).join("")}</div>
    ${Object.keys(R).length?`<div class="rot">${Object.entries(R).sort().map(([s,r])=>rotCard(s,r)).join("")}</div>
      <p class="note">"Leave": seconds between at least 2 Ts reaching the site and you leaving toward it (negative: you had left before). "Travel": from leaving to arriving. Routes: the first 3 zones crossed.</p>`
      :`<p class="note">No rotation of yours found on ${MAPN(midMap)}.</p>`}
@@ -1733,7 +1755,7 @@ function nowPanel(p,g,following,opt){const noBuy=opt&&opt.noBuy;
   return out.filter(Boolean).join("")||`<div class="now-empty"><b>Round ${g.round}</b><span class="mini">${ph==="over"?"5 s: why did this round go that way? Then one long exhale.":"Nothing to flag right now."}</span></div>`}
 function renderIngame(){
   const p=P(),v=$("#v-ingame"),PL=p.advice.plan||{},live=gsiFresh(),refs=PL.map_refs||{},mine=mapsOf(p);
-  const maps=[...mine,...Object.keys(refs).filter(k=>!mine.some(x=>x.map===k)).sort().map(k=>({map:k,n:0}))];
+  const maps=bombFirst([...mine,...Object.keys(refs).filter(k=>!mine.some(x=>x.map===k)).sort().map(k=>({map:k,n:0}))],x=>x.map);
   if(live&&!igManual){S.map=gsiLast.map;if(gsiLast.side)S.side=gsiLast.side}
   if(!S.map||(!maps.some(m=>m.map===S.map)&&!(live&&!igManual)))S.map=maps[0]?.map||null;
   const m=S.map?crossMap(p,S.map):null;
@@ -1759,8 +1781,9 @@ function renderIngame(){
      ${buy?`<div class="ig-toast" role="status" aria-live="polite"><button type="button" class="close tx" id="toastx" aria-label="Hide the buy advice">✕</button>${buy}</div>`:""}
      <div class="now ig-side" id="now">${nowPanel(p,gsiLast,following,{noBuy:true})}</div></div>`}
   else v.innerHTML=`${liveBar()}
+   ${following?"":missNote(p)}
    ${following&&focus?"":`<div class="ig-top">
-    <div class="chips" role="group" aria-label="Map">${maps.map(x=>`<button type="button" data-map="${x.map}" aria-pressed="${x.map===S.map}">${MAPN(x.map)}<small>${x.n||"base"}</small></button>`).join("")}${S.map&&!maps.some(x=>x.map===S.map)?`<button type="button" aria-pressed="true">${MAPN(S.map)}<small>0</small></button>`:""}</div>
+    <div class="chips" role="group" aria-label="Map">${maps.map((x,i)=>`${chipSep(maps,i,y=>y.map)}<button type="button" data-map="${x.map}" aria-pressed="${x.map===S.map}">${MAPN(x.map)}<small>${x.n||"base"}</small></button>`).join("")}${S.map&&!maps.some(x=>x.map===S.map)?`<button type="button" aria-pressed="true">${MAPN(S.map)}<small>0</small></button>`:""}</div>
     <div class="btns side big" role="group" aria-label="Side"><button type="button" data-side="T" aria-pressed="${S.side==="T"}">T · ${S.map?roleOf(S.map,"T"):"attack"}</button><button type="button" data-side="CT" aria-pressed="${S.side==="CT"}">CT · ${S.map?roleOf(S.map,"CT"):"defense"}</button></div>
     ${D.local?"":`<button type="button" class="close" id="focus">${focus?"Exit 2nd screen":"2nd screen mode"}</button>`}
    </div>`}
@@ -2112,8 +2135,14 @@ function findKnown(q){const t=q.trim(),low=t.toLowerCase().replace(/\/+$/,"");co
   for(const e of D.index){if((e.name||"").toLowerCase()===low||(van&&(e.vanity||"").toLowerCase()===van))return e.steamid}
   return null}
 function jobPanel(html,cls){const j=$("#job");j.hidden=false;const box=$(".in",j);box.className="in "+(cls||"");box.innerHTML=html+`<div><button type="button" class="close">Close</button></div>`;$(".close",box).onclick=()=>{j.hidden=true}}
-let polling=null,partialShown=null;
+// the page only switches player or view for a job you started from here and while you stayed on that view:
+// a background sync, or a job finishing while you read something else, never pulls you away
+let polling=null,partialShown=null,jobFrom=null;
+const mayGo=()=>jobFrom!==null&&S.view===jobFrom;
+const openBtn=(sid,name,view)=>`<div class="btns"><button type="button" data-open="${sid}" data-view="${view}">Open ${esc(name||"the profile")}</button></div>`;
+function bindOpen(){$$("[data-open]",$("#job")).forEach(b=>b.onclick=async()=>{delete D.players[b.dataset.open];await setPlayer(b.dataset.open,true);go(b.dataset.view)})}
 async function startAnalysis(q){
+  jobFrom=S.view;
   $("#qbtn").disabled=true;
   try{const r=await fetch("/api/analyze?q="+encodeURIComponent(q));const j=await r.json();
     if(!r.ok){jobPanel(`<b>${esc(j.error||"Error")}</b>${j.query?` (${esc(j.query)})`:""}`,"err");$("#qbtn").disabled=false;if(r.status===409)poll();return}
@@ -2122,20 +2151,24 @@ function poll(){clearTimeout(polling);polling=setTimeout(async()=>{
   let j;try{j=await (await fetch("/api/job")).json()}catch(e){return poll()}
   const logs=(j.log||[]).slice(-60).map(esc).join("\n");
   if(j.running){
-    if(j.partial&&partialShown!==j.partial){partialShown=j.partial;try{D.index=await (await fetch(`index.json?t=${Date.now()}`)).json();playerOptions();delete D.players[j.partial];await setPlayer(j.partial,true);go(j.partial===D.own?"ingame":"analysis")}catch(e){}}
+    if(j.partial&&partialShown!==j.partial&&mayGo()){partialShown=j.partial;try{D.index=await (await fetch(`index.json?t=${Date.now()}`)).json();playerOptions();delete D.players[j.partial];await setPlayer(j.partial,true);go(j.partial===D.own?"ingame":"analysis");jobFrom=S.view}catch(e){}}
     jobPanel(`<div class="row"><b><span class="spin" aria-hidden="true"></span>${partialShown?"First preview shown. Full demo analysis running…":j.view==="matches"?"Analyzing the match again…":`Analyzing ${esc(j.query)}…`}</b><span class="note">The profile completes itself at the end (from a few seconds to a few minutes).</span></div><pre>${logs||"Starting…"}</pre>`);poll();return}
-  $("#qbtn").disabled=false;
+  $("#qbtn").disabled=false;const go_=mayGo();jobFrom=null;
   if(j.error){jobPanel(`<b>${esc(j.error)}</b><pre>${logs}</pre>`,"err");return}
-  if(j.players&&j.players.length){D.index=await (await fetch(`index.json?t=${Date.now()}`)).json();
-    jobPanel(`<b>${j.players.length} players analyzed in this match.</b><div class="btns">${j.players.map(p=>`<button type="button" data-mp="${p.steamid}">${esc(p.name)}</button>`).join("")}</div><pre>${logs}</pre>`,"ok");
+  if(j.players&&j.players.length){D.index=await (await fetch(`index.json?t=${Date.now()}`)).json();playerOptions();
+    const nm=((j.query||"").match(/CSGO(-[\w]{5}){5}/g)||[]).length,ps=[...j.players].sort((a,b)=>(b.steamid===D.own)-(a.steamid===D.own)),
+      btn=p=>`<button type="button" data-mp="${p.steamid}">${esc(p.name)}</button>`;
+    jobPanel(`<b>${j.players.length} players analyzed${nm>1?` in these ${nm} matches`:" in this match"}.</b><div class="btns">${ps.slice(0,10).map(btn).join("")}</div>
+      ${ps.length>10?`<details><summary style="cursor:pointer" class="note">The other ${ps.length-10} players</summary><div class="btns">${ps.slice(10).map(btn).join("")}</div></details>`:""}<pre>${logs}</pre>`,"ok");
     $$("[data-mp]",$("#job")).forEach(b=>b.onclick=()=>{delete D.players[b.dataset.mp];setPlayer(b.dataset.mp,true).then(()=>go("analysis"))});return}
   if(j.steamid&&j.view==="matches"){try{D.index=await (await fetch(`index.json?t=${Date.now()}`)).json();playerOptions();delete D.players[j.steamid];   // a re-analysis: back on that match
-      await setPlayer(j.steamid,true);const i=P().matches.findIndex(x=>x.id===j.match);S.match=i<0?0:i;go("matches");
-      jobPanel(`<b>The match is analyzed again.</b> Profile, plan and in-game sheet updated.<pre>${logs}</pre>`,"ok")}
+      if(go_){await setPlayer(j.steamid,true);const i=P().matches.findIndex(x=>x.id===j.match);S.match=i<0?0:i;go("matches")}
+      jobPanel(`<b>The match is analyzed again.</b> Profile, plan and in-game sheet updated.${go_?"":openBtn(j.steamid,null,"matches")}<pre>${logs}</pre>`,"ok");bindOpen()}
     catch(e){jobPanel(`<b>The match could not be shown.</b><pre>${logs}</pre>`,"err")}return}
   if(j.steamid){try{D.index=await (await fetch(`index.json?t=${Date.now()}`)).json();playerOptions();delete D.players[j.steamid];
-      await setPlayer(j.steamid,true);S.map=null;const p=P();
-      jobPanel(`<b>${esc(p.name)} is analyzed.</b> ${p.light?"Light profile (Leetify stats, no demo available).":`${p.matches.length} demo(s) analyzed.`}<pre>${logs}</pre>`,"ok");go(j.steamid===D.own?"ingame":"analysis")}
+      const e=(D.index||[]).find(x=>x.steamid===j.steamid)||{},view=j.steamid===D.own?"ingame":"analysis";
+      if(go_){await setPlayer(j.steamid,true);S.map=null}
+      jobPanel(`<b>${esc(e.name||j.steamid)} is analyzed.</b> ${e.light?"Light profile (Leetify stats, no demo available).":e.n!=null?`${e.n} demo(s) analyzed.`:""}${go_?"":openBtn(j.steamid,e.name,view)}<pre>${logs}</pre>`,"ok");bindOpen();if(go_)go(view)}
     catch(e){jobPanel(`<b>Nothing to show for this player.</b><pre>${logs}</pre>`,"err")}}},1000)}
 $("#search").addEventListener("submit",async e=>{e.preventDefault();const q=$("#q").value.trim();if(!q)return;
   const ps=await loadPros(),ql=q.toLowerCase(),idm=(q.match(/7656\d{13}/)||[])[0];
@@ -2168,7 +2201,7 @@ function show(view){view=ALIAS[view]||view;if(!RENDER[view])view="ingame";if(vie
 async function setPlayer(id,force){S.player=id;store("player",id);S.match=0;if(!id){show(S.view);return}
   if(!D.players[id]||force){show(S.view);try{await loadPlayer(id,force)}catch(e){$("#v-"+S.view).innerHTML=`<div class="empty">Couldn't load this profile (${esc(e.message)}).</div>`;return}}
   show(S.view)}
-S.map=store("map");S.side=store("side")||"T";
+S.map=HOST(store("map"))?null:store("map");S.side=store("side")||"T";
 window.addEventListener("hashchange",()=>show(location.hash.slice(1)));
 S.view=ALIAS[location.hash.slice(1)]||location.hash.slice(1)||"ingame";if(!RENDER[S.view])S.view="ingame";
 if(store("focus"))document.body.classList.add("focus");

@@ -135,7 +135,7 @@ def rules(M, cross, per_match=False):
                  f"Other players: {h['others_win']}% when holding, {pk['others_win']}% when peeking."],
                 ["Let the enemy come to you.", "For info: a grenade or a jiggle-peek (one step, back).",
                  "If you have to peek: flash first."])
-        fl = ctx_row(cross, "Flashs", 0)
+        fl = ctx_row(cross, "Flashes", 0)
         tot = cross["totals"]["my_duels"]
         if tot >= 40 and fl.get("n", 0) / tot < 0.05:
             add("flash", 14, f"Only {fl.get('n', 0)} duels out of {tot} against a flashed enemy",
