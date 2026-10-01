@@ -516,6 +516,17 @@ body.igfull main{max-width:none;padding:0}
 .vdest{display:flex;flex-wrap:wrap;align-items:baseline;gap:10px;margin:2px 0}
 .vdest em{font:700 20px var(--f-display);font-style:normal}.vdest em.sec{font-size:15px;opacity:.6}
 .vfights{display:flex;flex-wrap:wrap;align-items:baseline;gap:12px;font:700 18px var(--f-display)}.vfights i{font-style:normal}.vfights b{font-size:15px;color:var(--muted)}
+/* side panel: one option per line (label, bar, number) */
+.vhead{font:700 12px var(--f-mono);letter-spacing:.08em;color:var(--muted);margin:2px 0 -4px}
+.vrows{display:grid;gap:5px}
+.vrow{display:grid;grid-template-columns:minmax(0,8.5em) minmax(0,1fr) 3em;align-items:center;gap:8px;font:700 17px var(--f-display);color:var(--ink)}
+.vrow span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.vrow i{display:block;height:14px;border-radius:7px;background:var(--chip);overflow:hidden}
+.vrow u{display:block;height:100%;border-radius:7px;background:var(--c)}
+.vrow b{text-align:right;font-variant-numeric:tabular-nums}
+.vodds .vrow{grid-template-columns:1.4em minmax(0,1fr) 3em;font-size:22px}.vodds .vrow i{height:20px;border-radius:10px}.vodds .vrow u{border-radius:10px}
+.vodds .vrow span{color:var(--c)}
+svg.radar .mkt.o{fill:#eef2f6}
 </style>
 
 <div class="bar"><div class="bar-in">
@@ -1659,7 +1670,7 @@ function tsideTable(p,map){const TS=(p.advice.plan||{}).tside,M=TS&&TS.maps&&TS.
    ${rows.map(c=>{const x=C[c];return `<tr><td><b>${esc(CTX[c]||c)}</b><br><span class="note">${x.n} rounds</span></td><td class="n">${x.A}%</td><td class="n">${x.B}%</td><td class="n">${x.none}%</td><td class="n">${x.rush_all!=null?x.rush_all+"%":x.rush!=null?x.rush+"%":"—"}</td>
      <td>${x.hit_timer?"around "+x.hit_timer:"—"}</td><td class="wrap">${from(x)||"—"}</td><td class="wrap">${(x.first||[]).slice(0,2).map(f=>`${esc(f.zone)} (${f.pct}%)`).join(", ")||"—"}</td></tr>`}).join("")}</tbody></table></div>
    ${M.plays&&M.plays.prior?(()=>{const P=M.plays,cs=["all",...rows.filter(c=>P.prior[c])],ps=Object.keys(P.prior.all).sort((a,b)=>P.prior.all[b]-P.prior.all[a]);
-     return `<h3>Plays and entrances</h3><p class="note">The play of every round of the base: a rush (3+ Ts on a site in the first 30 s), a split (two entrances of the site at once), or one entrance. An entrance is where the Ts of the push stood a few seconds before the site was taken; "mid" when it comes from mid. On the radar, as CT, the odds of each entrance update during the round.</p>
+     return `<h3>Plays and entrances</h3><p class="note">The play of every round of the base: a rush (3+ Ts on a site in the first 30 s), a split (two entrances of the site at once), or one entrance. An entrance is where the Ts of the push stood a few seconds before the site was taken; "mid" when it comes from mid. As CT, the odds of each entrance update during the round in the live panel (the radar keeps the spots and grenades).</p>
      <div class="cols3">${["A","B"].filter(s=>(P.lanes[s]||[]).length).map(s=>`<article class="card"><h3>Entrances of ${s}</h3><ul>${P.lanes[s].map(L=>`<li><b>${esc(L.name)}</b>${L.mid?" (mid)":L.main?" (main)":""}: used in ${L.share??"—"}% of the ${s} attacks<br><span class="note">${esc((L.zones||[]).join(", "))}</span></li>`).join("")}</ul></article>`).join("")}</div>
      <div class="tbl"><table><thead><tr><th>Play</th>${cs.map(c=>`<th class="n">${c==="all"?"All rounds":esc(CTX[c]||c)}</th>`).join("")}</tr></thead><tbody>
      ${ps.map(p=>`<tr><td>${esc(P.label[p]||p)}</td>${cs.map(c=>`<td class="n">${P.prior[c]&&P.prior[c][p]!=null?Math.round(100*P.prior[c][p])+"%":"—"}</td>`).join("")}</tr>`).join("")}</tbody></table></div>`})():""}
@@ -1915,7 +1926,7 @@ function renderIngame(){
   {const TS_=PL.tside,M_=TS_&&TS_.maps&&TS_.maps[S.map],site_=live&&!igManual&&gsiLast.map===S.map&&igEv.key===`${gsiLast.map}|${gsiLast.round}`&&igEv.site;   // show the plant spots' level
    const sp_=site_&&M_&&(((M_.evidence||{}).plants||{})[site_]||{}).spots;if(m&&sp_&&sp_.length&&sp_[0].level&&m.levels.some(l=>l.key===sp_[0].level))S.level=sp_[0].level}
   const R0=!m?refs[S.map]:null,following=!!(live&&!igManual&&gsiLast.map===S.map&&gsiLast.side===S.side),focus=document.body.classList.contains("focus");
-  const TSm=PL.tside&&PL.tside.maps&&PL.tside.maps[S.map],GEOm=TSm&&TSm.geo,liveR=!!(S.side==="CT"&&TSm&&TSm.plays&&GEOm&&GEOm.sites);
+  const TSm=PL.tside&&PL.tside.maps&&PL.tside.maps[S.map],GEOm=TSm&&TSm.geo,liveR=!!(TSm&&GEOm&&GEOm.radar&&(S.side==="CT"?TSm.plays&&GEOm.sites:following));   // live radar: CT always, T while following the game
   const LVs=(m&&m.levels)||(R0&&R0.levels)||((GEOm&&GEOm.radar&&GEOm.radar.levels)||[]).map(l=>({key:l.key,name:l.key==="lower"?"Lower level":l.key==="upper"?"Main level":"Map"}));
   if(liveR&&LVs.length&&!LVs.some(l=>l.key===S.level))S.level=LVs[0].key;
   const TABS=[["plan","Game plan"],["buys","Buys"],["nades","Grenades"],...(S.side==="CT"?[["t","T habits"]]:[])];
@@ -1974,7 +1985,7 @@ function renderIngame(){
   if(liveR){const draw=()=>{const box=$(".radar-box",v);if(!box||S.view!=="ingame")return;
       liveRadar(box,p,S.map,S.level,gsiLast,{side:S.side,layers:liveLayers(),following,site:following?igEv.site:null})};
     if(D.viewboxes[S.map])draw();else loadRadar(S.map).then(draw);
-    $$("[data-rlayer]",v).forEach(b=>b.onclick=()=>{const k=b.dataset.rlayer,L=liveLayers();store("rlayers",L.includes(k)?L.filter(x=>x!==k):[...L,k]);renderIngame()})}
+    $$("[data-rlayer]",v).forEach(b=>b.onclick=()=>{const k=b.dataset.rlayer,L=liveLayers();store("rlayers2",L.includes(k)?L.filter(x=>x!==k):[...L,k]);renderIngame()})}
   else if(m){const st={level:S.level,layers:["zones","best","nades"],nades:cols.plan?cols.plan.key_nades:[],sel:null},box=$(".radar-box",v);crossRadar(box,m,S.side,st);
     spotStars(box,((PL.spots||{})[S.map]||{})[S.side],S.level);
     const ps=plantSpots().filter(x=>!x.level||x.level===S.level);if(ps.length){const g_=$("g",box);ps.forEach(it=>{tip(el("rect",{x:it.px[0]-9,y:it.px[1]-9,width:18,height:18,rx:3,style:"fill:var(--bad);stroke:#fff;stroke-width:2"},g_),it.title);el("text",{x:it.px[0],y:it.px[1]-13,"text-anchor":"middle",class:"zlabel"},g_).textContent=it.label})}}
@@ -1987,7 +1998,8 @@ function renderIngame(){
       $$("[data-blevel]",box).forEach(b=>{b.setAttribute("aria-pressed",b.dataset.blevel===lv);b.onclick=()=>{S.blevel=b.dataset.blevel;renderIngame()}})})}
 }
 
-// ---------- live radar: the Ts' plays and entrances, your spots, grenades for now, rotations after the plant ----------
+// ---------- live radar: where to stand and what to throw (strong spots, multi-kill spots, grenades for now, rotation
+// after the plant). The odds (sites, entrances, rush) live in the side panel only: the radar never repeats them ----------
 const playSite=p=>p==="none"?"none":p.startsWith("rush")||p.startsWith("split")?p.slice(-1):p[0];
 const isRushPlay=p=>p.startsWith("rush");
 // odds of every play this round: the base's plays for this kind of round, the team's rushes, what you see in the
@@ -2042,7 +2054,7 @@ function rotationFor(M,site,from,GEO){const R=((M.rotations||{})[site])||{};if(!
   return k?{from:k,...R[k]}:null}
 
 // ---------- radar drawing: one visual language per layer ----------
-// T entrances: wedges in the site's color · your spots: ringed discs, gold stars for multi-kills ·
+// strong spots: green shields · multi-kills: gold stars (yours), white stars (other players, on your spots) · your spots: thin rings ·
 // grenades: dotted arcs ending on the grenade's own icon · rotation: route with a dark casing and chevrons ·
 // plant: C4 tag · you: pulsing white dot
 const PLACED=new WeakMap();   // labels already on a radar: a new one that would cover one moves down
@@ -2084,21 +2096,40 @@ function routeLine(ov,pts,col,main){const s=pts.map(p=>p.join(",")).join(" ");
   el("polyline",{points:s,style:`fill:none;stroke:${col};stroke-width:${main?5.5:3.5};stroke-linejoin:round;stroke-linecap:round${main?"":";stroke-dasharray:9 6"}`},ov);
   if(main)for(let i=0;i<pts.length-1;i++){const [a,b]=[pts[i],pts[i+1]],mx=(a[0]+b[0])/2,my=(a[1]+b[1])/2,d=Math.hypot(b[0]-a[0],b[1]-a[1]);if(d<40)continue;
     const ux=(b[0]-a[0])/d,uy=(b[1]-a[1])/d;el("path",{d:`M${mx-ux*5-uy*6} ${my-uy*5+ux*6}L${mx+ux*5} ${my+uy*5}L${mx-ux*5+uy*6} ${my-uy*5-ux*6}`,style:"fill:none;stroke:#fff;stroke-width:2.4;stroke-linecap:round;stroke-linejoin:round"},ov)}}
-// your spots: a ringed disc, the ring colored by the duels you win there
+// your spots: a thin ring, colored by the duels you win there
 function spotDisc(ov,s,side){const r=8+Math.sqrt(s.presence||1)*2.6,col=s.win==null?"#8a96a3":s.win>=58?"var(--good)":s.win<=42?"var(--bad)":"#c9a227";
-  tip(el("circle",{cx:s.px[0],cy:s.px[1],r,style:`fill:#0b0f14;fill-opacity:.35;stroke:${col};stroke-width:4`},ov),
+  tip(el("circle",{cx:s.px[0],cy:s.px[1],r,style:`fill:none;stroke:${col};stroke-width:2.5;stroke-opacity:.7`},ov),
     `${s.name}: ${Math.round(s.presence)}% of your time as ${side}, you ${s.k}-${s.d}${s.win!=null?` (${s.win}% of duels won, others ${s.others_win??"—"}%)`:""}`);
-  el("circle",{cx:s.px[0],cy:s.px[1],r:3,style:`fill:${col}`},ov);return r}
+  return r}
 const SW={lane:`<svg width="26" height="12" aria-hidden="true"><path d="M1 2L20 5L25 6L20 7L1 10Z" style="fill:var(--siteA);fill-opacity:.4;stroke:var(--siteA)"/></svg>`,
   spot:`<svg width="16" height="16" aria-hidden="true"><circle cx="8" cy="8" r="6" style="fill:none;stroke:var(--good);stroke-width:3"/></svg>`,
   star:`<svg width="16" height="16" aria-hidden="true"><path d="${starPath(8,8,7,3,5)}" style="fill:#ffd24a;stroke:#5a4100"/></svg>`,
+  wstar:`<svg width="16" height="16" aria-hidden="true"><path d="${starPath(8,8,6,2.6,5)}" style="fill:#f2f5f8;stroke:#0b0f14"/></svg>`,
+  shield:`<svg width="16" height="18" aria-hidden="true"><path d="M8 1L15 4L14 10Q12 15 8 17Q4 15 2 10L1 4Z" style="fill:var(--good);stroke:#0b0f14"/></svg>`,
   nade:`<svg width="26" height="14" aria-hidden="true"><path d="M2 12Q13 0 22 8" style="fill:none;stroke:var(--smoke);stroke-width:2.4;stroke-dasharray:1.5 4;stroke-linecap:round"/></svg>`,
   route:`<svg width="26" height="12" aria-hidden="true"><path d="M1 6H25" style="stroke:#0b0f14;stroke-width:8"/><path d="M1 6H25" style="stroke:var(--good);stroke-width:4"/></svg>`,
   c4:`<svg width="20" height="14" aria-hidden="true"><rect x="1" y="1" width="18" height="12" rx="2" style="fill:var(--bad)"/></svg>`};
 // T side: the multi-kill stars on top of your zones
 function spotStars(box,spots,level){const ov=$("g",box);PLACED.set(ov,[]);(spots||[]).filter(s=>s.multi2&&s.px&&(!s.level||!level||s.level===level)).forEach(s=>mkStar(ov,s.px[0]-6,s.px[1]-24,s))}
-const RLAYERS=[["odds","T odds"],["spots","Your spots"],["nades","Grenades now"],["rot","Rotation"]];
-function liveLayers(){let L=store("rlayers");if(!Array.isArray(L))L=RLAYERS.map(x=>x[0]);return L}
+const RLAYERS=[["strong","Strong spots"],["multi","Multi-kills"],["nades","Grenades"],["spots","Your spots"],["rot","Rotation"]];
+function liveLayers(){let L=store("rlayers2");if(!Array.isArray(L))L=RLAYERS.map(x=>x[0]);return L}
+// the moment the radar is about: now in a live round, the setup during freeze time, none when you browse
+function radarT(g,o){return !o.following||!g?null:g.round_phase==="live"?(g.elapsed||0):g.round_phase==="freezetime"?0:null}
+// the spots that fit this moment (from a bit before now to a bit after), or the nearest ones in time
+function nearT(list,t,before,after,min){if(t==null)return list;const w=list.filter(x=>x.t_med==null||(x.t_med>=t-before&&x.t_med<=t+after));
+  return w.length>=min?w:list.slice().sort((a,b)=>Math.abs((a.t_med??t)-t)-Math.abs((b.t_med??t)-t)).slice(0,min)}
+// a strong spot: a green shield with a tick, more opaque where more duels are won
+function strongMark(ov,s){const [x,y]=s.px,g=el("g",{class:"strong",style:`opacity:${s.win>=75?1:s.win>=68?.85:.7}`},ov);
+  el("path",{d:`M${x} ${y-13}L${x+11} ${y-8}L${x+10} ${y+2}Q${x+8} ${y+10} ${x} ${y+14}Q${x-8} ${y+10} ${x-10} ${y+2}L${x-11} ${y-8}Z`,style:"fill:var(--good);stroke:#0b0f14;stroke-width:1.8"},g);
+  el("path",{d:`M${x-5} ${y}L${x-1} ${y+4}L${x+5} ${y-4}`,style:"fill:none;stroke:#0b0f14;stroke-width:2.4;stroke-linecap:round;stroke-linejoin:round"},g);
+  return tip(g,`${s.zone}: players win ${s.win}% of their duels from here (${s.k} kills, ${s.d} deaths)${s.t_med!=null?`, around ${clock(s.t_med)}`:""}`)}
+// a multi-kill spot: a gold star for yours (with your best round there: 3K, 4K), a smaller white one for the other
+// players (with how many rounds)
+function mkMark(ov,s,mine,dim){const [x,y]=s.px,R=mine?13:9,g=el("g",{class:"mkstar",style:dim?"opacity:.45":""},ov);
+  el("path",{d:starPath(x,y,R,R*.42,5),style:mine?"fill:#ffd24a;stroke:#5a4100;stroke-width:1.5":"fill:#f2f5f8;stroke:#0b0f14;stroke-width:1.3"},g);
+  const t=mine?(s.best>=2?`${s.best}K`:""):(s.n>=2?`×${s.n}`:"");
+  if(t)el("text",{x:x+R+2,y:y+4.5,class:"mkt"+(mine?"":" o")},g).textContent=t;
+  return tip(g,mine?`${s.zone}: you got ${s.best} kills from here in one round${s.n>1?` (${s.n} rounds)`:""}`:`${s.zone}: ${s.n} rounds where a player got 2+ kills from here (best ${s.best})`)}
 function layerBtns(){const L=liveLayers();return `<div class="btns" role="group" aria-label="What the radar shows">${RLAYERS.map(([k,t])=>`<button type="button" data-rlayer="${k}" aria-pressed="${L.includes(k)}">${t}</button>`).join("")}</div>`}
 
 function liveRadar(box,p,map,level,g,o){
@@ -2106,32 +2137,29 @@ function liveRadar(box,p,map,level,g,o){
   const svg=$("svg",box),img=$("image",svg),ov=$("g",svg),cap=$(".caption",box);
   img.setAttribute("href",D.radars[`${map}:${level}`]||"");svg.setAttribute("viewBox",(D.viewboxes[map]||[0,0,1024,1024]).join(" "));ov.replaceChildren();PLACED.set(ov,[]);
   const here=x=>x&&x.px&&(!x.level||!level||x.level===level),legend=[];
-  const live=o.following&&g&&g.round_phase==="live",planted=live&&g.bomb==="planted",site=o.site;
+  const live=o.following&&g&&g.round_phase==="live",planted=live&&g.bomb==="planted",site=o.site,t=radarT(g,o);
   const layer=n=>el("g",{class:"ly-"+n},ov);   // one group per layer, drawn in this order
-  const Lspots=layer("spots"),Llanes=layer("lanes"),Lrot=layer("rot"),Lnades=layer("nades"),Ltop=layer("top");
-  // your spots
+  const Lspots=layer("spots"),Lstrong=layer("strong"),Lrot=layer("rot"),Lnades=layer("nades"),Ltop=layer("top");
+  // your spots: thin rings
   const SP=((PL.spots||{})[map]||{})[o.side]||[];
-  if(on("spots")&&SP.length){SP.filter(here).forEach(s=>{const r=spotDisc(Lspots,s,o.side);if(s.multi2)mkStar(Ltop,s.px[0]-6,s.px[1]-r-12,s)});
-    legend.push(`<span>${SW.spot}your spots (ring: green = you win your duels there, red = you lose them)</span><span>${SW.star}rounds with 2+ kills from there</span>`)}
-  // the Ts' entrances and the sites (CT)
+  if(on("spots")&&SP.length){SP.filter(here).forEach(s=>spotDisc(Lspots,s,o.side));
+    legend.push(`<span>${SW.spot}your spots (green = you win your duels there, red = you lose them)</span>`)}
+  // strong spots: where the players of your matches win most of their duels, at this moment of the round
+  const CM=typeof crossMap==="function"?crossMap(p,map):null,BS=(((CM||{}).sides||{})[o.side]||{}).best_spots||[];
+  if(on("strong")&&BS.length){const pick=nearT(BS.filter(here),t,15,25,2).sort((a,b)=>b.win*Math.sqrt(b.k)-a.win*Math.sqrt(a.k)).slice(0,planted?3:5);
+    pick.forEach(s=>strongMark(Lstrong,s));if(pick.length)legend.push(`<span>${SW.shield}strong spot${t!=null?" now":""}: players win most of their duels from there</span>`)}
+  // multi-kill spots: yours (exact), and the other players' on the spots you play
+  if(on("multi")){const mine=(((PL.multi||{})[map]||{})[o.side]||[]).filter(here),zones=new Set(SP.map(s=>s.name));
+    const base=((((M||{}).evidence||{}).multi||{})[o.side]||[]).filter(s=>here(s)&&zones.has(s.zone)&&!mine.some(m=>Math.hypot(m.px[0]-s.px[0],m.px[1]-s.px[1])<24));
+    const others=nearT(base,t,15,30,2).slice(0,4);
+    others.forEach(s=>mkMark(Ltop,s,false));mine.forEach(s=>mkMark(Ltop,s,true,t!=null&&s.t_med!=null&&Math.abs(s.t_med-t)>35));
+    if(mine.length||others.length)legend.push(`<span>${SW.star}your multi-kills (2+ kills from that spot in a round)</span>${others.length?`<span>${SW.wstar}other players' multi-kills on your spots</span>`:""}`)}
+  // the Ts' plays (CT): not drawn, the side panel shows the odds; they choose the grenades below
   let PLs=null;
-  if(ct&&M&&M.plays&&!planted){const ev=o.following?evFor(g):{},r=o.read||(o.following?tsidePredict(TS,map,g,ev):{A:M.all.A,B:M.all.B,none:M.all.none,rush:Math.round(100*(M.rush_p??.2)),live:false});PLs=r&&tsidePlays(TS,map,o.following?g:{},ev,r);
-    if(on("odds")&&PLs&&GEO&&GEO.sites){
-      PLs.lanes.filter(L=>L.px&&L.p>=0.02).forEach(L=>{const S_=GEO.sites[L.site];if(!S_)return;
-        const dim=!here(L)||!here(S_),gl=el("g",{style:dim?"opacity:.4":""},Llanes),col=L.site==="A"?"var(--siteA)":"var(--siteB)";
-        laneWedge(gl,L.px[0],L.px[1],S_.px[0],S_.px[1],8+44*L.p,col);
-        const lb=rbadge(Ltop,L.px[0],L.px[1],`${L.name.split(" / ")[0]}${L.mid?" (mid)":""} ${Math.round(100*L.p)}%`,col,"lane");if(dim)lb.setAttribute("style","opacity:.5");
-        tip(lb,`${Math.round(100*L.p)}% the Ts come through ${L.name} this round${L.rush>=0.02?` (rush through it: ${Math.round(100*L.rush)}%)`:""}${o.following&&L.haz>=0.05?`. Pushed in the next 15 s: ${Math.round(100*L.haz)}%`:""}. Zones: ${(L.zones||[]).join(", ")}`)});
-      ["A","B"].forEach(s=>{const S_=GEO.sites[s];if(!S_||!S_.px)return;const ps=PLs.list.filter(x=>x.site===s),tot=ps.reduce((a,x)=>a+x.v,0),other=!here(S_),col=s==="A"?"var(--siteA)":"var(--siteB)";
-        el("circle",{cx:S_.px[0],cy:S_.px[1],r:31,style:`fill:${col};fill-opacity:.22;stroke:${col};stroke-width:3.5;${other?"stroke-dasharray:6 5":""}`},Llanes);
-        el("text",{x:S_.px[0],y:S_.px[1]+8,"text-anchor":"middle",class:"rsite"},Ltop).textContent=`${s} ${Math.round(100*tot)}%${other?" ↕":""}`;
-        const rr=ps.filter(x=>x.p.startsWith("rush")).reduce((a,x)=>a+x.v,0),sp=ps.filter(x=>x.p.startsWith("split")).reduce((a,x)=>a+x.v,0);
-        const bits=[rr>=0.03?`⚡ rush ${Math.round(100*rr)}%`:"",sp>=0.03?`⇉ split ${Math.round(100*sp)}%`:""].filter(Boolean).join("  ");
-        if(bits)rbadge(Ltop,S_.px[0],S_.px[1]+48,bits,"#1b2430","play")});
-      legend.push(`<span>${SW.lane}entrance of the Ts, wider = more likely this round (⚡ rush, ⇉ split under each site)</span>`)}}
+  if(ct&&M&&M.plays&&!planted){const ev=o.following?evFor(g):{},r=o.read||(o.following?tsidePredict(TS,map,g,ev):{A:M.all.A,B:M.all.B,none:M.all.none,rush:Math.round(100*(M.rush_p??.2)),live:false});PLs=r&&tsidePlays(TS,map,o.following?g:{},ev,r)}
   // grenades: now (live), the plan (before the round), the retake ones (after the plant)
   const landed=[];   // grenades landing on the same spot: icons side by side
-  const drawNade=(x,label,title)=>{if(!here({px:x.to_px,level:x.land_level||x.level})&&!here({px:x.from_px,level:x.level}))return;
+  const drawNade=(x,label,title)=>{if(!x.to_px||!x.from_px)return;if(!here({px:x.to_px,level:x.land_level||x.level})&&!here({px:x.from_px,level:x.level}))return;
     const k=landed.filter(q=>Math.hypot(q[0]-x.to_px[0],q[1]-x.to_px[1])<18).length;landed.push(x.to_px);
     const tx=x.to_px[0]+k*34,ty=x.to_px[1];
     nadeArc(Lnades,x.from_px[0],x.from_px[1],tx,ty,x.type);nadeIcon(Ltop,x.type,tx,ty,title);
@@ -2145,6 +2173,9 @@ function liveRadar(box,p,map,level,g,o){
       `${nadeName(x.type,"CT")} ${x.from} → ${x.to}: ${x.why}. ${x.how||""}${x.click?`, ${x.click} click`:""}${x.yours?"":" (from a spot you don't play)"}`));
     o.nadesOut&&o.nadesOut(NN);
     if(NN.length)legend.push(`<span>${SW.nade}grenade worth throwing ${live?"now":"this round"}: from the white dot to its icon (cloud smoke, flame molotov, burst flash, HE)</span>`)}
+  if(!ct&&on("nades")&&o.following&&typeof vNadePicks==="function"){const NP=vNadePicks(p,g).filter(x=>x.x);
+    NP.forEach(n=>drawNade({...n.x,type:n.type},nadeName(n.type,"T"),`${nadeName(n.type,"T")} ${n.x.from} → ${n.x.to}${n.x.how?`. ${n.x.how}`:""}`));
+    if(NP.length)legend.push(`<span>${SW.nade}your grenades for this moment: from the white dot to its icon</span>`)}
   // after the plant: the way to the site from where you are, and where the bomb usually is
   const you=o.following&&g&&g.pos&&GEO?worldPx(GEO,g.pos):null;
   if(ct&&on("rot")&&planted&&site&&M&&GEO){const from=you?nearestZone(GEO,you.px,you.level):(SP[0]||{}).name,R=rotationFor(M,site,from,GEO);
@@ -2216,12 +2247,20 @@ function vTchips(p,g){const TS=(p.advice.plan||{}).tside,M=TS&&TS.maps&&TS.maps[
     Object.entries(P_.win).filter(([k])=>k!=="none").map(([k,w])=>{const c=C[k],n=c?c[0]:(P_.n||{})[k]||0,wr=c?c[1]:w;return {k,n,wr,s:(wr*n+50*12)/(n+12)}})
       .sort((a,b)=>b.s-a.s).slice(0,2).forEach(r=>out.push(`<span class="vchip ${vTone(r.wr)}">${esc(((P_.label||{})[r.k]||r.k).replace(/ through /," ").split(" / ")[0])} <b>${r.wr}%</b></span>`))}
   return out.length?`<div class="vchips">${out.join("")}</div>`:""}
+// one option per line: the label, a bar (the longest is the most likely), the number. Fixed order for the sites,
+// so the eye finds A and B at the same place every time
+const SITE_C={A:"var(--siteA)",B:"var(--siteB)"};
+const vHead=t=>`<div class="vhead">${t}</div>`;
+function vRows(rows){const mx=Math.max(...rows.map(r=>r.v),1);
+  return `<div class="vrows">${rows.map(r=>`<div class="vrow" style="--c:${r.c||"var(--ink)"}${r.o!=null&&r.o<1?`;opacity:${r.o}`:""}"><span>${r.l}</span><i><u style="width:${Math.max(4,Math.round(100*r.v/mx))}%"></u></i><b>${Math.round(r.v)}%</b></div>`).join("")}</div>`}
+function vOdds(r){return `<div class="vodds">${vRows([{l:"A",v:r.A,c:SITE_C.A},{l:"B",v:r.B,c:SITE_C.B},{l:"?",v:r.none,c:"var(--muted)"}])}</div>`}
 // a rush: how likely, and where it goes (the most likely in big, the second smaller and fainter)
 function vRush(TS,g,r){const PLs=tsidePlays(TS,g.map,g,evFor(g),r);if(!PLs)return "";
   const rn=r.live?Math.round(100*PLs.rush):r.rush,rs=(PLs.list||[]).filter(x=>/^rush/.test(x.p)).sort((a,b)=>b.v-a.v);
   if(rn<15||!rs.length)return "";
   const lab=x=>`${x.site} · ${vShort(String(x.label||"").replace(/^Rush [AB]( through )?/,""))}`;
-  return `<div class="vbig ${rn>=40?"bad":"warn"}"><b>RUSH ${rn}%</b><div class="vdest">${rs.slice(0,2).map((x,i)=>`<em class="${i?"sec":""}">${lab(x)} <b>${Math.round(100*x.v)}%</b></em>`).join("")}</div><span>until ${clock(32)}</span></div>`}
+  return `<div class="vbig ${rn>=40?"bad":"warn"}"><b>RUSH ${rn}%</b><span>until ${clock(32)}</span></div>`+
+    vRows(rs.slice(0,2).map((x,i)=>({l:lab(x),v:100*x.v,c:SITE_C[x.site],o:i?.6:1})))}
 // where the fights are at this moment of the round (deaths of both sides in the base, on the likely site when the
 // read leans one way): three zones, fainter as they get less likely
 function vFights(M,g,r){const D=((M&&M.evidence)||{}).deaths;if(!D)return "";const w=WIN_OF(g.elapsed||0);
@@ -2229,19 +2268,23 @@ function vFights(M,g,r){const D=((M&&M.evidence)||{}).deaths;if(!D)return "";con
   for(const side of ["CT","T"]){const src=((D[side]||{})[lean]||{})[w]||((D[side]||{}).all||{})[w];if(!src)continue;
     src.zones.forEach(z=>{acc[z.zone]=(acc[z.zone]||0)+z.pct*src.n});tot+=src.n}
   const top=Object.entries(acc).sort((a,b)=>b[1]-a[1]).slice(0,3);if(!top.length||!tot)return "";
-  return `<div class="vfights"><i>⚔</i>${top.map(([z,v],i)=>`<span style="opacity:${[1,.7,.45][i]}">${vShort(z)} <b>${Math.round(v/tot)}%</b></span>`).join("")}</div>`}
+  return vHead("⚔ FIGHTS NOW")+vRows(top.map(([z,v],i)=>({l:vShort(z),v:v/tot,c:"var(--ink)",o:[1,.75,.5][i]})))}
+// before the round (CT): where the Ts come from, one entrance per line
+function vEntries(TS,g,r){const PLs=tsidePlays(TS,g.map,g,evFor(g),r);if(!PLs)return "";
+  const top=PLs.lanes.filter(L=>L.p>=0.05).sort((a,b)=>b.p-a.p).slice(0,3);if(!top.length)return "";
+  return vHead("⇢ ENTRIES")+vRows(top.map((L,i)=>({l:`${L.site} · ${vShort(L.name)}`,v:100*L.p,c:SITE_C[L.site],o:[1,.75,.5][i]})))}
 function nowVisual(p,g,following){
   if(!following)return nowPanel(p,g,following,{noBuy:true});
   if(g.practice)return `<div class="vz"><div class="vsit"><span>PRACTICE</span></div></div>`;
   const ph=g.round_phase,ct=g.side==="CT",out=[];
   const TS=(p.advice.plan||{}).tside,r=ct?tsidePredict(TS,g.map,g,evFor(g)):null;
   if(ph==="freezetime"){out.push(vSituation(p,g));
-    if(ct&&r)out.push(oddsBar(r),vRush(TS,g,r));
+    if(ct&&r)out.push(vOdds(r),vRush(TS,g,r)||vEntries(TS,g,r));
     if(!ct){out.push(vTimeline(p,g),vCTdots(p,g),vTchips(p,g))}}
   else if(ph==="live"){const el=g.elapsed||0,planted=g.bomb==="planted";
     if(planted){const left=g.phase_left!=null?g.phase_left:Math.max(0,40-(g.since_plant||0));
       out.push(`<div class="vbig ${ct?"bad":"good"}"><b>💣 ${Math.ceil(left)}s</b><span>${ct?"retake together":"hold the bomb"}</span></div>`)}
-    else if(ct){if(r){out.push(oddsBar(r));
+    else if(ct){if(r){out.push(vOdds(r));
         const PLs=tsidePlays(TS,g.map,g,evFor(g),r),M=TS&&TS.maps&&TS.maps[g.map];
         const rush=el<32?vRush(TS,g,r):"";out.push(rush||vFights(M,g,r));
         const ev=(r.evid||[]).find(x=>/spot/.test(x));if(ev)out.push(`<span class="vchip ${/fight/.test(ev)?"bad":""}">● ${/fight/.test(ev)?"fight at your spot":"quiet at your spot"}</span>`);

@@ -389,6 +389,31 @@ def my_spots(sid, cross, maps):
     return out
 
 
+def my_multikills(sid, maps):
+    """Per map and side: the exact spots where you got two kills or more in a round from the same place."""
+    import glob
+    import tside
+    ev = {}
+    for f in glob.glob(os.path.join(config.player_dir(sid), "matches", "*", "map.json")):
+        try:
+            m = json.load(open(f, encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        if m.get("map") not in maps:
+            continue
+        by = {}
+        for k in m.get("my_kills") or []:
+            if k.get("px") and k.get("zone") and k.get("t") is not None and k.get("side") in ("T", "CT"):
+                by.setdefault((k["side"], k.get("round")), []).append({"px": k["px"], "level": k.get("level"), "t": k["t"], "zone": k["zone"]})
+        for (side, _), ks in by.items():
+            if len(ks) >= 2:
+                ev.setdefault((m["map"], side), []).extend(tside.multi_events(ks))
+    out = {}
+    for (mp, side), e in ev.items():
+        out.setdefault(mp, {})[side] = tside.multi_spots(e, top=8)
+    return out
+
+
 def build(steamid, adv, cross=None, deep=None, light=False):
     import context
     import experiments
@@ -432,6 +457,10 @@ def build(steamid, adv, cross=None, deep=None, light=False):
         plan["spots"] = my_spots(sid, cross, maps)
     except Exception as e:
         _miss(plan, "spots", e)
+    try:
+        plan["multi"] = my_multikills(sid, maps)
+    except Exception as e:
+        _miss(plan, "multi-kill spots", e)
     plan["weapon_positions"] = weapon_positions(weapons.weapon_zones(), maps)
     try:
         plan["map_refs"] = map_refs(sorted(set(PREMIER) | set(maps)))

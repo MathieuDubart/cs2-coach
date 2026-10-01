@@ -622,7 +622,7 @@ def econ_table(df):
 
 
 SUMMARY = os.path.join(config.OUT, "population", "tside_summary.json")
-VERSION = 13   # bump when the summary changes shape: the cache is rebuilt
+VERSION = 14   # bump when the summary changes shape: the cache is rebuilt
 
 
 def _stamp():
@@ -864,13 +864,73 @@ def _deaths(mp, dirs, site_of):
     return out
 
 
+MULTI_R = 45   # radar pixels: two kills of a round from closer than this are "from the same spot"
+
+
+def multi_events(kills):
+    """Multi-kills from one spot: kills of one player in one round (sorted by time), grouped while they come from
+    within MULTI_R of the first one. kills: dicts with px, level, t, zone. Returns the groups of 2 kills or more."""
+    out, cur = [], []
+    for k in sorted(kills, key=lambda k: k["t"]):
+        if cur and (k["level"] != cur[0]["level"] or np.hypot(k["px"][0] - cur[0]["px"][0], k["px"][1] - cur[0]["px"][1]) > MULTI_R):
+            out.append(cur) if len(cur) >= 2 else None
+            cur = []
+        cur.append(k)
+    if len(cur) >= 2:
+        out.append(cur)
+    return [{"px": [float(np.mean([k["px"][0] for k in e])), float(np.mean([k["px"][1] for k in e]))], "level": e[0]["level"],
+             "n": len(e), "t": float(e[0]["t"]), "zone": max(set(k["zone"] for k in e), key=[k["zone"] for k in e].count)} for e in out]
+
+
+def multi_spots(events, r=30, top=12, min_n=1):
+    """The multi-kill events grouped by spot (same level, within r pixels of the group's center): where on the radar
+    players got 2+ kills from the same place, the most frequent first."""
+    cl = []
+    for e in sorted(events, key=lambda e: -e["n"]):
+        c = next((c for c in cl if c["level"] == e["level"] and np.hypot(c["x"] / c["n"] - e["px"][0], c["y"] / c["n"] - e["px"][1]) <= r), None)
+        if c is None:
+            c = {"level": e["level"], "x": 0.0, "y": 0.0, "n": 0, "best": 0, "ts": [], "zones": []}
+            cl.append(c)
+        c["x"] += e["px"][0]
+        c["y"] += e["px"][1]
+        c["n"] += 1
+        c["best"] = max(c["best"], e["n"])
+        c["ts"].append(e["t"])
+        c["zones"].append(e["zone"])
+    cl = [c for c in cl if c["n"] >= min_n]
+    cl.sort(key=lambda c: (-c["n"], -c["best"]))
+    return [{"px": [round(c["x"] / c["n"]), round(c["y"] / c["n"])], "level": c["level"], "n": c["n"], "best": c["best"],
+             "t_med": round(float(np.median(c["ts"]))), "zone": max(set(c["zones"]), key=c["zones"].count)} for c in cl[:top]]
+
+
+def _multi(mp, dirs):
+    """Per side: the exact spots where the players of the base got two kills or more in a round from the same place."""
+    ev = {"T": [], "CT": []}
+    for d in dirs:
+        fd, fr = os.path.join(d, "duels.parquet"), os.path.join(d, "rounds.parquet")
+        if not os.path.exists(fd) or not os.path.exists(fr) or not five_v_five(pd.read_parquet(fr, columns=["T_n", "CT_n"])):
+            continue
+        D = pd.read_parquet(fd, columns=["round", "t", "killer", "killer_side", "victim_side", "killer_px", "killer_py", "killer_level", "killer_zone"])
+        D = D[D.killer_side.isin(["T", "CT"]) & (D.killer_side != D.victim_side) & D.killer_px.notna() & D.killer_zone.notna()]
+        for (side, _, _), x in D.groupby(["killer_side", "round", "killer"]):
+            if len(x) >= 2:
+                ev[side] += multi_events([{"px": [a, b], "level": lv, "t": t, "zone": humanize(z, mp)}
+                                          for a, b, lv, t, z in zip(x.killer_px, x.killer_py, x.killer_level, x.t, x.killer_zone)])
+    return {s: multi_spots(e, top=16, min_n=2) for s, e in ev.items() if e}
+
+
 def evidence(mp, g, dirs, pool=None):
     site_of = {(m, int(r)): s for m, r, s in zip(g.match, g["round"], g.site)}
     plants, retakes, rows = _plants_and_retakes(mp, dirs)
     if pool is not None and rows is not None:
         pool.append(rows)
+    try:
+        multi = _multi(mp, dirs)
+    except Exception as e:   # the radar just shows no base multi-kills
+        print(f"{mp}: multi-kill spots unavailable ({e})")
+        multi = None
     return {"survival": _survival(g), "contact": _contact(g), "plants": plants, "retakes": retakes,
-            "deaths": _deaths(mp, dirs, site_of), "windows": {k: [lo, hi] for k, lo, hi in WINDOWS}}
+            "deaths": _deaths(mp, dirs, site_of), "windows": {k: [lo, hi] for k, lo, hi in WINDOWS}, "multi": multi}
 
 
 SELF_T = [20, 30, 40, 50]
