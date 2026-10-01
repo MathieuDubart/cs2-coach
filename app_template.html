@@ -1485,7 +1485,10 @@ const WIN_OF=t=>t<20?"early":t<40?"setup":t<70?"hit":"late";
 const WIN_EN={early:"start of the round (1:55-1:35)",setup:"info phase (1:35-1:15)",hit:"site attack (1:15-0:45)",late:"end of the round (after 0:45)"};
 const WIN_SHORT={early:["start of the round","1:55-1:35"],setup:["info phase","1:35-1:15"],hit:["site attack","1:15-0:45"],late:["end of the round","after 0:45"]};
 // the round's length: read from the game when it sends its clock (bot matches and other modes are longer), else 1:55
-const RLEN=()=>(typeof gsiLast!=="undefined"&&gsiLast&&gsiLast.round_len)||115;
+// CS2 doesn't send its clock to players: 1:55 (competitive, Premier); a bomb planted later than that this match means
+// longer rounds (bot matches: 2:15), and the app adapts
+const RLEN=()=>{const g=typeof gsiLast!=="undefined"?gsiLast:null;if(g&&g.round_len)return g.round_len;
+  const R=((g&&g.hist)||{}).rounds||{},late=Math.max(0,...Object.values(R).map(r=>r&&r.plant||0));return late>113?(late>133?155:135):115};
 const clock=t=>{const s=Math.max(0,RLEN()-t);return `${Math.floor(s/60)}:${String(Math.floor(s%60)).padStart(2,"0")}`};
 function evFor(g){const key=`${g.map}|${g.round}`;if(igEv.key!==key){const H=g.hist||{},mk=(H.marks||{})[g.round]||{},s=(H.sites||{})[g.round];   // what you marked survives a reload
   igEv={key,contact:mk.contact||null,alone:mk.alone??null,site:g.round_phase==="live"&&(s==="A"||s==="B")?s:null}}return igEv}
