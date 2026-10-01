@@ -147,5 +147,48 @@ def save_settings(s):
         s._base = copy.deepcopy(dict(s))
 
 
+# ---------- the game first: heavy work waits while you play ----------
+PLAYING = os.path.join(OUT, "playing.json")
+
+
+def in_match():
+    """True while CS2 says you are in a match (kept fresh by the game detection, stale 75 s after its last news)."""
+    try:
+        d = read_json(PLAYING)
+    except (OSError, ValueError):
+        return False
+    return bool(d and d.get("until", 0) > time.time())
+
+
+def wait_for_match_end(log=None, what="analysis"):
+    """Demo downloads, extraction and analyses take the CPU, the disk and the connection: during a match they wait
+    for its end, then go on where they stopped. Returns True when it waited."""
+    if not in_match():
+        return False
+    if log:
+        log(f"Match in progress: {what} paused until the end of your match (your game comes first)…")
+    while in_match():
+        time.sleep(10)
+    if log:
+        log("Match over: resuming.")
+    return True
+
+
+def low_priority():
+    """This process only gets the CPU the game doesn't use (worker processes of the analyses)."""
+    try:
+        if os.name == "nt":
+            import ctypes
+            from ctypes import wintypes
+            k = ctypes.windll.kernel32
+            k.GetCurrentProcess.restype = wintypes.HANDLE   # 64-bit handle (the default int would cut it)
+            k.SetPriorityClass.argtypes = [wintypes.HANDLE, wintypes.DWORD]
+            k.SetPriorityClass(k.GetCurrentProcess(), 0x40)   # IDLE_PRIORITY_CLASS
+        else:
+            os.nice(15)
+    except Exception:
+        pass
+
+
 def player_dir(steamid):
     return os.path.join(PLAYERS, str(steamid))

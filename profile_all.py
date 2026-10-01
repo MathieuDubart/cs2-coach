@@ -30,6 +30,7 @@ def candidates(min_demos):
 
 
 def work(sid):
+    config.wait_for_match_end()   # a match is going on: this profile waits for its end
     import io
     import contextlib
     import cs2coach
@@ -66,7 +67,7 @@ def main(min_demos=3, workers=None, force=False):
     workers = workers or max(1, (os.cpu_count() or 4) - 2)
     print(f"{len(todo)} profiles to build ({workers} processes)", flush=True)
     done = 0
-    with ProcessPoolExecutor(workers) as ex:
+    with ProcessPoolExecutor(workers, initializer=config.low_priority) as ex:
         futs = {ex.submit(work, sid): (sid, name, n) for sid, name, n in todo}
         for f in as_completed(futs):
             sid, name, n = futs[f]

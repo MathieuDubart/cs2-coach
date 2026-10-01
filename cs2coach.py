@@ -131,9 +131,10 @@ def ensure_demos(reg, workers=2, only=None):
             if (only is None or mid in only) and m.get("url") and (not m.get("expired") or _recent(m))
             and not os.path.exists(os.path.join(config.CACHE, f"{mid}.dem"))}
     if todo:
+        config.wait_for_match_end(log, "demo downloads")
         log(f"Downloading {len(todo)} demo(s) from Valve…")
     with ThreadPoolExecutor(workers) as ex:
-        futs = {ex.submit(_fetch_demo, mid, url): mid for mid, url in todo.items()}
+        futs = {ex.submit(lambda a, b: (config.wait_for_match_end(), _fetch_demo(a, b))[1], mid, url): mid for mid, url in todo.items()}
         for i, f in enumerate(as_completed(futs), 1):
             mid = futs[f]
             try:
@@ -163,20 +164,45 @@ def ensure_deep():
     tside.run_all(log=log)
 
 
+def _extract(src, out):
+    """deep.extract in a worker: the demo parser's panics (not an Exception) come back as a plain error."""
+    import deep
+    try:
+        deep.extract(src, out)
+    except BaseException as e:   # pyo3 PanicException derives from BaseException
+        raise RuntimeError(f"{type(e).__name__}: {str(e)[:200]}") from None
+
+
 def _ensure_deep(deep):
-    for f in os.listdir(config.CACHE):
-        if not f.endswith(".dem"):
-            continue
-        mid = f[:-4]
-        out = os.path.join(config.DEEP, mid)
-        if os.path.exists(os.path.join(out, "meta.json")):
-            continue
-        log(f"[{mid}] detailed extraction")
-        try:
-            deep.extract(os.path.join(config.CACHE, f), out)
-        except Exception as e:
-            log(f"[{mid}] extraction ERROR: {e}")
-            traceback.print_exc()
+    """Detailed extraction of the new demos: in separate processes at the lowest priority (the game and the
+    app's page keep the CPU), two at a time, waiting for the end of a match between demos."""
+    import multiprocessing
+    todo = [f[:-4] for f in sorted(os.listdir(config.CACHE)) if f.endswith(".dem")
+            and not os.path.exists(os.path.join(config.DEEP, f[:-4], "meta.json"))]
+    if not todo:
+        return
+
+    if multiprocessing.current_process().name != "MainProcess":   # already a worker: stay in it
+        for mid in todo:
+            config.wait_for_match_end(log, "demo extraction")
+            log(f"[{mid}] detailed extraction")
+            try:
+                _extract(os.path.join(config.CACHE, f"{mid}.dem"), os.path.join(config.DEEP, mid))
+            except Exception as e:
+                log(f"[{mid}] extraction ERROR: {e}")
+        return
+    from concurrent.futures import ProcessPoolExecutor
+    with ProcessPoolExecutor(2, initializer=config.low_priority) as ex:
+        for i in range(0, len(todo), 2):
+            config.wait_for_match_end(log, "demo extraction")
+            futs = [(mid, ex.submit(_extract, os.path.join(config.CACHE, f"{mid}.dem"), os.path.join(config.DEEP, mid)))
+                    for mid in todo[i:i + 2]]
+            for mid, fu in futs:
+                log(f"[{mid}] detailed extraction")
+                try:
+                    fu.result()
+                except Exception as e:
+                    log(f"[{mid}] extraction ERROR: {e}")
 
 
 def player_matches(steamid):
@@ -194,6 +220,7 @@ def _analyze_match(steamid, mid, m):
     """One match for one player (runs in a worker process)."""
     import analyze
     import map_analysis
+    config.wait_for_match_end()   # a match started meanwhile: this worker waits for its end
     folder = os.path.join(config.player_dir(steamid), "matches", mid)
     dem = os.path.join(config.CACHE, f"{mid}.dem")
     try:
@@ -228,12 +255,14 @@ def analyze_player(steamid, reg):
         log(f"Analyzing {len(todo)} match(es)…")
         if multiprocessing.current_process().name == "MainProcess" and len(todo) > 1:
             from concurrent.futures import ProcessPoolExecutor, as_completed
-            with ProcessPoolExecutor(min(8, len(todo))) as ex:
+            config.wait_for_match_end(log, "match analysis")
+            with ProcessPoolExecutor(min(8, len(todo)), initializer=config.low_priority) as ex:
                 futs = [ex.submit(_analyze_match, steamid, mid, reg.get(mid, {})) for mid in todo]
                 for f in as_completed(futs):
                     log("  " + f.result())
         else:  # already inside a worker (batch profiling): stay sequential
             for mid in todo:
+                config.wait_for_match_end(log, "match analysis")
                 log("  " + _analyze_match(steamid, mid, reg.get(mid, {})))
     import leetify
     prof = leetify.profile(steamid)
@@ -493,6 +522,7 @@ def run_for(query, fetch=True):
         s.setdefault("players", {}).setdefault(str(p_id), {})["name"] = nm
     config.save_settings(s)
     for i, (p_id, nm) in enumerate(players.items(), 1):
+        config.wait_for_match_end(log, "profile building")
         if analyze_player(p_id, reg):
             attach_plan(p_id)
         log(f"  profile {i}/{len(players)}: {nm}")

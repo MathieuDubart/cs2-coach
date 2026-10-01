@@ -326,7 +326,27 @@ def update(payload):
         if STATE.get("map") and key != STATE.get("_key"):
             STATE["_key"] = key
             log_event({"map": key[0], "round": key[1], "phase": key[2], "side": key[3], "steamid": me})
+        on = bool(STATE.get("map") and STATE.get("map_phase") != "gameover")
+    _playing_flag(on, now)
     return True
+
+
+_FLAG = {"t": 0.0, "on": False}
+
+
+def _playing_flag(on, now):
+    """out/playing.json: 'a match is going on' for every process of the app (analyses wait for its end).
+    Refreshed every 20 s while you play; gone at the final scoreboard or back in the menus."""
+    try:
+        if on and now - _FLAG["t"] > 20:
+            config.write_json(config.PLAYING, {"until": now + 75, "map": STATE.get("map")})
+            _FLAG.update(t=now, on=True)
+        elif not on and _FLAG["on"]:
+            if os.path.exists(config.PLAYING):
+                os.remove(config.PLAYING)
+            _FLAG.update(t=0.0, on=False)
+    except OSError as e:
+        print("match flag:", e, flush=True)
 
 
 def state():

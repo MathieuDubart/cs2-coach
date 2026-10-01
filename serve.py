@@ -360,6 +360,8 @@ def auto_sync(every=1800):
     import time
     time.sleep(20)
     while True:
+        while config.in_match():   # never start downloads and analyses during a match: after it
+            time.sleep(30)
         s = config.settings()
         sid = str(s.get("own_steamid") or "")
         p = s.get("players", {}).get(sid, {})
