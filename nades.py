@@ -296,6 +296,8 @@ def _role(typ, x):
     that closes an entrance (any time); damage: an HE later in the round."""
     if typ in ("molotov", "he") and (x.get("usual") == "debut" or (x.get("t_med") or 99) <= 25):
         return "anti_rush"
+    if typ == "flash":
+        return "flash"   # blinds the Ts as they come through
     return "block" if typ in ("smoke", "molotov") else "damage"
 
 
@@ -304,13 +306,13 @@ SLIM = ("from", "to", "from_px", "to_px", "level", "land_level", "timer", "t_med
 
 
 def lane_picks(M, lanes_mp, zones):
-    """For each entrance of the Ts (lanes.py): the smoke, molotov and HE that land on it, thrown from your zones when
-    some do (else the base's best), with their role."""
+    """For each entrance of the Ts (lanes.py): the smoke, molotov, HE and flash that land on it, thrown from your zones
+    when some do (else the base's best), with their role. A flash that rarely blinds anyone is left out."""
     out = {}
     for typ, T in M["types"].items():
-        if typ == "flash":
-            continue
         for x in T["groups"]:
+            if typ == "flash" and (x.get("blind") or 0) < 25:
+                continue
             for site, ls in (lanes_mp or {}).items():
                 for i, ln in enumerate(ls or []):
                     if x["to"] not in ln.get("zones", []):
