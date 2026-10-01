@@ -677,12 +677,35 @@ function deepCard(p){const X=p.deep;if(!X)return "";const r=X.reaction,a=X.preai
 function midCard(p){const M=(p.advice.plan||{}).mid;if(!M||(!M.weak.length&&!M.strong.length))return "";
   return `<article class="card"><h3>Mid-round at a glance</h3><ul>${M.weak.slice(0,3).map(w=>`<li>${esc(w.text)}${w.fix?` <b>${esc(w.fix)}</b>`:""}</li>`).join("")}${M.strong.slice(0,2).map(s=>`<li class="good">${esc(s.text)}</li>`).join("")}</ul>
    <p><a href="#midround" style="color:var(--ct)">Rotation routes, positions by weapon and reflexes: Mid-round tab</a></p></article>`}
+// a teammate's whole history (his matches without you too): his Steam history code, given by him
+async function fillFollow(p){const box=$("#follow-card");if(!box)return;let st;
+  try{st=await (await fetch(`/api/steam/status?sid=${p.steamid}`)).json()}catch(e){box.querySelector(".note").textContent="The local server doesn't answer.";return}
+  const inp="font:14px var(--f-mono);background:var(--bg);color:var(--ink);border:1px solid var(--line);border-radius:3px;padding:5px 8px";
+  box.innerHTML=`<h3>Follow ${esc(p.name)}'s matches ${st.has_auth?'<span class="pill" style="color:var(--good)">on</span>':""}</h3>
+   <p>Only the matches already on this PC are analyzed for ${esc(p.name)}: the ones you played together. To find <b>every match he plays, even without you</b>, he can give you two codes from <a href="${esc((st.links||{}).auth||"https://help.steampowered.com/en/wizard/HelpWithGameIssue/?appid=730&issueid=128")}" target="_blank" rel="noopener" style="color:var(--ct)">Steam's CS2 help page</a> (signed in to <b>his</b> account): his authentication code, and the code of one of his matches. For a single match, he can also send you its share code (CSGO-…): paste it in the search bar.</p>
+   ${st.has_key?"":`<p class="note">First add your own Steam API key in <a href="#settings" style="color:var(--ct)">Settings</a>: it is used to read everyone's history.</p>`}
+   <div class="row"><input id="fo-auth" type="password" autocomplete="off" spellcheck="false" placeholder="${st.has_auth?"already saved":"His authentication code XXXX-XXXXX-XXXX"}" style="width:270px;${inp}">
+     <input id="fo-known" type="text" autocomplete="off" spellcheck="false" placeholder="Code of one of his matches CSGO-…" style="flex:1;min-width:240px;${inp}"></div>
+   <div class="row"><button type="button" class="primary" id="fo-save" ${st.has_key?"":"disabled"}>Save and check</button>
+     <button type="button" class="primary" id="fo-sync" ${st.has_auth?"":"disabled"}>Find his new matches</button>
+     ${st.has_auth?`<button type="button" class="close" id="fo-forget">Stop following</button>`:""}<span class="note" id="fo-msg" role="status"></span></div>
+   ${st.has_auth?`<p class="note">Checked automatically when the app starts, then every 30 minutes. Last check: ${st.last_sync?fmtDate(st.last_sync):"never"}${st.pending?` · ${st.pending} match(es) waiting (Steam must be open and CS2 closed)`:""}.</p>`:""}
+   <p class="note">His codes stay in <code>out/settings.json</code> on this PC (not versioned) and only go to Steam's official API. Ask him first: they let you read his match history.</p>`;
+  const msg=$("#fo-msg",box),sid=p.steamid;
+  $("#fo-save",box).onclick=async()=>{const b=$("#fo-save",box);b.disabled=true;msg.textContent="Checking with Steam…";
+    try{const j=await api("/api/steam/credentials",{sid,auth_code:$("#fo-auth",box).value.trim(),known_code:$("#fo-known",box).value.trim()});
+      msg.textContent=j.saved.length?`Saved: ${j.saved.join(" and ")}.`:"Nothing new to save.";setTimeout(()=>fillFollow(p),900)}
+    catch(e){msg.textContent=e.message;b.disabled=false}};
+  $("#fo-sync",box).onclick=async()=>{msg.textContent="";try{await api("/api/steam/sync",{sid});poll()}catch(e){msg.textContent=e.message}};
+  const fg=$("#fo-forget",box);if(fg)fg.onclick=async()=>{if(fg.dataset.ok!=="1"){fg.dataset.ok="1";fg.textContent="Confirm: remove his codes";return}
+    try{await api("/api/steam/forget",{sid});fillFollow(p)}catch(e){msg.textContent=e.message}}}
 function renderAnalysis(){
   const p=P(),v=$("#v-analysis"),ms=p.matches;const rec={win:0,draw:0,loss:0};ms.forEach(m=>rec[m.result]++);
   const auto=p.advice.rules.map((r,i)=>({level:i<2?"high":"mid",title:r.title,evidence:r.why,fix:r.do,standing:r.standing,target:r.target,bench:r.bench,drills:r.drills,sources:r.sources}));
   v.innerHTML=`<div class="head"><div style="display:grid;gap:4px"><span class="eyebrow">${esc(p.name)} · ${ms.length} matches analyzed</span><h2>Full analysis</h2></div>
     <div class="record"><span>${rec.win}<small>wins</small></span><span>${rec.draw}<small>draws</small></span><span>${rec.loss}<small>losses</small></span></div></div>
     ${p.advice.strengths.length?`<div class="strengths">${p.advice.strengths.map(s=>`<span>${esc(s)}</span>`).join("")}</div>`:""}
+    ${D.local&&p.steamid!==D.own?`<article class="card form" id="follow-card"><h3>Follow ${esc(p.name)}'s matches</h3><p class="note">Loading…</p></article>`:""}
     ${archCard(p)}
     ${midCard(p)}
     ${deepCard(p)}
@@ -695,6 +718,7 @@ function renderAnalysis(){
     ${leetBlock(p)}`;
   $$("tr.click",v).forEach(r=>{r.onclick=()=>{S.match=+r.dataset.i;go("matches")};r.onkeydown=e=>{if(e.key==="Enter")r.click()}});
   copyBtn(v);
+  fillFollow(p);
 }
 
 // ---------- view: matches ----------
