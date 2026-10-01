@@ -715,8 +715,11 @@ function renderAnalysis(){
     ${midCard(p)}
     ${deepCard(p)}
     ${prosBlock(p)}
-    ${p.overall?`<h3>Coach's analysis${p.overall.scope?` · ${esc(p.overall.scope)}`:""}</h3><p style="max-width:75ch;font-size:16px">${p.overall.summary}</p>${findings(p.overall.priorities)}<h3>Automatic detection · ${ms.length} matches</h3>`:""}
+    ${p.overall?`<h3>What the coach detects · ${ms.length} matches</h3>`:""}
     ${findings(auto)}
+    ${p.overall?`<details class="old-notes"><summary style="cursor:pointer;font-family:var(--f-display);font-size:18px;font-weight:600">Earlier hand-written analysis${p.overall.scope?` · ${esc(p.overall.scope)}`:""}</summary>
+      <p class="note" style="margin:8px 0">Written from those matches only: its numbers are from that time. The list above covers all your matches and is the one to follow.</p>
+      <p style="max-width:75ch">${p.overall.summary}</p>${findings(p.overall.priorities)}</details>`:""}
     ${benchSection(p)}
     ${extrasBlock(p)}
     ${ms.length?`<h3>Match by match</h3><div class="tbl"><table>${TREND_HEAD}<tbody>${trendRows(ms,-1)}</tbody></table></div>`:""}

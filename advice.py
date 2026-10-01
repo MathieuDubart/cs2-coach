@@ -120,7 +120,7 @@ def rules(M, cross, per_match=False):
              "On attack, go in second behind a flash.", "On defense, play crossfires."])
     un = M.get("nades_unused", 0)
     if un / n >= (4 if per_match else 6):
-        add("nades", un / n * 2.2, f"{int(un)} grenades died with you (${int(M.get('nades_value', 0)):,})".replace(",", " "),
+        add("nades", un / n * 2.2, f"{int(un)} grenades died with you (${int(M.get('nades_value', 0)):,})",
             "Empty your pockets before 40 s",
             [f"{int(un)} grenades not thrown when you died, out of {int(M.get('nades_bought', 0))} in your inventory ({pct(un, M.get('nades_bought', 0))}%).",
              f"{pl(M.get('flash_thrown', 0), 'flash thrown', 'flashes thrown')}: {pl(M.get('flash_en', 0), 'enemy flashed', 'enemies flashed')}, {pl(M.get('flash_mates', 0), 'teammate flashed', 'teammates flashed')}."],
@@ -133,7 +133,7 @@ def rules(M, cross, per_match=False):
                 "Hold the angle, don't dry-peek",
                 [f"{pk['n']} of your {cross['totals']['my_duels']} duels start while moving.",
                  f"Other players: {h['others_win']}% when holding, {pk['others_win']}% when peeking."],
-                ["Fais venir l'adversaire.", "For info: a grenade or a jiggle-peek (one step, back).",
+                ["Let the enemy come to you.", "For info: a grenade or a jiggle-peek (one step, back).",
                  "If you have to peek: flash first."])
         fl = ctx_row(cross, "Flashs", 0)
         tot = cross["totals"]["my_duels"]

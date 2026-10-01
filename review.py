@@ -139,7 +139,9 @@ def build(sid, stats, mid_rows, ctx, exps, adv):
         better = (a > b) == hib
         item = {"key": k, "label": lab, "unit": unit, "higher_better": hib, "before": round(b, 2), "after": round(a, 2),
                 "delta": round(a - b, 2), "better": better, "z": round(z, 2), "n_before": nb, "n_after": na,
-                "level": "clear" if abs(z) >= 2 else "trend" if abs(z) >= 1.2 else None, "why": []}
+                # 8 indicators compared on a few games: 2.5 standard errors before calling a gap clear (with 2, one
+                # session in three would show a "clear" change that is only chance)
+                "level": "clear" if abs(z) >= 2.5 else "trend" if abs(z) >= 1.5 else None, "why": []}
         if item["level"] is None:
             stable.append(lab)
             continue

@@ -181,11 +181,13 @@ def _cmp(group, rest):
 
 
 def _level(z, n):
+    """About fifteen groups are compared (game of the session, time of day, group, previous result...): with the
+    usual 2 standard errors, one of them would look 'reliable' by chance every few weeks. Hence 2.5 and 6 games."""
     if z is None:
         return "not enough data"
-    if abs(z) >= 2 and n >= 5:
+    if abs(z) >= 2.5 and n >= 6:
         return "reliable"
-    if abs(z) >= 1.2 and n >= 3:
+    if abs(z) >= 1.5 and n >= 4:
         return "trend"
     return "no clear gap"
 
@@ -325,26 +327,29 @@ def _fr(v):
 
 
 def recommendations(F, overall, sessions, partners):
-    """Personal rules drawn from the player's own history (only when the data says something)."""
+    """Personal rules drawn from the player's own history: a rule (stop, break, time slot, group) only when the gap
+    is reliable, never from a handful of games."""
     R = []
+    sure = lambda r: r and r["level"] == "reliable"
     fx = {f["title"]: {r["group"]: r for r in f["rows"]} for f in F}
     idx = fx.get("Game in the session", {})
-    late = idx.get("4th game and later") or idx.get("3rd game")
-    if late and late["level"] in ("reliable", "trend") and (late["delta"] or 0) < 0:
-        R.append({"kind": "stop", "level": late["level"], "text": f"Your {late['group']}s are clearly worse ({_fr(late['perf'])} vs {_fr(overall['perf'])} on average over {late['n']} games): set yourself a limit of {2 if late['group'].startswith('3') else 3} games per session."})
+    late = idx.get("4th game and later") if sure(idx.get("4th game and later")) else idx.get("3rd game")
+    if sure(late) and (late["delta"] or 0) < 0:
+        which = "Your games from the 4th of a session on" if late["group"].startswith("4") else "Your 3rd games of a session"
+        R.append({"kind": "stop", "level": late["level"], "text": f"{which} are clearly worse (rating {_fr(late['perf'])} vs {_fr(overall['perf'])} on average, over {late['n']} games): set yourself a limit of {2 if late['group'].startswith('3') else 3} games per session."})
     after = fx.get("After the previous result", {}).get("after 2+ losses")
-    if after and after["n"] >= 2 and (after["delta"] or 0) < 0:
+    if sure(after) and (after["delta"] or 0) < 0:
         R.append({"kind": "tilt", "level": after["level"], "text": f"After 2 losses in a row: {after['winrate']}% wins and a rating of {_fr(after['perf'])} ({after['n']} games). Rule: a break of at least 30 min, or end the session."})
     hours = fx.get("Time of day", {})
-    good = [r for r in hours.values() if r["level"] in ("reliable", "trend") and (r["delta"] or 0) > 0]
-    bad = [r for r in hours.values() if r["level"] in ("reliable", "trend") and (r["delta"] or 0) < 0]
+    good = [r for r in hours.values() if sure(r) and (r["delta"] or 0) > 0]
+    bad = [r for r in hours.values() if sure(r) and (r["delta"] or 0) < 0]
     for r in good[:1]:
         R.append({"kind": "hour", "level": r["level"], "text": f"You play best in the {r['group']}: rating {_fr(r['perf'])} over {r['n']} games. Schedule your ranked sessions in that slot."})
     for r in bad[:1]:
         R.append({"kind": "hour", "level": r["level"], "text": f"In the {r['group']}, your rating drops to {_fr(r['perf'])} ({r['n']} games): keep that slot for Deathmatch or lineup practice."})
     grp = fx.get("Group", {})
     solo, duo = grp.get("solo"), grp.get("duo")
-    if solo and duo and solo["n"] >= 2 and duo["n"] >= 2 and solo["perf"] is not None and duo["perf"] is not None:
+    if solo and duo and solo["perf"] is not None and duo["perf"] is not None and (sure(solo) or sure(duo)):
         better = "as a duo" if duo["perf"] > solo["perf"] else "solo"
         R.append({"kind": "party", "level": _level(duo.get("z"), duo["n"]) if better == "as a duo" else _level(solo.get("z"), solo["n"]),
                   "text": f"You perform better {better}: rating {_fr(max(duo['perf'], solo['perf']))} vs {_fr(min(duo['perf'], solo['perf']))} ({duo['n']} games as a duo, {solo['n']} solo)."})

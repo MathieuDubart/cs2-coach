@@ -287,6 +287,21 @@ def analyze_player(steamid, reg):
     return pdir
 
 
+def rebuild_advice(steamid):
+    """The advice again from the analyses already done (after a change in how rules are picked): no demo is
+    read again. What doesn't come from the demos (Steam, csstats.gg, Leetify) is kept."""
+    import advice
+    pdir = config.player_dir(steamid)
+    p = os.path.join(pdir, "advice.json")
+    if not os.path.exists(os.path.join(pdir, "cross.json")) or not os.path.exists(p):
+        return False   # light profile (no demo): nothing to recompute
+    old = json.load(open(p, encoding="utf-8"))
+    new = advice.build(pdir)
+    new.update({k: v for k, v in old.items() if k not in new and k != "plan"})
+    config.write_json(p, new, indent=1)
+    return True
+
+
 def _rm(path):
     try:
         os.remove(path)
@@ -433,7 +448,7 @@ def minimal_profile(sid, ex):
         cur, prev = prem[0], prem[1]
         delta = cur["current"] - prev["current"]
         rules.append({"id": "premier", "score": 15, "short": "Premier: " + ("improving" if delta > 0 else "dropping"),
-                      "title": f"Premier {cur['season']}: {cur['current']:,} (best {cur['best']:,}), vs {prev['current']:,} in {prev['season']}".replace(",", " "),
+                      "title": f"Premier {cur['season']}: {cur['current']:,} (best {cur['best']:,}), vs {prev['current']:,} in {prev['season']}",
                       "why": [f"{cur['wins']} wins this season."], "do": []})
     rules.append({"id": "unlock", "score": 1, "short": "Unlock the full analysis",
                   "title": "No demo and no Leetify profile: analysis limited to public rankings",

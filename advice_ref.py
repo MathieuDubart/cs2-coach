@@ -68,8 +68,23 @@ def fmt(v, unit):
     return s + ("%" if unit == "%" else unit)
 
 
+def _lever(b):
+    """A rule is a problem when the player is clearly below the base, or when higher-ranked players do clearly
+    better (a lever to rank up). At the base's level and level with the ranks above: not a problem, whatever the
+    absolute number says (everyone at this level dies with grenades)."""
+    p = b["percentile"]
+    if p is None or p < 45:
+        return True
+    hi, you = b.get("higher"), b["you"]
+    if hi is None or you is None:
+        return False
+    gap = (hi - you) if b["higher_better"] else (you - hi)
+    return gap >= 0.10 * max(abs(hi), 1e-9)
+
+
 def enrich(rules, bench):
-    """Attach benchmarks / drills / sources; add population-only rules; re-score by percentile."""
+    """Attach benchmarks / drills / sources; add population-only rules; re-score by percentile; drop the rules
+    where the player is not behind (see _lever)."""
     have = {r["id"] for r in rules}
     M = (bench or {}).get("metrics", {})
     for rid, (title, short, why) in EXTRA.items():
@@ -90,6 +105,9 @@ def enrich(rules, bench):
                        "good": b["good"], "same": b["same_rank_median"], "higher": b["higher_rank_median"], "unit": b["unit"],
                        "higher_better": b["higher_better"], "n": b["n"]})
         r["bench"] = bl
+        if bl and not _lever(bl[0]):
+            r["drop"] = True
+            continue
         if bl and bl[0]["percentile"] is not None:
             p = bl[0]["percentile"]
             r["score"] = round(r["score"] * 0.6 + (60 - p) * 0.5, 1)
@@ -97,7 +115,7 @@ def enrich(rules, bench):
             target = b0["higher"] if b0["higher"] is not None else b0["good"]
             r["target"] = f"Target: {fmt(target, b0['unit'])} ({'level of higher-ranked players' if b0['higher'] is not None else 'top quarter of the base'})"
             r["standing"] = f"You {fmt(b0['you'], b0['unit'])} · median {fmt(b0['median'], b0['unit'])} · better than {p:.0f}% of players"
-    return sorted(rules, key=lambda r: -r["score"])
+    return sorted([r for r in rules if not r.pop("drop", False)], key=lambda r: -r["score"])
 
 
 def strengths_from_bench(bench, limit=4):

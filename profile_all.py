@@ -3,6 +3,7 @@
 Usage: python profile_all.py [min_demos=3] [--workers N] [--force]
        python profile_all.py --plans      # rebuild only the coaching plans of every existing profile
        python profile_all.py --existing   # full analysis again for every existing profile (after the base grew)
+       python profile_all.py --advice     # advice and plans again from the analyses already done (no demo read)
 """
 import os
 import sys
@@ -37,7 +38,10 @@ def work(sid):
     buf = io.StringIO()
     t = time.time()
     with contextlib.redirect_stdout(buf), contextlib.redirect_stderr(buf):
-        ok = cs2coach.analyze_player(int(sid), cs2coach.registry()) if not PLANS_ONLY else True
+        if ADVICE:
+            ok = cs2coach.rebuild_advice(int(sid))
+        else:
+            ok = cs2coach.analyze_player(int(sid), cs2coach.registry()) if not PLANS_ONLY else True
         if ok or os.path.exists(os.path.join(config.player_dir(sid), "advice.json")):   # profiles without demos too
             cs2coach.attach_plan(int(sid))
     return sid, bool(ok), round(time.time() - t)
@@ -45,10 +49,11 @@ def work(sid):
 
 PLANS_ONLY = "--plans" in sys.argv  # only (re)build the coaching plan of existing profiles
 EXISTING = "--existing" in sys.argv  # full analysis of every existing profile
+ADVICE = "--advice" in sys.argv  # advice and plan again, from the analyses already done
 
 
 def main(min_demos=3, workers=None, force=False):
-    if PLANS_ONLY or EXISTING:
+    if PLANS_ONLY or EXISTING or ADVICE:
         todo = [(sid, (config.settings().get("players", {}).get(sid) or {}).get("name") or sid, 0) for sid in os.listdir(config.PLAYERS)
                 if os.path.exists(os.path.join(config.player_dir(sid), "advice.json"))]
         force = True

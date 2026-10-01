@@ -80,8 +80,16 @@ def level(adv, sid=None):
             "src": K.src(*K.LEVEL_SRC)}
 
 
+# what a mid-round habit costs in rounds: a player lost on a rotation or an advantage thrown away costs the round,
+# an audible step rarely does (used to order the weak points, most costly first)
+MID_WEIGHT = {"rot_died": 3, "adv_conv": 3, "adv_throw": 3, "isolated": 2, "rt_solo": 2, "t_late": 2, "pp_surv": 2,
+              "anchor_hold": 2, "rot_react": 1, "anchor_kpr": 1, "pp_kpr": 1, "steps_alone": 1, "steps_clutch": 1}
+MID_MIN_GAP = {"%": 5.0, "": 1.0}   # smaller gaps with the base median say nothing (percent points, or per 24 rounds)
+
+
 def mid_findings(mb):
-    """Weak and strong mid-round points, most important first."""
+    """Weak and strong mid-round points, most costly first. Not a weak point: what pros do just as much, or a gap
+    with the base too small to matter."""
     if not mb:
         return [], []
     bad, good = [], []
@@ -93,13 +101,17 @@ def mid_findings(mb):
         item = {"id": k, "label": m["label"], "you": m["you"], "median": m["median"], "pro": m.get("pro"), "percentile": m["percentile"],
                 "unit": u, "text": f"{m['label'][0].upper() + m['label'][1:]}: you {fmt(m['you'])}, base median {fmt(m['median'])}"
                                    + (f", pros {fmt(m['pro'])}" if m.get("pro") is not None else "") + f" (out of {m['n_you']:.0f})."}
-        if m["percentile"] <= 30:
+        gap = abs(m["you"] - m["median"]) if m.get("median") is not None else None
+        hb, pro = m.get("higher_better"), m.get("pro")
+        pros_same = pro is not None and hb is not None and ((pro <= m["you"]) if hb else (pro >= m["you"]))
+        if m["percentile"] <= 30 and not pros_same and (gap is None or gap >= MID_MIN_GAP.get(u.strip(), 0)):
             item["fix"] = MID_FIX.get(k)
+            item["weight"] = MID_WEIGHT.get(k, 1)
             item["tags"] = MID_TAGS.get(k, [])
             bad.append(item)
         elif m["percentile"] >= 75:
             good.append(item)
-    bad.sort(key=lambda x: x["percentile"])
+    bad.sort(key=lambda x: (-x["weight"], x["percentile"]))
     good.sort(key=lambda x: -x["percentile"])
     M = mb.get("metrics", {})
     rr, rd = M.get("rot_react"), M.get("rot_died")
@@ -181,9 +193,13 @@ def training(adv, deep, mb):
         return (B.get(m) or {}).get("percentile")
     react = ((deep or {}).get("reaction") or {}).get("better_than_pct")
     pre = ((deep or {}).get("preaim") or {}).get("better_than_pct")
-    if react is not None and react < 50:
+    # a drill for a real weak point only: clearly below the others (not just under the median, half of all players are),
+    # and for the crosshair the measure of the whole app (offset before the duel, every duel of every match) decides;
+    # the pre-aim of the deep analysis only stands in when it is missing
+    if react is not None and react < 35:
         blocks.append(("reaction", f"Your reaction time is slower than {100 - react}% of the players in your matches."))
-    if (pct("xhair") is not None and pct("xhair") < 50) or (pre is not None and pre < 50) or "xhair" in rid:
+    xh = pct("xhair") if pct("xhair") is not None else pre
+    if (xh is not None and xh < 40) or "xhair" in rid:
         blocks.append(("xhair", "Your crosshair is not at head height yet when the enemy appears."))
     if "pistol" in rid or (pct("pistol_moving") is not None and pct("pistol_moving") < 40):
         blocks.append(("pistol", "Too many pistol shots while moving."))
