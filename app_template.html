@@ -513,6 +513,9 @@ body.igfull main{max-width:none;padding:0}
 .vbuy-h{display:flex;align-items:baseline;gap:10px}.vbuy-h b{font:700 26px var(--f-display)}.vbuy-h span{font:600 16px var(--f-mono);color:var(--muted)}
 .vtags{display:flex;flex-wrap:wrap;gap:6px}.vtag{font:700 15px var(--f-body);padding:4px 10px;border-radius:var(--radius);background:color-mix(in srgb,var(--ink) 10%,var(--panel))}.vtag.got{color:var(--good)}
 .vbuy .good{color:var(--good)}.vbuy .bad{color:var(--bad)}
+.vdest{display:flex;flex-wrap:wrap;align-items:baseline;gap:10px;margin:2px 0}
+.vdest em{font:700 20px var(--f-display);font-style:normal}.vdest em.sec{font-size:15px;opacity:.6}
+.vfights{display:flex;flex-wrap:wrap;align-items:baseline;gap:12px;font:700 18px var(--f-display)}.vfights i{font-style:normal}.vfights b{font-size:15px;color:var(--muted)}
 </style>
 
 <div class="bar"><div class="bar-in">
@@ -1488,7 +1491,9 @@ const WIN_SHORT={early:["start of the round","1:55-1:35"],setup:["info phase","1
 // CS2 doesn't send its clock to players: 1:55 (competitive, Premier); a bomb planted later than that this match means
 // longer rounds (bot matches: 2:15), and the app adapts
 const RLEN=()=>{const g=typeof gsiLast!=="undefined"?gsiLast:null;if(g&&g.round_len)return g.round_len;
-  const R=((g&&g.hist)||{}).rounds||{},late=Math.max(0,...Object.values(R).map(r=>r&&r.plant||0));return late>113?(late>133?155:135):115};
+  // a bomb down after 1:55, or a round that ran past 1:55 with no bomb: this match has longer rounds (bots: 2:15, 2:30)
+  const R=((g&&g.hist)||{}).rounds||{},seen=Math.max(0,...Object.values(R).map(r=>Math.max(r&&r.plant||0,r&&r.plant==null&&r.end||0)));
+  return seen<=117?115:seen<=137?135:seen<=152?150:Math.ceil(seen/5)*5};
 const clock=t=>{const s=Math.max(0,RLEN()-t);return `${Math.floor(s/60)}:${String(Math.floor(s%60)).padStart(2,"0")}`};
 function evFor(g){const key=`${g.map}|${g.round}`;if(igEv.key!==key){const H=g.hist||{},mk=(H.marks||{})[g.round]||{},s=(H.sites||{})[g.round];   // what you marked survives a reload
   igEv={key,contact:mk.contact||null,alone:mk.alone??null,site:g.round_phase==="live"&&(s==="A"||s==="B")?s:null}}return igEv}
@@ -1691,7 +1696,7 @@ function nadeEff(x,t){
   if(t==="he")return `${x.dmg} damage on average, hits ${x.hit}% of the time`;
   if(t==="molotov")return `blocks ${esc(x.to)} (thrown in ${Math.round(x.per100)} rounds out of 100)${x.dmg>=5?`, ${x.dmg} damage on average`:""}`;
   return `common smoke (${Math.round(x.per100)} rounds out of 100)${x.win!=null?`, rounds won ${x.win}% when it's used (${x.base_win}% on average)`:""}`}
-function nadeLine(N,side,t,x,now,post){return `<span class="nd-t" style="color:${NADE_C[t]}">${nadeName(t,side)}</span> ${esc(x.from)} → <b>${esc(x.to)}</b>, ${post?esc(nadeWin(N,side,"post")):`around ${x.timer}${x.best&&x.best!==x.usual&&t!=="smoke"?` (best moment: ${esc(nadeWin(N,side,x.best))})`:""}`}${now?' <span class="pill" style="color:var(--flash)">now</span>':""}<br><span class="note">${nadeEff(x,t)} · ${esc(x.how)}${x.click?`, ${esc(x.click)} click`:""}</span>`}
+function nadeLine(N,side,t,x,now,post){return `<span class="nd-t" style="color:${NADE_C[t]}">${nadeName(t,side)}</span> ${esc(x.from)} → <b>${esc(x.to)}</b>, ${post?esc(nadeWin(N,side,"post")):`around ${x.t_med!=null?clock(x.t_med):x.timer}${x.best&&x.best!==x.usual&&t!=="smoke"?` (best moment: ${esc(nadeWin(N,side,x.best))})`:""}`}${now?' <span class="pill" style="color:var(--flash)">now</span>':""}<br><span class="note">${nadeEff(x,t)} · ${esc(x.how)}${x.click?`, ${esc(x.click)} click`:""}</span>`}
 function nadePlan(E,cash,held,maxN){const H=Object.assign({},held||{}),plan=[];let n=Object.entries(H).filter(([t])=>t!=="decoy").reduce((a,[,v])=>a+v,0),left=cash;
   const want=E.order.map(o=>o.type),fl=E.order.find(o=>o.type==="flash");if(fl&&fl.strong)want.push("flash");   // a 2nd flash when they blind from your zones
   for(const t of want){if(n>=maxN)break;const o=E.order.find(x=>x.type===t),cap=t==="flash"?2:1;if(!o||(H[t]||0)>=cap||o.price>left)continue;plan.push(o);left-=o.price;H[t]=(H[t]||0)+1;n++}
@@ -1751,7 +1756,7 @@ function nadeTable(p,map,side){const N=(p.advice.plan||{}).nades,E=N&&((N.maps||
     Buying order when money is short: ${E.order.map(o=>`${nadeName(o.type,side)} ($${o.price})`).join(" › ")}.${o0&&o0.alone&&E.none?` Bought alone, the ${nadeName(o0.type,side)} wins ${o0.alone.win}% of rounds, vs ${E.none.win}% with no grenade (base).`:""}</p>
    <div class="tbl"><table><thead><tr><th>Grenade</th><th>From → to</th><th>When</th><th>Effect in the base</th><th>How</th><th class="n">Your throws</th></tr></thead><tbody>
    ${types.map(t=>(E.types[t].picks||[]).map(x=>`<tr><td><span class="nd-t" style="color:${NADE_C[t]}">${nadeName(t,side)}</span>${E.types[t].elsewhere?'<br><span class="note">elsewhere on the map</span>':""}</td><td>${esc(x.from)} → <b>${esc(x.to)}</b></td>
-     <td>around ${x.timer}${x.best&&x.best!==x.usual&&t!=="smoke"?`<br><span class="note">best: ${esc(nadeWin(N,side,x.best))}</span>`:""}</td><td class="wrap">${nadeEff(x,t)}</td>
+     <td>around ${x.t_med!=null?clock(x.t_med):x.timer}${x.best&&x.best!==x.usual&&t!=="smoke"?`<br><span class="note">best: ${esc(nadeWin(N,side,x.best))}</span>`:""}</td><td class="wrap">${nadeEff(x,t)}</td>
      <td class="wrap">${esc(x.how)}${x.click?`, ${esc(x.click)} click`:""}<div class="cmd"><code>${esc(x.setpos)}</code><button type="button">Copy</button></div></td><td class="n">${x.mine||"—"}</td></tr>`).join("")).join("")}</tbody></table></div>
    ${N.unused_per_death!=null?`<p class="note">In your last matches, ${N.unused_per_death} grenade still in hand per death (${(N.unused_last||[]).map(u=>`${MAPN(u.map)}: ${u.unused}`).join(", ")}). Paste the position in the console of a practice server (sv_cheats 1).</p>`:""}`}
 
@@ -2169,9 +2174,9 @@ function vNadePicks(p,g){const N=(p.advice.plan||{}).nades,E=N&&((N.maps||{})[g.
   const pick=t=>{if(w==="post")return (E.types[t].post||[])[0]||null;if(el==null||!w)return (E.types[t].picks||[])[0]||null;
     const fit=x=>x.best===w||x.usual===w||(x.t_med!=null&&x.t_med>=el-8&&x.t_med<=el+25);
     return all(t).filter(fit).sort((a,b)=>Math.abs((a.t_med??el)-el)-Math.abs((b.t_med??el)-el))[0]||null};
-  return Object.entries(g.nades||{}).filter(([t,v])=>v>0&&E.types[t]).map(([t,v])=>({type:t,n:v,x:pick(t)}))}
+  return Object.entries(g.nades||{}).filter(([t,v])=>v>0&&E.types[t]).map(([t,v])=>({type:t,n:v,x:pick(t),el:g.round_phase==="live"?el:null}))}
 function vNades(list){if(!list.length)return "";
-  return `<div class="vnades">${list.map(o=>`<span class="vnade${o.x?(o.now?" now":""):" keep"}" style="--c:${NADE_C[o.type]||"#ccc"}"><i>${vLetter[o.type]||"?"}</i>${o.x?`${vShort(o.x.to||o.x.land)}${o.x.timer?`<small>${esc(o.x.timer)}</small>`:""}`:"<small>keep</small>"}</span>`).join("")}</div>`}
+  return `<div class="vnades">${list.map(o=>`<span class="vnade${o.x?(o.now?" now":""):" keep"}" style="--c:${NADE_C[o.type]||"#ccc"}"><i>${vLetter[o.type]||"?"}</i>${o.x?`${vShort(o.x.to||o.x.land)}${o.x.t_med!=null&&o.el!=null&&o.x.t_med>o.el+3?`<small>${clock(o.x.t_med)}</small>`:o.x.t_med!=null&&o.el==null?`<small>${clock(o.x.t_med)}</small>`:"<small>now</small>"}`:"<small>keep</small>"}</span>`).join("")}</div>`}
 // a rule as icons and two numbers: what your side wins when you do it / when you don't
 const vRule=(icon,label,bad,good)=>`<div class="vrule"><i>${icon}</i><span>${label}</span><b class="bad">${bad}%</b><em>→</em><b class="good">${good}%</b></div>`;
 // you in this situation (your matches) against the base: rounds won, died before 0:20
@@ -2211,24 +2216,39 @@ function vTchips(p,g){const TS=(p.advice.plan||{}).tside,M=TS&&TS.maps&&TS.maps[
     Object.entries(P_.win).filter(([k])=>k!=="none").map(([k,w])=>{const c=C[k],n=c?c[0]:(P_.n||{})[k]||0,wr=c?c[1]:w;return {k,n,wr,s:(wr*n+50*12)/(n+12)}})
       .sort((a,b)=>b.s-a.s).slice(0,2).forEach(r=>out.push(`<span class="vchip ${vTone(r.wr)}">${esc(((P_.label||{})[r.k]||r.k).replace(/ through /," ").split(" / ")[0])} <b>${r.wr}%</b></span>`))}
   return out.length?`<div class="vchips">${out.join("")}</div>`:""}
+// a rush: how likely, and where it goes (the most likely in big, the second smaller and fainter)
+function vRush(TS,g,r){const PLs=tsidePlays(TS,g.map,g,evFor(g),r);if(!PLs)return "";
+  const rn=r.live?Math.round(100*PLs.rush):r.rush,rs=(PLs.list||[]).filter(x=>/^rush/.test(x.p)).sort((a,b)=>b.v-a.v);
+  if(rn<15||!rs.length)return "";
+  const lab=x=>`${x.site} · ${vShort(String(x.label||"").replace(/^Rush [AB]( through )?/,""))}`;
+  return `<div class="vbig ${rn>=40?"bad":"warn"}"><b>RUSH ${rn}%</b><div class="vdest">${rs.slice(0,2).map((x,i)=>`<em class="${i?"sec":""}">${lab(x)} <b>${Math.round(100*x.v)}%</b></em>`).join("")}</div><span>until ${clock(32)}</span></div>`}
+// where the fights are at this moment of the round (deaths of both sides in the base, on the likely site when the
+// read leans one way): three zones, fainter as they get less likely
+function vFights(M,g,r){const D=((M&&M.evidence)||{}).deaths;if(!D)return "";const w=WIN_OF(g.elapsed||0);
+  const lean=r&&Math.abs(r.A-r.B)>=12?(r.A>r.B?"A":"B"):"all",acc={};let tot=0;
+  for(const side of ["CT","T"]){const src=((D[side]||{})[lean]||{})[w]||((D[side]||{}).all||{})[w];if(!src)continue;
+    src.zones.forEach(z=>{acc[z.zone]=(acc[z.zone]||0)+z.pct*src.n});tot+=src.n}
+  const top=Object.entries(acc).sort((a,b)=>b[1]-a[1]).slice(0,3);if(!top.length||!tot)return "";
+  return `<div class="vfights"><i>⚔</i>${top.map(([z,v],i)=>`<span style="opacity:${[1,.7,.45][i]}">${vShort(z)} <b>${Math.round(v/tot)}%</b></span>`).join("")}</div>`}
 function nowVisual(p,g,following){
   if(!following)return nowPanel(p,g,following,{noBuy:true});
   if(g.practice)return `<div class="vz"><div class="vsit"><span>PRACTICE</span></div></div>`;
   const ph=g.round_phase,ct=g.side==="CT",out=[];
   const TS=(p.advice.plan||{}).tside,r=ct?tsidePredict(TS,g.map,g,evFor(g)):null;
   if(ph==="freezetime"){out.push(vSituation(p,g));
-    if(ct&&r)out.push(oddsBar(r));
+    if(ct&&r)out.push(oddsBar(r),vRush(TS,g,r));
     if(!ct){out.push(vTimeline(p,g),vCTdots(p,g),vTchips(p,g))}}
   else if(ph==="live"){const el=g.elapsed||0,planted=g.bomb==="planted";
     if(planted){const left=g.phase_left!=null?g.phase_left:Math.max(0,40-(g.since_plant||0));
       out.push(`<div class="vbig ${ct?"bad":"good"}"><b>💣 ${Math.ceil(left)}s</b><span>${ct?"retake together":"hold the bomb"}</span></div>`)}
     else if(ct){if(r){out.push(oddsBar(r));
-        const PLs=tsidePlays(TS,g.map,g,evFor(g),r),rn=PLs&&r.live?Math.round(100*PLs.rush):r.rush;
-        if(el<32&&rn>=15)out.push(`<div class="vbig ${rn>=40?"bad":"warn"}"><b>RUSH ${rn}%</b><span>until ${clock(32)}</span></div>`);
+        const PLs=tsidePlays(TS,g.map,g,evFor(g),r),M=TS&&TS.maps&&TS.maps[g.map];
+        const rush=el<32?vRush(TS,g,r):"";out.push(rush||vFights(M,g,r));
         const ev=(r.evid||[]).find(x=>/spot/.test(x));if(ev)out.push(`<span class="vchip ${/fight/.test(ev)?"bad":""}">● ${/fight/.test(ev)?"fight at your spot":"quiet at your spot"}</span>`);
         const NN=PLs?nadesNow(p.advice.plan||{},g.map,g,PLs,true):[];
-        if(NN.length){out.push(vNades(NN.slice(0,3).map(x=>({type:x.type,x,now:true}))))}}}
-    else{out.push(vTimeline(p,g));
+        const shown=NN.slice(0,3),rest=Object.entries(g.nades||{}).filter(([t,v])=>v>0&&!shown.some(x=>x.type===t)).map(([t])=>({type:t,x:null}));
+        if(shown.length||rest.length)out.push(vNades([...shown.map(x=>({type:x.type,x,now:true,el})),...rest]))}}
+    else{out.push(vTimeline(p,g),vFights(TS&&TS.maps&&TS.maps[g.map],g,null));
       const left=g.phase_left!=null?g.phase_left:Math.max(0,RLEN()-el);
       if(left<=45)out.push(`<div class="vbig bad"><b>PLANT ${Math.floor(left/60)}:${String(Math.floor(left%60)).padStart(2,"0")}</b><span>${left>20?"commit now":"plant or save"}</span></div>`);
       else{out.push(vCTdots(p,g),vTchips(p,g))}}
