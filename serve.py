@@ -24,12 +24,14 @@ JOB = {"running": False, "log": [], "done": False, "error": None, "steamid": Non
 LOCK = threading.Lock()
 
 
-def run_job(query, task=None):
-    """One analysis at a time (search, or Steam history sync when task is given). The caller holds LOCK."""
-    JOB.update(running=True, log=[], done=False, error=None, steamid=None, query=query, partial=None, players=None)
-    cs2coach.LOG_HOOK = lambda m: JOB["log"].append(m)
-    cs2coach.PARTIAL_HOOK = publish_partial
-    try:
+def run_job(query, task=None, extra=None):
+    """One analysis at a time (search, or Steam history sync when task is given). The caller holds LOCK.
+    extra: what the page shows at the end (the view and the match of a re-analysis)."""
+    try:   # everything inside: the lock is released whatever happens
+        JOB.update({"running": True, "log": [], "done": False, "error": None, "steamid": None, "query": query, "partial": None,
+                    "players": None, "view": None, "match": None, **(extra or {})})
+        cs2coach.LOG_HOOK = lambda m: JOB["log"].append(m)
+        cs2coach.PARTIAL_HOOK = publish_partial
         res = task() if task else cs2coach.run_for(query)
         ids = [p["steamid"] for p in res["match_players"]] if isinstance(res, dict) else [str(res)]
         entries = {i: build_app.write_player(i) for i in ids}
@@ -219,6 +221,15 @@ class Handler(BaseHTTPRequestHandler):
             except (TypeError, ValueError):
                 return self.send(400, {"error": "invalid round"})
             return self.send(200 if ok else 409, gsi.state())
+        if u.path == "/api/reanalyze":  # one match again, from its demo (button of the Matches view)
+            sid, mid = str(body.get("sid") or ""), str(body.get("mid") or "")
+            if not sid.isdigit() or not mid.isdigit():
+                return self.send(400, {"error": "invalid match"})
+            if not LOCK.acquire(blocking=False):
+                return self.send(409, {"error": "An analysis is already running", "query": JOB["query"]})
+            threading.Thread(target=run_job, args=("re-analysis of the match", lambda: cs2coach.reanalyze_match(sid, mid)),
+                             kwargs={"extra": {"view": "matches", "match": mid}}, daemon=True).start()
+            return self.send(200, {"started": True})
         if u.path in ("/api/gsi/install", "/api/gsi/uninstall"):
             import gsi
             try:

@@ -5,7 +5,7 @@
  "levels": [
   {
    "key": "main",
-   "name": "Carte",
+   "name": "Map",
    "image": "maps/cs_office.png"
   }
  ]

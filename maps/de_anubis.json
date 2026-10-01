@@ -5,7 +5,7 @@
  "levels": [
   {
    "key": "main",
-   "name": "Carte",
+   "name": "Map",
    "image": "maps/de_anubis.png"
   }
  ]

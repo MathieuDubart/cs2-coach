@@ -18,6 +18,9 @@ def _download(name):
     return f"maps/{name}.png"
 
 
+LEVEL_EN = {"Étage principal": "Main level", "Étage inférieur": "Lower level", "Carte": "Map"}
+
+
 def get(map_name):
     path = os.path.join(MAPS, f"{map_name}.json")
     if os.path.exists(path):
@@ -47,6 +50,7 @@ def get(map_name):
         with open(path, "w", encoding="utf-8") as f:
             json.dump(cfg, f, ensure_ascii=False, indent=1)
     for lv in cfg["levels"]:
+        lv["name"] = LEVEL_EN.get(lv.get("name"), lv.get("name"))   # configs saved by the French version
         if lv.get("image") and not os.path.isabs(lv["image"]):
             lv["image_path"] = os.path.join(HERE, lv["image"])
             if not os.path.exists(lv["image_path"]):  # radars are not versioned: download on first use

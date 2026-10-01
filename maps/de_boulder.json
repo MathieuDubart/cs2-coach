@@ -5,13 +5,13 @@
  "levels": [
   {
    "key": "upper",
-   "name": "Étage principal",
+   "name": "Main level",
    "image": "maps/de_boulder.png",
    "z_min": 62.0
   },
   {
    "key": "lower",
-   "name": "Étage inférieur",
+   "name": "Lower level",
    "image": "maps/de_boulder_lower.png",
    "z_max": 62.0
   }

@@ -692,7 +692,8 @@ function renderMatches(){
   v.innerHTML=`<div class="head"><div style="display:grid;gap:4px"><span class="eyebrow">${ms.length} matches · pick one below</span><h2>Matches</h2></div></div>
   <div class="tbl"><table>${TREND_HEAD}<tbody>${trendRows(ms,S.match)}</tbody></table></div>
   <div class="head" id="mhead"><div style="display:grid;gap:4px"><span class="eyebrow">${fmtDate(m.time)} · ${m.rounds} rounds · ${RES[m.result]}${m.hostage?" · hostage map: CTs attack":""}</span>
-    <h2>${MAPN(m.map)} · ${esc(m.mode)}</h2></div><div class="record"><span>${m.score.me}-${m.score.them}</span></div></div>
+    <h2>${MAPN(m.map)} · ${esc(m.mode)}</h2></div><div class="record"><span>${m.score.me}-${m.score.them}</span></div>
+    ${D.local?`<button type="button" class="close" id="reanalyze" title="Extract this match again from its demo, then update your profile and plan (a minute or two)">Re-analyze this match</button>`:""}</div>
   <div class="stats"><div class="stat"><b class="num">${s.kills}/${s.deaths}/${s.assists}</b><span>K / D / A</span></div><div class="stat"><b class="num">${f1(s.adr)}</b><span>ADR</span></div>
     <div class="stat"><b class="num">${f1(s.kast)}%</b><span>KAST</span></div><div class="stat"><b class="num">${s.traded_pct==null?"—":f1(s.traded_pct)+"%"}</b><span>deaths traded</span></div>
     <div class="stat"><b class="num">${s.nades_unused}</b><span>grenades wasted</span></div><div class="stat"><b class="num">${s.clutches_won}/${s.clutches}</b><span>clutches won</span></div></div>
@@ -705,6 +706,10 @@ function renderMatches(){
       <svg class="radar" viewBox="${(D.viewboxes[m.map]||[0,0,1024,1024]).join(" ")}" role="img" aria-label="Radar"><image x="0" y="0" width="1024" height="1024"></image><g></g></svg><div class="caption"></div></div>
     <div style="display:grid;gap:10px;min-width:0"><h3>Zones of the match</h3><div class="tbl"><table><thead><tr><th>Zone</th><th class="n">Duels</th><th class="n">K/D T</th><th class="n">K/D CT</th><th class="n">You</th></tr></thead><tbody id="mzt"></tbody></table></div></div></div>`;
   $$("tr.click",v).forEach(r=>{r.onclick=()=>{S.match=+r.dataset.i;renderMatches();$("#mhead").scrollIntoView({behavior:"smooth"})};r.onkeydown=e=>{if(e.key==="Enter")r.click()}});
+  const rb=$("#reanalyze",v);if(rb)rb.onclick=async()=>{rb.disabled=true;rb.textContent="Re-analysis running…";
+    try{const r=await fetch("/api/reanalyze",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({sid:p.steamid,mid:m.id})});const j=await r.json();
+      if(!r.ok){jobPanel(`<b>${esc(j.error||"Error")}</b>${j.query?` (${esc(j.query)})`:""}`,"err");rb.disabled=false;rb.textContent="Re-analyze this match";if(r.status===409)poll();return}
+      poll()}catch(e){jobPanel(`<b>The local server doesn't answer.</b> Restart "Coach CS2.bat".`,"err");rb.disabled=false;rb.textContent="Re-analyze this match"}};
   const box=$(".radar-box",v),ov=$("g",box);
   function draw(){
     $("image",box).setAttribute("href",D.radars[`${m.map}:${st.level}`]||"");ov.replaceChildren();const L=st.level;
@@ -1951,12 +1956,16 @@ function poll(){clearTimeout(polling);polling=setTimeout(async()=>{
   const logs=(j.log||[]).slice(-60).map(esc).join("\n");
   if(j.running){
     if(j.partial&&partialShown!==j.partial){partialShown=j.partial;try{D.index=await (await fetch(`index.json?t=${Date.now()}`)).json();playerOptions();delete D.players[j.partial];await setPlayer(j.partial,true);go(j.partial===D.own?"ingame":"analysis")}catch(e){}}
-    jobPanel(`<div class="row"><b><span class="spin" aria-hidden="true"></span>${partialShown?"First preview shown. Full demo analysis running…":`Analyzing ${esc(j.query)}…`}</b><span class="note">The profile completes itself at the end (from a few seconds to a few minutes).</span></div><pre>${logs||"Starting…"}</pre>`);poll();return}
+    jobPanel(`<div class="row"><b><span class="spin" aria-hidden="true"></span>${partialShown?"First preview shown. Full demo analysis running…":j.view==="matches"?"Analyzing the match again…":`Analyzing ${esc(j.query)}…`}</b><span class="note">The profile completes itself at the end (from a few seconds to a few minutes).</span></div><pre>${logs||"Starting…"}</pre>`);poll();return}
   $("#qbtn").disabled=false;
   if(j.error){jobPanel(`<b>${esc(j.error)}</b><pre>${logs}</pre>`,"err");return}
   if(j.players&&j.players.length){D.index=await (await fetch(`index.json?t=${Date.now()}`)).json();
     jobPanel(`<b>${j.players.length} players analyzed in this match.</b><div class="btns">${j.players.map(p=>`<button type="button" data-mp="${p.steamid}">${esc(p.name)}</button>`).join("")}</div><pre>${logs}</pre>`,"ok");
     $$("[data-mp]",$("#job")).forEach(b=>b.onclick=()=>{delete D.players[b.dataset.mp];setPlayer(b.dataset.mp,true).then(()=>go("analysis"))});return}
+  if(j.steamid&&j.view==="matches"){try{D.index=await (await fetch(`index.json?t=${Date.now()}`)).json();playerOptions();delete D.players[j.steamid];   // a re-analysis: back on that match
+      await setPlayer(j.steamid,true);const i=P().matches.findIndex(x=>x.id===j.match);S.match=i<0?0:i;go("matches");
+      jobPanel(`<b>The match is analyzed again.</b> Profile, plan and in-game sheet updated.<pre>${logs}</pre>`,"ok")}
+    catch(e){jobPanel(`<b>The match could not be shown.</b><pre>${logs}</pre>`,"err")}return}
   if(j.steamid){try{D.index=await (await fetch(`index.json?t=${Date.now()}`)).json();playerOptions();delete D.players[j.steamid];
       await setPlayer(j.steamid,true);S.map=null;const p=P();
       jobPanel(`<b>${esc(p.name)} is analyzed.</b> ${p.light?"Light profile (Leetify stats, no demo available).":`${p.matches.length} demo(s) analyzed.`}<pre>${logs}</pre>`,"ok");go(j.steamid===D.own?"ingame":"analysis")}

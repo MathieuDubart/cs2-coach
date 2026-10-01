@@ -258,6 +258,59 @@ def analyze_player(steamid, reg):
     return pdir
 
 
+def _rm(path):
+    try:
+        os.remove(path)
+    except OSError:
+        pass
+
+
+def reanalyze_match(steamid, mid):
+    """One match again, from its demo: everything extracted from it (positions, duels, grenades, round context,
+    mid-round, buys, T side, reference population, style), then the player's analysis of the match, profile,
+    plan and page. For a match analyzed with an older version or interrupted (app closed during the analysis)."""
+    import shutil
+    sid, mid = int(steamid), str(int(mid))
+    dem = os.path.join(config.CACHE, f"{mid}.dem")
+    reg = registry()
+    if not os.path.exists(dem):
+        if not (reg.get(mid) or {}).get("url"):
+            raise ValueError("The demo of this match is no longer on this PC, and Valve no longer has it.")
+        log("The demo is no longer on this PC: downloading it again…")
+        ensure_demos(reg, only={mid})
+        if not os.path.exists(dem):
+            raise ValueError("Valve no longer has this demo (demos are kept about a month).")
+    log(f"[{mid}] clearing the previous analysis of this match")
+    shutil.rmtree(os.path.join(config.DEEP, mid), ignore_errors=True)
+    for sub in ("midround", "routes", "buys", "tside"):
+        _rm(os.path.join(config.OUT, "population", sub, f"{mid}.parquet"))
+    _rm(os.path.join(config.OUT, "population", f"{mid}.parquet"))
+    _rm(os.path.join(config.OUT, "style", f"{mid}.parquet"))
+    pdir = config.player_dir(sid)
+    shutil.rmtree(os.path.join(pdir, "matches", mid), ignore_errors=True)
+    ensure_deep()
+    if not os.path.exists(os.path.join(config.DEEP, mid, "meta.json")):
+        raise ValueError("The demo could not be read again: it may be damaged. Delete it from the cache folder and sync again.")
+    import population
+    import style
+    log(f"[{mid}] reference population and style")
+    population.run_all()
+    style.run_all(workers=2)
+    p = os.path.join(pdir, "advice.json")
+    old = json.load(open(p, encoding="utf-8")) if os.path.exists(p) else {}
+    log("Updating your profile with this match…")
+    if not analyze_player(sid, reg):
+        raise ValueError("You are not in this demo.")
+    new = json.load(open(p, encoding="utf-8"))
+    kept = {k: v for k, v in old.items() if k not in new and k != "plan"}   # Steam, csstats.gg...: not from the demos
+    if kept:
+        new.update(kept)
+        json.dump(new, open(p, "w", encoding="utf-8"), ensure_ascii=False, indent=1)
+    attach_plan(sid)
+    log(f"[{mid}] re-analysis done")
+    return sid
+
+
 def attach_plan(sid):
     """Coaching plan (routine, mid-round, weapons, context, experiments) from the saved analysis of a player."""
     import plan

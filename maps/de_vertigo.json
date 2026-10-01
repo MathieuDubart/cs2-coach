@@ -1,3 +1,19 @@
-{"pos_x": -3168, "pos_y": 1762, "scale": 4.0,
- "levels": [{"key": "upper", "name": "Étage principal", "image": "maps/de_vertigo.png", "z_min": 11700},
-            {"key": "lower", "name": "Étage inférieur", "image": "maps/de_vertigo_lower.png", "z_max": 11700}]}
+{
+ "pos_x": -3168,
+ "pos_y": 1762,
+ "scale": 4.0,
+ "levels": [
+  {
+   "key": "upper",
+   "name": "Main level",
+   "image": "maps/de_vertigo.png",
+   "z_min": 11700
+  },
+  {
+   "key": "lower",
+   "name": "Lower level",
+   "image": "maps/de_vertigo_lower.png",
+   "z_max": 11700
+  }
+ ]
+}

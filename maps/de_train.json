@@ -5,13 +5,13 @@
  "levels": [
   {
    "key": "upper",
-   "name": "Étage principal",
+   "name": "Main level",
    "image": "maps/de_train.png",
    "z_min": -50.0
   },
   {
    "key": "lower",
-   "name": "Étage inférieur",
+   "name": "Lower level",
    "image": "maps/de_train_lower.png",
    "z_max": -50.0
   }
