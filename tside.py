@@ -622,7 +622,7 @@ def econ_table(df):
 
 
 SUMMARY = os.path.join(config.OUT, "population", "tside_summary.json")
-VERSION = 7   # bump when the summary changes shape: the cache is rebuilt
+VERSION = 13   # bump when the summary changes shape: the cache is rebuilt
 
 
 def _stamp():
@@ -699,7 +699,15 @@ def _tendencies(maps, df):
             res["maps"][mp]["geo"] = LN.radar(LN.geo(), mp)
         except Exception as e:
             print(f"{mp}: plays unavailable ({e})")
+        try:   # what the T side can lean on: tempo, fakes, CT setups, rotations, smokes that pay
+            res["maps"][mp]["tplan"] = _tplan(mp, g, dirs.get(mp, []), res["maps"][mp])
+        except Exception as e:
+            print(f"{mp}: T plan unavailable ({e})")
     res["retake_all"] = retake_table(pool)
+    try:   # situations measured on all maps together (pistol as CT for now)
+        res["situations"] = _situations(df, res["maps"])
+    except Exception as e:
+        print(f"situations unavailable ({e})")
     return res
 
 # ---------- evidence during the round: what the CT side sees, and what it says about the site ----------
@@ -920,6 +928,202 @@ def _self_evidence(mp, g, dirs):
     for key, region in reg.items():
         names[humanize(key, mp)] = region
     return {"t": SELF_T, "regions": names, "lik": lik} if lik else None
+
+
+def _zone_regions(mp, TS):
+    """Zone key -> A / B / mid with the lanes and the levels (stacked sites on Nuke), as the team plan reads them."""
+    import team
+    from map_analysis import humanize
+    meta = (team.map_meta().get(mp) or {}).get("regions") or {}
+    zones = ((TS or {}).get("geo") or {}).get("zones") or {}
+    zm = [{"key": k, "name": humanize(k, mp), **({"px": zones[humanize(k, mp)]["px"], "level": zones[humanize(k, mp)].get("level")}
+                                                if humanize(k, mp) in zones else {})} for k in meta]
+    R = team.Regions(TS or {}, {"zones_meta": zm}, meta)
+    return {z["key"]: R.of(z["name"]) for z in zm}
+
+
+def _tplan(mp, g, dirs, TS):
+    """What the T side can lean on, from the base: the tempo that wins by kind of round, fakes (first contact on the
+    other site, then the hit), where the CTs stand 20 s in, how fast the CTs of the other site arrive after the hit,
+    and the smokes that pay off toward each site (rounds won when thrown vs the side's average)."""
+    import collections
+    from map_analysis import humanize
+    k2r = _zone_regions(mp, TS)
+    n2r = {humanize(k, mp): r for k, r in k2r.items()}
+    pct = lambda x: int(round(100 * float(x.mean()))) if len(x) else None
+    out = {"tempo": {}, "fake": {}, "setup": {}, "rotation": {}, "smokes": {}}
+    d = g[g.dyn.isin(["rush", "fast", "exec", "late"])]
+    for c, x in d.groupby("ctx"):
+        out["tempo"][c] = {k: [int(len(y)), pct(y.T_won.astype(bool))] for k, y in x.groupby("dyn") if len(y) >= 8}
+    h = g[g.site.isin(["A", "B"])].assign(fr=lambda x: x.first_zone.map(n2r))
+    h = h[h.fr.isin(["A", "B"])]
+    for kind, y in (("switch", h[h.fr != h.site]), ("direct", h[h.fr == h.site])):
+        out["fake"][kind] = [int(len(y)), pct(y.T_won.astype(bool))]
+    info = {(str(m), int(r)): (s_, ht, c) for m, r, s_, ht, c in zip(g.match, g["round"], g.site, g.hit_t, g.ctx)}
+    setups, rot = collections.defaultdict(collections.Counter), {"A": [], "B": []}
+    for dd in dirs:
+        mid = os.path.basename(dd)
+        f = os.path.join(dd, "samples.parquet")
+        if not os.path.exists(f):
+            continue
+        S = pd.read_parquet(f, columns=["steamid", "side", "round", "t", "zone", "health"])
+        S = S[(S.side == "CT") & (S.health > 0) & (S.t <= 90)]
+        S = S.assign(reg=S.zone.map(k2r).fillna("mid"))
+        for rnd, x in S.groupby("round"):
+            k = (mid, int(rnd))
+            if k not in info:
+                continue
+            site, hit_t, ctx = info[k]
+            at = x[(x.t >= 18) & (x.t <= 22)].groupby("steamid").reg.agg(lambda r: r.mode().iloc[0])
+            if len(at) >= 4:
+                c = collections.Counter(at)
+                setups[ctx][(c.get("A", 0), c.get("B", 0), c.get("mid", 0))] += 1
+                setups["all"][(c.get("A", 0), c.get("B", 0), c.get("mid", 0))] += 1
+            if site in ("A", "B") and hit_t == hit_t:
+                ah = x[(x.t >= hit_t - 1) & (x.t <= hit_t + 1)].groupby("steamid").reg.agg(lambda r: r.mode().iloc[0])
+                for sid, rg in ah.items():
+                    if rg != site:
+                        later = x[(x.steamid == sid) & (x.t > hit_t) & (x.reg == site)].t
+                        rot[site].append(float(later.min() - hit_t) if len(later) else np.nan)
+    for c, cnt in setups.items():
+        tot = sum(cnt.values())
+        if tot >= 20:
+            out["setup"][c] = {"n": tot, "top": [[a, b, m_, int(round(100 * k / tot))] for (a, b, m_), k in cnt.most_common(4)],
+                               "light": {L: int(round(100 * sum(k for (a, b, _), k in cnt.items() if (a if L == "A" else b) <= 1) / tot)) for L in ("A", "B")}}
+    for L, xs in rot.items():
+        r = pd.Series(xs, dtype=float)
+        if r.notna().sum() >= 15:
+            out["rotation"][L] = {"n": int(r.notna().sum()), "med": round(float(r.median()), 1), "q25": round(float(r.quantile(.25)), 1),
+                                  "arrive": int(round(100 * r.notna().mean()))}
+    try:   # smokes toward each site: rounds won when thrown vs the side's average (nades summary)
+        import nades
+        T = ((nades.summary().get("maps") or {}).get(mp) or {}).get("T") or {}
+        for x in (T.get("types") or {}).get("smoke", {}).get("groups", []):
+            L = k2r.get(x.get("to_key"))
+            # thrown from the site itself = after taking it: it follows the win more than it makes it, left out
+            if L in ("A", "B") and x.get("n", 0) >= 10 and x.get("win") is not None and x.get("base_win") is not None                     and not str(x.get("from_key", "")).startswith("Bombsite"):
+                out["smokes"].setdefault(L, []).append({k: x.get(k) for k in ("from", "to", "n", "win", "base_win", "timer", "t_med", "how", "setpos")})
+        for L in out["smokes"]:
+            out["smokes"][L] = sorted(out["smokes"][L], key=lambda x: -(x["win"] - x["base_win"]) * min(x["n"], 60) ** .5)[:4]
+    except Exception as e:
+        print(f"{mp}: smokes for the T plan unavailable ({e})")
+    return out
+
+
+SIT_OF = {("pistol", None): "pistol"}
+
+
+def _sit(mine, theirs):
+    """Economic situation from one player's side: their team's buy against the other team's."""
+    if mine == "pistol":
+        return "pistol"
+    return {("full", "eco"): "anti_eco", ("full", "full"): "full_full", ("force", "full"): "force_full", ("eco", "full"): "eco_full"}.get((mine, theirs))
+
+
+def situ_rows(df, mids=None, who=None):
+    """One row per player and round (or only one player's): side, situation, won, died before 20 s, kills."""
+    buys = {(str(m), int(r)): (t, c) for m, r, t, c in zip(df.match, df["round"], df.T_buy, df.CT_buy)}
+    rows = []
+    for mid in (mids if mids is not None else df.match.astype(str).unique()):
+        f = os.path.join(config.DEEP, str(mid), "loadout.parquet")
+        if not os.path.exists(f):
+            continue
+        L = pd.read_parquet(f, columns=["round", "steamid", "side", "died_t", "won", "kills"])
+        if who is not None:
+            L = L[L.steamid == int(who)]
+        for r in L.itertuples():
+            b = buys.get((str(mid), int(r.round)))
+            if not b:
+                continue
+            s_ = _sit(*((b[0], b[1]) if r.side == "T" else (b[1], b[0])))
+            if s_:
+                rows.append({"side": r.side, "sit": s_, "won": bool(r.won), "early": bool(r.died_t == r.died_t and r.died_t < 20), "kills": r.kills})
+    return pd.DataFrame(rows)
+
+
+def situ_table(d):
+    """{side: {situation: [rounds, % won, % died before 20 s, kills per round]}}"""
+    out = {}
+    if not len(d):
+        return out
+    for (side, s_), x in d.groupby(["side", "sit"]):
+        out.setdefault(side, {})[s_] = [int(len(x)), int(round(100 * x.won.mean())), int(round(100 * x.early.mean())), round(float(x.kills.mean()), 2)]
+    return out
+
+
+def situ_player(sid):
+    """The same table for one player, on their own matches (their recurrences by situation)."""
+    import cs2coach
+    df = load()
+    return situ_table(situ_rows(df, cs2coach.player_matches(sid), who=sid)) if len(df) else {}
+
+
+def _situations(df, maps_summary):
+    """Situations measured on every map together (a map alone has too few rounds). Pistol as CT: what wins when the
+    Ts rush (CT kevlars, grenades bought, CTs on the hit site 5 s before the hit) and when they don't."""
+    rows = []
+    p = df[df.ctx == "pistol"]
+    for (mid, mp), g in p.groupby(["match", "map"]):
+        d = os.path.join(config.DEEP, str(mid))
+        f = os.path.join(d, "loadout.parquet")
+        if not os.path.exists(f) or mp not in maps_summary:
+            continue
+        L = pd.read_parquet(f, columns=["round", "side", "armor", "nades"])
+        k2r = _zone_regions(mp, maps_summary[mp])
+        S = pd.read_parquet(os.path.join(d, "samples.parquet"), columns=["steamid", "side", "round", "t", "zone", "health"])
+        S = S[(S.side == "CT") & (S.health > 0)]
+        for r in g.itertuples():
+            ct = L[(L["round"] == r.round) & (L.side == "CT")]
+            if len(ct) < 4:
+                continue
+            on = None
+            if r.site in ("A", "B") and r.hit_t == r.hit_t:
+                x = S[(S["round"] == r.round) & (S.t >= r.hit_t - 6) & (S.t <= r.hit_t - 4)]
+                on = int((x.groupby("steamid").zone.agg(lambda z: z.mode().iloc[0]).map(k2r) == r.site).sum())
+            rows.append({"rush": r.dyn == "rush", "ct_won": not bool(r.T_won), "kev": int((ct.armor > 0).sum()), "nades": int(ct.nades.sum()), "on": on})
+    d = pd.DataFrame(rows)
+    if not len(d):
+        return {}
+    out = {"n": int(len(d)), "rush_share": int(round(100 * d.rush.mean()))}
+    for key, x in (("rush", d[d.rush]), ("no_rush", d[~d.rush])):
+        cell = lambda y: [int(len(y)), int(round(100 * y.ct_won.mean()))] if len(y) >= 15 else None
+        out[key] = {"kevlar": {"0-2": cell(x[x.kev <= 2]), "3-4": cell(x[(x.kev >= 3) & (x.kev <= 4)]), "5": cell(x[x.kev == 5])},
+                    "nades": {"0-1": cell(x[x.nades <= 1]), "2+": cell(x[x.nades >= 2])},
+                    "on_site": {"0": cell(x[x.on == 0]), "1": cell(x[x.on == 1]), "2+": cell(x[x.on >= 2])}}
+    res = {"pistol_ct": out}
+    try:   # every player of the base, by side and situation: the reference for each player's own recurrences
+        res["base_by_side"] = situ_table(situ_rows(df))
+    except Exception as e:
+        print("situations by side unavailable:", e)
+    # economic situations: who is on eco, force or full on each side, and what costs rounds there (a death before
+    # 20 s on your side), with the T tempo that wins in each
+    rows = []
+    for mid, g in df.groupby("match"):
+        f = os.path.join(config.DEEP, str(mid), "duels.parquet")
+        if not os.path.exists(f):
+            continue
+        D = pd.read_parquet(f, columns=["round", "t", "victim_side"])
+        early = D[D.t < 20].groupby(["round", "victim_side"]).size()
+        for r in g.itertuples():
+            rows.append({"T_buy": r.T_buy, "CT_buy": r.CT_buy, "T_won": bool(r.T_won), "dyn": r.dyn,
+                         "ct_early": int(early.get((r.round, "CT"), 0)) > 0, "t_early": int(early.get((r.round, "T"), 0)) > 0})
+    e = pd.DataFrame(rows)
+    pc = lambda x: int(round(100 * float(x.mean())))
+    for key, sel in (("ct_anti_eco", (e.T_buy == "eco") & (e.CT_buy == "full")), ("t_anti_eco", (e.CT_buy == "eco") & (e.T_buy == "full")),
+                     ("full_full", (e.CT_buy == "full") & (e.T_buy == "full")), ("t_force", (e.T_buy == "force") & (e.CT_buy == "full")),
+                     ("ct_force", (e.CT_buy == "force") & (e.T_buy == "full")), ("t_eco", (e.T_buy == "eco") & (e.CT_buy == "full"))):
+        x = e[sel]
+        if len(x) < 60:
+            continue
+        c = {"n": int(len(x)), "t_win": pc(x.T_won), "rush": pc(x.dyn == "rush")}
+        for side, col in (("CT", "ct_early"), ("T", "t_early")):
+            y, z = x[x[col]], x[~x[col]]
+            if len(y) >= 20 and len(z) >= 20:
+                won = (lambda q: pc(~q.T_won)) if side == "CT" else (lambda q: pc(q.T_won))
+                c[f"early_{side}"] = [won(z), won(y), int(len(y))]   # win with no early death, with one, rounds with one
+        c["tempo"] = {k: [int(len(y)), pc(y.T_won)] for k, y in x.groupby("dyn") if len(y) >= 15 and k != "none"}
+        res[key] = c
+    return res
 
 
 def retake_table(pool):

@@ -315,7 +315,8 @@ def adapted(sid, maps, arch=None, zone_duels=None, weapons_info=None):
                 if not kd or kd[0] + kd[1] < 4:
                     return 0, None
                 k, d = kd
-                return float(0.25 * ((k + 3) / (k + d + 6) - 0.5)), f"your duels here (all rounds): {k}-{d}"
+                # your own duels in the zone weigh in clearly: a 4-8 spot is not the one to send you to, whatever the base
+                return float(0.75 * ((k + 3) / (k + d + 6) - 0.5)), f"your duels here (all rounds): {k}-{d}"
             for rt in TYPES:
                 by = "adr" if rt == "eco" else "win"
                 sel = lambda x: x[(x["map"] == mp) & (x.side == side) & (x.rtype == rt)]

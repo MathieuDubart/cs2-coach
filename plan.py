@@ -420,6 +420,11 @@ def build(steamid, adv, cross=None, deep=None, light=False):
     mb = midround.bench(sid)
     bad, good = mid_findings(mb)
     plan["mid"] = {"bench": mb, "weak": bad, "strong": good}
+    try:   # your recurrences by economic situation (pistol, anti-eco, full vs full...), against the base's
+        import tside
+        plan["situ_me"] = tside.situ_player(sid)
+    except Exception as e:
+        _miss(plan, "your situations", e)
     plan["playbook"] = playbook(bad)
     maps = sorted({m["map"] for m in (cross or {}).get("maps", [])})
     plan["routes"] = routes_view(midround.player_routes(sid), maps)

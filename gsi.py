@@ -71,6 +71,13 @@ def config_text(port):
         "player_match_stats" "1"
         "player_weapons"     "1"
         "player_position"    "1"
+        "phase_countdowns"   "1"
+        "map_round_wins"     "1"
+        "bomb"               "1"
+        "allplayers_id"      "1"
+        "allplayers_state"   "1"
+        "allplayers_position" "1"
+        "allplayers_weapons" "1"
     }}
 }}
 '''
@@ -262,10 +269,35 @@ def _hist_times(cur, phase, bomb, prev_phase, prev_bomb, health, prev_health, ki
 NADE_KEY = {"flashbang": "flash", "smokegrenade": "smoke", "hegrenade": "he", "molotov": "molotov", "incgrenade": "molotov", "decoy": "decoy"}
 
 
+RAW = {"keys": {}, "samples": []}
+
+
+def _sample(payload):
+    """What the game really sends (it keeps a lot for spectators only): every key path seen, how often, and a few
+    whole messages at different moments, without the auth token. Read with /api/gsi/raw."""
+    def walk(o, path, depth=0):
+        if isinstance(o, dict) and depth < 3:
+            for k, v in o.items():
+                if k == "auth":
+                    continue
+                p = f"{path}.{k}" if path else k
+                RAW["keys"][p] = RAW["keys"].get(p, 0) + 1
+                walk(v, p, depth + 1)
+    walk(payload, "")
+    ph = ((payload.get("round") or {}).get("phase"), (payload.get("map") or {}).get("phase"), bool(payload.get("allplayers")),
+          bool((payload.get("player") or {}).get("position")), str((payload.get("player") or {}).get("steamid")) == str((payload.get("provider") or {}).get("steamid")))
+    if sum(1 for x in RAW["samples"] if x[0] == ph) < 2 and len(RAW["samples"]) < 40:
+        RAW["samples"].append((ph, {k: v for k, v in payload.items() if k != "auth"}))
+
+
 def update(payload):
     """A message from the game. Keeps only what the in-game sheet needs."""
     if (payload.get("auth") or {}).get("token") != config.settings().get("gsi_token"):
         return False
+    try:
+        _sample(payload)
+    except Exception:
+        pass
     prov = payload.get("provider") or {}
     mp = payload.get("map") or {}
     rd = payload.get("round") or {}
@@ -308,6 +340,17 @@ def update(payload):
             STATE["live_since"] = now      # end of the freeze time: the round clock starts
         if rd.get("bomb") == "planted" and STATE.get("bomb") != "planted":
             STATE["planted_at"] = now
+        # the game's own clock: seconds left in the phase (round, bomb, freeze time). Rounds are not always 1:55
+        # (bot matches, other modes): the length of this round is read when it starts
+        pc = payload.get("phase_countdowns") or {}
+        try:
+            ends = float(pc.get("phase_ends_in")) if pc.get("phase_ends_in") is not None else None
+        except (TypeError, ValueError):
+            ends = None
+        if ends is not None:
+            STATE.update(pc_phase=pc.get("phase"), pc_ends_at=now + ends)
+            if pc.get("phase") == "live" and rd.get("phase") == "live" and STATE.get("live_since") and now - STATE["live_since"] < 3:
+                STATE["round_len"] = round(ends + (now - STATE["live_since"]))
         STATE.update({"steamid": me, "round_phase": rd.get("phase"), "bomb": rd.get("bomb"), "win_team": rd.get("win_team"),
                       "activity": pl.get("activity"), "_t": now})
         if own:
@@ -377,6 +420,8 @@ def state():
         s["age"] = round(time.time() - s.pop("_t", 0), 1)
         if s.get("round_phase") == "live" and s.get("live_since"):
             s["elapsed"] = round(time.time() - s["live_since"], 1)   # seconds since the end of the freeze time
+        if s.get("pc_ends_at"):
+            s["phase_left"] = round(max(0.0, s.pop("pc_ends_at") - time.time()), 1)   # the game's clock
         if s.get("bomb") == "planted" and s.get("planted_at"):
             s["since_plant"] = round(time.time() - s["planted_at"], 1)
     return s

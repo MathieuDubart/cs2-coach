@@ -358,7 +358,11 @@ def summary(g, lanes_mp, contact_zones=None, k=10):
     return {"lanes": {s: [{k: L[k] for k in ("name", "px", "level", "main", "mid", "theta")} | {"share": share.get((s, i)), "zones": [humanize(z, mp) for z in L.get("core") or L["zones"]]}
                           for i, L in enumerate(ls)] for s, ls in lanes_mp.items()},
             "prior": prior, "use": use, "surv": {"t": ts, **surv}, "contact": contact, "label": label,
-            "n": {p: int((g.play == p).sum()) for p in plays}, "rounds": int(n)}
+            "n": {p: int((g.play == p).sum()) for p in plays}, "rounds": int(n),
+            # how the Ts fare with each play (T rounds won), overall and by kind of round: what to run as T
+            "win": {p: _pct(g[g.play == p].T_won.astype(bool).mean()) for p in plays if (g.play == p).sum() >= 5},
+            "win_ctx": {c: {p: [int(len(y)), _pct(y.T_won.astype(bool).mean())] for p, y in x.groupby("play") if len(y) >= 5}
+                        for c, x in g[g.ctx.notna()].groupby("ctx")}}
 
 
 def radar(G, mp):

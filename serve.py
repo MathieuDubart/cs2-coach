@@ -125,6 +125,9 @@ class Handler(BaseHTTPRequestHandler):
             except Exception:
                 pass
             return self.send(200, s)
+        if u.path == "/api/gsi/raw":   # what the game really sends (key paths and a few whole messages)
+            import gsi
+            return self.send(200, {"keys": dict(sorted(gsi.RAW["keys"].items())), "samples": gsi.RAW["samples"]})
         if u.path == "/api/gsi/status":
             import gsi
             return self.send(200, gsi.status())
