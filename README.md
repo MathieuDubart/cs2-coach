@@ -41,7 +41,7 @@ Game detection is turned on in Settings: the app writes `gamestate_integration_c
 - Every piece of advice cites its sources: guides, pro videos, scientific studies, patch notes (see `knowledge.py`).
 - Comparison with a reference population (random players + HLTV pro demos).
 
-Any player can be analyzed on the fly from the search bar (Steam link, SteamID64, custom URL or share code).
+Any player can be analyzed on the fly from the search bar (Steam link, SteamID64, custom URL or share code). Share codes: every player of those matches feeds the base, and full profiles are built for you, the players you follow and your teammates (plus an update of players already profiled); search anyone else to build theirs. A demo Valve no longer has (after about a month) is given up after 2 tries.
 
 ## Requirements
 

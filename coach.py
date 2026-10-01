@@ -28,9 +28,15 @@ def log(*a):
     print(*a, flush=True)
 
 
-def download(url, dest, tries=8):
+class DemoGone(IOError):
+    """Valve no longer has this demo (it keeps them about a month)."""
+
+
+def download(url, dest, tries=8, gone_tries=None):
     """Valve's replay servers sometimes drop the connection in the middle of a demo, and Python does not notice it
-    (the file just ends early): check the size announced by the server and resume where it stopped."""
+    (the file just ends early): check the size announced by the server and resume where it stopped.
+    gone_tries: for an old match, an error before the first byte means the demo is gone after that many tries
+    (it used to wait 8 tries, about 2 minutes, for each expired demo)."""
     import time
     import urllib.error
     tmp = dest + ".part"
@@ -55,7 +61,9 @@ def download(url, dest, tries=8):
             if e.code == 416 and have and total and have >= total:  # already complete
                 err = None
             elif e.code in (404, 410):
-                raise
+                raise DemoGone(f"HTTP {e.code}") from None
+            elif gone_tries and not have and attempt + 1 >= gone_tries:
+                raise DemoGone(f"HTTP {e.code} {e.reason}") from None
             else:
                 err = e
         except OSError as e:  # connection reset, timeout...

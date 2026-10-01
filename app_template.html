@@ -973,11 +973,12 @@ function contextBlock(C){
    </tbody></table></div>
    ${C.partners&&C.partners.length?`<p><b>Regular partners</b> (seen on your team in at least 2 matches): ${C.partners.map(x=>`${esc(x.name)} ${x.w}W-${x.l}L, rating ${pf(x.perf)} over ${x.n} games`).join(" · ")}</p>`:""}
    ${srcLinks([C.rating_source],true)}</article>`}
-function checkinCard(){
+// your journal: only on your own profile; folded until it becomes a habit (3 entries), with its count
+function checkinCard(nj){
   if(!D.local)return `<article class="card"><h3>Pre-session journal</h3><p class="note">The journal (sleep, energy, warm-up) is filled in the local app: double-click <code>Coach CS2.bat</code>.</p></article>`;
   const b=(k,vals)=>`<div class="btns" role="group" data-ck="${k}">${vals.map(([val,t])=>`<button type="button" data-v="${val}" aria-pressed="${String(ckState[k])===String(val)}">${t}</button>`).join("")}</div>`;
   const five=[[1,"1"],[2,"2"],[3,"3"],[4,"4"],[5,"5"]];
-  return `<article class="card form"><h3>Pre-session journal</h3>
+  return `<article class="card form"><details${(nj||0)>=3?" open":""}><summary style="cursor:pointer;font-family:var(--f-display);font-size:20px;font-weight:600">Pre-session journal <span class="note" style="font:13px var(--f-body)">· ${nj?`${nj} entr${nj>1?"ies":"y"} so far`:"not used yet"}</span></summary>
    <p class="note">20 seconds before your first game. Each entry is linked to the matches of the next 6 hours: over the weeks, the coach measures how your sleep, energy and warm-up affect your rating.</p>
    <div class="row"><label class="f" for="ck-sleep">Sleep (hours)</label><input id="ck-sleep" type="number" min="0" max="14" step="0.5" value="${esc(ckState.sleep_h??"")}"></div>
    <div class="row"><span class="f">Energy (1-5)</span>${b("energy",five)}</div>
@@ -986,7 +987,7 @@ function checkinCard(){
    <div class="row"><span class="f">Caffeine</span>${b("caffeine",[["yes","yes"],["no","no"]])}</div>
    <div class="row"><span class="f">Group</span>${b("party",[["solo","solo"],["duo","duo"],["trio","trio"],["quatuor","4-stack"],["five","5-stack"]])}</div>
    <div class="row"><label class="f" for="ck-note">Goal</label><input id="ck-note" type="text" value="${esc(ckState.note??"")}" placeholder="Your goal for the session"></div>
-   <div class="row"><button type="button" class="primary" id="ck-save">Save</button><span class="note" id="ck-msg" role="status"></span></div></article>`}
+   <div class="row"><button type="button" class="primary" id="ck-save">Save</button><span class="note" id="ck-msg" role="status"></span></div></details></article>`}
 function partyBlock(PL){const P_=PL.party;if(!P_)return "";const keys=["solo","duo","trio","quatuor","five"],cur=partySel||PL.party_mode||"solo",x=P_[cur];
   const how={solo:"solo",duo:"as a duo",trio:"as a trio",quatuor:"as a 4-stack",five:"as a 5-stack"};
   return `<article class="card"><h3>Depending on your group</h3>${PL.party_mode?`<p class="note">From the teammates who keep showing up in your matches, you mostly play ${how[PL.party_mode]}.</p>`:""}
@@ -999,7 +1000,7 @@ function noPlan(v){v.innerHTML=`<div class="empty">This player's plan isn't comp
 function renderRoutine(){
   const p=P(),v=$("#v-routine"),PL=p.advice.plan;if(!PL)return noPlan(v);
   v.innerHTML=`<div class="head"><div style="display:grid;gap:4px"><span class="eyebrow">${esc(p.name)} · ${levelLine(PL.level)}</span><h2>Routine: before, during, after</h2></div></div>
-   <div class="pg-grid2">${checkinCard()}${PL.context?contextBlock(PL.context):`<article class="card"><h3>Your playing habits</h3><p class="note">No dated match for this player: habits (times, sessions, group) need demos or a Leetify history.</p></article>`}</div>
+   <div class="pg-grid2">${P().steamid===D.own?checkinCard((PL.context||{}).journal_n):""}${PL.context?contextBlock(PL.context):`<article class="card"><h3>Your playing habits</h3><p class="note">No dated match for this player: habits (times, sessions, group) need demos or a Leetify history.</p></article>`}</div>
    <div class="phases">${PL.phases.map(phaseCard).join("")}</div>
    ${partyBlock(PL)}
    ${metaBlock(PL)}`;
@@ -2073,24 +2074,28 @@ async function loadPlayer(id,force){if(!force&&D.players[id])return D.players[id
   await Promise.all([...maps].map(loadRadar));return p}
 
 // ---------- view: players ----------
-let jq="",jsort="n";
+let jq="",jsort="n",jshow=24;   // 24 profiles at a time (the list had 22 screens)
 function renderPlayers(){
   const v=$("#v-players");
   const list=D.index.filter(e=>!jq||e.name.toLowerCase().includes(jq)||e.steamid.includes(jq)||(e.archetype||"").toLowerCase().includes(jq)||Object.keys(e.maps||{}).some(m=>MAPN(m).toLowerCase().includes(jq)))
-    .sort((a,b)=>jsort==="n"?b.n-a.n:jsort==="kd"?(b.kd||0)-(a.kd||0):jsort==="adr"?(b.adr||0)-(a.adr||0):(b.last||"").localeCompare(a.last||""));
+    .sort((a,b)=>(b.steamid===D.own)-(a.steamid===D.own)||(jsort==="n"?b.n-a.n:jsort==="kd"?(b.kd||0)-(a.kd||0):jsort==="adr"?(b.adr||0)-(a.adr||0):(b.last||"").localeCompare(a.last||"")));
+  const shown=list.slice(0,jshow);
   v.innerHTML=`<div class="head"><div style="display:grid;gap:4px"><span class="eyebrow">${D.index.length} profiles · data built ${fmtDate(D.generated)}</span><h2>Players</h2></div></div>
   <div class="btns" style="align-items:center"><input id="jf" type="search" value="${esc(jq)}" placeholder="Filter by name, SteamID, map or archetype" aria-label="Filter players" style="font:14px var(--f-body);background:var(--panel);color:var(--ink);border:1px solid var(--line);border-radius:3px;padding:6px 10px;min-width:260px">
     ${[["n","Most demos"],["kd","K/D"],["adr","ADR"],["last","Most recent"]].map(([k,t])=>`<button type="button" data-sort="${k}" aria-pressed="${jsort===k}">${t}</button>`).join("")}</div>
-  <div class="players">${list.map(e=>`<button type="button" class="pcard" data-pid="${e.steamid}" aria-pressed="${e.steamid===S.player}">
+  ${jq?`<p class="note">${list.length} profile${list.length===1?"":"s"} match.</p>`:""}
+  <div class="players">${shown.map(e=>`<button type="button" class="pcard" data-pid="${e.steamid}" aria-pressed="${e.steamid===S.player}">
     <b>${esc(e.name)}</b><span class="num note">${e.steamid}${e.rank?` · ${SKILL[e.rank]||""}`:""}</span>${e.archetype?`<span class="arch-tag" style="margin:0">${esc(e.archetype)}</span>`:""}
     <span>${e.minimal?"Minimal profile (public rankings, no demo)":e.light?"Leetify-only profile (no demo)":`${e.n} demo${e.n>1?"s":""} · K/D ${e.kd==null?"—":e.kd} · ADR ${e.adr==null?"—":Math.round(e.adr)} · ${e.record.win}W ${e.record.draw}D ${e.record.loss}L`}</span>
     <span class="note">${Object.entries(e.maps||{}).sort((a,b)=>b[1]-a[1]).slice(0,4).map(([m,n])=>`${MAPN(m)} ${n}`).join(" · ")}</span>
     ${e.top_rule?`<span class="note">Priority: ${esc(e.top_rule)}</span>`:""}</button>`).join("")||`<div class="empty">No player matches.</div>`}</div>
+  ${list.length>shown.length?`<div class="btns"><button type="button" id="jmore">Show ${Math.min(24,list.length-shown.length)} more (${list.length-shown.length} left)</button></div>`:""}
   <div class="card"><h3>Analyze any player</h3>
     <p>${D.local?"Paste their Steam profile link, SteamID64 or custom URL name in the search bar at the top: the analysis runs on your PC.":"In the local version (double-click <code>Coach CS2.bat</code>), paste their Steam profile link or SteamID64 in the search bar at the top. This published page can only show players already analyzed."}</p>
     <p class="note">Demo sources: the ones already downloaded, their recent matchmaking matches via Leetify (about a month), their share codes (<code>--sharecode</code>) or their whole history with their authentication code (<code>--authcode</code>). Without demos, a light profile is built from their Leetify stats.</p></div>`;
-  const jf=$("#jf",v);jf.oninput=()=>{jq=jf.value.trim().toLowerCase();const pos=jf.selectionStart;renderPlayers();const n=$("#jf");n.focus();n.setSelectionRange(pos,pos)};
-  $$("[data-sort]",v).forEach(b=>b.onclick=()=>{jsort=b.dataset.sort;renderPlayers()});
+  const jf=$("#jf",v);jf.oninput=()=>{jq=jf.value.trim().toLowerCase();jshow=24;const pos=jf.selectionStart;renderPlayers();const n=$("#jf");n.focus();n.setSelectionRange(pos,pos)};
+  $$("[data-sort]",v).forEach(b=>b.onclick=()=>{jsort=b.dataset.sort;jshow=24;renderPlayers()});
+  const jm=$("#jmore",v);if(jm)jm.onclick=()=>{const y=scrollY;jshow+=24;renderPlayers();scrollTo(0,y)};
   $$("[data-pid]",v).forEach(b=>b.onclick=()=>{setPlayer(b.dataset.pid).then(()=>go(b.dataset.pid===D.own?"ingame":"analysis"))});
 }
 

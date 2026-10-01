@@ -17,7 +17,7 @@ import traceback
 
 import config
 import matchlist
-from coach import decompress, download, game_mode
+from coach import DemoGone, decompress, download, game_mode
 
 REGISTRY = os.path.join(config.CACHE, "matches.json")
 
@@ -92,12 +92,12 @@ def leetify_codes(steamid, days=35, limit=15):
     return codes
 
 
-def _fetch_demo(mid, url):
+def _fetch_demo(mid, url, gone_tries=None):
     dem = os.path.join(config.CACHE, f"{mid}.dem")
     arc = dem + ".bz2"
     if os.path.exists(arc) and not os.path.exists(arc + ".part"):  # left by an earlier, cut download: resume it
         os.replace(arc, arc + ".part")
-    download(url, arc)
+    download(url, arc, gone_tries=gone_tries)
     try:
         decompress(arc, dem)
     except Exception:
@@ -134,7 +134,9 @@ def ensure_demos(reg, workers=2, only=None):
         config.wait_for_match_end(log, "demo downloads")
         log(f"Downloading {len(todo)} demo(s) from Valve…")
     with ThreadPoolExecutor(workers) as ex:
-        futs = {ex.submit(lambda a, b: (config.wait_for_match_end(), _fetch_demo(a, b))[1], mid, url): mid for mid, url in todo.items()}
+        # an old match (past Valve's month): 2 tries before calling it gone; a recent one: patience (network hiccups)
+        futs = {ex.submit(lambda a, b, g: (config.wait_for_match_end(), _fetch_demo(a, b, g))[1], mid, url,
+                          None if _recent(reg[mid]) else 2): mid for mid, url in todo.items()}
         for i, f in enumerate(as_completed(futs), 1):
             mid = futs[f]
             try:
@@ -145,9 +147,11 @@ def ensure_demos(reg, workers=2, only=None):
                 if _recent(reg[mid]):  # not online yet (a few minutes after the match), or a network hiccup
                     reg[mid].pop("expired", None)
                     log(f"  [{mid}] demo not available from Valve yet ({e}): it arrives a few minutes after the match ends. Trying again at the next analysis.")
-                else:
+                elif isinstance(e, DemoGone):
                     reg[mid]["expired"] = True
                     log(f"  [{mid}] demo unavailable ({e}): Valve only keeps it for about a month")
+                else:   # cut in the middle: not gone, tried again at the next analysis
+                    log(f"  [{mid}] download failed ({e}): tried again at the next analysis")
     save_registry(reg)
 
 
@@ -524,22 +528,39 @@ def run_for(query, fetch=True):
         attach_plan(sid)
         log("Analysis done")
         return sid
-    # share codes only: profile every player of those matches
+    # share codes only. Full profiles for you, the players you follow and your teammates in those matches, plus an
+    # update of the players already profiled; the others (opponents, strangers) only feed the base: a search builds
+    # their profile on demand. A batch of 14 matches used to build ~110 profiles of strangers (hours of CPU).
     import pandas as pd
-    players = {}
+    players, keep, met = {}, set(), set()
+    ps = config.settings().get("players", {})
+    anchors = {int(own_id or 0)} | {int(k) for k, v in ps.items() if k.isdigit() and v.get("authcode")}
+    profiled = {int(k) for k in (os.listdir(config.PLAYERS) if os.path.exists(config.PLAYERS) else [])
+                if k.isdigit() and os.path.exists(os.path.join(config.player_dir(k), "cross.json"))}
     for mid in code_ids:
         f = os.path.join(config.DEEP, mid, "samples.parquet")
-        if os.path.exists(f):
-            for p_id, nm in pd.read_parquet(f, columns=["steamid", "name"]).drop_duplicates("steamid").itertuples(index=False):
-                if p_id:
-                    players[int(p_id)] = nm
+        if not os.path.exists(f):
+            continue
+        S = pd.read_parquet(f, columns=["steamid", "name", "side", "round"])
+        side = dict(S[S["round"] == S["round"].min()].drop_duplicates("steamid")[["steamid", "side"]].itertuples(index=False))
+        for p_id, nm in S.drop_duplicates("steamid")[["steamid", "name"]].itertuples(index=False):
+            if p_id:
+                players[int(p_id)] = nm
+        ours = {side[a] for a in anchors if a in side}
+        met |= {int(p) for p in side if p and int(p) in anchors}
+        keep |= {int(p) for p, sd in side.items() if p and (sd in ours or int(p) in profiled)}
     if not players:
         raise ValueError("No match fetched with this code: the demo may have expired at Valve (about 1 month).")
-    log(f"{len(players)} players in this/these match(es): building their profiles…")
+    if not met:   # matches without you or anyone you follow (another team's matches): everyone, as asked
+        keep = set(players)
     s = config.settings()
     for p_id, nm in players.items():
         s.setdefault("players", {}).setdefault(str(p_id), {})["name"] = nm
     config.save_settings(s)
+    others = len(players) - len(keep)
+    log(f"{len(players)} players in this/these match(es): building {len(keep)} profile(s)"
+        + (f" (you, your teammates and players already profiled; the {others} others feed the base, search one to see their profile)…" if others else "…"))
+    players = {p: nm for p, nm in players.items() if p in keep}
     for i, (p_id, nm) in enumerate(players.items(), 1):
         config.wait_for_match_end(log, "profile building")
         if analyze_player(p_id, reg):
