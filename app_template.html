@@ -470,6 +470,11 @@ body.igfull main{max-width:none;padding:0}
 .ig-full:not(.noside){--sidehalf:min(180px,15vw)}
 .ig-hud{grid-column:1/-1}
 @media (max-width:820px){.ig-full:not(.noside){--sidehalf:0px}}
+.nlist{list-style:none;padding:0;margin:4px 0;display:grid;gap:3px;font-size:13px}
+.nlist .cmd{display:inline-flex;gap:4px;align-items:center}
+.nlist .cmd button{font-size:11px;padding:1px 6px}
+.insights>article{min-width:0}
+.pl-list .nlist li{background:none;border:0;padding:0;font-size:13px}
 </style>
 
 <div class="bar"><div class="bar-in">
@@ -1195,12 +1200,29 @@ async function loadTeam(id){const r=await fetch(`teams/${id}.json?t=${Date.now()
   await Promise.all(Object.keys(teamPlan.plans||{}).map(loadRadar));return teamPlan}
 function teamRadarDraw(box,map,level,items){const svg=$("svg",box),g=$("g",box);
   $("image",box).setAttribute("href",D.radars[`${map}:${level}`]||"");svg.setAttribute("viewBox",(D.viewboxes[map]||[0,0,1024,1024]).join(" "));g.replaceChildren();
-  items.filter(it=>it.px&&(!it.level||!level||it.level===level)).forEach(it=>{
-    if(it.to){el("line",{x1:it.px[0],y1:it.px[1],x2:it.to[0],y2:it.to[1],style:`stroke:${it.color};stroke-width:2.5;stroke-dasharray:7 5`},g);
-      tip(el("circle",{cx:it.to[0],cy:it.to[1],r:10,style:`fill:${it.color};fill-opacity:.45;stroke:#fff;stroke-width:1.5`},g),it.title||"");
-      el("text",{x:it.to[0],y:it.to[1]+4,"text-anchor":"middle",class:"zsmall"},g).textContent=it.short||""}
-    else{tip(el("circle",{cx:it.px[0],cy:it.px[1],r:12,style:`fill:${it.color};stroke:#111;stroke-width:2`},g),it.title||"");
-      el("text",{x:it.px[0],y:it.px[1]-17,"text-anchor":"middle",class:"zlabel"},g).textContent=it.label}})}
+  const defs=el("defs",{},g),mk=el("marker",{id:"tarrow",viewBox:"0 0 10 10",refX:"7",refY:"5",markerWidth:"5",markerHeight:"5",orient:"auto-start-reverse"},defs);
+  el("path",{d:"M0,0 L10,5 L0,10 z",style:"fill:#ff5a4e"},mk);
+  const on=it=>it.px&&(!it.level||!level||it.level===level);
+  // T lanes: a red arrow toward the site, as thick as the lane is used, with its share of the rounds
+  items.filter(it=>it.kind==="lane"&&on(it)&&it.to).forEach(it=>{
+    const [x1,y1]=it.px,[x2,y2]=it.to,dx=x2-x1,dy=y2-y1,L=Math.hypot(dx,dy)||1,k=Math.max(0,(L-40)/L);
+    tip(el("line",{x1,y1,x2:x1+dx*k,y2:y1+dy*k,"marker-end":"url(#tarrow)",style:`stroke:#ff5a4e;stroke-opacity:.75;stroke-width:${it.w||4};stroke-linecap:round;${it.dash?"stroke-dasharray:10 8":""}`},g),it.title||"");
+    if(it.label)el("text",{x:x1,y:y1-10,"text-anchor":"middle",class:"zlabel",style:"fill:#ffb3ad"},g).textContent=it.label});
+  items.filter(it=>it.kind==="site"&&on(it)).forEach(it=>{
+    el("circle",{cx:it.px[0],cy:it.px[1],r:30,style:"fill:none;stroke:#fff;stroke-opacity:.5;stroke-width:2;stroke-dasharray:4 4"},g);
+    el("text",{x:it.px[0],y:it.px[1]+46,"text-anchor":"middle",class:"zlabel"},g).textContent=it.label});
+  // grenades: dotted arc from the thrower's spot to where it lands, letter on the landing
+  items.filter(it=>it.kind==="nade"&&it.to&&on(it)).forEach(it=>{
+    const [x1,y1]=it.px,[x2,y2]=it.to,mx=(x1+x2)/2-(y2-y1)*.15,my=(y1+y2)/2+(x2-x1)*.15;
+    el("path",{d:`M${x1},${y1} Q${mx},${my} ${x2},${y2}`,style:`fill:none;stroke:${it.color};stroke-width:2;stroke-dasharray:3 4;opacity:.85`},g);
+    tip(el("rect",{x:x2-9,y:y2-9,width:18,height:18,rx:4,style:`fill:${{smoke:"#9aa5b1",flash:"#f2e14c",molotov:"#ff8a3d",he:"#7bd88f"}[it.type]||"#ccc"};stroke:#111;stroke-width:1.5`},g),it.title||"");
+    el("text",{x:x2,y:y2+4,"text-anchor":"middle",style:"font:700 11px var(--f-mono);fill:#111"},g).textContent=it.short||""});
+  // positions: a disc in the player's color (grey with a number for an extra player), a ring when it is the player's own spot
+  items.filter(it=>it.kind==="dot"&&on(it)).forEach(it=>{
+    if(it.ring)el("circle",{cx:it.px[0],cy:it.px[1],r:18,style:`fill:none;stroke:${it.color};stroke-width:2.5`},g);
+    tip(el("circle",{cx:it.px[0],cy:it.px[1],r:12,style:`fill:${it.color};stroke:#111;stroke-width:2`},g),it.title||"");
+    if(it.n)el("text",{x:it.px[0],y:it.px[1]+4,"text-anchor":"middle",style:"font:700 12px var(--f-mono);fill:#111"},g).textContent=it.n;
+    el("text",{x:it.px[0],y:it.px[1]-19,"text-anchor":"middle",class:"zlabel"},g).textContent=it.label})}
 function teamBuilder(){
   const I=IDX(),own=D.own&&I[D.own]?D.own:S.player;
   if(!teamSel)teamSel=own?[own]:[];
@@ -1233,36 +1255,40 @@ function teamPlanView(host){
   const maps=Object.keys(T.plans||{});if(!teamMap||!maps.includes(teamMap))teamMap=maps[0];
   const P=T.plans[teamMap];
   const ind=Object.fromEntries((T.individual||[]).map(x=>[x.steamid,x]));
-  const igl=T.igl[0];
+  const igl=T.igl[0],GREY="#8a96a3",pc=v=>v==null?"—":v+"%",rec=r=>r&&r.n?`${r.won}/${r.n}`:"—";
+  const nExtra=5-T.size;
   host.innerHTML=`
-  <div class="head" style="border-bottom-width:1px"><div style="display:grid;gap:4px"><span class="eyebrow">Plan created ${fmtDate(T.created)} · ${T.size} players${T.missing_roles.length?` · roles left to extra players: ${T.missing_roles.map(esc).join(", ")}`:""}</span>
+  <div class="head" style="border-bottom-width:1px"><div style="display:grid;gap:4px"><span class="eyebrow">Plan created ${fmtDate(T.created)} · ${T.size} players${nExtra?` + ${nExtra} extra player${nExtra>1?"s":""}`:""}</span>
     <h2>${T.members.map((m,i)=>`<span style="color:${TCOL[i]}">${esc(m.name)}</span>`).join(" · ")}</h2></div></div>
   <div class="tbl"><table><thead><tr><th>Player</th><th>Profile</th><th>T role</th><th>CT positions</th><th>Individual work</th></tr></thead><tbody>
    ${T.members.map((m,i)=>{const x=ind[m.steamid]||{};return `<tr><td><b style="color:${TCOL[i]}">●</b> ${esc(m.name)}${igl&&igl.steamid===m.steamid?' <span class="probadge">suggested IGL</span>':""}</td>
      <td>${esc(m.archetype||"—")}${m.light?' <span class="note">(limited data)</span>':""}</td><td><b>${esc(m.t_role_name||"—")}</b></td>
-     <td class="wrap">${esc(x.ct_role||"—")}</td><td class="wrap">${(x.priorities||[]).slice(0,2).map(esc).join(" · ")}</td></tr>`}).join("")}</tbody></table></div>
+     <td class="wrap">${esc(x.ct_role||"—")}</td><td class="wrap">${(x.priorities||[]).slice(0,2).map(esc).join(" · ")}</td></tr>`}).join("")}
+   ${nExtra?`<tr><td><b style="color:${GREY}">●</b> Extra player${nExtra>1?"s":""} (${nExtra})</td><td class="note">random teammates</td><td><b>${T.missing_roles.map(esc).join(", ")}</b></td><td class="wrap note">the grey positions on each map</td><td class="note">Tell them their spot in the lobby.</td></tr>`:""}</tbody></table></div>
   <div class="insights">
    <article class="card"><h3>Who calls?</h3><p>Suggestion: <b>${esc(igl.name)}</b>${igl.why.length?` (${igl.why.map(esc).join(", ")})`:""}.</p>
      <p class="note">Ranking: ${T.igl.map(x=>`${esc(x.name)} ${x.score}`).join(" · ")}. Measured on converting advantages, isolated deaths, trades, profile and experience. It's your call: the IGL mostly needs to talk clearly and stay calm.</p></article>
    <article class="card"><h3>Your maps</h3><p>Pick in Premier: <b>${T.picks.length?T.picks.map(MAPN).join(", "):"no pool map with data yet"}</b>${T.to_work.length?` · to work on: ${T.to_work.map(MAPN).join(", ")}`:""}.</p>
      <div class="tbl"><table><thead><tr><th>Map</th><th class="n">Rounds won</th><th class="n">Rounds</th>${T.members.map((m,i)=>`<th class="n" style="color:${TCOL[i]}">${esc(m.name.slice(0,10))}</th>`).join("")}</tr></thead><tbody>
-      ${T.maps.filter(r=>r.members_with_data).slice(0,8).map(r=>`<tr><td>${MAPN(r.map)}${r.premier?' <span class="pill">Premier</span>':""}</td><td class="n">${r.round_win==null?"—":r.round_win+"%"}</td><td class="n">${r.rounds}</td>
-        ${r.per_member.map(x=>`<td class="n">${x.win==null?"—":x.win+"%"}</td>`).join("")}</tr>`).join("")}</tbody></table></div>
-     <p class="note">Rounds won by the members on each map (their demos). Since September 22, 2026, each team picks its maps and one of the four is drawn at random.</p></article>
+      ${T.maps.filter(r=>r.members_with_data&&!/^cs_/.test(r.map)).slice(0,8).map(r=>`<tr><td>${MAPN(r.map)}${r.premier?' <span class="pill">Premier</span>':""}</td><td class="n">${pc(r.round_win)}</td><td class="n">${r.rounds}</td>
+        ${r.per_member.map(x=>`<td class="n">${x.win==null?"—":`${x.win}% <span class="note">(${x.rounds})</span>`}</td>`).join("")}</tr>`).join("")}</tbody></table></div>
+     <p class="note">Rounds won by each member on the map (their demos, number of rounds in brackets). Bomb maps only. Since September 22, 2026, each team picks its maps and one of the four is drawn at random.</p></article>
   </div>
   ${maps.length?`<h3>Game plan per map</h3>
   <div class="chips" role="group" aria-label="Map">${maps.map(m=>`<button type="button" data-tmap="${m}" aria-pressed="${m===teamMap}">${MAPN(m)}</button>`).join("")}</div>
-  <div class="btns side big" role="group" aria-label="Side"><button type="button" data-tside="CT" aria-pressed="${teamSide==="CT"}">CT · setup</button><button type="button" data-tside="T" aria-pressed="${teamSide==="T"}">T · executes</button></div>
+  <div class="btns side big" role="group" aria-label="Side"><button type="button" data-tside="CT" aria-pressed="${teamSide==="CT"}">CT · setup</button><button type="button" data-tside="T" aria-pressed="${teamSide==="T"}">T · plays</button></div>
   <div class="stage">${radarShell((P.levels||[]).length>1?`<div class="btns" role="group" aria-label="Level">${P.levels.map(l=>`<button type="button" data-tlevel="${l.key}" aria-pressed="${l.key===(teamLevel||P.levels[0].key)}">${esc(l.name)}</button>`).join("")}</div>`:"")}
    <div style="display:grid;gap:14px;min-width:0" id="tside"></div></div>
+  <div id="tplays"></div>
   <div class="insights" id="tcalls"></div>`:`<div class="empty">No map in common with detailed data: play a few matches together, then create the plan again.</div>`}
   <h3>Economy and weapons</h3>
   <div class="insights"><article class="card"><ul>${T.economy.rules.map(r=>`<li>${esc(r)}</li>`).join("")}</ul>
     <p>${T.economy.awp?`AWP: <b>${esc(T.economy.awp)}</b>.`:"No dedicated AWPer: the AWP is only bought when the team is rich."} ${T.economy.pistol_openers.length?`Pistol rounds: ${T.economy.pistol_openers.map(esc).join(", ")} take${T.economy.pistol_openers.length>1?"":"s"} the opening duels.`:""}</p>${srcLinks(T.economy.src,true)}</article>
-   <article class="card"><h3>Everyone's force-buy</h3><ul>${T.economy.members.map(x=>`<li><b>${esc(x.name)}</b>: ${x.force?`${esc(x.force)} (${x.force_adr} damage per round on force-buys)`:"not enough force-buy rounds"}</li>`).join("")}</ul></article></div>
-  ${T.synergy.length?`<h3>You together</h3><div class="tbl"><table><thead><tr><th>Duo</th><th class="n">Matches together</th><th class="n">Rounds won</th><th class="n">Trades (one avenges the other)</th></tr></thead><tbody>
-   ${T.synergy.map(s=>`<tr><td>${esc(s.name_a)} + ${esc(s.name_b)}</td><td class="n">${s.matches}</td><td class="n">${s.round_win==null?"—":s.round_win+"%"}</td><td class="n">${s.trades_ab} · ${s.trades_ba}</td></tr>`).join("")}</tbody></table></div>`:""}
-  ${T.matches.length?`<p class="note">${T.matches.length} match(es) with at least 2 members on the same team: ${T.matches.slice(0,6).map(x=>`${MAPN(x.map||"?")} ${x.score?`${x.score.me}-${x.score.them}`:""}`).join(" · ")}.</p>`:""}
+   <article class="card"><h3>Everyone's force-buy</h3><ul>${T.economy.members.map(x=>`<li><b>${esc(x.name)}</b>: ${x.force?`${esc(x.force)}: ${x.force_win!=null?`${x.force_win}% of ${x.force_n} force-buy rounds won, `:""}${x.force_adr} damage per round`:"not enough force-buy rounds yet (8 needed)"}</li>`).join("")}</ul>
+    <p class="note">Cheap weapons only (SMGs, shotguns, pistols, Galil, FAMAS): an AWP or a full rifle isn't a force-buy.</p></article></div>
+  ${T.synergy.length?`<h3>You together</h3><div class="tbl"><table><thead><tr><th>Duo</th><th class="n">Matches together</th><th class="n">Rounds won</th><th>Trades (one avenges the other within 5 s)</th></tr></thead><tbody>
+   ${T.synergy.map(s=>`<tr><td>${esc(s.name_a)} + ${esc(s.name_b)}</td><td class="n">${s.matches}</td><td class="n">${pc(s.round_win)}</td><td>${esc(s.name_a)} avenges ${esc(s.name_b)} ${s.trades_ab}× · ${esc(s.name_b)} avenges ${esc(s.name_a)} ${s.trades_ba}×</td></tr>`).join("")}</tbody></table></div>`:""}
+  ${T.matches.length?`<p class="note">${T.n_matches||T.matches.length} match${(T.n_matches||T.matches.length)>1?"es":""} with at least 2 members on the same team. Latest: ${T.matches.slice(0,6).map(x=>`${MAPN(x.map||"?")} ${x.score?`${x.score.me}-${x.score.them}`:""}`).join(" · ")}.</p>`:""}
   ${T.collective.length?`<h3>Team goals</h3><div class="insights">${T.collective.map(c=>`<article class="card"><h3>${esc(c.title)}</h3><p>${esc(c.do)}</p>
     <p class="note">Team average percentile: ${c.avg_percentile} (${c.members.map(x=>`${esc(x.name)} ${x.percentile}`).join(" · ")}).</p></article>`).join("")}</div>`:""}
   <h3>Individual work for the team</h3>
@@ -1270,44 +1296,68 @@ function teamPlanView(host){
     <p class="note">${esc(m.t_do||"")}</p><ol>${(x.priorities||[]).map(p=>`<li>${esc(p)}</li>`).join("")}</ol>${x.drill?`<p class="note">Warm-up: ${esc(x.drill)}</p>`:""}</article>`}).join("")}</div>
   ${T.party&&T.party[T.party_key]?`<h3>${esc(T.party[T.party_key].title)}</h3><article class="card"><ul>${T.party[T.party_key].items.map(t=>`<li>${esc(t)}</li>`).join("")}</ul>${srcLinks(T.party[T.party_key].src,true)}</article>`:""}
   ${D.local?`<div class="btns"><button type="button" id="tdel">Delete this plan</button></div>`:""}`;
-  $$("[data-tmap]",host).forEach(b=>b.onclick=()=>{teamMap=b.dataset.tmap;teamLevel=null;teamPlanView(host)});
-  $$("[data-tside]",host).forEach(b=>b.onclick=()=>{teamSide=b.dataset.tside;teamPlanView(host)});
+  $$("[data-tmap]",host).forEach(b=>b.onclick=()=>{teamMap=b.dataset.tmap;teamLevel=null;teamExec=null;teamPlanView(host)});
+  $$("[data-tside]",host).forEach(b=>b.onclick=()=>{teamSide=b.dataset.tside;teamLevel=null;teamPlanView(host)});
   $$("[data-tlevel]",host).forEach(b=>b.onclick=()=>{teamLevel=b.dataset.tlevel;teamPlanView(host)});
   const del=$("#tdel",host);if(del)del.onclick=async()=>{if(del.dataset.ok!=="1"){del.dataset.ok="1";del.textContent="Confirm deletion";return}
     try{await api("/api/team/delete",{sid:T.owner,id:T.id});teamPlan=null;teamId=null;await loadTeamIdx(true);renderTeam()}catch(e){}};
   if(!P)return;
-  const onMap=teamSide==="CT"?P.ct.map(x=>x.level):[...P.t_lanes.map(x=>x.level),...(((P.executes||{})[teamExec||P.t_target]||{}).items||[]).map(x=>x.level)];
-  const cnt={};onMap.filter(Boolean).forEach(l=>cnt[l]=(cnt[l]||0)+1);
+  const TH=P.threats,s=x=>x==null?"—":x+" s",sites=P.site_px||{};
+  const plays=P.t_plays||[];if(!teamExec||!plays.some(p=>p.key===teamExec))teamExec=plays[0]?plays[0].key:null;
+  const PL=plays.find(p=>p.key===teamExec);
+  const who=(sid,x)=>sid?col[sid]:GREY,dotN=x=>x.extra?(typeof x.extra==="number"?x.extra:""):"";
+  const siteItems=L=>sites[L]?[{kind:"site",px:sites[L],level:TH&&TH.geo_sites&&TH.geo_sites[L]?TH.geo_sites[L].level:null,
+    label:TH?`${L} · ${TH.sites[L].odds}% of attacks${TH.sites[L].rush?` · rush ${TH.sites[L].rush}%`:""}`:L}]:[];
+  let items=[];
+  if(teamSide==="CT"){
+    if(TH)["A","B"].forEach(L=>{items.push(...siteItems(L));TH.sites[L].lanes.forEach(ln=>items.push({kind:"lane",px:ln.px,to:sites[L],level:ln.level,w:2+ln.odds/5,label:`${ln.name.split(" / ")[0]} ${ln.odds}%`,
+      title:`${ln.name} → ${L}: used in ${ln.odds}% of the attacks${ln.rush?`, ${ln.rush}% of them rushes`:""}`}))});
+    P.ct.forEach(sl=>{items.push({kind:"dot",px:sl.px,level:sl.level,color:who(sl.member),n:sl.member?"":sl.extra,ring:sl.yours,label:sl.member?nm[sl.member]:`Extra ${sl.extra}`,title:`${sl.label} · ${sl.zone}`});
+      (sl.nades||[]).filter(n=>n.from_px&&n.to_px).slice(0,sl.member?3:1).forEach(n=>items.push({kind:"nade",type:n.type,px:n.from_px,to:n.to_px,level:n.level,color:who(sl.member),short:{smoke:"S",flash:"F",molotov:"M",he:"H"}[n.type],title:`${TYPE[n.type]} ${n.from} → ${n.to}`}))});
+  }else if(PL){
+    items.push(...siteItems(PL.site));
+    PL.lanes.forEach((ln,i)=>items.push({kind:"lane",px:ln.px,to:PL.site_px,level:ln.level,w:i?5:8,label:ln.name}));
+    const at={};PL.roles.forEach(r=>{if(!r.lane||!r.lane.px)return;const k=r.lane.px.join(),j=at[k]=(at[k]||0)+1;
+      if(r.lane.lurk)items.push({kind:"lane",px:r.lane.px,to:sites[PL.site==="A"?"B":"A"],level:r.lane.level,w:3,dash:true,label:"lurk"});
+      items.push({kind:"dot",px:[r.lane.px[0]+((j-1)%3-1)*26,r.lane.px[1]+28+Math.floor((j-1)/3)*26],level:r.lane.level,color:who(r.member),n:r.extra?r.name.replace(/\D/g,""):"",label:r.extra?"":r.name,title:`${r.name}: ${r.role_name}`})});
+    PL.nades.filter(n=>n.from_px&&n.to_px).forEach(n=>items.push({kind:"nade",type:n.type,px:n.from_px,to:n.to_px,level:n.level,color:who(n.member),short:{smoke:"S",flash:"F",molotov:"M",he:"H"}[n.type],title:`${TYPE[n.type]} ${n.from} → ${n.to}: ${n.name}`}));
+  }
+  const cnt={};items.filter(x=>x.kind==="dot"||x.kind==="nade").map(x=>x.level).filter(Boolean).forEach(l=>cnt[l]=(cnt[l]||0)+1);
   const busiest=Object.keys(cnt).sort((a,b)=>cnt[b]-cnt[a])[0];
   const level=teamLevel||busiest||(P.levels&&P.levels[0]?P.levels[0].key:null);
   $$("[data-tlevel]",host).forEach(b=>{b.setAttribute("aria-pressed",b.dataset.tlevel===level);if(cnt[b.dataset.tlevel])b.textContent=`${b.textContent.replace(/ \(\d+\)$/,"")} (${cnt[b.dataset.tlevel]})`});
   const box=$(".radar-box",host),side=$("#tside",host);
-  const s=x=>x==null?"—":x+" s";
+  teamRadarDraw(box,teamMap,level,items);
+  const nadeLi=n=>`<li><b>${TYPE[n.type]}</b> ${esc(n.from)} → ${esc(n.to)}${n.role?` <span class="pill">${{anti_rush:"anti-rush",block:"blocks the lane",flash:"flash",damage:"damage"}[n.role]||esc(n.role)}</span>`:""}${n.timer?` <span class="note">around ${esc(n.timer)}</span>`:""}${n.yours?' <span class="pill strong">yours</span>':""}${n.setpos?` <span class="cmd"><code hidden>${esc(n.setpos)}</code><button type="button" title="${esc(n.setpos)}">Copy setpos</button></span>`:""}</li>`;
   if(teamSide==="CT"){
-    teamRadarDraw(box,teamMap,level,P.ct.map(sl=>({px:sl.px,level:sl.level,label:sl.member?nm[sl.member]:"open",color:sl.member?col[sl.member]:"#8a96a3",title:`${sl.label} · ${sl.zone}`})));
-    $(".caption",box).innerHTML=`<span>Suggested CT setup: every dot is a position where CTs of the base win their duels.</span>`;
-    side.innerHTML=`<ul class="pl-list">${P.ct.map(sl=>`<li style="border-left-color:${sl.member?col[sl.member]:"var(--muted)"}"><b>${esc(sl.label)} · ${esc(sl.zone)}</b>: ${sl.member?`<b>${esc(sl.name)}</b>`:"an extra player"}${sl.why&&sl.why.length?` (${sl.why.map(esc).join(", ")})`:""}.
-       <br><span class="note">${esc(sl.do)}${sl.base_win!=null?` The base wins ${sl.base_win}% of its duels there.`:""}${sl.t_med?` Median contact around ${Math.round(sl.t_med)} s.`:""}</span></li>`).join("")}</ul>
-      ${P.plants&&P.plants.A&&P.plants.B?`<p class="note">In the base, Ts plant A ${P.plants.A.share}% of the time and B ${P.plants.B.share}%: the extra player goes to ${P.heavy_site}.</p>`:""}
-      ${P.rotations.length?`<span class="lbl4" style="color:var(--muted)">Rotations</span><ul>${P.rotations.map(r=>`<li><b>${esc(r.name)}</b> to ${r.to}: ${esc(r.route)} (${s(r.travel)}, ${r.died}% deaths on the way over ${r.n} ${r.who==="pro"?"pro":"base"} rotations)</li>`).join("")}</ul>`:""}`;
+    $(".caption",box).innerHTML=`<span>Red arrows: where the Ts of the base attack from (share of the attacks). Discs: the setup, a ring when it's the player's own strong spot; grey numbers are extra players. Squares: their grenades.</span>`;
+    const heavy=P.heavy_site,two=P.ct.filter(sl=>sl.site===heavy).length;
+    side.innerHTML=`${TH?`<div class="tread"><b>Where the Ts attack</b> (${TH.rounds} rounds of the base): ${["A","B"].map(L=>`<b>${L}</b> ${TH.sites[L].odds}%${TH.sites[L].rush?` (rush ${TH.sites[L].rush}%)`:""}`).join(" · ")}.
+       ${two>=2?`${two} players on ${heavy}, the most attacked site.`:""}</div>`:""}
+      <ul class="pl-list">${P.ct.map(sl=>`<li style="border-left-color:${who(sl.member)}"><b>${esc(sl.label)} · ${esc(sl.zone)}</b>: ${sl.member?`<b>${esc(sl.name)}</b>`:`<b>extra player ${sl.extra}</b>`}${sl.why&&sl.why.length?` (${sl.why.map(esc).join(", ")})`:""}.
+       ${sl.lane?`<br>Faces <b>${esc(sl.lane.name)}</b>: ${sl.lane.odds}% of the attacks${sl.lane.rush?`, ${sl.lane.rush}% of them rushes`:""}.`:""}
+       ${sl.nades&&sl.nades.length?`<ul class="nlist">${sl.nades.slice(0,sl.member?3:2).map(nadeLi).join("")}</ul>`:""}
+       <span class="note">${esc(sl.do)}${sl.base?` Base CTs on this spot: ${esc(sl.base)} in duels.`:""}${sl.base_zone?` (The base plays ${esc(sl.base_zone)} instead.)`:""}${sl.t_med?` First duel around ${Math.round(sl.t_med)} s.`:""}</span></li>`).join("")}</ul>
+      ${P.rotations.length?`<span class="lbl4" style="color:var(--muted)">Rotations once the bomb is down on the other site</span><ul>${P.rotations.map(r=>`<li><b>${esc(r.name)}</b> to ${r.to}: ${esc(r.route)} (${s(r.travel)}, ${r.died}% die on the way, ${r.n} ${r.who==="pro"?"pro":"base"} rotations)</li>`).join("")}</ul>`:""}`;
   }else{
-    const ex=P.executes||{},sites=Object.keys(ex);if(!teamExec||!sites.includes(teamExec))teamExec=P.t_target&&sites.includes(P.t_target)?P.t_target:sites[0];
-    const E=ex[teamExec]||{items:[]};
-    teamRadarDraw(box,teamMap,level,[...P.t_lanes.map(l=>({px:l.px,level:l.level,label:l.name,color:col[l.member],title:`${l.role_name} · ${l.zone||""}`})),
-      ...E.items.map(it=>({px:it.from_px,to:it.to_px,level:it.level,color:it.member?col[it.member]:"#8a96a3",short:{smoke:"S",flash:"F",molotov:"M",he:"H"}[it.type]||"",title:`${TYPE[it.type]} ${it.from} → ${it.to}: ${it.name}`}))]);
-    $(".caption",box).innerHTML=`<span>Everyone's fighting zones and the grenades of the ${esc(teamExec)} execute (S smoke, F flash, M molotov).</span>`;
-    side.innerHTML=`<div class="btns" role="group" aria-label="Site">${sites.map(L=>`<button type="button" data-texec="${L}" aria-pressed="${L===teamExec}">Execute ${L}${L===P.t_target?" (priority)":""}</button>`).join("")}</div>
-      ${E.plant_share!=null?`<p class="note">Base: ${E.plant_share}% of plants on ${teamExec}, Ts win ${E.t_win}% of the rounds where they plant, median plant at ${s(E.plant_t)} into the round.</p>`:""}
-      <ul class="pl-list">${P.t_lanes.map(l=>`<li style="border-left-color:${col[l.member]}"><b>${esc(l.name)} · ${esc(l.role_name)}</b>${l.zone?` · ${esc(l.zone)}`:""}<br><span class="note">${esc(l.do)}</span></li>`).join("")}</ul>
-      ${E.items.length?`<span class="lbl4" style="color:var(--muted)">Grenades of the ${esc(teamExec)} execute</span><div class="lineups">${E.items.map(it=>`<article class="lu" data-type="${it.type}" style="cursor:default"><div class="top"><span class="ty">${TYPE[it.type]} · ${esc(it.name)}</span><span class="pill ${it.known?"strong":""}">${it.known?"already thrown":"to learn"}</span></div>
-        <div class="route">${esc(it.from)} → ${esc(it.to)}</div><div class="meta">${esc(it.how||"")}${it.t!=null?` · around ${Math.round(it.t)} s`:""} · ${it.uses} throws in the base</div>
-        ${it.setpos?`<div class="cmd"><code>${esc(it.setpos)}</code><button type="button">Copy</button></div>`:""}</article>`).join("")}</div>`:`<p class="note">Not enough grenades observed toward this site in the base.</p>`}`;
-    $$("[data-texec]",side).forEach(b=>b.onclick=()=>{teamExec=b.dataset.texec;teamPlanView(host)});
-    copyBtn(side);
+    $(".caption",box).innerHTML=`<span>${PL?`${esc(PL.label)}: thick arrow = main lane, thin = second lane, dashed = the lurker's. Squares: the grenades (S smoke, F flash, M molotov).`:"No play with enough rounds in the base on this map."}</span>`;
+    side.innerHTML=PL?`<div class="btns" role="group" aria-label="Play">${plays.map(p=>`<button type="button" data-texec="${p.key}" aria-pressed="${p.key===teamExec}">${esc(p.label)}</button>`).join("")}</div>
+      <div class="tread">In the base: <b>${PL.t_win}%</b> of rounds won by the Ts over ${PL.n} rounds${TH.t_avg!=null?` (map average ${TH.t_avg}%)`:""}${PL.hit_t!=null?`, site taken around ${PL.hit_t} s into the round`:""}. ${PL.team_t&&PL.team_t.n?`You ran it ${PL.team_t.n} time${PL.team_t.n>1?"s":""} together: ${PL.team_t.won} won.`:"You haven't run it together yet."}</div>
+      <ul class="pl-list">${PL.roles.map(r=>`<li style="border-left-color:${who(r.member)}"><b>${esc(r.name)} · ${esc(r.role_name)}</b>${r.lane?` · ${esc(r.lane.name)}`:""}<br><span class="note">${esc(r.do)}</span></li>`).join("")}</ul>
+      ${PL.nades.length?`<span class="lbl4" style="color:var(--muted)">Grenades</span><div class="lineups">${PL.nades.map(it=>`<article class="lu" data-type="${it.type}" style="cursor:default"><div class="top"><span class="ty">${TYPE[it.type]} · ${esc(it.name)}</span><span class="pill ${it.known?"strong":""}">${it.known?"already thrown":"to learn"}</span></div>
+        <div class="route">${esc(it.from)} → ${esc(it.to)}${it.lane?` <span class="note">(${esc(it.lane)})</span>`:""}</div><div class="meta">${esc(it.how||"")}${it.t!=null?` · around ${Math.round(it.t)} s`:""} · ${it.uses} throws in the base</div>
+        ${it.setpos?`<div class="cmd"><code>${esc(it.setpos)}</code><button type="button">Copy</button></div>`:""}</article>`).join("")}</div>`:`<p class="note">Not enough grenades observed toward this site in the base.</p>`}`
+      :`<p class="note">Not enough rounds of the base on this map to suggest plays.</p>`;
+    $$("[data-texec]",side).forEach(b=>b.onclick=()=>{teamExec=b.dataset.texec;teamLevel=null;teamPlanView(host)});
   }
-  const C=P.callouts||{};
-  $("#tcalls",host).innerHTML=`<article class="card"><h3>Shared vocabulary</h3><p class="note">The same names for everyone: the game's own (radar).</p>
-    ${["A","mid","B"].filter(k=>C[k]).map(k=>`<p><b>${k==="mid"?"Mid":k+" side"}</b>: ${C[k].map(esc).join(", ")}</p>`).join("")}</article>
+  copyBtn(side);
+  // every play of the base, with the team's own rounds on both sides
+  $("#tplays",host).innerHTML=TH&&TH.plays.length?`<h3>Plays of the base on ${MAPN(teamMap)}, and how you did</h3><div class="tbl"><table><thead><tr><th>Play</th><th class="n">Rounds of the base</th><th class="n">T win</th><th class="n">Site taken</th><th class="n">You as T (won)</th><th class="n">You as CT, against it (won)</th></tr></thead><tbody>
+    ${TH.plays.map(p=>`<tr><td>${esc(p.label)}</td><td class="n">${p.odds}% <span class="note">(${p.n})</span></td><td class="n">${p.t_win}%</td><td class="n">${s(p.hit_t)}</td><td class="n">${rec(p.team_t)}</td><td class="n">${rec(p.team_ct)}</td></tr>`).join("")}</tbody></table></div>
+    <p class="note">Plays learned from the paths of the Ts (lanes: the ways in each site). "You" counts the rounds where at least two of you were in the same team.</p>`:"";
+  const V=P.vocab||[];
+  $("#tcalls",host).innerHTML=`<article class="card"><h3>Shared vocabulary</h3><p class="note">The callouts used on FACEIT and by pros, grouped by area.</p>
+    ${V.map(g=>`<p><b>${esc(g.title)}</b>: ${g.zones.map(esc).join(", ")}</p>`).join("")}</article>
    <article class="card"><h3>Everyone's calls</h3><ul>
     <li><b>Entry, anchor</b>: "how many, where, which grenades": "3 B, flash, molotov on box".</li>
     <li><b>Lurker</b>: the rotations heard: "one CT through connector, B is light".</li>

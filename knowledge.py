@@ -326,7 +326,7 @@ MAP_VIDEOS = {
 DRILLS = {
     "xhair": {"map": "Prefire map (workshop) of the day's map", "min": 5, "text": "Crosshair at head height on every angle, without shooting the floor.", "src": ["workshop_maps"]},
     "reaction": {"map": "Aim Rush", "min": 5, "text": "Reactive targets: the closest thing to a real duel for reaction time.", "src": ["workshop_maps", "yt_workshop"]},
-    "pistol": {"map": "Aim Botz (pistolet)", "min": 5, "text": "A-D, full stop, one shot: never while moving.", "src": ["workshop_maps"]},
+    "pistol": {"map": "Aim Botz (pistol)", "min": 5, "text": "A-D, full stop, one shot: never while moving.", "src": ["workshop_maps"]},
     "spray": {"map": "Recoil Master", "min": 5, "text": "The first 10 bullets of the AK and the M4, then bursts of 3-5.", "src": ["workshop_maps"]},
     "precision": {"map": "Aim Botz", "min": 5, "text": "Still bots then strafing bots: first-shot accuracy.", "src": ["workshop_maps"]},
     "dm": {"map": "Deathmatch", "min": 5, "text": "With your role's weapon, aiming only at the head.", "src": ["csgonews_solo"]},
