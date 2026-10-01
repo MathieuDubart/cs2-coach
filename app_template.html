@@ -434,6 +434,11 @@ svg.radar .rsite{font:800 24px var(--f-display);fill:#fff;paint-order:stroke;str
 svg.radar .you-pulse{animation:youp 1.6s ease-out infinite;transform-box:fill-box;transform-origin:center}
 @keyframes youp{0%{opacity:1;transform:scale(.6)}100%{opacity:0;transform:scale(1.8)}}
 @media (prefers-reduced-motion:reduce){svg.radar .you-pulse{animation:none}}
+svg.radar .rtt{font:600 12px var(--f-body);fill:#fff}
+svg.radar .mkt{font:800 13px var(--f-mono);fill:#ffd24a;paint-order:stroke;stroke:#0b0f14;stroke-width:3.5px}
+svg.radar .het{font:800 9.5px var(--f-mono);fill:#0b0f14}
+svg.radar .c4t{font:800 10.5px var(--f-mono);fill:#fff}
+.caption span svg{vertical-align:middle;margin-right:5px}
 </style>
 
 <div class="bar"><div class="bar-in">
@@ -1738,15 +1743,62 @@ function rotationFor(M,site,from,GEO){const R=((M.rotations||{})[site])||{};if(!
   if(!k&&GEO&&GEO.zones&&GEO.zones[from]){const f=GEO.zones[from].px;k=Object.keys(R).filter(z=>GEO.zones[z]).sort((a,b)=>Math.hypot(GEO.zones[a].px[0]-f[0],GEO.zones[a].px[1]-f[1])-Math.hypot(GEO.zones[b].px[0]-f[0],GEO.zones[b].px[1]-f[1]))[0]}
   return k?{from:k,...R[k]}:null}
 
+// ---------- radar drawing: one visual language per layer ----------
+// T entrances: wedges in the site's color · your spots: ringed discs, gold stars for multi-kills ·
+// grenades: dotted arcs ending on the grenade's own icon · rotation: route with a dark casing and chevrons ·
+// plant: C4 tag · you: pulsing white dot
 const PLACED=new WeakMap();   // labels already on a radar: a new one that would cover one moves down
-function rbadge(ov,x,y,text,fill,cls){const w=7.2*text.length+12;let L=PLACED.get(ov);if(!L){L=[];PLACED.set(ov,L)}
-  for(let k=0;k<5&&L.some(b=>Math.abs(b.x-x)<(b.w+w)/2+2&&Math.abs(b.y-y)<22);k++)y+=24;
-  L.push({x,y,w});const gg=el("g",{class:"rb"+(cls?" "+cls:"")},ov);
+function place(ov,x,y,w,h){let L=PLACED.get(ov);if(!L){L=[];PLACED.set(ov,L)}
+  for(let k=0;k<6&&L.some(b=>Math.abs(b.x-x)<(b.w+w)/2+2&&Math.abs(b.y-y)<(b.h+h)/2);k++)y+=h+2;L.push({x,y,w,h});return y}
+// pill: entrances and sites (rounded, filled with the site's color)
+function rbadge(ov,x,y,text,fill,cls){const w=7.2*text.length+14;y=place(ov,x,y,w,22);const gg=el("g",{class:"rb"+(cls?" "+cls:"")},ov);
   el("rect",{x:x-w/2,y:y-11,width:w,height:22,rx:11,style:`fill:${fill};stroke:#0b0f14;stroke-width:1.5`},gg);
   el("text",{x,y:y+4.5,"text-anchor":"middle",class:"rbt"},gg).textContent=text;return gg}
-// T side (no live reading of the Ts): the multi-kill stars on top of your zones
-function spotStars(box,spots,level){const ov=$("g",box);PLACED.set(ov,[]);(spots||[]).filter(s=>s.multi2&&s.px&&(!s.level||!level||s.level===level)).forEach(s=>
-  tip(rbadge(ov,s.px[0],s.px[1]-30,`★ ${s.multi2}× 2K+${s.best>=3?` · ${s.best}K`:""}`,"#ffd24a","mk"),`${s.name}: ${s.multi2} round${s.multi2>1?"s":""} with 2+ kills from here (best ${s.best} kills)`))}
+// tag: grenades and rotations (square, dark, a color bar on the left)
+function rtag(ov,x,y,text,color,cls){const w=6.6*text.length+18;y=place(ov,x,y,w,20);const gg=el("g",{class:"rt "+(cls||"")},ov);
+  el("rect",{x:x-w/2,y:y-10,width:w,height:20,rx:3,style:"fill:#0b0f14;fill-opacity:.88;stroke:#ffffff33;stroke-width:1"},gg);
+  el("rect",{x:x-w/2,y:y-10,width:4,height:20,rx:1.5,style:`fill:${color}`},gg);
+  el("text",{x:x+2,y:y+4,"text-anchor":"middle",class:"rtt"},gg).textContent=text;return gg}
+function starPath(x,y,R,r,n){let d="";for(let i=0;i<2*n;i++){const a=-Math.PI/2+i*Math.PI/n,q=i%2?r:R;d+=(i?"L":"M")+(x+q*Math.cos(a)).toFixed(1)+" "+(y+q*Math.sin(a)).toFixed(1)}return d+"Z"}
+// gold star with the number of multi-kill rounds (your spots)
+function mkStar(ov,x,y,s){const g=el("g",{class:"mkstar"},ov);
+  el("path",{d:starPath(x,y,11,4.6,5),style:"fill:#ffd24a;stroke:#5a4100;stroke-width:1.4"},g);
+  el("text",{x:x+14,y:y+4.5,class:"mkt"},g).textContent=`×${s.multi2}${s.best>=3?` · ${s.best}K`:""}`;
+  return tip(g,`${s.name}: ${s.multi2} round${s.multi2>1?"s":""} with 2+ kills from here (best: ${s.best} kills)`)}
+// the grenade's own icon where it lands
+function nadeIcon(ov,type,x,y,title){const g=el("g",{class:"nicon"},ov);
+  if(type==="smoke"){el("circle",{cx:x,cy:y,r:17,style:"fill:#c9d1d9;fill-opacity:.5;stroke:#eef2f6;stroke-width:2;stroke-dasharray:4 3"},g);
+    [[-6,-2,7],[5,-4,8],[0,5,7]].forEach(([dx,dy,r])=>el("circle",{cx:x+dx,cy:y+dy,r,style:"fill:#e9eef3;fill-opacity:.85"},g))}
+  else if(type==="molotov")el("path",{d:`M${x} ${y-15}C${x+11} ${y-3} ${x+9} ${y+10} ${x} ${y+10}C${x-9} ${y+10} ${x-11} ${y-3} ${x-3} ${y-8}C${x-2} ${y-2} ${x+2} ${y-3} ${x} ${y-15}Z`,style:"fill:#ff7a1a;stroke:#4a1600;stroke-width:1.6"},g);
+  else if(type==="flash")el("path",{d:starPath(x,y,15,6,8),style:"fill:#fff3a0;stroke:#7a6a00;stroke-width:1.4"},g);
+  else{el("circle",{cx:x,cy:y,r:12,style:"fill:#6abf69;stroke:#0b0f14;stroke-width:1.6"},g);el("text",{x,y:y+4,"text-anchor":"middle",class:"het"},g).textContent="HE"}
+  return tip(g,title)}
+// dotted arc from where you throw to where it lands
+function nadeArc(ov,x1,y1,x2,y2,type){const dx=x2-x1,dy=y2-y1,d=Math.hypot(dx,dy)||1,cx=(x1+x2)/2-dy/d*d*0.18,cy=(y1+y2)/2+dx/d*d*0.18;
+  el("path",{d:`M${x1} ${y1}Q${cx} ${cy} ${x2} ${y2}`,style:`fill:none;stroke:var(--${type});stroke-width:2.6;stroke-dasharray:1.5 5;stroke-linecap:round`},ov);
+  el("circle",{cx:x1,cy:y1,r:4.5,style:`fill:#fff;stroke:var(--${type});stroke-width:2.2`},ov)}
+// a wedge from an entrance toward its site: wide where the Ts come from, pointed at the site
+function laneWedge(gl,x1,y1,x2,y2,w,col){const d=Math.hypot(x2-x1,y2-y1)||1,ux=(x2-x1)/d,uy=(y2-y1)/d,ex=x2-ux*36,ey=y2-uy*36,h=w/2;
+  el("path",{d:`M${x1-uy*h} ${y1+ux*h}L${ex-uy*3} ${ey+ux*3}L${ex+ux*12} ${ey+uy*12}L${ex+uy*3} ${ey-ux*3}L${x1+uy*h} ${y1-ux*h}Z`,style:`fill:${col};fill-opacity:.32;stroke:${col};stroke-width:1.6;stroke-opacity:.9`},gl)}
+// a route: dark casing, colored core, chevrons showing the way
+function routeLine(ov,pts,col,main){const s=pts.map(p=>p.join(",")).join(" ");
+  el("polyline",{points:s,style:`fill:none;stroke:#0b0f14;stroke-width:${main?10:7};stroke-opacity:.75;stroke-linejoin:round;stroke-linecap:round`},ov);
+  el("polyline",{points:s,style:`fill:none;stroke:${col};stroke-width:${main?5.5:3.5};stroke-linejoin:round;stroke-linecap:round${main?"":";stroke-dasharray:9 6"}`},ov);
+  if(main)for(let i=0;i<pts.length-1;i++){const [a,b]=[pts[i],pts[i+1]],mx=(a[0]+b[0])/2,my=(a[1]+b[1])/2,d=Math.hypot(b[0]-a[0],b[1]-a[1]);if(d<40)continue;
+    const ux=(b[0]-a[0])/d,uy=(b[1]-a[1])/d;el("path",{d:`M${mx-ux*5-uy*6} ${my-uy*5+ux*6}L${mx+ux*5} ${my+uy*5}L${mx-ux*5+uy*6} ${my-uy*5-ux*6}`,style:"fill:none;stroke:#fff;stroke-width:2.4;stroke-linecap:round;stroke-linejoin:round"},ov)}}
+// your spots: a ringed disc, the ring colored by the duels you win there
+function spotDisc(ov,s,side){const r=8+Math.sqrt(s.presence||1)*2.6,col=s.win==null?"#8a96a3":s.win>=58?"var(--good)":s.win<=42?"var(--bad)":"#c9a227";
+  tip(el("circle",{cx:s.px[0],cy:s.px[1],r,style:`fill:#0b0f14;fill-opacity:.35;stroke:${col};stroke-width:4`},ov),
+    `${s.name}: ${Math.round(s.presence)}% of your time as ${side}, you ${s.k}-${s.d}${s.win!=null?` (${s.win}% of duels won, others ${s.others_win??"—"}%)`:""}`);
+  el("circle",{cx:s.px[0],cy:s.px[1],r:3,style:`fill:${col}`},ov);return r}
+const SW={lane:`<svg width="26" height="12" aria-hidden="true"><path d="M1 2L20 5L25 6L20 7L1 10Z" style="fill:var(--siteA);fill-opacity:.4;stroke:var(--siteA)"/></svg>`,
+  spot:`<svg width="16" height="16" aria-hidden="true"><circle cx="8" cy="8" r="6" style="fill:none;stroke:var(--good);stroke-width:3"/></svg>`,
+  star:`<svg width="16" height="16" aria-hidden="true"><path d="${starPath(8,8,7,3,5)}" style="fill:#ffd24a;stroke:#5a4100"/></svg>`,
+  nade:`<svg width="26" height="14" aria-hidden="true"><path d="M2 12Q13 0 22 8" style="fill:none;stroke:var(--smoke);stroke-width:2.4;stroke-dasharray:1.5 4;stroke-linecap:round"/></svg>`,
+  route:`<svg width="26" height="12" aria-hidden="true"><path d="M1 6H25" style="stroke:#0b0f14;stroke-width:8"/><path d="M1 6H25" style="stroke:var(--good);stroke-width:4"/></svg>`,
+  c4:`<svg width="20" height="14" aria-hidden="true"><rect x="1" y="1" width="18" height="12" rx="2" style="fill:var(--bad)"/></svg>`};
+// T side: the multi-kill stars on top of your zones
+function spotStars(box,spots,level){const ov=$("g",box);PLACED.set(ov,[]);(spots||[]).filter(s=>s.multi2&&s.px&&(!s.level||!level||s.level===level)).forEach(s=>mkStar(ov,s.px[0]-6,s.px[1]-24,s))}
 const RLAYERS=[["odds","T odds"],["spots","Your spots"],["nades","Grenades now"],["rot","Rotation"]];
 function liveLayers(){let L=store("rlayers");if(!Array.isArray(L))L=RLAYERS.map(x=>x[0]);return L}
 function layerBtns(){const L=liveLayers();return `<div class="btns" role="group" aria-label="What the radar shows">${RLAYERS.map(([k,t])=>`<button type="button" data-rlayer="${k}" aria-pressed="${L.includes(k)}">${t}</button>`).join("")}</div>`}
@@ -1756,68 +1808,60 @@ function liveRadar(box,p,map,level,g,o){
   const svg=$("svg",box),img=$("image",svg),ov=$("g",svg),cap=$(".caption",box);
   img.setAttribute("href",D.radars[`${map}:${level}`]||"");svg.setAttribute("viewBox",(D.viewboxes[map]||[0,0,1024,1024]).join(" "));ov.replaceChildren();PLACED.set(ov,[]);
   const here=x=>x&&x.px&&(!x.level||!level||x.level===level),legend=[];
-  const badge=(x,y,text,fill,cls)=>rbadge(ov,x,y,text,fill,cls);
-  // your spots: how much you play them, your duels there, and the rounds with 2+ kills from there
+  const live=o.following&&g&&g.round_phase==="live",planted=live&&g.bomb==="planted",site=o.site;
+  const layer=n=>el("g",{class:"ly-"+n},ov);   // one group per layer, drawn in this order
+  const Lspots=layer("spots"),Llanes=layer("lanes"),Lrot=layer("rot"),Lnades=layer("nades"),Ltop=layer("top");
+  // your spots
   const SP=((PL.spots||{})[map]||{})[o.side]||[];
-  if(on("spots")&&SP.length){SP.filter(here).forEach(s=>{const r=7+Math.sqrt(s.presence||1)*3.2,col=s.win==null?"#8a96a3":s.win>=58?"var(--good)":s.win<=42?"var(--bad)":"#c9a227";
-      tip(el("circle",{cx:s.px[0],cy:s.px[1],r,style:`fill:${col};fill-opacity:.35;stroke:${col};stroke-width:2.5`},ov),
-        `${s.name}: ${Math.round(s.presence)}% of your time as ${o.side}, you ${s.k}-${s.d}${s.win!=null?` (${s.win}% of duels won, others ${s.others_win??"—"}%)`:""}${s.multi2?`, ${s.multi2} round${s.multi2>1?"s":""} with 2+ kills from here (best: ${s.best} kills)`:""}`);
-      if(s.multi2)badge(s.px[0],s.px[1]-r-13,`★ ${s.multi2}× 2K+${s.best>=3?` · ${s.best}K`:""}`,"#ffd24a","mk")});
-    legend.push(`<span><i style="background:var(--good)"></i>your strong spots</span><span><i style="background:var(--bad)"></i>spots where you lose duels</span><span>★ rounds with 2+ kills from there</span>`)}
-  let PLs=null;const planted=o.following&&g&&g.round_phase==="live"&&g.bomb==="planted";
+  if(on("spots")&&SP.length){SP.filter(here).forEach(s=>{const r=spotDisc(Lspots,s,o.side);if(s.multi2)mkStar(Ltop,s.px[0]-6,s.px[1]-r-12,s)});
+    legend.push(`<span>${SW.spot}your spots (ring: green = you win your duels there, red = you lose them)</span><span>${SW.star}rounds with 2+ kills from there</span>`)}
+  // the Ts' entrances and the sites (CT)
+  let PLs=null;
   if(ct&&M&&M.plays&&!planted){const ev=o.following?evFor(g):{},r=o.read||(o.following?tsidePredict(TS,map,g,ev):{A:M.all.A,B:M.all.B,none:M.all.none,rush:Math.round(100*(M.rush_p??.2)),live:false});PLs=r&&tsidePlays(TS,map,o.following?g:{},ev,r);
     if(on("odds")&&PLs&&GEO&&GEO.sites){
-      // entrances: arrow toward the site, width = chance they come through it
       PLs.lanes.filter(L=>L.px&&L.p>=0.02).forEach(L=>{const S_=GEO.sites[L.site];if(!S_)return;
-        const dim=!here(L)||!here(S_),gl=el("g",{style:dim?"opacity:.4":""},ov);   // another floor (Nuke): shown faded
-        const [x1,y1]=L.px,[x2,y2]=S_.px,d=Math.hypot(x2-x1,y2-y1)||1,ux=(x2-x1)/d,uy=(y2-y1)/d,ex=x2-ux*34,ey=y2-uy*34,wd=2+16*L.p,col=L.site==="A"?"var(--siteA)":"var(--siteB)";
-        el("line",{x1,y1,x2:ex,y2:ey,style:`stroke:${col};stroke-width:${wd};stroke-opacity:.55;stroke-linecap:round`},gl);
-        el("path",{d:`M${ex+ux*12} ${ey+uy*12}L${ex-uy*(wd/2+6)} ${ey+ux*(wd/2+6)}L${ex+uy*(wd/2+6)} ${ey-ux*(wd/2+6)}Z`,style:`fill:${col};fill-opacity:.8`},gl);
-        const lb=badge(x1,y1,`${L.name.split(" / ")[0]}${L.mid?" (mid)":""} ${Math.round(100*L.p)}%`,L.site==="A"?"var(--siteA)":"var(--siteB)","lane");if(dim)lb.setAttribute("style","opacity:.5");
-        tip(lb,
-          `${Math.round(100*L.p)}% the Ts come through ${L.name} this round${L.rush>=0.02?` (rush through it: ${Math.round(100*L.rush)}%)`:""}${o.following&&L.haz>=0.05?`. Pushed in the next 15 s: ${Math.round(100*L.haz)}%`:""}. Zones: ${(L.zones||[]).join(", ")}`)});
-      // sites: the odds of each, and its most likely play
-      ["A","B"].forEach(s=>{const S_=GEO.sites[s];if(!S_||!S_.px)return;const ps=PLs.list.filter(x=>x.site===s),tot=ps.reduce((a,x)=>a+x.v,0),top=ps[0];   // rush and split shares of this site under it
-        const other=!here(S_);
-        el("circle",{cx:S_.px[0],cy:S_.px[1],r:30,style:`fill:${s==="A"?"var(--siteA)":"var(--siteB)"};fill-opacity:.25;stroke:${s==="A"?"var(--siteA)":"var(--siteB)"};stroke-width:3;${other?"stroke-dasharray:6 5":""}`},ov);
-        el("text",{x:S_.px[0],y:S_.px[1]+7,"text-anchor":"middle",class:"rsite"},ov).textContent=`${s} ${Math.round(100*tot)}%${other?" ↕":""}`;
-        if(top&&top.v>=0.03){const rr=ps.filter(x=>x.p.startsWith("rush")).reduce((a,x)=>a+x.v,0),sp=ps.filter(x=>x.p.startsWith("split")).reduce((a,x)=>a+x.v,0);
-          const bits=[rr>=0.03?`rush ${Math.round(100*rr)}%`:"",sp>=0.03?`split ${Math.round(100*sp)}%`:""].filter(Boolean).join(" · ");
-          if(bits)badge(S_.px[0],S_.px[1]+46,bits,"#1b2430","play")}});
-      legend.push(`<span><i style="background:var(--siteA)"></i><i style="background:var(--siteB)"></i>arrow = an entrance of the Ts, thicker = more likely this round</span>`)}}
-  // grenades for now (or the plan before the round)
-  if(ct&&on("nades")&&planted&&o.site&&GEO&&GEO.sites&&GEO.sites[o.site]){const E=((((PL.nades||{}).maps||{})[map])||{}).CT,S_=GEO.sites[o.site].px,held=g.nades||null;
-    Object.entries((E&&E.types)||{}).forEach(([type,T])=>(T.post||[]).filter(x=>x.to_px&&Math.hypot(x.to_px[0]-S_[0],x.to_px[1]-S_[1])<=230&&(!held||held[type]>0)).slice(0,1).forEach(x=>{
-      if(!here({px:x.to_px,level:x.land_level||x.level}))return;const col=`var(--${type})`;
-      el("line",{x1:x.from_px[0],y1:x.from_px[1],x2:x.to_px[0],y2:x.to_px[1],style:`stroke:${col};stroke-width:3;stroke-dasharray:7 5`},ov);
-      el("circle",{cx:x.from_px[0],cy:x.from_px[1],r:5,style:`fill:#fff;stroke:${col};stroke-width:2.5`},ov);
-      tip(el("circle",{cx:x.to_px[0],cy:x.to_px[1],r:12,style:`fill:${col};fill-opacity:.8;stroke:#0b0f14;stroke-width:1.5`},ov),`Retake ${nadeName(type,"CT")}: ${x.from} → ${x.to}. ${x.how||""}`);
-      badge(x.to_px[0],x.to_px[1]-22,`retake ${nadeName(type,"CT")}`,"#0b0f14","nd")}));
-    legend.push(`<span>dashed line = a retake grenade for ${o.site}, from where it is thrown (white dot)</span>`)}
-  if(ct&&on("nades")&&PLs){const NN=nadesNow(PL,map,g,PLs,o.following&&g&&g.round_phase==="live");
-    NN.forEach(x=>{if(!here({px:x.to_px,level:x.land_level||x.level})&&!here({px:x.from_px,level:x.level}))return;const col=`var(--${x.type})`;
-      el("line",{x1:x.from_px[0],y1:x.from_px[1],x2:x.to_px[0],y2:x.to_px[1],style:`stroke:${col};stroke-width:3;stroke-dasharray:7 5`},ov);
-      el("circle",{cx:x.from_px[0],cy:x.from_px[1],r:5,style:`fill:#fff;stroke:${col};stroke-width:2.5`},ov);
-      tip(el("circle",{cx:x.to_px[0],cy:x.to_px[1],r:12,style:`fill:${col};fill-opacity:.8;stroke:#0b0f14;stroke-width:1.5`},ov),
-        `${nadeName(x.type,"CT")} ${x.from} → ${x.to}: ${x.why}. ${x.how||""}${x.click?`, ${x.click} click`:""}${x.yours?"":" (from a spot you don't play)"}`);
-      badge(x.to_px[0],x.to_px[1]-22,`${nadeName(x.type,"CT")}${x.role==="anti_rush"?" · anti-rush":x.role==="block"?" · block":x.role==="flash"?" · as they push":""}`,"#0b0f14","nd")});
+        const dim=!here(L)||!here(S_),gl=el("g",{style:dim?"opacity:.4":""},Llanes),col=L.site==="A"?"var(--siteA)":"var(--siteB)";
+        laneWedge(gl,L.px[0],L.px[1],S_.px[0],S_.px[1],8+44*L.p,col);
+        const lb=rbadge(Ltop,L.px[0],L.px[1],`${L.name.split(" / ")[0]}${L.mid?" (mid)":""} ${Math.round(100*L.p)}%`,col,"lane");if(dim)lb.setAttribute("style","opacity:.5");
+        tip(lb,`${Math.round(100*L.p)}% the Ts come through ${L.name} this round${L.rush>=0.02?` (rush through it: ${Math.round(100*L.rush)}%)`:""}${o.following&&L.haz>=0.05?`. Pushed in the next 15 s: ${Math.round(100*L.haz)}%`:""}. Zones: ${(L.zones||[]).join(", ")}`)});
+      ["A","B"].forEach(s=>{const S_=GEO.sites[s];if(!S_||!S_.px)return;const ps=PLs.list.filter(x=>x.site===s),tot=ps.reduce((a,x)=>a+x.v,0),other=!here(S_),col=s==="A"?"var(--siteA)":"var(--siteB)";
+        el("circle",{cx:S_.px[0],cy:S_.px[1],r:31,style:`fill:${col};fill-opacity:.22;stroke:${col};stroke-width:3.5;${other?"stroke-dasharray:6 5":""}`},Llanes);
+        el("text",{x:S_.px[0],y:S_.px[1]+8,"text-anchor":"middle",class:"rsite"},Ltop).textContent=`${s} ${Math.round(100*tot)}%${other?" ↕":""}`;
+        const rr=ps.filter(x=>x.p.startsWith("rush")).reduce((a,x)=>a+x.v,0),sp=ps.filter(x=>x.p.startsWith("split")).reduce((a,x)=>a+x.v,0);
+        const bits=[rr>=0.03?`⚡ rush ${Math.round(100*rr)}%`:"",sp>=0.03?`⇉ split ${Math.round(100*sp)}%`:""].filter(Boolean).join("  ");
+        if(bits)rbadge(Ltop,S_.px[0],S_.px[1]+48,bits,"#1b2430","play")});
+      legend.push(`<span>${SW.lane}entrance of the Ts, wider = more likely this round (⚡ rush, ⇉ split under each site)</span>`)}}
+  // grenades: now (live), the plan (before the round), the retake ones (after the plant)
+  const landed=[];   // grenades landing on the same spot: icons side by side
+  const drawNade=(x,label,title)=>{if(!here({px:x.to_px,level:x.land_level||x.level})&&!here({px:x.from_px,level:x.level}))return;
+    const k=landed.filter(q=>Math.hypot(q[0]-x.to_px[0],q[1]-x.to_px[1])<18).length;landed.push(x.to_px);
+    const tx=x.to_px[0]+k*34,ty=x.to_px[1];
+    nadeArc(Lnades,x.from_px[0],x.from_px[1],tx,ty,x.type);nadeIcon(Ltop,x.type,tx,ty,title);
+    rtag(Ltop,tx,ty+27,label,`var(--${x.type})`,"nd")};
+  if(ct&&on("nades")&&planted&&site&&GEO&&GEO.sites&&GEO.sites[site]){const E=((((PL.nades||{}).maps||{})[map])||{}).CT,S_=GEO.sites[site].px,held=g.nades||null;
+    Object.entries((E&&E.types)||{}).forEach(([type,T])=>(T.post||[]).filter(x=>x.to_px&&Math.hypot(x.to_px[0]-S_[0],x.to_px[1]-S_[1])<=230&&(!held||held[type]>0)).slice(0,1)
+      .forEach(x=>drawNade({...x,type},`retake ${nadeName(type,"CT")}`,`Retake ${nadeName(type,"CT")}: ${x.from} → ${x.to}. ${x.how||""}`)));
+    legend.push(`<span>${SW.nade}retake grenade: from the white dot to its icon</span>`)}
+  if(ct&&on("nades")&&PLs){const NN=nadesNow(PL,map,g,PLs,live);
+    NN.forEach(x=>drawNade(x,`${nadeName(x.type,"CT")}${x.role==="anti_rush"?" · anti-rush":x.role==="block"?" · block":x.role==="flash"?" · as they push":""}`,
+      `${nadeName(x.type,"CT")} ${x.from} → ${x.to}: ${x.why}. ${x.how||""}${x.click?`, ${x.click} click`:""}${x.yours?"":" (from a spot you don't play)"}`));
     o.nadesOut&&o.nadesOut(NN);
-    legend.push(`<span>dashed line = a grenade worth throwing now, from your spot (white dot) to where it lands</span>`)}
+    if(NN.length)legend.push(`<span>${SW.nade}grenade worth throwing ${live?"now":"this round"}: from the white dot to its icon (cloud smoke, flame molotov, burst flash, HE)</span>`)}
   // after the plant: the way to the site from where you are, and where the bomb usually is
-  const live=o.following&&g&&g.round_phase==="live",site=o.site;
   const you=o.following&&g&&g.pos&&GEO?worldPx(GEO,g.pos):null;
-  if(ct&&on("rot")&&live&&g.bomb==="planted"&&site&&M&&GEO){const from=you?nearestZone(GEO,you.px,you.level):(SP[0]||{}).name;
-    const R=rotationFor(M,site,from,GEO);
-    if(R&&R.routes){R.routes.forEach((rt,i)=>{const pts=[GEO.zones[R.from],...rt.route.map(z=>GEO.zones[z]),GEO.sites[site]].filter(Boolean).map(z=>z.px);
+  if(ct&&on("rot")&&planted&&site&&M&&GEO){const from=you?nearestZone(GEO,you.px,you.level):(SP[0]||{}).name,R=rotationFor(M,site,from,GEO);
+    if(R&&R.routes){R.routes.slice().reverse().forEach((rt,j)=>{const i=R.routes.length-1-j,pts=[GEO.zones[R.from],...rt.route.map(z=>GEO.zones[z]),GEO.sites[site]].filter(Boolean).map(z=>z.px);
         if(you&&i===0)pts.unshift(you.px);if(pts.length<2)return;const col=rt.died>=40?"var(--bad)":rt.died>=20?"#e0a526":"var(--good)";
-        el("polyline",{points:pts.map(p=>p.join(",")).join(" "),style:`fill:none;stroke:${col};stroke-width:${i?3:5};stroke-opacity:${i?.55:.9};stroke-linejoin:round;stroke-linecap:round${i?";stroke-dasharray:8 6":""}`},ov);
-        const m_=pts[Math.floor(pts.length/2)];tip(badge(m_[0],m_[1]-16,`${rt.travel!=null?`${Math.round(rt.travel)} s · `:""}${rt.died}% die`,"#0b0f14","rot"),`From ${R.from} to ${site}: ${rt.route.join(" > ")} (${rt.n} rotations in the base, ${rt.died}% died on the way)`)});
-      legend.push(`<span>rotation to ${site} from ${esc(R.from)}: green = safe, red = players often die on the way</span>`)}}
-  // plant spots of the site
+        routeLine(Lrot,pts,col,i===0);const m_=pts[Math.floor(pts.length/2)];
+        tip(rtag(Ltop,m_[0],m_[1]-18,`⏱ ${rt.travel!=null?`${Math.round(rt.travel)} s · `:""}${rt.died}% die`,col,"rot"),`From ${R.from} to ${site}: ${rt.route.join(" > ")} (${rt.n} rotations in the base, ${rt.died}% died on the way)`)});
+      legend.push(`<span>${SW.route}rotation to ${site} from ${esc(R.from)} (green = safe, red = players often die on the way; dashed = the other way)</span>`)}}
   const PLT=site&&M&&M.evidence&&M.evidence.plants&&M.evidence.plants[site];
-  if(PLT&&live&&g.bomb==="planted")(PLT.spots||[]).filter(s=>!s.level||s.level===level).forEach(s=>{tip(el("rect",{x:s.px[0]-9,y:s.px[1]-9,width:18,height:18,rx:3,style:"fill:var(--bad);stroke:#fff;stroke-width:2"},ov),`Plant spot: ${s.share}% of plants, Ts win ${s.t_win}% after it`)});
-  if(you&&you.level===level){el("circle",{cx:you.px[0],cy:you.px[1],r:16,class:"you-pulse",style:"fill:none;stroke:#fff;stroke-width:2"},ov);
-    el("circle",{cx:you.px[0],cy:you.px[1],r:7,style:"fill:#fff;stroke:#0b0f14;stroke-width:2"},ov)}
+  if(PLT&&planted){(PLT.spots||[]).filter(s=>!s.level||s.level===level).forEach(s=>{const gg=el("g",{},Ltop);
+      el("rect",{x:s.px[0]-13,y:s.px[1]-9,width:26,height:18,rx:3,style:"fill:var(--bad);stroke:#fff;stroke-width:1.6"},gg);
+      el("text",{x:s.px[0],y:s.px[1]+4,"text-anchor":"middle",class:"c4t"},gg).textContent="C4";tip(gg,`Plant spot: ${s.share}% of plants, Ts win ${s.t_win}% after it`)});
+    legend.push(`<span>${SW.c4}where the bomb usually is</span>`)}
+  if(you&&you.level===level){el("circle",{cx:you.px[0],cy:you.px[1],r:16,class:"you-pulse",style:"fill:none;stroke:#fff;stroke-width:2"},Ltop);
+    el("circle",{cx:you.px[0],cy:you.px[1],r:7,style:"fill:#fff;stroke:#0b0f14;stroke-width:2"},Ltop)}
   cap.innerHTML=legend.join("");
   return PLs}
 
