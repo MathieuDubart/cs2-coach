@@ -291,7 +291,38 @@ def _my_zones(cross, mp, side, top=4, min_presence=5.0):
     return [], {}
 
 
-def for_player(sid, maps, cross=None, stats=None):
+def _role(typ, x):
+    """anti_rush: a molotov or an HE usually thrown in the first 25 s at an entrance; block: a smoke or a molotov
+    that closes an entrance (any time); damage: an HE later in the round."""
+    if typ in ("molotov", "he") and (x.get("usual") == "debut" or (x.get("t_med") or 99) <= 25):
+        return "anti_rush"
+    return "block" if typ in ("smoke", "molotov") else "damage"
+
+
+SLIM = ("from", "to", "from_px", "to_px", "level", "land_level", "timer", "t_med", "how", "click", "setpos", "n", "per100",
+        "blind", "kill", "team", "dmg", "hit", "win", "base_win", "usual", "best")
+
+
+def lane_picks(M, lanes_mp, zones):
+    """For each entrance of the Ts (lanes.py): the smoke, molotov and HE that land on it, thrown from your zones when
+    some do (else the base's best), with their role."""
+    out = {}
+    for typ, T in M["types"].items():
+        if typ == "flash":
+            continue
+        for x in T["groups"]:
+            for site, ls in (lanes_mp or {}).items():
+                for i, ln in enumerate(ls or []):
+                    if x["to"] not in ln.get("zones", []):
+                        continue
+                    key, yours = f"{site}{i}", (not zones) or x["from_key"] in zones
+                    cur = out.setdefault(key, {}).get(typ)
+                    if cur is None or (yours, x["score"]) > (cur["yours"], cur["score"]):
+                        out[key][typ] = {**{k: x[k] for k in SLIM if k in x}, "score": x["score"], "yours": yours, "role": _role(typ, x)}
+    return out
+
+
+def for_player(sid, maps, cross=None, stats=None, lanes=None):
     """Per map and side: the grenades that work from the zones you play, in buying order, with when and how to throw
     them; and your habits (grenades you throw, grenades you still hold when you die)."""
     S = summary()
@@ -346,6 +377,8 @@ def for_player(sid, maps, cross=None, stats=None):
             entry["order"] = order
             entry["none"] = single.get("none")
             entry["mine"] = {t: int((own.type == t).sum()) for t in TYPES}
+            if side == "CT" and lanes and lanes.get(mp):   # the grenades that close each entrance of the Ts
+                entry["lanes"] = lane_picks(M, lanes[mp], zones)
             res["maps"].setdefault(mp, {})[side] = entry
     # habits: grenades still in hand at death, and grenades thrown per round, against the base
     if stats:

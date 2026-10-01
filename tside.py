@@ -17,6 +17,7 @@ import midround
 
 OUT = os.path.join(config.OUT, "population", "tside")
 ZONES = os.path.join(config.OUT, "population", "tside_zones.json")   # which zones lead to which site, per map
+LANES = os.path.join(config.OUT, "population", "tside_lanes.json")   # how each site is entered, per map (lanes.py)
 RUSH = 30.0          # site taken in the first 30 s (timer above 1:25): a rush
 LATE = 75.0          # site taken after 75 s (timer under 0:40): a late hit
 LONE = 1000.0        # a T with no teammate within 1000 units (about 25 m) is alone
@@ -38,6 +39,28 @@ def five_v_five(R):
     return len(R) and R.T_n.max() >= 4 and R.CT_n.max() >= 4
 
 
+def _paths(T_, kd):
+    """Every T's way through the map in the round: 'zone@t>zone@t>...>†@t' (raw place names, a change of zone at a
+    time, † when killed), one T per ';'. Tells the route of an attack: through a main, through mid, or both."""
+    dead = {}
+    if len(kd) and "victim" in kd:
+        for v, t, s in zip(kd.victim, kd.t, kd.victim_side):
+            if s == "T" and v == v:
+                dead.setdefault(v, float(t))
+    out = []
+    for sid, x in T_.sort_values("t").groupby("steamid"):
+        seq, last = [], None
+        for z, t in zip(x.zone, x.t):
+            if isinstance(z, str) and z and z != "?" and z != last:
+                seq.append(f"{z}@{t:.0f}")
+                last = z
+        if sid in dead:
+            seq.append(f"†@{dead[sid]:.0f}")
+        if seq:
+            out.append(">".join(seq))
+    return ";".join(out) or None
+
+
 def analyze(ddir):
     """-> one row per round: the site the T hit (A, B or '-' when they never did), when, with how many."""
     meta = midround._meta(ddir)
@@ -52,7 +75,7 @@ def analyze(ddir):
     S = pd.read_parquet(os.path.join(ddir, "samples.parquet"), columns=["steamid", "side", "round", "t", "X", "Y", "Z", "zone", "health"])
     S = S[(S.steamid != 0) & (S.health > 0)]
     fd = os.path.join(ddir, "duels.parquet")
-    dcols = ["round", "t", "killer_side", "victim_side", "victim_zone", "killer_zone", "victim_mate_dist", "killer_mate_dist", "traded"]
+    dcols = ["round", "t", "victim", "killer_side", "victim_side", "victim_zone", "killer_zone", "victim_mate_dist", "killer_mate_dist", "traded"]
     D = pd.read_parquet(fd).reindex(columns=dcols) if os.path.exists(fd) else pd.DataFrame()
     # teams: the T of the first round are team a, whatever side they play later
     first = S[S["round"] == R["round"].min()]
@@ -105,7 +128,8 @@ def analyze(ddir):
                "site": "-", "hit_t": None, "n_exec": None, "n_push": None, "lurk_other": None, "approaches": None, "pre_zones": None,
                "t_events": ";".join(f"{z}@{t:.1f}" for z, t in t_events if isinstance(z, str) and z) or None,
                "first_zone": None, "first_t": None, "first_t_side_won": None, "t_alive_hit": None, "ct_alive_hit": None,
-               "fc_alone": None, "t_deaths": None, "ct_deaths": None, "bunch_t": None, "bunch_zone": None}
+               "fc_alone": None, "t_deaths": None, "ct_deaths": None, "bunch_t": None, "bunch_zone": None,
+               "t_paths": _paths(T_, kd)}
         if len(kd):
             k0 = kd.iloc[0]
             # the T of the first duel: alone (no teammate within LONE units) or with others
@@ -164,7 +188,7 @@ def _outdated(f):
         names = pq.read_schema(f).names
     except Exception:
         return True
-    return "map" in names and "t_deaths" not in names
+    return "map" in names and ("t_deaths" not in names or "t_paths" not in names)
 
 
 def run_all(log=print, force=False):
@@ -205,7 +229,32 @@ def load():
         os.replace(tmp, ZONES)
     except OSError:
         pass
-    return _sequences(_dynamics(_directions(df, zs=zs)))
+    df = _sequences(_dynamics(_directions(df, zs=zs)))
+    return _with_plays(df)
+
+
+def _with_plays(df):
+    """Lanes of every site and the play of every round (lanes.py); kept on disk for single matches."""
+    import json
+    import lanes as LN
+    try:
+        G = LN.geo()
+        ls, mem = LN.learn(df, G)
+        df = LN.classify(df, ls, G, mem)
+        tmp = LANES + f".{os.getpid()}.tmp"
+        json.dump(ls, open(tmp, "w", encoding="utf-8"), ensure_ascii=False)
+        os.replace(tmp, LANES)
+    except Exception as e:   # the rest of the reading stays usable
+        print(f"plays unavailable ({e})")
+    return df
+
+
+def _lanes():
+    import json
+    try:
+        return json.load(open(LANES, encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
 
 
 def zone_sites(df):
@@ -573,7 +622,7 @@ def econ_table(df):
 
 
 SUMMARY = os.path.join(config.OUT, "population", "tside_summary.json")
-VERSION = 3   # bump when the summary changes shape: the cache is rebuilt
+VERSION = 5   # bump when the summary changes shape: the cache is rebuilt
 
 
 def _stamp():
@@ -611,6 +660,7 @@ def _tendencies(maps, df):
            "ctx_fr": CTX_FR, "tempo": tempo_model(df), "alone": alone_gamma(df), "dyn_after": _dyn_after(df), "dyn_fr": DYN_FR}
     r_map, r_ctx = _rush_rates(df) if "dyn" in df else ({}, {})
     dirs = _map_dirs()
+    rot = None
     pool = []
     for mp in maps:
         g = df[df["map"] == mp]
@@ -634,6 +684,17 @@ def _tendencies(maps, df):
             res["maps"][mp]["evidence"] = evidence(mp, g, dirs.get(mp, []), pool)
         except Exception as e:  # the rest of the reading stays usable
             print(f"{mp}: in-round evidence unavailable ({e})")
+        try:   # plays (rush, split, one lane), what the radar needs, rotations of the CTs toward each site
+            import lanes as LN
+            if rot is None:
+                rot = midround.retake_routes()
+            res["maps"][mp]["rotations"] = rot.get(mp)
+            ls = _lanes().get(mp)
+            cz = ((res["maps"][mp].get("evidence") or {}).get("contact") or {}).get("zones")
+            res["maps"][mp]["plays"] = LN.summary(g, ls, cz) if ls else None
+            res["maps"][mp]["geo"] = LN.radar(LN.geo(), mp)
+        except Exception as e:
+            print(f"{mp}: plays unavailable ({e})")
     res["retake_all"] = retake_table(pool)
     return res
 
@@ -827,10 +888,19 @@ def match_story(mid):
     except (OSError, ValueError):
         zs = {}
     df = _dynamics(_directions(df, zs=zs))
+    try:   # the play of each round, with the lanes this match's Ts used
+        import lanes as LN
+        ls = _lanes()
+        df = LN.classify(df, ls, LN.geo())
+        mp = df["map"].iloc[0]
+        df["play_name"] = [LN.name(p, ls.get(mp), [int(i) for i in str(u).split(",") if i != ""]) for p, u in zip(df.play, df.play_lanes)]
+    except Exception:
+        df["play"], df["play_name"] = None, None
     num = lambda v: round(float(v), 1) if v is not None and v == v else None
     out = []
     for _, r in df.sort_values("round").iterrows():
         out.append({"r": int(r["round"]), "team": r.t_team, "site": r.site, "in": bool(r.entered), "dyn": r.dyn,
+                    "play": r.get("play"), "play_name": r.get("play_name"),
                     "at": num(r.commit), "grp": int(r.grp) if r.grp == r.grp and r.grp is not None else None,
                     "plant": [r.plant_site, num(r.plant_t)] if r.plant_site in ("A", "B") else None,
                     "tw": bool(r.T_won), "why": r.reason, "end": num(r.end_t),

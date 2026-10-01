@@ -73,7 +73,7 @@ class ZoneMap:
             lab = ((pts[:, None, :] - c[None]) ** 2).sum(-1).argmin(1)
             c = np.array([pts[lab == i].mean(0) if (lab == i).any() else c[i] for i in range(k)])
         c = c[np.lexsort((c[:, 0], np.round(c[:, 1] / 80)))]
-        self.zones = [(f"S{i + 1}", f"Secteur {i + 1}", float(x), float(y), lv) for i, (x, y) in enumerate(c)]
+        self.zones = [(f"S{i + 1}", f"Sector {i + 1}", float(x), float(y), lv) for i, (x, y) in enumerate(c)]
         self.anchors = c
         self.manual = True
 

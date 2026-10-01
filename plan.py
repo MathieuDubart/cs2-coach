@@ -8,6 +8,8 @@ import datetime as dt
 import json
 import os
 
+import numpy as np
+
 import config
 import knowledge as K
 from map_analysis import humanize
@@ -311,6 +313,59 @@ def map_refs(maps):
     return out
 
 
+def my_spots(sid, cross, maps):
+    """Per map and side: the zones you play, how often, the duels you win there, and the rounds where you got two
+    kills or more from there (multi-kills), with where on the radar your kills come from."""
+    import collections
+    import glob
+    rounds = collections.defaultdict(list)
+    for f in glob.glob(os.path.join(config.player_dir(sid), "matches", "*", "map.json")):
+        try:
+            m = json.load(open(f, encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        if m.get("map") not in maps:
+            continue
+        mid = os.path.basename(os.path.dirname(f))
+        for k in m.get("my_kills") or []:
+            rounds[(m["map"], k.get("side"), mid, k.get("round"))].append(k)
+    multi = collections.defaultdict(lambda: {"m2": 0, "m3": 0, "best": 0, "px": []})
+    for (mp, side, _, _), ks in rounds.items():
+        for k in ks:
+            if k.get("zone") and k.get("px"):
+                multi[(mp, side, k["zone"])]["px"].append(k["px"])
+        zc = collections.Counter(k["zone"] for k in ks if k.get("zone"))
+        if len(ks) >= 2 and zc:
+            e = multi[(mp, side, zc.most_common(1)[0][0])]
+            e["m2"] += 1
+            e["m3"] += len(ks) >= 3
+            e["best"] = max(e["best"], len(ks))
+    out = {}
+    for m in (cross or {}).get("maps", []):
+        mp = m["map"]
+        if mp not in maps:
+            continue
+        meta = {z["name"]: z for z in m.get("zones_meta", [])}
+        for side in ("T", "CT"):
+            res = []
+            for z in (m.get("sides", {}).get(side) or {}).get("zones", []):
+                mm = multi.get((mp, side, z["name"])) or {}
+                if (z.get("presence") or 0) < 4 and not mm.get("m2"):
+                    continue
+                pts = mm.get("px") or []
+                px = [round(float(np.median([p[0] for p in pts]))), round(float(np.median([p[1] for p in pts])))] if len(pts) >= 3 else (meta.get(z["name"]) or {}).get("px")
+                if not px:
+                    continue
+                res.append({"name": z["name"], "px": [round(px[0]), round(px[1])], "level": (meta.get(z["name"]) or {}).get("level"),
+                            "presence": z.get("presence"), "k": z.get("k"), "d": z.get("d"), "win": z.get("win"),
+                            "others_win": z.get("others_win"), "verdict": z.get("verdict"),
+                            "multi2": mm.get("m2", 0), "multi3": mm.get("m3", 0), "best": mm.get("best", 0)})
+            res.sort(key=lambda x: -(x["presence"] or 0))
+            if res:
+                out.setdefault(mp, {})[side] = res[:8]
+    return out
+
+
 def build(steamid, adv, cross=None, deep=None, light=False):
     import context
     import experiments
@@ -345,6 +400,10 @@ def build(steamid, adv, cross=None, deep=None, light=False):
     plan["playbook"] = playbook(bad)
     maps = sorted({m["map"] for m in (cross or {}).get("maps", [])})
     plan["routes"] = routes_view(midround.player_routes(sid), maps)
+    try:
+        plan["spots"] = my_spots(sid, cross, maps)
+    except Exception as e:
+        print("spots unavailable:", e)
     plan["weapon_positions"] = weapon_positions(weapons.weapon_zones(), maps)
     try:
         plan["map_refs"] = map_refs(sorted(set(PREMIER) | set(maps)))
@@ -375,7 +434,8 @@ def build(steamid, adv, cross=None, deep=None, light=False):
                 if not st.get("error"):
                     stats_n.append(st)
         stats_n.sort(key=lambda s: (s.get("match") or {}).get("time") or "")
-        plan["nades"] = nades.for_player(sid, sorted(set(PREMIER) | set(maps)), cross, stats_n)
+        lanes = {mp: (M.get("plays") or {}).get("lanes") for mp, M in ((plan.get("tside") or {}).get("maps") or {}).items()}
+        plan["nades"] = nades.for_player(sid, sorted(set(PREMIER) | set(maps)), cross, stats_n, lanes=lanes)
     except Exception as e:
         print("grenades unavailable:", e)
     ctx = context.analyze(sid)

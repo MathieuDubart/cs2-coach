@@ -495,6 +495,36 @@ def route_refs(rebuild=False):
     return res
 
 
+def retake_routes(min_n=3):
+    """Per map, site and starting zone of a CT: the ways players of the base rotate to the site (first zones of the
+    route), how long it takes and how often they die on the way."""
+    from map_analysis import humanize
+    df = load_routes()
+    out = {}
+    if not len(df):
+        return out
+    df = df[df.route.notna() & (df.route != "")].copy()
+    df["r3"] = df.route.map(lambda r: tuple(r.split(" > ")[:3]))
+    for (mp, to, sz), g in df.groupby(["map", "to", "start_zone"]):
+        if len(g) < min_n or not isinstance(sz, str):
+            continue
+        rs = []
+        for r, gg in g.groupby("r3"):
+            if len(gg) < 2:
+                continue
+            tr = gg.travel.dropna()
+            rs.append({"route": [humanize(z) for z in r], "n": int(len(gg)), "died": round(100 * gg.died_way.mean()),
+                       "travel": round(float(tr.median()), 1) if len(tr) else None})
+        if not rs:
+            continue
+        rs.sort(key=lambda x: (-x["n"], x["died"]))
+        tr = g.travel.dropna()
+        out.setdefault(mp, {}).setdefault(to, {})[humanize(sz)] = {
+            "n": int(len(g)), "died": round(100 * g.died_way.mean()), "travel": round(float(tr.median()), 1) if len(tr) else None,
+            "routes": rs[:2]}
+    return out
+
+
 def player_routes(steamid):
     """The player's own rotations per map and site, next to the base and pro references."""
     sid = int(steamid)

@@ -70,6 +70,7 @@ def config_text(port):
         "player_state"       "1"
         "player_match_stats" "1"
         "player_weapons"     "1"
+        "player_position"    "1"
     }}
 }}
 '''
@@ -310,10 +311,17 @@ def update(payload):
                     if k:
                         held[k] = held.get(k, 0) + max(1, int(w.get("ammo_reserve") or 1))
             STATE["nades"] = held if pl.get("weapons") else STATE.get("nades")
+            try:   # your own position (world units), to put you on the radar: only while you are alive
+                pos = [round(float(v)) for v in str(pl.get("position") or "").split(",")] if pl.get("position") else None
+                STATE["pos"] = pos if pos and len(pos) == 3 and alive else None
+            except ValueError:
+                STATE["pos"] = None
             STATE.update({"side": side or STATE.get("side"), "money": st.get("money"), "equip": st.get("equip_value"),
                           "armor": st.get("armor"), "helmet": st.get("helmet"), "primary": prim if pl.get("weapons") else STATE.get("primary"),
                           "health": st.get("health"), "round_kills": st.get("round_kills"),
                           "stats": pl.get("match_stats")})
+        if not own:
+            STATE["pos"] = None   # dead: the game shows the teammate you spectate
         key = (STATE.get("map"), STATE.get("round"), STATE.get("round_phase"), STATE.get("side"))
         if STATE.get("map") and key != STATE.get("_key"):
             STATE["_key"] = key
