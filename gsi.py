@@ -228,9 +228,10 @@ def set_mark(rnd, fields):
     return True
 
 
-def _hist_times(cur, phase, bomb, prev_phase, prev_bomb, health, prev_health, kills, prev_kills, now):
-    """Seconds since the end of the freeze time, per round: the plant, the end of the round, your death, your kills.
-    Read the Ts' tempo from them (a plant 35 s in is a fast hit) without any click."""
+def _hist_times(cur, phase, bomb, prev_phase, prev_bomb, health, prev_health, kills, prev_kills, now, hp=None, prev_hp=None, pos=None):
+    """Seconds since the end of the freeze time, per round: the plant, the end of the round, your death, your kills,
+    the first damage you took, and where you stood until 20 s in. Read the Ts' tempo (a plant 35 s in is a fast hit)
+    and what happens at your spot (a fight there or nothing yet) without any click."""
     if not HIST or not cur:
         return
     r = HIST.setdefault("rounds", {}).setdefault(str(cur), {})
@@ -249,6 +250,11 @@ def _hist_times(cur, phase, bomb, prev_phase, prev_bomb, health, prev_health, ki
         if phase == "live" and kills and prev_kills is not None and kills > prev_kills:
             r.setdefault("kills", []).extend([el] * min(5, kills - prev_kills))
             changed = True
+        if phase == "live" and hp is not None and prev_hp is not None and hp < prev_hp and "hurt" not in r:
+            r["hurt"], changed = el, True
+        if phase == "live" and pos and health and el <= 20 and r.get("pos15") != pos:   # the last spot before 20 s
+            r["pos15"] = pos
+            changed = changed or el >= 12
     if changed:
         _hist_save()
 
@@ -281,14 +287,20 @@ def update(payload):
             except Exception as e:
                 print("round history:", e, flush=True)
         elif pl.get("activity") == "menu":
-            STATE.update({"map": None, "map_phase": None})
+            STATE.update({"map": None, "map_phase": None, "practice": False, "_pmap": None})
         now = time.time()
         alive = bool(own and (st.get("health") or 0) > 0)   # when dead, the game shows the teammate you spectate
         try:
             if STATE.get("map") and HIST.get("map") == STATE.get("map"):
+                try:   # your own position (world units) while alive
+                    mypos = [round(float(v)) for v in str(pl.get("position") or "").split(",")] if own and alive and pl.get("position") else None
+                    mypos = mypos if mypos and len(mypos) == 3 else None
+                except ValueError:
+                    mypos = None
                 _hist_times(STATE.get("round"), rd.get("phase"), rd.get("bomb"), STATE.get("round_phase"), STATE.get("bomb"),
                             1 if alive else 0, 1 if STATE.get("_alive") else 0,
-                            st.get("round_kills") if own else None, STATE.get("round_kills"), now)
+                            st.get("round_kills") if own else None, STATE.get("round_kills"), now,
+                            hp=st.get("health") if own else None, prev_hp=STATE.get("health") if STATE.get("_alive") or alive else None, pos=mypos)
         except Exception as e:
             print("round times:", e, flush=True)
         STATE["_alive"] = alive
@@ -326,6 +338,13 @@ def update(payload):
         if STATE.get("map") and key != STATE.get("_key"):
             STATE["_key"] = key
             log_event({"map": key[0], "round": key[1], "phase": key[2], "side": key[3], "steamid": me})
+        # a practice or custom server: more than the $16,000 a real match allows, or a round longer than any real one
+        # (1:55 + 40 s of bomb): the live advice and the automatic recording stay off there (analyses still wait)
+        if STATE.get("map") != STATE.get("_pmap"):
+            STATE.update(_pmap=STATE.get("map"), practice=False)
+        el = now - STATE["live_since"] if STATE.get("round_phase") == "live" and STATE.get("live_since") else 0
+        if STATE.get("map") and ((own and (st.get("money") or 0) > 16000) or el > 240):
+            STATE["practice"] = True
         on = bool(STATE.get("map") and STATE.get("map_phase") != "gameover")
     _playing_flag(on, now)
     return True
@@ -351,7 +370,7 @@ def _playing_flag(on, now):
 
 def state():
     with LOCK:
-        s = {k: v for k, v in STATE.items() if k not in ("_key", "_alive")}
+        s = {k: v for k, v in STATE.items() if k not in ("_key", "_alive", "_pmap")}
         if HIST and HIST.get("map") == s.get("map"):
             s["hist"] = {"rounds": HIST.get("rounds", {}), "sites": HIST.get("sites", {}), "marks": HIST.get("marks", {})}
     if s:

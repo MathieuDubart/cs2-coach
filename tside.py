@@ -622,7 +622,7 @@ def econ_table(df):
 
 
 SUMMARY = os.path.join(config.OUT, "population", "tside_summary.json")
-VERSION = 6   # bump when the summary changes shape: the cache is rebuilt
+VERSION = 7   # bump when the summary changes shape: the cache is rebuilt
 
 
 def _stamp():
@@ -684,6 +684,10 @@ def _tendencies(maps, df):
             res["maps"][mp]["evidence"] = evidence(mp, g, dirs.get(mp, []), pool)
         except Exception as e:  # the rest of the reading stays usable
             print(f"{mp}: in-round evidence unavailable ({e})")
+        try:   # your own spot: a fight there or nothing yet (no click)
+            res["maps"][mp]["self"] = _self_evidence(mp, g, dirs.get(mp, []))
+        except Exception as e:
+            print(f"{mp}: own-spot evidence unavailable ({e})")
         try:   # plays (rush, split, one lane), what the radar needs, rotations of the CTs toward each site
             import lanes as LN
             if rot is None:
@@ -859,6 +863,63 @@ def evidence(mp, g, dirs, pool=None):
         pool.append(rows)
     return {"survival": _survival(g), "contact": _contact(g), "plants": plants, "retakes": retakes,
             "deaths": _deaths(mp, dirs, site_of), "windows": {k: [lo, hi] for k, lo, hi in WINDOWS}}
+
+
+SELF_T = [20, 30, 40, 50]
+
+
+def _self_evidence(mp, g, dirs):
+    """What a CT sees from their own spot, without clicking anything: where they stand at 15 s (A, B or mid) and
+    whether they were in a fight (hurt, a kill or dead) by 20, 30, 40 and 50 s. For each region and moment, how often
+    that happens for each place the attack goes, on every CT of the base: a quiet B at 30 s tilts toward A, a fight
+    at B toward B. Used as a likelihood (where a CT stands does not depend on where the Ts go)."""
+    import team
+    from map_analysis import humanize
+    reg = (team.map_meta().get(mp) or {}).get("regions") or {}
+    site_of = {(str(m), int(r)): ("none" if s == "-" else s) for m, r, s in zip(g.match, g["round"], g.site) if s in ("A", "B", "-")}
+    cnt = {}
+    for d in dirs:
+        mid = os.path.basename(d)
+        fs, fd = os.path.join(d, "samples.parquet"), os.path.join(d, "duels.parquet")
+        if not os.path.exists(fs) or not any(k[0] == mid for k in site_of):
+            continue
+        S = pd.read_parquet(fs, columns=["steamid", "side", "round", "t", "zone", "health"])
+        S = S[(S.side == "CT") & (S.steamid != 0) & (S.t <= max(SELF_T))]
+        if not len(S):
+            continue
+        z15 = S[(S.t >= 12) & (S.t <= 18)].groupby(["round", "steamid"]).zone.agg(lambda z: z.mode().iloc[0])
+        hurt = S[S.health < 100].groupby(["round", "steamid"]).t.min()
+        parts = [hurt]
+        if os.path.exists(fd):
+            D = pd.read_parquet(fd, columns=["round", "t", "killer", "victim"])
+            for col in ("killer", "victim"):
+                x = D.groupby(["round", col]).t.min()
+                x.index.names = ["round", "steamid"]
+                parts.append(x)
+        first = pd.concat(parts, axis=1).min(axis=1)
+        for (rnd, sid), z in z15.items():
+            site = site_of.get((mid, int(rnd)))
+            if site is None:
+                continue
+            region = reg.get(z, "mid")
+            c = first.get((rnd, sid), np.nan)
+            for t in SELF_T:
+                e = cnt.setdefault((region, t), {}).setdefault(site, [0, 0])
+                e[0] += bool(c == c and c <= t)
+                e[1] += 1
+    lik = {}
+    for (region, t), by in cnt.items():
+        row = {"contact": {}, "quiet": {}, "n": {}}
+        for site in ("A", "B", "none"):
+            k, n = by.get(site, [0, 0])
+            row["contact"][site] = round((k + 1) / (n + 2), 4)   # a fight by t at this spot, when the attack goes there
+            row["quiet"][site] = round((n - k + 1) / (n + 2), 4)
+            row["n"][site] = n
+        lik.setdefault(region, {})[str(t)] = row
+    names = {}
+    for key, region in reg.items():
+        names[humanize(key, mp)] = region
+    return {"t": SELF_T, "regions": names, "lik": lik} if lik else None
 
 
 def retake_table(pool):

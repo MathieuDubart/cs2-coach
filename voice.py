@@ -157,6 +157,12 @@ def on_gsi(g):
         return
     auto = bool(settings().get("auto"))
     phase = g.get("map_phase")
+    if auto and g.get("practice"):   # practice or custom server: nothing to line up with a match, no automatic recording
+        if REC.recording() and (REC.meta or {}).get("source") == "auto":
+            REC.meta["practice"] = True   # stopped without transcription; kept (Settings lists it, delete it there)
+            REC.stop()
+            LAST.update(key=None, gameover=None)
+        return
     if auto and phase == "live" and g.get("map") and not REC.recording():
         try:
             pause_transcription()  # all the power for the game
@@ -270,7 +276,7 @@ def recordings():
             rid = m["id"]
             a = os.path.join(DIR, rid + ".analysis.json")
             out.append({"id": rid, "start": m.get("start_iso"), "map": m.get("map"), "duration": m.get("duration"), "device": m.get("device"),
-                        "rounds_marked": len({r.get("round") for r in m.get("rounds", [])}), "source": m.get("source"),
+                        "rounds_marked": len({r.get("round") for r in m.get("rounds", [])}), "source": m.get("source"), "practice": bool(m.get("practice")),
                         "transcribed": os.path.exists(os.path.join(DIR, rid + ".transcript.json")),
                         "silent": bool(m.get("silent")) or (m.get("peak") is not None and m["peak"] < 0.01),
                         "match": json.load(open(a, encoding="utf-8")).get("match") if os.path.exists(a) else None,
