@@ -2354,8 +2354,9 @@ function liveRadar(box,p,map,level,g,o){
         el("circle",{cx:z.px[0],cy:z.px[1],r,style:"fill:none;stroke:var(--bad);stroke-width:2.4"},gg);
         el("path",{d:`M${z.px[0]-r-4} ${z.px[1]}H${z.px[0]-r+4}M${z.px[0]+r-4} ${z.px[1]}H${z.px[0]+r+4}M${z.px[0]} ${z.px[1]-r-4}V${z.px[1]-r+4}M${z.px[0]} ${z.px[1]+r-4}V${z.px[1]+r+4}`,style:"stroke:var(--bad);stroke-width:2.4;stroke-linecap:round"},gg);
         if(z.sneaky){const L_=PLACED.get(Ltop)||[],free=(x,y)=>!L_.some(q=>Math.abs(q.x-x)<(q.w+14)/2+1&&Math.abs(q.y-y)<(q.h+14)/2+1);   // the "!" goes on a free corner, never on a label
-          const [bx,by]=[[r+3,-r-3],[-r-3,-r-3],[r+3,r+3],[-r-3,r+3]].map(([dx,dy])=>[z.px[0]+dx,z.px[1]+dy]).find(([x,y])=>free(x,y))||[z.px[0]+r+3,z.px[1]-r-3];
-          el("circle",{cx:bx,cy:by,r:7,style:"fill:var(--bad);stroke:#0b0f14;stroke-width:1.2"},gg);el("text",{x:bx,y:by+4,"text-anchor":"middle",class:"pbt",style:"fill:#fff"},gg).textContent="!";obstacle(Ltop,bx,by,14,14)}
+          const spot=[[r+3,-r-3],[-r-3,-r-3],[r+3,r+3],[-r-3,r+3]].map(([dx,dy])=>[z.px[0]+dx,z.px[1]+dy]).find(([x,y])=>free(x,y));
+          if(spot){const [bx,by]=spot;   // no free corner: the target stays, the "!" goes (a label is never covered)
+            el("circle",{cx:bx,cy:by,r:7,style:"fill:var(--bad);stroke:#0b0f14;stroke-width:1.2"},gg);el("text",{x:bx,y:by+4,"text-anchor":"middle",class:"pbt",style:"fill:#fff"},gg).textContent="!";obstacle(Ltop,bx,by,14,14)}}
         tip(gg,`${z.zone||"CT angle"}: ${z.kills} T killed from here at this moment of the round${z.sneaky?" — they kill a lot from here for the little time they spend there: check it":""}`)});
       if(ds.length)legend.push(`<span>${SW.danger}angles the CTs kill from (! = often forgotten)</span>`)}}
   // the Ts' plays (CT): not drawn, the side panel shows the odds; they choose the grenades below
