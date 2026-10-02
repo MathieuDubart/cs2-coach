@@ -622,7 +622,7 @@ def econ_table(df):
 
 
 SUMMARY = os.path.join(config.OUT, "population", "tside_summary.json")
-VERSION = 24   # bump when the summary changes shape: the cache is rebuilt
+VERSION = 25   # bump when the summary changes shape: the cache is rebuilt
 
 
 def _stamp():
@@ -720,6 +720,7 @@ def _tendencies(maps, df):
             res["maps"][mp]["play_ctx"] = _play_ctx(g)
             res["maps"][mp]["ct_spots"] = _ct_spots(mp, dirs.get(mp, []))
             res["maps"][mp]["ct_push"] = _ct_push(mp, dirs.get(mp, []))
+            res["maps"][mp]["play_timing"] = _play_timing(g)
             res["maps"][mp]["setplays"] = _setplays(mp, dirs.get(mp, []))
         except Exception as e:
             print(f"{mp}: play contexts / CT spots unavailable ({e})")
@@ -1091,6 +1092,35 @@ def _rot_paths(mp, g, dirs):
                     m = _walk_medoid(paths)
                     if m:
                         out.setdefault(site, {}).setdefault(sz, {})[k_] = m
+    return out or None
+
+
+def _play_timing(g, bw=7.0, k=8.0, min_n=10.0):
+    """Each play: when to be on the site to win the most rounds. Over the rounds of the base where the Ts took the
+    site with that play, the rounds won around each moment (every round weighted by how close its arrival is, 7 s),
+    pulled toward the play's average when few rounds are around; the best moment with at least 10 rounds' worth.
+    Pistol rounds apart (another tempo). -> {play: {"pistol"|"other": {best, lo, hi, win, mean, n}}}"""
+    x = g[g.hit_t.notna() & g.play.notna() & (g.play != "none")]
+    out = {}
+    for play, p in x.groupby("play"):
+        for grp, q in (("pistol", p[p.T_buy == "pistol"]), ("other", p[p.T_buy != "pistol"])):
+            if len(q) < 15:
+                continue
+            t, y = q.hit_t.to_numpy(float), q.T_won.astype(float).to_numpy()
+            m = float(y.mean())
+            best = None
+            for c in np.arange(8, 101, 1.0):
+                w = np.exp(-0.5 * ((t - c) / bw) ** 2)
+                ne = float(w.sum())
+                if ne < min_n:
+                    continue
+                v = (float((w * y).sum()) + m * k) / (ne + k)
+                if best is None or v > best[1]:
+                    best = (float(c), v, ne)
+            if best:
+                c, v, ne = best
+                out.setdefault(play, {})[grp] = {"best": round(c, 1), "lo": round(max(0.0, c - 5), 1), "hi": round(c + 5, 1),
+                                                 "win": round(100 * v), "mean": round(100 * m), "n": int(round(ne))}
     return out or None
 
 
