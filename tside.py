@@ -622,7 +622,7 @@ def econ_table(df):
 
 
 SUMMARY = os.path.join(config.OUT, "population", "tside_summary.json")
-VERSION = 23   # bump when the summary changes shape: the cache is rebuilt
+VERSION = 24   # bump when the summary changes shape: the cache is rebuilt
 
 
 def _stamp():
@@ -693,6 +693,15 @@ def _tendencies(maps, df):
             if rot is None:
                 rot = midround.retake_routes()
             res["maps"][mp]["rotations"] = rot.get(mp)
+            try:   # each rotation drawn as it is walked (the corridors), not straight between zone centers
+                rp = _rot_paths(mp, g, dirs.get(mp, [])) or {}
+                for site, by in (res["maps"][mp]["rotations"] or {}).items():
+                    for sz, e in by.items():
+                        w = (rp.get(site) or {}).get(sz) or {}
+                        for r in e.get("routes", []):
+                            r["pts"] = w.get(" > ".join(r["route"])) or w.get("*")
+            except Exception as e:
+                print(f"{mp}: rotation walks unavailable ({e})")
             ls = _lanes().get(mp)
             cz = ((res["maps"][mp].get("evidence") or {}).get("contact") or {}).get("zones")
             res["maps"][mp]["plays"] = LN.summary(g, ls, cz) if ls else None
@@ -994,6 +1003,94 @@ def _t_routes(mp, g, dirs, top=2):
                         "pts": [[round(float(a)), round(float(b)), l, round(float(t))] for (a, b), l, t in zip(xy, lv, ts)]})
         if res:
             out[play] = res
+    return out or None
+
+
+def _walk_medoid(paths, k=40):
+    """The most typical of several walks (the medoid, resampled along its length), lightly smoothed: the player's
+    wobble goes, the corners of the corridor stay. Each point: x, y, level."""
+    def resample(pts):
+        xy = np.array([[p[0], p[1]] for p in pts])
+        d = np.r_[0, np.cumsum(np.hypot(*np.diff(xy, axis=0).T))]
+        if d[-1] <= 0:
+            return None
+        u = np.linspace(0, d[-1], k)
+        idx = np.clip(np.searchsorted(d, u), 0, len(pts) - 1)
+        return np.c_[np.interp(u, d, xy[:, 0]), np.interp(u, d, xy[:, 1])], [pts[i][2] for i in idx]
+    rs = [r for r in (resample(p) for p in paths if len(p) >= 3) if r is not None]
+    if not rs:
+        return None
+    A = np.array([r[0] for r in rs])
+    xy, lv = rs[int(np.argmin([np.mean(np.hypot(*(A - a).transpose(2, 0, 1))) for a in A]))]
+    sm = xy.copy()
+    sm[1:-1] = (xy[:-2] + xy[1:-1] + xy[2:]) / 3
+    return [[round(float(a)), round(float(b)), l] for (a, b), l in zip(sm, lv)]
+
+
+def _rot_paths(mp, g, dirs):
+    """CT rotations as walked: in the rounds the Ts hit a site (after 20 s, not a rush), each CT away from it who goes
+    there and makes it: his walk from the moment he leaves to the site. Grouped like the rotation stats (site, start
+    zone, first 3 zones of the route), the most typical walk of each group."""
+    sites = midround.site_centers().get(mp)
+    hits = {(str(m), int(r)): (st, float(t)) for m, r, st, t in zip(g.match, g["round"], g.site, g.hit_t)
+            if st in ("A", "B") and t == t and t is not None and t >= 20}
+    if not sites or not hits:
+        return None
+    walks = {}
+    for d in dirs:
+        mid = os.path.basename(d)
+        f = os.path.join(d, "samples.parquet")
+        if not os.path.exists(f):
+            continue
+        S = pd.read_parquet(f, columns=["steamid", "side", "round", "t", "X", "Y", "Z", "px", "py", "level", "zone", "health"])
+        S = S[(S.side == "CT") & S.px.notna() & (S.health > 0)].sort_values("t")
+        for (rnd, sid), x in S.groupby(["round", "steamid"]):
+            h = hits.get((mid, int(rnd)))
+            if not h:
+                continue
+            site, hit_t = h
+            other = "B" if site == "A" else "A"
+            cS, rS = sites[site]["c"], sites[site]["r"] * 1.3
+            cO, rO = sites[other]["c"], sites[other]["r"] * 2.0
+            before = x[x.t <= hit_t]
+            if not len(before):
+                continue
+            p0 = before.iloc[-1]
+            d0S = float(midround._dist(p0.X, p0.Y, p0.Z, cS))
+            d0O = float(midround._dist(p0.X, p0.Y, p0.Z, cO))
+            region = "site" if d0S <= rS else ("other" if d0O <= rO and d0O < d0S else "mid")
+            if region == "site" or (region == "mid" and d0S <= rS * 2.5):
+                continue
+            w = x[x.t >= max(hit_t - 10, 15)]
+            if len(w) < 3:
+                continue
+            dd = midround._dist(w.X.values, w.Y.values, w.Z.values, cS)
+            if dd[0] - dd.min() < max(700.0, 0.35 * (dd[0] - rS)):
+                continue
+            j = int(np.argmax(dd <= dd[0] - 250)) if (dd <= dd[0] - 250).any() else 0
+            arr = np.where((dd <= rS) & (np.arange(len(dd)) >= j))[0]
+            if not len(arr):
+                continue
+            a = int(arr[0])
+            route = midround._route(list(w.zone.values[j:a + 1]))
+            key = " > ".join(humanize(z, mp) for z in route[:3])
+            sz = humanize(p0.zone, mp) if isinstance(p0.zone, str) else None
+            if not sz:
+                continue
+            pts = [(float(px_), float(py_), lv) for px_, py_, lv in zip(w.px.values[max(0, j - 2):a + 1], w.py.values[max(0, j - 2):a + 1], w.level.values[max(0, j - 2):a + 1])]
+            e = walks.setdefault(site, {}).setdefault(sz, {})
+            for k_ in (key, "*"):   # the route's own walks, and every walk from this zone (a route without enough)
+                lst = e.setdefault(k_, [])
+                if len(lst) < 60:
+                    lst.append(pts)
+    out = {}
+    for site, by in walks.items():
+        for sz, routes in by.items():
+            for k_, paths in routes.items():
+                if len(paths) >= 2:
+                    m = _walk_medoid(paths)
+                    if m:
+                        out.setdefault(site, {}).setdefault(sz, {})[k_] = m
     return out or None
 
 

@@ -2131,7 +2131,9 @@ function flushLabels(ov){const q=(LQ.get(ov)||[]).sort((a,b)=>b.prio-a.prio);LQ.
   const hit=b=>L.some(o=>Math.abs(o.x-b.x)<(o.w+b.w)/2+1&&Math.abs(o.y-b.y)<(o.h+b.h)/2+1);
   q.forEach(l=>{const fs=l.tag?12:FSZ[String(l.cls).split(" ")[0]]||12,w=l.tag?6.6*l.text.length+18:l.text.length*fs*.62+4,h=l.tag?20:fs+3,r=l.r||8;
     const C=l.tag?[[l.x,l.y+r+h/2+2],[l.x,l.y-r-h/2-2],[l.x+r+w/2+2,l.y],[l.x-r-w/2-2,l.y],[l.x,l.y+r+1.5*h+4],[l.x,l.y-r-1.5*h-4],[l.x+w/2,l.y+r+h/2+2],[l.x-w/2,l.y+r+h/2+2],[l.x+w/2,l.y-r-h/2-2],[l.x-w/2,l.y-r-h/2-2],[l.x+r+w/2+2,l.y+h+2],[l.x-r-w/2-2,l.y+h+2],[l.x+r+w/2+2,l.y-h-2],[l.x-r-w/2-2,l.y-h-2]]:[[l.x+r+w/2+2,l.y],[l.x-r-w/2-2,l.y],[l.x,l.y-r-h/2-2],[l.x,l.y+r+h/2+2],[l.x+r+w/2+2,l.y-h-1],[l.x+r+w/2+2,l.y+h+1],[l.x-r-w/2-2,l.y-h-1],[l.x-r-w/2-2,l.y+h+1],[l.x,l.y-r-1.5*h-4],[l.x,l.y+r+1.5*h+4],[l.x+r+w/2+2,l.y-2*h-2],[l.x-r-w/2-2,l.y-2*h-2],[l.x+r+w/2+2,l.y+2*h+2],[l.x-r-w/2-2,l.y+2*h+2],[l.x,l.y-r-2.5*h-6],[l.x,l.y+r+2.5*h+6]];
-    const c=C.find(([cx,cy])=>!hit({x:cx,y:cy,w,h}))||C[0];L.push({x:c[0],y:c[1],w,h});
+    // no free place: the one that covers the least
+    const area=(cx,cy)=>L.reduce((s_,o)=>s_+Math.max(0,Math.min(o.x+o.w/2,cx+w/2)-Math.max(o.x-o.w/2,cx-w/2))*Math.max(0,Math.min(o.y+o.h/2,cy+h/2)-Math.max(o.y-o.h/2,cy-h/2)),0);
+    const c=C.find(([cx,cy])=>!hit({x:cx,y:cy,w,h}))||C.reduce((b_,q)=>area(q[0],q[1])<area(b_[0],b_[1])?q:b_,C[0]);L.push({x:c[0],y:c[1],w,h});
     if(l.tag){const gg=el("g",{class:"rt nd"},ov);el("rect",{x:c[0]-w/2,y:c[1]-10,width:w,height:20,rx:3,style:"fill:#0b0f14;fill-opacity:.88;stroke:#ffffff33;stroke-width:1"},gg);
       el("rect",{x:c[0]-w/2,y:c[1]-10,width:4,height:20,rx:1.5,style:`fill:${l.color}`},gg);el("text",{x:c[0]+2,y:c[1]+4,"text-anchor":"middle",class:"rtt"},gg).textContent=l.text;return}
     const t=el("text",{x:c[0],y:c[1]+fs*.36,"text-anchor":"middle",class:l.cls},ov);if(l.style)t.setAttribute("style",l.style);t.textContent=l.text})}
@@ -2166,6 +2168,15 @@ function nadeArc(ov,x1,y1,x2,y2,type){const dx=x2-x1,dy=y2-y1,d=Math.hypot(dx,dy
 function laneWedge(gl,x1,y1,x2,y2,w,col){const d=Math.hypot(x2-x1,y2-y1)||1,ux=(x2-x1)/d,uy=(y2-y1)/d,ex=x2-ux*36,ey=y2-uy*36,h=w/2;
   el("path",{d:`M${x1-uy*h} ${y1+ux*h}L${ex-uy*3} ${ey+ux*3}L${ex+ux*12} ${ey+uy*12}L${ex+uy*3} ${ey-ux*3}L${x1+uy*h} ${y1-ux*h}Z`,style:`fill:${col};fill-opacity:.32;stroke:${col};stroke-width:1.6;stroke-opacity:.9`},gl)}
 // a route: dark casing, colored core, chevrons showing the way
+function rotPath(lay,pts,col,main,level){let seg=[];const segs=[];
+  pts.forEach(q=>{if(!level||!q[2]||q[2]===level)seg.push(q);else{if(seg.length>1)segs.push(seg);seg=[]}});if(seg.length>1)segs.push(seg);
+  segs.forEach(sg=>{const s=sg.map(q=>q[0]+","+q[1]).join(" ");
+    el("polyline",{points:s,style:"fill:none;stroke:#0b0f14;stroke-width:5.5;stroke-opacity:.7;stroke-linejoin:round;stroke-linecap:round"},lay);
+    el("polyline",{points:s,style:`fill:none;stroke:${col};stroke-width:${main?2.8:2};stroke-linejoin:round;stroke-linecap:round${main?"":";stroke-dasharray:7 5"}`},lay);
+    let acc=0;for(let i=0;i<sg.length-1;i++){const a=sg[i],b=sg[i+1],d=Math.hypot(b[0]-a[0],b[1]-a[1]);acc+=d;if(acc<110||d<4)continue;acc=0;
+      const ux=(b[0]-a[0])/d,uy=(b[1]-a[1])/d,mx=b[0],my=b[1];
+      el("path",{d:`M${mx-ux*5-uy*5} ${my-uy*5+ux*5}L${mx+ux*3} ${my+uy*3}L${mx-ux*5+uy*5} ${my-uy*5-ux*5}`,style:`fill:none;stroke:${col};stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round`},lay)}});
+  return segs}
 function routeLine(ov,pts,col,main){const s=pts.map(p=>p.join(",")).join(" ");
   el("polyline",{points:s,style:`fill:none;stroke:#0b0f14;stroke-width:${main?10:7};stroke-opacity:.75;stroke-linejoin:round;stroke-linecap:round`},ov);
   el("polyline",{points:s,style:`fill:none;stroke:${col};stroke-width:${main?5.5:3.5};stroke-linejoin:round;stroke-linecap:round${main?"":";stroke-dasharray:9 6"}`},ov);
@@ -2183,6 +2194,7 @@ const SW={lane:`<svg width="26" height="12" aria-hidden="true"><path d="M1 2L20 
   key:`<svg width="18" height="18" aria-hidden="true"><path d="M9 1L16 5V13L9 17L2 13V5Z" style="fill:var(--good);stroke:#0b0f14"/></svg>`,
   eco:`<svg width="18" height="16" aria-hidden="true"><path d="M9 1L17 15H1Z" style="fill:var(--warn);stroke:#0b0f14"/></svg>`,
   ctpos:`<svg width="16" height="16" aria-hidden="true"><circle cx="8" cy="8" r="6" style="fill:var(--ct);fill-opacity:.32;stroke:var(--ct);stroke-width:2"/></svg>`,
+  push:`<svg width="26" height="12" aria-hidden="true"><circle cx="4" cy="6" r="3" style="fill:#fff;stroke:#0b0f14"/><path d="M6 6H21" style="stroke:var(--ct);stroke-width:2.5"/><path d="M19 2L25 6L19 10Z" style="fill:var(--ct)"/></svg>`,
   danger:`<svg width="18" height="18" aria-hidden="true"><circle cx="9" cy="9" r="5" style="fill:none;stroke:var(--bad);stroke-width:2"/><path d="M1 9H4M14 9H17M9 1V4M9 14V17" style="stroke:var(--bad);stroke-width:2"/></svg>`,
   tpath:`<svg width="26" height="12" aria-hidden="true"><path d="M1 6H25" style="stroke:#0b0f14;stroke-width:5"/><path d="M1 6H25" style="stroke:#ffb347;stroke-width:2.5"/></svg>`,
   shield:`<svg width="16" height="18" aria-hidden="true"><path d="M8 1L15 4L14 10Q12 15 8 17Q4 15 2 10L1 4Z" style="fill:var(--good);stroke:#0b0f14"/></svg>`,
@@ -2260,8 +2272,21 @@ function liveRadar(box,p,map,level,g,o){
       if(seen.size)legend.push(`<span>${SW.tpath}your way from the spawn, % won = rounds won by its play in this situation (${esc(RT_EN[W.rt]||W.rt)}${W.eb&&W.eb.full>=.5?" vs their full buy":W.eb&&W.eb.eco>=.5?" vs their eco":""}, ${RUN_EN[W.run]})</span>`)}}
   // T side: where the CTs stand when you get there, and the angles they kill from (! = a spot they kill a lot from for the
   // little time they spend there: the angle the Ts forget)
+  // T, the first moments (buy time, then up to 1:10): CTs pushing past a neutral zone, for their buy this round: an
+  // arrow from the neutral zone (where both sides arrive at the same time) to where the pushing CT gets
+  let earlyDone=false;
+  if(!ct&&on("ctpos")&&o.following&&g&&!planted&&(g.round_phase==="freezetime"||(live&&(g.elapsed||0)<45))&&typeof ctPush==="function"){const CP=ctPush(p,g);
+    if(CP&&CP.gates.length){CP.gates.filter(x=>here({px:x.from,level:x.level})).forEach(x=>{const [x0,y0]=x.from,[x1,y1]=x.to,d=Math.hypot(x1-x0,y1-y0)||1,ux=(x1-x0)/d,uy=(y1-y0)/d;
+        const hot=x.kill>=30,w=1.8+Math.min(2.4,x.share/6),gg=el("g",{style:(live&&(g.elapsed||0)>x.t+6)?"opacity:.35":""},Ltop),col=hot?"var(--bad)":"var(--ct)";
+        el("line",{x1:x0,y1:y0,x2:x1-ux*7,y2:y1-uy*7,style:`stroke:#0b0f14;stroke-width:${w+3};stroke-opacity:.6;stroke-linecap:round`},gg);
+        el("line",{x1:x0,y1:y0,x2:x1-ux*7,y2:y1-uy*7,style:`stroke:${col};stroke-width:${w};stroke-linecap:round`},gg);
+        el("path",{d:`M${x1} ${y1}L${x1-ux*11-uy*6} ${y1-uy*11+ux*6}L${x1-ux*11+uy*6} ${y1-uy*11-ux*6}Z`,style:`fill:${col};stroke:#0b0f14;stroke-width:1`},gg);
+        el("circle",{cx:x0,cy:y0,r:4.5,style:"fill:#fff;stroke:#0b0f14;stroke-width:1.5"},gg);obstacle(Ltop,x1,y1,16,16);
+        qLabel(Ltop,x1,y1,9,clock(x.t),"kwt",3);
+        tip(gg,`${x.gate||"Neutral zone"}: a CT pushes past it in ${Math.round(x.share)}% of rounds (${CP.label.toLowerCase()}), around ${clock(x.t)}; the pushing CT gets a kill ${x.kill}% of the time`)});
+      legend.push(`<span>${SW.push}a CT pushing past a neutral zone (white dot: where both sides arrive at the same time), for their buy this round; the time is when, red: the push often gets a kill</span>`);earlyDone=true}}
   const CS=!ct&&M&&M.ct_spots;
-  if(CS&&(on("ctpos")||on("danger"))){const tt=t==null?25:Math.max(t+15,20),wn=tt<20?"early":tt<40?"setup":tt<70?"hit":"late",W_=CS[wn]||CS.setup;
+  if(CS&&!earlyDone&&(on("ctpos")||on("danger"))){const tt=t==null?25:Math.max(t+15,20),wn=tt<20?"early":tt<40?"setup":tt<70?"hit":"late",W_=CS[wn]||CS.setup;
     if(W_&&on("ctpos")){const hs=W_.hold.filter(h=>here(h)&&h.zone!=="CT Spawn").slice(0,6),mx=Math.max(...hs.map(h=>h.share),1);
       hs.forEach(h=>tip(el("circle",{cx:h.px[0],cy:h.px[1],r:7+9*h.share/mx,style:"fill:var(--ct);fill-opacity:.32;stroke:var(--ct);stroke-width:2;stroke-opacity:.8"},Lstrong),`${h.zone||"CT spot"}: ${h.share}% of the CTs' time at this moment`));
       if(hs.length)legend.push(`<span>${SW.ctpos}where the CTs stand when you get there (bigger = more often)</span>`)}
@@ -2304,9 +2329,12 @@ function liveRadar(box,p,map,level,g,o){
   // after the plant: the way to the site from where you are, and where the bomb usually is
   const you=o.following&&g&&g.pos&&GEO?worldPx(GEO,g.pos):null;
   if(ct&&on("rot")&&planted&&site&&M&&GEO){const from=you?nearestZone(GEO,you.px,you.level):(SP[0]||{}).name,R=rotationFor(M,site,from,GEO);
-    if(R&&R.routes){R.routes.slice().reverse().forEach((rt,j)=>{const i=R.routes.length-1-j,pts=[GEO.zones[R.from],...rt.route.map(z=>GEO.zones[z]),GEO.sites[site]].filter(Boolean).map(z=>z.px);
-        if(you&&i===0)pts.unshift(you.px);if(pts.length<2)return;const col=rt.died>=40?"var(--bad)":rt.died>=20?"#e0a526":"var(--good)";
-        routeLine(Lrot,pts,col,i===0);const m_=pts[Math.floor(pts.length/2)];
+    if(R&&R.routes){R.routes.slice().reverse().forEach((rt,j)=>{const i=R.routes.length-1-j,col=rt.died>=40?"var(--bad)":rt.died>=20?"#e0a526":"var(--good)";let m_;
+        if(rt.pts&&rt.pts.length>2){   // the walk of the base (the corridors)
+          const w=you&&i===0&&you.level===level?[[you.px[0],you.px[1],you.level],...rt.pts]:rt.pts,sg=rotPath(Lrot,w,col,i===0,level);if(!sg.length)return;
+          const lng=sg.reduce((a,b)=>b.length>a.length?b:a);m_=lng[Math.floor(lng.length/2)]}
+        else{const pts=[GEO.zones[R.from],...rt.route.map(z=>GEO.zones[z]),GEO.sites[site]].filter(Boolean).map(z=>z.px);
+          if(you&&i===0)pts.unshift(you.px);if(pts.length<2)return;rotPath(Lrot,pts.map(q=>[q[0],q[1],null]),col,i===0,null);m_=pts[Math.floor(pts.length/2)]}
         tip(rtag(Ltop,m_[0],m_[1]-18,`⏱ ${rt.travel!=null?`${Math.round(rt.travel)} s · `:""}${rt.died}% die`,col,"rot"),`From ${R.from} to ${site}: ${rt.route.join(" > ")} (${rt.n} rotations in the base, ${rt.died}% died on the way)`)});
       legend.push(`<span>${SW.route}rotation to ${site} from ${esc(R.from)} (green = safe, red = players often die on the way; dashed = the other way)</span>`)}}
   cap.innerHTML=legend.join("");flushLabels(Ltop);   // the legend first: its box is known when the labels are placed
@@ -2375,8 +2403,8 @@ function vCTdots(p,g){const TS=(p.advice.plan||{}).tside,M=TS&&TS.maps&&TS.maps[
   const dots=n=>"●".repeat(n)||"○";
   return vHead("CT SETUP · MOST USED")+`<div class="vdots"><span>A</span><b>${dots(t[0])}</b><em>|</em><span>B</span><b>${dots(t[1])}</b>${t[2]?`<em>|</em><span>mid</span><b>${dots(t[2])}</b>`:""}<small>${t[3]}% of rounds</small></div>`}
 function vTchips(p,g){const TS=(p.advice.plan||{}).tside,M=TS&&TS.maps&&TS.maps[g.map],TP=(M&&M.tplan)||{},P_=M&&M.plays,out=[];
-  const ro=TP.rotation||{};if(ro.A||ro.B)out.push(`<span class="vchip">CT ↻ ${["A","B"].filter(L=>ro[L]).map(L=>`${L} ${Math.round(ro[L].med)}s`).join(" · ")}</span>`);
-  const fk=TP.fake||{};if(fk.switch&&fk.direct&&fk.switch[1]-fk.direct[1]>=5)out.push(`<span class="vchip good">FAKE ${fk.switch[1]}% won <small>vs ${fk.direct[1]} direct</small></span>`);
+  // a fake (first contact on one side, the hit on the other) against going straight: rounds won, both, always
+  const fk=TP.fake||{};if(fk.switch&&fk.direct){const d=fk.switch[1]-fk.direct[1];out.push(`<span class="vchip ${d>=5?"good":d<=-5?"bad":""}">FAKE ${fk.switch[1]}% won <small>direct ${fk.direct[1]}%</small></span>`)}
   return out.length?`<div class="vchips">${out.join("")}</div>`:""}
 // one option per line: the label, a bar (the longest is the most likely), the number. Fixed order for the sites,
 // so the eye finds A and B at the same place every time
@@ -2413,16 +2441,21 @@ function vMates(g){const M=g.mates||{},prev=(g.round||0)-1;if(prev<1||halfStart(
   const R=((g.hist||{}).rounds||{})[prev]||{},won=R.win===g.side,L=g.losses||0,gain=won?ECON.win:ECON.bonus[Math.max(0,Math.min(L-1,4))],need=g.side==="CT"?3900:3700;
   const xs=Object.values(M).filter(m=>m.money!=null&&m.money_round===prev).map(m=>({n:m.name||"mate",v:Math.min(ECON.cap,m.money+gain)})).slice(0,3);
   return xs.map(x=>`<span class="vchip ${x.v>=need?"good":"bad"}">👥 ${esc(vShort(x.n))} ≈${kMoney(x.v)} ${x.v>=need?"✓":"✕"}</span>`).join("")}
+// T: CTs pushing past a neutral zone, one line per zone (share of rounds, when); red: the push often gets a kill;
+// once its moment is past, the line fades
+function vPush(p,g){const E=typeof ctPush==="function"?ctPush(p,g):null;if(!E||!E.gates.length)return "";const el=g.round_phase==="live"?(g.elapsed||0):0;
+  const rows=E.gates.map((x,i)=>({l:`${vShort(x.gate||"?")} · ${clock(x.t)}`,v:x.share,c:x.kill>=30?"var(--bad)":"var(--ct)",o:el>x.t+6?.35:[1,.85,.7,.6][i]}));
+  return vHead(`➜ CT PUSHES · ${E.label} · OF ROUNDS`)+vRows(rows)}
 function nowVisual(p,g,following){
   if(!following)return nowPanel(p,g,following,{noBuy:true});
   if(g.practice)return `<div class="vz"><div class="vsit"><span>PRACTICE</span></div></div>`;
   if(g.map_phase==="warmup"&&typeof briefVisual==="function")return briefVisual(p,g);   // the map loads: the 60-second brief
   const ph=g.round_phase,ct=g.side==="CT",out=[];
   const TS=(p.advice.plan||{}).tside,r=ct?tsidePredict(TS,g.map,g,evFor(g)):null;
-  if(ph==="freezetime"){out.push(vSituation(p,g),vKey(p,g));
+  if(ph==="freezetime"){out.push(ct?vSituation(p,g):"",vKey(p,g));
     {if(typeof antiEco==="function"&&antiEco(p,g))out.push(`<span class="vchip bad">! eco kill spots on the map: clear them, no close duel</span>`)}
     if(ct&&r)out.push(vOdds(r),vRush(TS,g,r)||vEntries(TS,g,r));
-    if(!ct){out.push(vTimeline(p,g),vCTdots(p,g),vTchips(p,g))}}   // the plays and the grenades are on the map
+    if(!ct){out.push(vTimeline(p,g),vPush(p,g),vTchips(p,g))}}   // the plays and the grenades are on the map
   else if(ph==="live"){const el=g.elapsed||0,planted=g.bomb==="planted";out.push(vCall(g));
     if(planted){const left=g.phase_left!=null?g.phase_left:Math.max(0,40-(g.since_plant||0)),as=typeof autoSite==="function"?autoSite(p,g):null;
       out.push(`<div class="vbig ${ct?"bad":"good"}"><b>💣 ${Math.ceil(left)}s</b><span>${ct?"retake together":"hold the bomb"}${as?` · ${as.site} site, ${as.p}% sure`:""}</span></div>`)}
@@ -2430,10 +2463,10 @@ function nowVisual(p,g,following){
         const PLs=tsidePlays(TS,g.map,g,evFor(g),r),M=TS&&TS.maps&&TS.maps[g.map];
         const rush=el<32?vRush(TS,g,r):"";out.push(rush||vFights(M,g,r));
         (r.evid||[]).filter(x=>/spot/.test(x)).slice(0,2).forEach(ev=>out.push(`<span class="vchip ${/fight/.test(ev)?"bad":""}">● ${esc(ev)}</span>`))}}
-    else{out.push(vTimeline(p,g),vFights(TS&&TS.maps&&TS.maps[g.map],g,null));
+    else{out.push(vTimeline(p,g),(el<45&&vPush(p,g))||vFights(TS&&TS.maps&&TS.maps[g.map],g,null));
       const left=g.phase_left!=null?g.phase_left:Math.max(0,RLEN()-el);
       if(left<=45)out.push(`<div class="vbig bad"><b>PLANT ${Math.floor(left/60)}:${String(Math.floor(left%60)).padStart(2,"0")}</b><span>${left>20?"commit now":"plant or save"}</span></div>`);
-      else out.push(vCTdots(p,g),vTchips(p,g))}}
+      else out.push(vTchips(p,g))}}
   else if(ph==="over"){out.push(`<div class="vsit"><span>ROUND ${g.round}</span>${g.win_team?`<b class="${g.win_team===g.side?"good":"bad"}">${g.win_team===g.side?"WON":"LOST"}</b>`:""}</div>`)}
   const html=out.filter(Boolean).join("");
   return `<div class="vz">${html||`<div class="vsit"><span>ROUND ${g.round||""}</span></div>`}</div>`}
@@ -2458,7 +2491,7 @@ function buyVisual(p,g){if(g.money==null||!g.side||g.practice)return "";const rt
     const r=nadePlan(E,Math.max(0,g.money-main),g.nades||{},maxN);left=r.left;
     nd=r.plan.length?`<div class="vnades">${r.plan.map(o=>`<span class="vnade now" style="--c:${NADE_C[o.type]||"#ccc"}"><i>${vLetter[o.type]}</i><small>$${o.price}</small></span>`).join("")}</div>`:""}
   const next=(rt==="eco"?g.money:left)+bonus,okNext=next>=full;
-  const spot=kit.zone?`<span class="vchip">📍 ${vShort(kit.zone.key)}</span>`:"",avoid=kit.avoid?`<span class="vchip bad">✕ ${vShort(kit.avoid.key)}</span>`:"";
+  const T_=g.side==="T",spot=!T_&&kit.zone?`<span class="vchip">📍 ${vShort(kit.zone.key)}</span>`:"",avoid=!T_&&kit.avoid?`<span class="vchip bad">✕ ${vShort(kit.avoid.key)}</span>`:"";
   const awp=sk&&sk.endsWith("anti_eco")?`<span class="vchip bad">✕ AWP</span>`:"";
   const rows=econRows(plan);   // the plan already says what a loss leaves: no separate chip then
   return `<div class="vbuy"><div class="vbuy-h"><b>${RT}</b><span>${money(g.money)}</span></div>
@@ -2676,7 +2709,8 @@ function briefVisual(p,g){const TS=(p.advice.plan||{}).tside||{},M=(TS.maps||{})
     const w=L.find(w=>!DEF_PISTOL.has(w.w));return w?w.w:"save"};
   const kr=[["pistol","PISTOL"],["eco_force","R2 ECO"],["eco_full","ECO"],["force_full","FORCE"]].map(([k,l])=>{const w=first(k);return w?`<span class="vchip"><b>${l}</b> ${esc(W_SHORT[w]||w.toUpperCase())}</span>`:""}).join("");
   if(kr)out.push(vHead("KEY ROUNDS · WEAPON"),`<div class="vchips">${kr}</div>`);
-  if(T){const d=(((M.ct_spots||{}).setup||{}).danger||[]).filter(z=>z.sneaky).slice(0,2).map(z=>esc(z.zone||"?"));if(d.length)out.push(`<span class="vchip bad">! check ${d.join(", ")}</span>`)}
+  if(T){const d=(((M.ct_spots||{}).setup||{}).danger||[]).filter(z=>z.sneaky).slice(0,2).map(z=>esc(z.zone||"?"));if(d.length)out.push(`<span class="vchip bad">! check ${d.join(", ")}</span>`);
+    const cp=((M.ct_push||{}).full||{}).gates||[],zs=cp.filter(x=>x.share>=5).map(x=>x.gate).filter(Boolean).slice(0,2);if(zs.length)out.push(`<span class="vchip">➜ CT pushes: ${zs.map(esc).join(", ")}</span>`)}
   else{const mine=(((p.advice.plan||{}).multi||{})[g.map]||{}).CT||[];if(mine.length)out.push(`<span class="vchip good">★ your multi-kills: ${[...new Set(mine.map(s=>s.zone))].slice(0,3).map(esc).join(", ")}</span>`)}
   return `<div class="vz">${out.join("")}</div>`}
 // predictability: the plays shown as path 1 this half (kept in this browser), the ones that lost go down, a play
@@ -2718,6 +2752,20 @@ function calSite(map,a,b,n){const c=CAL();if(!c)return [a,b,n];const T=((c.maps|
 function calRush(p){const c=CAL(),r=c&&c.rush;if(!r||(r[0]===1&&r[1]===0))return p;return SIG(r[0]*LGT(CLP(p))+r[1])}
 function calPlant(pa){const c=CAL(),T=c&&c.plant_T;if(!T||Math.abs(T-1)<.01)return pa;return SIG(LGT(CLP(pa))/T)}
 function calPath(wr){const c=CAL(),d=c&&c.path_d;if(!d)return wr;return Math.round(100*SIG(LGT(CLP(wr/100))+d))}
+// ---------- T side: CTs pushing past the neutral zones (where both sides arrive at the same time when they run),
+// for the CTs' buy this round ----------
+const PUSH_L={pistol:"PISTOL",eco:"THEIR ECO",force:"THEIR FORCE",full:"THEIR FULL BUY",anti_eco:"YOUR ECO vs FULL"};
+function ctPush(p,g){const M=(((p.advice.plan||{}).tside||{}).maps||{})[g.map],CP=M&&M.ct_push;if(!CP||!g||g.side!=="T")return null;
+  let W;if(g.round===halfStart(g.round))W={pistol:1};
+  else{const eb=enemyBuy(p,g)||{};W={eco:eb.eco||0,force:eb.force||0,full:eb.full||0};if(advisedType(g)==="eco"&&W.full&&CP.anti_eco){W.anti_eco=W.full;W.full=0}}
+  const acc={};let ws=0;
+  for(const [c,w] of Object.entries(W)){const X=CP[c];if(!X||!w)continue;ws+=w;
+    X.gates.forEach(x=>{const k=`${x.gate}|${x.level}`,o=acc[k]||(acc[k]={gate:x.gate,level:x.level,share:0,t:0,kill:0,from:x.from,to:x.to,best:0});
+      const v=w*x.share;o.share+=v;o.t+=v*x.t_med;o.kill+=v*x.kill;if(v>o.best){o.best=v;o.from=x.from;o.to=x.to}})}
+  if(!ws)return null;
+  const gates=Object.values(acc).map(o=>({...o,t:o.t/o.share,kill:Math.round(o.kill/o.share),share:o.share/ws})).filter(o=>o.share>=3).sort((a,b)=>b.share-a.share).slice(0,4);
+  const top=Object.entries(W).sort((a,b)=>b[1]-a[1])[0][0];
+  return {gates,ctx:top,label:PUSH_L[top]||""}}
 
 // ---------- view: review (after the session, or the next day) ----------
 // what the In game page showed in your matches, checked against their demos (livecheck.py)
