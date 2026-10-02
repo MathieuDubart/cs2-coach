@@ -414,6 +414,39 @@ def my_multikills(sid, maps):
     return out
 
 
+def _carryover(sid):
+    """Matches played within 2 h of the previous one (a session): the player's rounds 2 to 5 (after the pistol) against
+    the rest of the match, by the previous game's rating (terciles: bad, average, good): damage per round and deaths
+    in the first 30 s. And the latest match (time, rating, its tercile): the page's previous game during the next one."""
+    import context
+    import pandas as pd
+    H = [m for m in context.history(int(sid)) if m.get("source") == "demo" and m.get("perf") is not None]
+    rows = []
+    for p, m in zip(H, H[1:]):
+        if (m["start"] - p["end"]).total_seconds() > 2 * 3600:
+            continue
+        f = os.path.join(config.DEEP, str(m["id"]), "loadout.parquet")
+        if not os.path.exists(f):
+            continue
+        L = pd.read_parquet(f, columns=["round", "steamid", "died_t", "damage"])
+        me = L[L.steamid == int(sid)]
+        first, rest = me[me["round"].isin([2, 3, 4, 5])], me[~me["round"].isin([1, 2, 3, 4, 5, 13, 14])]
+        if len(first) < 3 or len(rest) < 5:
+            continue
+        rows.append((p["perf"], float(first.damage.mean()), float(rest.damage.mean()), float((first.died_t < 30).mean()), float((rest.died_t < 30).mean())))
+    if len(rows) < 12 or not H:
+        return None
+    R = pd.DataFrame(rows, columns=["prev", "adr_first", "adr_rest", "early_first", "early_rest"])
+    lo, hi = float(R.prev.quantile(1 / 3)), float(R.prev.quantile(2 / 3))
+    grp = lambda x: {"n": int(len(x)), "adr_first": round(float(x.adr_first.mean())), "adr_rest": round(float(x.adr_rest.mean())),
+                     "early_first": round(100 * float(x.early_first.mean())), "early_rest": round(100 * float(x.early_rest.mean()))}
+    last = H[-1]
+    return {"bad": grp(R[R.prev <= lo]), "average": grp(R[(R.prev > lo) & (R.prev < hi)]), "good": grp(R[R.prev >= hi]),
+            "lo": round(lo, 2), "hi": round(hi, 2),
+            "last": {"id": str(last["id"]), "end": last["end"].isoformat(timespec="minutes"), "rating": round(float(last["perf"]), 2),
+                     "kind": "bad" if last["perf"] <= lo else "good" if last["perf"] >= hi else "average"}}
+
+
 def build(steamid, adv, cross=None, deep=None, light=False):
     import context
     import experiments
@@ -531,6 +564,10 @@ def build(steamid, adv, cross=None, deep=None, light=False):
             plan["mood"] = voice.mood_stats(sid)   # the rounds after a frustrated moment against the others
     except Exception as e:
         _miss(plan, "calls", e)
+    try:   # the game before weighs on the first rounds: the player's rounds 2 to 5 after a bad, average, good game
+        plan["carry"] = _carryover(sid)
+    except Exception as e:
+        _miss(plan, "carry-over", e)
     try:   # lineup books made by players (where to stand, where to aim), read from their GitHub repository
         import lineupbook
         plan["lineups"] = lineupbook.all_books()

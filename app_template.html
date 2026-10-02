@@ -2378,12 +2378,12 @@ function liveRadar(box,p,map,level,g,o){
       .forEach(x=>drawNade({...x,type},`retake ${nadeName(type,"CT")}`,`Retake ${nadeName(type,"CT")}: ${x.from} → ${x.to}. ${x.how||""}`)));
     legend.push(`<span>${SW.nade}retake grenade: from the white dot to its icon</span>`)}
   if(ct&&on("nades")&&PLs){const NN=nadesNow(PL,map,g,PLs,live);
-    NN.forEach(x=>drawNade(x,`${nadeName(x.type,"CT")}${x.role==="anti_rush"?" · anti-rush":x.role==="block"?" · block":x.role==="flash"?" · as they push":""}`,
+    NN.forEach(x=>drawNade(x,`${nadeName(x.type,"CT")} → ${vShort(x.to||"?")}${/jump|run/i.test(x.how||"")?` · ${String(x.how).match(/jump|run/i)[0].toLowerCase()}`:""}${x.role==="anti_rush"?" · anti-rush":x.role==="block"?" · block":x.role==="flash"?" · as they push":""}`,
       `${nadeName(x.type,"CT")} ${x.from} → ${x.to}: ${x.why}. ${x.how||""}${x.click?`, ${x.click} click`:""}${x.yours?"":" (from a spot you don't play)"}`));
     o.nadesOut&&o.nadesOut(NN);
     if(NN.length)legend.push(`<span>${SW.nade}grenade worth throwing ${live?"now":"this round"}: from the white dot to its icon (cloud smoke, flame molotov, burst flash, HE)</span>`)}
   if(att&&on("nades")&&o.following&&typeof vNadePicks==="function"){const NP=vNadePicks(p,g).filter(x=>x.x);
-    NP.forEach(n=>drawNade({...n.x,type:n.type},nadeName(n.type,"T")+({site:` · site ${FN||1}`,way:` · path ${FN||1}`}[n.x.way]||""),`${nadeName(n.type,"T")} ${n.x.from} → ${n.x.to}${n.x.how?`. ${n.x.how}`:""}`));
+    NP.forEach(n=>drawNade({...n.x,type:n.type},`${nadeName(n.type,"T")} → ${vShort(n.x.to||"?")}`+(/jump|run/i.test(n.x.how||"")?` · ${String(n.x.how).match(/jump|run/i)[0].toLowerCase()}`:"")+({site:` · site ${FN||1}`,way:` · path ${FN||1}`}[n.x.way]||""),`${nadeName(n.type,"T")} ${n.x.from} → ${n.x.to}${n.x.how?`. ${n.x.how}`:""}`));
     NP.filter(n=>n.alt&&n.alt.to_px&&n.alt.from_px&&here({px:n.alt.to_px,level:n.alt.land_level||n.alt.level})).forEach(n=>{const a=n.alt,gg=el("g",{style:"opacity:.45"},Lnades);   // the other good throw, faint
       nadeArc(gg,a.from_px[0],a.from_px[1],a.to_px[0],a.to_px[1],n.type);tip(el("circle",{cx:a.to_px[0],cy:a.to_px[1],r:9,style:`fill:var(--${n.type});fill-opacity:.6;stroke:#0b0f14`},gg),`Other ${nadeName(n.type,"T")}: ${a.from} → ${a.to}`)});
     if(NP.length)legend.push(`<span>${SW.nade}your grenades for this moment: from the white dot to its icon</span>`)}
@@ -2567,7 +2567,10 @@ function resetWhy(g){if(g.round_phase!=="freezetime"||!g.hist)return null;const 
   const mk=n=>Mk[n]||{},frus=[prev,cur].some(n=>mk(n).mood==="frustration"||mk(n).heat),doubt=[prev,cur].some(n=>mk(n).mood==="doubt");
   const bad=n=>{const x=R[n]||{};return !!(x.win&&x.side&&x.win!==x.side&&x.dead!=null&&!(x.kills||[]).length)};
   const early=[prev,prev-1].some(n=>{const x=R[n]||{};return x.dead!=null&&x.dead<30});
-  return frus?{k:"frus",early}:bad(prev)&&bad(prev-1)?{k:"bad",early}:doubt?{k:"doubt",early}:null}
+  // the game before was a bad one, in the same session: the first rounds (2 to 5) are where it costs, from your matches
+  const C=typeof P==="function"&&P()?(((P().advice||{}).plan||{}).carry):null,last=C&&C.last;
+  const carry=last&&last.kind==="bad"&&g.round>=2&&g.round<=5&&halfStart(g.round)===1&&Date.now()-Date.parse(last.end)<3*3600e3&&C.bad.adr_first<C.bad.adr_rest-5;
+  return frus?{k:"frus",early}:bad(prev)&&bad(prev-1)?{k:"bad",early}:doubt?{k:"doubt",early}:carry?{k:"carry",early:true,C}:null}
 // the simple plan of the round: T, path 1 and when to be on the site; CT, your spot of the buy card
 function simplePlan(p,g){if(g.side==="T"){const W=typeof winsRank==="function"?winsRank(p,g):null,r=W&&W.rows[0];if(!r)return null;
     const ps=pathShort(p,g,r),pts=(r.route||{}).pts,end=pts&&pts[pts.length-1],tm=r.timing,win=tm&&tm.win-tm.mean>=3;
@@ -2577,6 +2580,7 @@ function simplePlan(p,g){if(g.side==="T"){const W=typeof winsRank==="function"?w
 function vReset(p,g){const w=resetWhy(g);if(!w)return "";
   if(w.k==="doubt"){const sp=simplePlan(p,g);if(!sp)return "";
     return `<div class="vreset plan"><b>PLAN</b><span>${sp.spot?`📍 ${vShort(sp.spot)} · molly for their arrival`:`${esc(sp.head)}${sp.via?` via ${esc(sp.via)}`:""} · ${sp.lo!=null?`on site ${clock(sp.lo)}-${clock(sp.hi)}`:sp.at!=null?`on site ~${clock(sp.at)}`:""}`}</span></div>`}
+  if(w.k==="carry")return `<div class="vreset"><b>CALM START</b><span>👥 play the trade · ✕ no dry peek before ${clock(30)}</span><small>after a bad game · ADR rounds 2-5 ${w.C.bad.adr_first} vs ${w.C.bad.adr_rest} later</small></div>`;
   const MS=(p.advice.plan||{}).mood,data=MS&&MS.after&&MS.other&&MS.after.adr<MS.other.adr?`<small>after a tilt · ADR ${MS.after.adr} vs ${MS.other.adr}</small>`:"";
   return `<div class="vreset"><b>RESET</b><span>${w.early?`✕ no dry peek before ${clock(30)}`:"👥 play the trade: next to a mate"}</span>${data}</div>`}
 // ---------- the coach's voice at the buy time: a few seconds in French, once per round, when the reset or plan card
@@ -2594,6 +2598,8 @@ function coachVoice(p,g){if(!voiceOn()||!g||g.practice)return;const w=resetWhy(g
   const pick=a=>a[Math.floor(Math.random()*a.length)];
   const instr=w.early?`pas de peek sec avant ${sayClock(30)}`:"joue le trade, à côté d'un coéquipier";
   let t;
+  if(w.k==="carry"){if(VOICE.carry===g.map)return;VOICE.carry=g.map;   // once per match
+    if(coachSay(`Nouvelle partie. La dernière était dure : on démarre calme. Joue le trade, pas de peek sec avant ${sayClock(30)}.`))VOICE.said=key;return}
   if(w.k==="doubt"){const sp=simplePlan(p,g);if(!sp)return;
     t=sp.spot?`Plan simple : ton spot, ${String(sp.spot).split(" / ")[0]}, et ta molly pour leur arrivée.`
       :`Plan simple : ${sp.head}${sp.via?` par ${sp.via.replace(/ > /g,", ")}`:""}${sp.lo!=null?`, sur le site entre ${sayClock(sp.lo)} et ${sayClock(sp.hi)}`:sp.at!=null?`, sur le site vers ${sayClock(sp.at)}`:""}.`}
@@ -2601,7 +2607,8 @@ function coachVoice(p,g){if(!voiceOn()||!g||g.practice)return;const w=resetWhy(g
     t=w.k==="frus"?pick([`Respire. Le round d'avant est fini. Ce round, ${instr}.`,`On reset. Une info utile, puis ${instr}.`])
       :pick([`Deux rounds compliqués, ça arrive. Ce round, ${instr}.`,`On repart simple : ${instr}.`]);
     if(drop>=10&&VOICE.data!==g.map){t+=` Après un tilt, tes dégâts baissent de ${drop} pour cent : joue simple.`;VOICE.data=g.map}}
-  if(coachSay(t))VOICE.said=key}
+  if(VOICE.last&&VOICE.last.map===g.map&&w.k!=="doubt"&&g.round-VOICE.last.round<3){VOICE.said=key;return}   // a reset at most every 3 rounds: not a sermon each round
+  if(coachSay(t)){VOICE.said=key;if(w.k!=="doubt")VOICE.last={map:g.map,round:g.round}}}
 // T: the site left open by what you called in the last 25 s (two CTs or more on one side and none on the other, or a
 // site said clear): where the bomb should go
 function vOpen(g){if(g.side!=="T"||g.bomb==="planted"||!g.seen||g.seen.round!==g.round)return "";
