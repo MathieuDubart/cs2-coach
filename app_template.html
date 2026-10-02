@@ -541,6 +541,7 @@ table.lc{border-collapse:collapse;font-variant-numeric:tabular-nums;min-width:64
 .vrows.econ .vrow{grid-template-columns:3.2em minmax(48px,1fr) 2.6em 4em;gap:6px}   /* the buy card fits the side column: short labels, the bar keeps its room */
 .vsit small{font:600 13px var(--f-mono);color:var(--muted);letter-spacing:.04em}   /* "won" next to a win rate */
 .upd{font:600 12.5px var(--f-body);background:none;border:1px solid var(--line);color:var(--ink);border-radius:10px;padding:3px 10px;cursor:pointer;white-space:nowrap}.upd:hover{border-color:var(--ct);color:var(--ct)}.upd:disabled{opacity:.5;cursor:wait}
+.vcurve{display:block}.vct{font:600 11px var(--f-mono);fill:var(--muted)}.vcv{font:700 13px var(--f-mono);fill:var(--ink)}
 </style>
 
 <div class="bar"><div class="bar-in">
@@ -2404,8 +2405,27 @@ function vTimeline(p,g){const TS=(p.advice.plan||{}).tside,M=TS&&TS.maps&&TS.map
   const tp=(TP.tempo||{})[rt==="pistol"?"pistol":rt]||(TP.tempo||{}).full||{},L=RLEN(),el=g.round_phase==="live"?(g.elapsed||0):0;
   const seg=[["rush",0,30],["exec",30,75],["late",75,L]].filter(s=>s[2]>s[1]);
   return vHead("ROUNDS WON · BY TEMPO")+`<div class="vtl">${seg.map(([k,a,b])=>{const v=(tp[k]||[])[1];
-      return `<div class="vseg ${vTone(v)}${el>b?" past":""}" style="flex:${b-a}"><span>${k}</span>${v!=null?`<b>${v}%</b>`:""}</div>`}).join("")}
+      return `<div class="vseg ${vTone(v)}${el>b?" past":""}" style="flex:${b-a}"><span>${k} ${a===0?`›${clock(b)}`:b>=L?`‹${clock(a)}`:`${clock(a)}-${clock(b)}`}</span>${v!=null?`<b>${v}%</b>`:""}</div>`}).join("")}
     ${g.round_phase==="live"?`<i class="vcur" style="left:${Math.min(100,100*el/L)}%"></i>`:""}</div>`}
+// T: when to be on the site with your paths: rounds won by the moment the play is on the site (game clock, 1:55 on the
+// left, 0:00 on the right), path 1 filled, paths 2 and 3 as dashed lines in their colors; the band is path 1's best
+// window (its "on site" on the map), the white line is now. The same rounds as the window on the map
+function vPathCurve(p,g){const W=typeof winsRank==="function"?winsRank(p,g):null;if(!W)return "";
+  const rows=W.rows.slice(0,3).filter(r=>r.timing&&r.timing.curve&&r.timing.curve.length>=3);if(!rows.length||rows[0].rank!==1)return "";
+  const Wd=320,H=86,L=RLEN(),all=rows.flatMap(r=>r.timing.curve.map(c=>c[1])),lo=Math.min(...all)-4,hi=Math.max(...all)+6;
+  const X=c=>Math.round(Wd*c/L),Y=v=>Math.round(6+(H-20)*(1-(v-lo)/Math.max(1,hi-lo)));
+  const line=r=>r.timing.curve.map(([c,v],i)=>`${i?"L":"M"}${X(c)} ${Y(v)}`).join("");
+  const r1=rows[0],c1=r1.timing.curve,t1=r1.timing,base=H-14,area=`${line(r1)}L${X(c1[c1.length-1][0])} ${base}L${X(c1[0][0])} ${base}Z`;
+  const now=g.round_phase==="live"?(g.elapsed||0):null,pk=c1.reduce((a,b)=>b[1]>a[1]?b:a);
+  const ticks=[[25,"1:30"],[55,"1:00"],[85,"0:30"]].map(([c,t])=>`<line x1="${X(c)}" y1="${base}" x2="${X(c)}" y2="${base+4}" stroke="var(--muted)"/><text x="${X(c)}" y="${H-1}" text-anchor="middle" class="vct">${t}</text>`).join("");
+  const svg=`<svg class="vcurve" viewBox="0 0 ${Wd} ${H}" width="100%" height="${H}" role="img" aria-label="Rounds won by the moment the play is on the site">
+    <line x1="0" y1="${base}" x2="${Wd}" y2="${base}" stroke="var(--line)"/>
+    ${t1.win-t1.mean>=3?`<rect x="${X(t1.lo)}" y="0" width="${Math.max(2,X(t1.hi)-X(t1.lo))}" height="${base}" fill="${r1.col}" fill-opacity=".2"/>`:""}
+    <path d="${area}" fill="${r1.col}" fill-opacity=".22"/><path d="${line(r1)}" fill="none" stroke="${r1.col}" stroke-width="2.4" stroke-linejoin="round"/>
+    ${rows.slice(1).map(r=>`<path d="${line(r)}" fill="none" stroke="${r.col}" stroke-width="1.6" stroke-dasharray="4 3" opacity=".85"/>`).join("")}
+    <text x="${Math.min(Wd-14,Math.max(14,X(pk[0])))}" y="${Math.max(10,Y(pk[1])-4)}" text-anchor="middle" class="vcv">${pk[1]}%</text>
+    ${ticks}${now!=null?`<line x1="${X(now)}" y1="0" x2="${X(now)}" y2="${base}" stroke="#fff" stroke-width="1.6"/>`:""}</svg>`;
+  return vHead(`ON THE SITE AT · ROUNDS WON · PATH${rows.length>1?`S 1-${rows.length}`:" 1"}`)+svg}
 function vCTdots(p,g){const TS=(p.advice.plan||{}).tside,M=TS&&TS.maps&&TS.maps[g.map],TP=(M&&M.tplan)||{},rt=advisedType(g);
   const su=(TP.setup||{})[rt==="pistol"?"pistol":rt]||(TP.setup||{}).all;if(!su||!su.top||!su.top.length)return "";const t=su.top[0];
   const dots=n=>"●".repeat(n)||"○";
@@ -2463,7 +2483,7 @@ function nowVisual(p,g,following){
   if(ph==="freezetime"){out.push(ct?vSituation(p,g):"",vKey(p,g));
     {if(typeof antiEco==="function"&&antiEco(p,g))out.push(`<span class="vchip bad">! eco kill spots on the map: clear them, no close duel</span>`)}
     if(ct&&r)out.push(vOdds(r),vRush(TS,g,r)||vEntries(TS,g,r));
-    if(!ct){out.push(vTimeline(p,g),vPush(p,g),vTchips(p,g))}}   // the plays and the grenades are on the map
+    if(!ct){out.push(vPathCurve(p,g)||vTimeline(p,g),vPush(p,g),vTchips(p,g))}}   // the plays and the grenades are on the map
   else if(ph==="live"){const el=g.elapsed||0,planted=g.bomb==="planted";out.push(vCall(g));
     if(planted){const left=g.phase_left!=null?g.phase_left:Math.max(0,40-(g.since_plant||0)),as=typeof autoSite==="function"?autoSite(p,g):null;
       out.push(`<div class="vbig ${ct?"bad":"good"}"><b>💣 ${Math.ceil(left)}s</b><span>${ct?"retake together":"hold the bomb"}${as?` · ${as.site} site, ${as.p}% sure`:""}</span></div>`)}
@@ -2471,7 +2491,7 @@ function nowVisual(p,g,following){
         const PLs=tsidePlays(TS,g.map,g,evFor(g),r),M=TS&&TS.maps&&TS.maps[g.map];
         const rush=el<32?vRush(TS,g,r):"";out.push(rush||vFights(M,g,r));
         (r.evid||[]).filter(x=>/spot/.test(x)).slice(0,2).forEach(ev=>out.push(`<span class="vchip ${/fight/.test(ev)?"bad":""}">● ${esc(ev)}</span>`))}}
-    else{out.push(vTimeline(p,g),(el<45&&vPush(p,g))||vFights(TS&&TS.maps&&TS.maps[g.map],g,null));
+    else{out.push(vPathCurve(p,g)||vTimeline(p,g),(el<45&&vPush(p,g))||vFights(TS&&TS.maps&&TS.maps[g.map],g,null));
       const left=g.phase_left!=null?g.phase_left:Math.max(0,RLEN()-el);
       if(left<=45)out.push(`<div class="vbig bad"><b>PLANT ${Math.floor(left/60)}:${String(Math.floor(left%60)).padStart(2,"0")}</b><span>${left>20?"commit now":"plant or save"}</span></div>`);
       else out.push(vTchips(p,g))}}
@@ -2902,7 +2922,7 @@ function proDetail(x){const st=x.stats;const n=(v,s="")=>v==null?"—":String(v)
     <div class="kv"><div><b>${n(st.kpr)}</b><span>kills per round</span></div><div><b>${n(st.hs,"%")}</b><span>headshot kills</span></div>
       <div><b>${n(st.open_win,"%")}</b><span>opening duels won</span></div><div><b>${n(st.trade_rate)}</b><span>trades per round</span></div>
       <div><b>${n(st.iso_T==null?null:Math.round(st.iso_T)," u")}</b><span>distance to teammate as T</span></div><div><b>${n(st.util_pr)}</b><span>grenades per round</span></div>
-      <div><b>${n(st.late_share,"%")}</b><span>kills after 60 s</span></div><div><b>${n(st.first_duel_t," s")}</b><span>first duel of the round</span></div></div>
+      <div><b>${n(st.late_share,"%")}</b><span>kills after 0:55</span></div><div><b>${st.first_duel_t==null?"—":clock(st.first_duel_t)}</b><span>first duel of the round</span></div></div>
     <div><span class="lbl4" style="color:var(--muted)">Weapons (share of kills)</span>
       <div class="wbar">${Object.entries(x.weapons).filter(([k,v])=>v>0).map(([k,v])=>`<i style="width:${v}%;background:${WCOL[k]||"var(--muted)"}" title="${esc(k)} ${v}%"></i>`).join("")}</div>
       <div class="wleg">${Object.entries(x.weapons).filter(([k,v])=>v>0).map(([k,v])=>`<span><b style="background:${WCOL[k]||"var(--muted)"}"></b>${esc(k)} ${v}%</span>`).join("")}</div>

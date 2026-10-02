@@ -622,7 +622,7 @@ def econ_table(df):
 
 
 SUMMARY = os.path.join(config.OUT, "population", "tside_summary.json")
-VERSION = 25   # bump when the summary changes shape: the cache is rebuilt
+VERSION = 26   # bump when the summary changes shape: the cache is rebuilt
 
 
 def _stamp():
@@ -1108,19 +1108,21 @@ def _play_timing(g, bw=7.0, k=8.0, min_n=10.0):
                 continue
             t, y = q.hit_t.to_numpy(float), q.T_won.astype(float).to_numpy()
             m = float(y.mean())
-            best = None
-            for c in np.arange(8, 101, 1.0):
+            best, curve = None, []
+            for c in np.arange(8, 106, 1.0):
                 w = np.exp(-0.5 * ((t - c) / bw) ** 2)
                 ne = float(w.sum())
                 if ne < min_n:
                     continue
                 v = (float((w * y).sum()) + m * k) / (ne + k)
-                if best is None or v > best[1]:
+                if c % 5 == 0:
+                    curve.append([int(c), round(100 * v)])   # the whole curve (every 5 s): what the In game strip draws
+                if c <= 100 and (best is None or v > best[1]):
                     best = (float(c), v, ne)
             if best:
                 c, v, ne = best
                 out.setdefault(play, {})[grp] = {"best": round(c, 1), "lo": round(max(0.0, c - 5), 1), "hi": round(c + 5, 1),
-                                                 "win": round(100 * v), "mean": round(100 * m), "n": int(round(ne))}
+                                                 "win": round(100 * v), "mean": round(100 * m), "n": int(round(ne)), "curve": curve}
     return out or None
 
 

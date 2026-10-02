@@ -30,7 +30,7 @@ ROLES = {
                "tips": ["Your timing matters more than your aim: strike when the team executes, not before.",
                         "Give info: you are often the only one who sees the enemy rotations.",
                         "If the round is already lost, save your weapon: a lurker who dies without impact is expensive."],
-               "key": [("iso_T", "distance to nearest teammate as T"), ("late_share", "share of kills after 60 s"), ("first_duel_t", "first duel of the round (s)")]},
+               "key": [("iso_T", "distance to nearest teammate as T"), ("late_share", "share of kills after 0:55"), ("first_duel_t", "first duel of the round (clock)")]},
     "support": {"name": "Support", "icon": "🛡️",
                 "what": "Prepares the ground with grenades (smokes, flashes, molotovs) and plays so teammates win their duels.",
                 "tips": ["Learn the full executes of your maps: 2 smokes, 2 flashes, 1 molotov per site.",
@@ -48,7 +48,7 @@ ROLES = {
                "tips": ["Play the clock and the bomb in a clutch: isolate duels one by one.",
                         "Stay alive early in the round: your impact comes later.",
                         "In the post-plant, play the angles that see the bomb, not the enemy spawn."],
-               "key": [("late_share", "share of kills after 60 s"), ("kpr", "kills per round"), ("hold_share", "duels started standing still")]},
+               "key": [("late_share", "share of kills after 0:55"), ("kpr", "kills per round"), ("hold_share", "duels started standing still")]},
 }
 SOURCES = [("Refrag, the roles of a CS2 team", "https://refrag.gg/blog/cs2-team-roles-explained/"),
            ("Esports.gg, every role in CS2", "https://esports.gg/news/counter-strike-2/all-roles-in-cs2/"),
@@ -176,13 +176,15 @@ def fmt(v, kind):
         return f"{v * 100:.0f}%"
     if kind == "s":
         return f"{v:.1f} s"
+    if kind == "clock":   # a moment of the round: the game clock, as shown in game
+        return _timer(v)
     if kind == "u":
         return f"{v:.0f} u"
     return f"{v:.2f}"
 
 
 KIND = {"awp_share": "pct", "open_win": "pct", "hold_share": "pct", "open_rate_T": "n", "traded_share": "pct", "trade_rate": "n",
-        "trade_time": "s", "iso_T": "u", "late_share": "pct", "first_duel_t": "s", "util_pr": "n", "blind_pr": "n",
+        "trade_time": "s", "iso_T": "u", "late_share": "pct", "first_duel_t": "clock", "util_pr": "n", "blind_pr": "n",
         "util_dmg_pr": "n", "ct_site": "pct", "ct_top": "pct", "kpr": "n", "move_share": "pct", "duel_len_won": "s", "hs_share": "pct"}
 
 
