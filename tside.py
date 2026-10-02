@@ -622,7 +622,7 @@ def econ_table(df):
 
 
 SUMMARY = os.path.join(config.OUT, "population", "tside_summary.json")
-VERSION = 20   # bump when the summary changes shape: the cache is rebuilt
+VERSION = 22   # bump when the summary changes shape: the cache is rebuilt
 
 
 def _stamp():
@@ -713,6 +713,10 @@ def _tendencies(maps, df):
             res["maps"][mp]["setplays"] = _setplays(mp, dirs.get(mp, []))
         except Exception as e:
             print(f"{mp}: play contexts / CT spots unavailable ({e})")
+        try:   # after the plant: where the Ts hold in the rounds they win
+            res["maps"][mp]["postplant"] = _postplant(mp, dirs.get(mp, []))
+        except Exception as e:
+            print(f"{mp}: post-plant holds unavailable ({e})")
     try:   # the weapons in key rounds (pistol, eco or force against a full buy), every map together
         res["setplay_w"] = setplay_weapons({m: dirs.get(m, []) for m in maps})
     except Exception as e:
@@ -831,7 +835,8 @@ def _plants_and_retakes(mp, dirs):
             spots.append({"n": int(len(s)), "share": round(100 * len(s) / len(g)), "px": [round(mx), round(my)], "level": level,
                           "where": _compass(mx - cx, my - cy), "timer": _timer(s.t.median()), "t_win": round(100 * float(s.win_t.mean()))})
         spots.sort(key=lambda x: -x["n"])
-        plants[site] = {"n": int(len(g)), "timer": _timer(g.t.median()), "t_win": round(100 * float(g.win_t.mean())), "spots": spots[:3]}
+        plants[site] = {"n": int(len(g)), "timer": _timer(g.t.median()), "t_win": round(100 * float(g.win_t.mean())), "spots": spots[:3],
+                        "t_q": [round(float(g.t.quantile(q)), 1) for q in (0.25, 0.5, 0.75)]}
         rt = []
         for (ct, tt), s in g.groupby(["ct", "tt"]):
             if len(s) >= 6 and ct >= 1 and tt >= 1:
@@ -1080,7 +1085,54 @@ def _ct_spots(mp, dirs, cell=26):
     return out or None
 
 
-KEY_SITS = ("pistol", "eco_full", "force_full")
+def _postplant(mp, dirs, cell=26):
+    """After the plant, each site: where the Ts hold (each T's median spot 3 to 30 s after the plant) and how often the
+    round is won from there, the spots taken often enough first by their rounds won."""
+    rows = []
+    for d in dirs:
+        fr, fs = os.path.join(d, "rounds.parquet"), os.path.join(d, "samples.parquet")
+        if not (os.path.exists(fr) and os.path.exists(fs)):
+            continue
+        R = pd.read_parquet(fr)
+        if not five_v_five(R) or "plant_site" not in R or "plant_t" not in R:   # older extractions have no plant columns
+            continue
+        R = R[R.plant_site.isin(["A", "B"]) & R.plant_t.notna()]
+        if not len(R):
+            continue
+        S = pd.read_parquet(fs, columns=["steamid", "side", "round", "t", "px", "py", "level", "zone", "health"])
+        S = S[(S.side == "T") & S.px.notna() & (S.health > 0)].merge(R[["round", "plant_site", "plant_t", "winner"]], on="round")
+        S = S[(S.t >= S.plant_t + 3) & (S.t <= S.plant_t + 30)]
+        if not len(S):
+            continue
+        h = S.groupby(["round", "steamid"]).agg(px=("px", "median"), py=("py", "median"), level=("level", "first"), zone=("zone", "first"),
+                                                 site=("plant_site", "first"), won=("winner", lambda w: w.iloc[0] == "T")).reset_index()
+        rows.append(h)
+    if not rows:
+        return None
+    H = pd.concat(rows, ignore_index=True)
+    H["c"] = list(zip(H.level, (H.px // cell).astype(int), (H.py // cell).astype(int)))
+    out = {}
+    for site, g in H.groupby("site"):
+        base = float(g.won.mean())
+        cand = []
+        for c, x in g.groupby("c"):
+            if len(x) < 6:
+                continue
+            cand.append({"px": [round(float(x.px.mean())), round(float(x.py.mean()))], "level": c[0], "n": int(len(x)), "win": round(100 * float(x.won.mean())),
+                         "zone": humanize(x.zone.mode().iloc[0], mp) if x.zone.notna().any() else None,
+                         "s": (float(x.won.sum()) + 10 * base) / (len(x) + 10)})
+        cand.sort(key=lambda z: -z["s"])
+        res = []
+        for z in cand:   # not two holds in the same place
+            if not any(r["level"] == z["level"] and np.hypot(r["px"][0] - z["px"][0], r["px"][1] - z["px"][1]) < 2 * cell for r in res):
+                res.append({k: v for k, v in z.items() if k != "s"})
+            if len(res) == 4:
+                break
+        out[site] = {"base": round(100 * base), "n": int(len(g)), "holds": res}
+    return out or None
+
+
+KEY_SITS = ("pistol", "eco_full", "force_full", "eco_force")
 W_GROUP = {**{w: "close" for w in ("Tec-9", "Five-SeveN", "CZ75-Auto", "Dual Berettas", "MAC-10", "MP9", "MP7", "UMP-45", "P90", "PP-Bizon",
                                   "MP5-SD", "XM1014", "MAG-7", "Nova", "Sawed-Off")},
            **{w: "long" for w in ("Desert Eagle", "R8 Revolver", "SSG 08", "AK-47", "M4A1-S", "M4A4", "Galil AR", "FAMAS", "AWP", "AUG", "SG 553")},
@@ -1100,7 +1152,8 @@ def _key_rows(d):
     L = L.merge(R[["round", "T_buy", "CT_buy"]], on="round", how="left")
     enemy = np.where(L.side == "T", L.CT_buy, L.T_buy)
     L["sit"] = np.where(L.team_buy == "pistol", "pistol", np.where((L.team_buy == "eco") & (enemy == "full"), "eco_full",
-                        np.where((L.team_buy == "force") & (enemy == "full"), "force_full", None)))
+                        np.where((L.team_buy == "force") & (enemy == "full"), "force_full",
+                                 np.where((L.team_buy == "eco") & (enemy == "force"), "eco_force", None))))
     L = L[L.sit.notna() & L.side.isin(["T", "CT"])].copy()
     if not len(L):
         return None

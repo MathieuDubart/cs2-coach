@@ -377,6 +377,11 @@ def attach_plan(sid):
         adv["plan_error"] = f"{type(e).__name__}: {e}"[:200]   # the previous plan stays; the page says it is not up to date
         config.write_json(p, adv, indent=1, default=str)
         return
+    try:   # what the In game page showed in your matches, against their demos
+        import livecheck
+        adv["plan"]["livecheck"] = livecheck.run(sid)
+    except Exception as e:
+        log(f"Live check unavailable: {e}")
     try:  # coach notes per map and side (zones to change or keep, grenades), from the cross-match analysis
         import coach_notes
         coach_notes.write(sid, load("cross.json"), adv.get("plan"))

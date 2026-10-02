@@ -536,6 +536,7 @@ svg.radar .pbt{font:800 12px var(--f-mono);fill:#1a1206}
 svg.radar .ptt{font:800 13px var(--f-mono);fill:#ffd9a0;paint-order:stroke;stroke:#0b0f14;stroke-width:3.5px}
 svg.radar .kwt{font:800 12px var(--f-mono);fill:#bff5c8;paint-order:stroke;stroke:#0b0f14;stroke-width:3.5px}
 .vsit.key span{color:var(--flash)}
+table.lc{border-collapse:collapse;font-variant-numeric:tabular-nums;min-width:640px}table.lc th,table.lc td{padding:6px 10px;border-bottom:1px solid var(--line);text-align:left;font-size:14px}table.lc th{font:600 12px var(--f-mono);color:var(--muted);text-transform:uppercase;letter-spacing:.04em}table.lc .good{color:var(--good)}table.lc .bad{color:var(--bad)}
 </style>
 
 <div class="bar"><div class="bar-in">
@@ -1801,8 +1802,10 @@ function liveBar(){if(!D.local)return "";const g=gsiLast,focus=document.body.cla
     :`<span>Pick your map and side, or <a href="#settings" style="color:var(--ct)">turn on game detection</a>: this page will follow your match by itself.</span>`}<span class="sp">${micBtn()}${fb}</span></div>`}
 async function gsiPoll(){clearTimeout(gsiTimer);if(!D.local||S.view!=="ingame")return;
   try{const g=await (await fetch("/api/gsi/state")).json();const sig=x=>x?[x.map,x.side,x.round,x.round_phase,x.money,x.bomb,x.age!=null&&x.age<75,JSON.stringify(x.hist||{}),JSON.stringify(x.nades||{}),x.health===0,x.elapsed==null?"":Math.floor(x.elapsed/5),x.pos?x.pos.map(c=>Math.round(c/100)).join(","):""].join("|"):"";
-    const before=sig(gsiLast)+(gsiLast&&gsiLast.mic);gsiLast=g&&Object.keys(g).length?g:null;if(sig(gsiLast)+(gsiLast&&gsiLast.mic)!==before&&S.view==="ingame"&&S.player&&D.players[S.player])renderIngame()}catch(e){}
-  gsiTimer=setTimeout(gsiPoll,2000)}
+    const before=sig(gsiLast)+(gsiLast&&gsiLast.mic);gsiLast=g&&Object.keys(g).length?g:null;
+    if(gsiLast&&S.player&&D.players[S.player]&&typeof liveLog==="function")liveLog(D.players[S.player],gsiLast);   // checked after the match
+    if(sig(gsiLast)+(gsiLast&&gsiLast.mic)!==before&&S.view==="ingame"&&S.player&&D.players[S.player])renderIngame()}catch(e){}
+  gsiTimer=setTimeout(gsiPoll,1000)}   // the game sends every 0.25 s
 
 // ---------- the page ----------
 function planColumns(p,m,R0){const PL=p.advice.plan||{};
@@ -1926,7 +1929,7 @@ function nowPanel(p,g,following,opt){const noBuy=opt&&opt.noBuy;
   if(g.practice)return `<div class="now-empty"><b>Practice server</b><span class="mini">More money or a longer round than a real match allows: the live advice (buys, T read) and the automatic recording are off here. The radar, your positions and grenades still work: pick them below.</span></div>`;
   if(ph==="freezetime"){if(!noBuy)out.push(buyCard(p,g));if(ct&&(g.round===1||g.round===13))out.push(pistolCT(p,g));out.push(situationCard(p,g));if(ct)out.push(tsideLive(p,g));else out.push(tPlanLive(p,g))}
   else if(ph==="live"){
-    if(g.bomb==="planted"){const site=ev.site||null;
+    if(g.bomb==="planted"){const site=ev.site||((typeof autoSite==="function"&&autoSite(p,g))||{}).site||null;
       if(site)out.push(retakeCard(p,g,site));
       else out.push(`<div class="tread" style="border-left-color:var(--bad)"><h3><span>Bomb planted</span></h3><div class="ev" role="group" aria-label="Site"><span class="l">On</span>${["A","B"].map(s=>`<button type="button" class="site-${s}" data-evsite="${s}" aria-pressed="false">${s} site</button>`).join("")}</div><p class="mini">Pick the site: plant spots, ${ct?"retake":"post-plant"} odds and danger zones show up.</p></div>`);
       out.push(nadeLive(p,g))}
@@ -2001,7 +2004,8 @@ function renderIngame(){
   const plantSpots=()=>{const TS=PL.tside,M=TS&&TS.maps&&TS.maps[S.map],site=following&&(igEv.site||null);if(!M||!site||!(M.evidence||{}).plants)return [];
     return (((M.evidence.plants||{})[site]||{}).spots||[]).map(s=>({px:s.px,level:s.level,label:`plant ${s.share}%`,color:"var(--bad)",title:`Plant spot on ${site}: ${s.share}% of plants, Ts win ${s.t_win}% after it`}))};
   if(liveR){const draw=()=>{const box=$(".radar-box",v);if(!box||S.view!=="ingame")return;
-      liveRadar(box,p,S.map,S.level,gsiLast,{side:S.side,layers:liveLayers(),following,site:following?igEv.site:null})};
+      const gR=following&&gsiLast&&gsiLast.map_phase==="warmup"&&typeof briefState==="function"?briefState(gsiLast):gsiLast;
+      liveRadar(box,p,S.map,S.level,gR,{side:S.side,layers:liveLayers(),following,site:following?(igEv.site||((typeof autoSite==="function"&&autoSite(p,gsiLast))||{}).site||null):null})};
     if(D.viewboxes[S.map])draw();else loadRadar(S.map).then(draw);
     $$("[data-rlayer]",v).forEach(b=>b.onclick=()=>{const k=b.dataset.rlayer,L=liveLayers();store("rlayers2",L.includes(k)?L.filter(x=>x!==k):[...L,k]);renderIngame()})}
   else if(m){const st={level:S.level,layers:["zones","best","nades"],nades:cols.plan?cols.plan.key_nades:[],sel:null},box=$(".radar-box",v);crossRadar(box,m,S.side,st);
@@ -2124,6 +2128,7 @@ const SW={lane:`<svg width="26" height="12" aria-hidden="true"><path d="M1 2L20 
   star:`<svg width="16" height="16" aria-hidden="true"><path d="${starPath(8,8,7,3,5)}" style="fill:#ffd24a;stroke:#5a4100"/></svg>`,
   wstar:`<svg width="16" height="16" aria-hidden="true"><path d="${starPath(8,8,6,2.6,5)}" style="fill:#f2f5f8;stroke:#0b0f14"/></svg>`,
   key:`<svg width="18" height="18" aria-hidden="true"><path d="M9 1L16 5V13L9 17L2 13V5Z" style="fill:var(--good);stroke:#0b0f14"/></svg>`,
+  eco:`<svg width="18" height="16" aria-hidden="true"><path d="M9 1L17 15H1Z" style="fill:var(--warn);stroke:#0b0f14"/></svg>`,
   ctpos:`<svg width="16" height="16" aria-hidden="true"><circle cx="8" cy="8" r="6" style="fill:var(--ct);fill-opacity:.32;stroke:var(--ct);stroke-width:2"/></svg>`,
   danger:`<svg width="18" height="18" aria-hidden="true"><circle cx="9" cy="9" r="5" style="fill:none;stroke:var(--bad);stroke-width:2"/><path d="M1 9H4M14 9H17M9 1V4M9 14V17" style="stroke:var(--bad);stroke-width:2"/></svg>`,
   tpath:`<svg width="26" height="12" aria-hidden="true"><path d="M1 6H25" style="stroke:#0b0f14;stroke-width:5"/><path d="M1 6H25" style="stroke:#ffb347;stroke-width:2.5"/></svg>`,
@@ -2133,8 +2138,8 @@ const SW={lane:`<svg width="26" height="12" aria-hidden="true"><path d="M1 2L20 
   c4:`<svg width="20" height="14" aria-hidden="true"><rect x="1" y="1" width="18" height="12" rx="2" style="fill:var(--bad)"/></svg>`};
 // T side: the multi-kill stars on top of your zones
 function spotStars(box,spots,level){const ov=$("g",box);PLACED.set(ov,[]);(spots||[]).filter(s=>s.multi2&&s.px&&(!s.level||!level||s.level===level)).forEach(s=>mkStar(ov,s.px[0]-6,s.px[1]-24,s))}
-const RLAYERS=[["key","Key rounds"],["paths","T paths"],["ctpos","CT spots"],["danger","CT kill angles"],["strong","Strong spots"],["multi","Multi-kills"],["nades","Grenades"],["spots","Your spots"],["rot","Rotation"]];
-function liveLayers(){let L=store("rlayers5");if(!Array.isArray(L))L=RLAYERS.map(x=>x[0]);return L}
+const RLAYERS=[["key","Key rounds"],["post","After the plant"],["paths","T paths"],["ctpos","CT spots"],["danger","CT kill angles"],["strong","Strong spots"],["multi","Multi-kills"],["nades","Grenades"],["spots","Your spots"],["rot","Rotation"]];
+function liveLayers(){let L=store("rlayers6");if(!Array.isArray(L))L=RLAYERS.map(x=>x[0]);return L}
 // the moment the radar is about: now in a live round, the setup during freeze time, none when you browse
 function radarT(g,o){return !o.following||!g?null:g.round_phase==="live"?(g.elapsed||0):g.round_phase==="freezetime"?0:null}
 // the spots that fit this moment (from a bit before now to a bit after), or the nearest ones in time
@@ -2192,11 +2197,13 @@ function liveRadar(box,p,map,level,g,o){
     others.forEach(s=>mkMark(Ltop,s,false));mine.forEach(s=>mkMark(Ltop,s,true,t!=null&&s.t_med!=null&&Math.abs(s.t_med-t)>35));
     if(mine.length||others.length)legend.push(`<span>${SW.star}your multi-kills (2+ kills from that spot in a round)</span>${others.length?`<span>${SW.wstar}other players' multi-kills on your spots</span>`:""}`)}
   // key rounds (pistol, eco or force against a full buy): the spots that pay for your weapon, a plant that wins more
-  if(on("key")&&o.following&&g&&!planted&&(g.round_phase==="freezetime"||(live&&(g.elapsed||0)<45))&&typeof keyRadar==="function")keyRadar(p,g,map,level,Lstrong,Ltop,legend,here);
+  if(on("key")&&o.following&&g&&!planted&&(g.round_phase==="freezetime"||(live&&(g.elapsed||0)<45))&&typeof keyRadar==="function"){keyRadar(p,g,map,level,Lstrong,Ltop,legend,here);antiEcoRadar(p,g,map,level,Ltop,legend,here)}
+  if(on("post")&&!ct&&planted&&site&&typeof postplantRadar==="function")postplantRadar(p,g,map,level,Ltop,legend,here,site);
   // T side, before the hit: the way from the spawn of the plays that win most (numbered like the side panel's lines)
   if(!ct&&on("paths")&&o.following&&g&&!planted&&(g.round_phase==="freezetime"||(live&&(g.elapsed||0)<45))){const W=winsRank(p,g);
     if(W){const seen=new Map();W.rows.slice(0,3).forEach(r=>{if(!r.route)return;const k=r.route.zones.join(">");if(seen.has(k)){seen.get(k).push(r.rank);return}seen.set(k,[r.rank]);r._k=k});
       W.rows.slice(0,3).filter(r=>r._k).reverse().forEach(r=>tPath(Lrot,Ltop,r.route.pts,r.col,seen.get(r._k),level,r.rank===1,r.wr));   // the play's chance this round (a route alone is biased: only the ones who got there alive count)
+      if(seen.size&&W.rotated)legend.push(`<span>${SW.tpath}path 1 changed: the one shown before lost or was shown too often, they read you too</span>`);
       if(seen.size)legend.push(`<span>${SW.tpath}your way from the spawn: 1 wins most this round (${esc(RT_EN[W.rt]||W.rt)}${W.eb&&W.eb.full>=.5?" vs their full buy":W.eb&&W.eb.eco>=.5?" vs their eco":""}, ${RUN_EN[W.run]})</span>`)}}
   // T side: where the CTs stand when you get there, and the angles they kill from (! = a spot they kill a lot from for the
   // little time they spend there: the angle the Ts forget)
@@ -2347,14 +2354,16 @@ function vEntries(TS,g,r){const PLs=tsidePlays(TS,g.map,g,evFor(g),r);if(!PLs)re
 function nowVisual(p,g,following){
   if(!following)return nowPanel(p,g,following,{noBuy:true});
   if(g.practice)return `<div class="vz"><div class="vsit"><span>PRACTICE</span></div></div>`;
+  if(g.map_phase==="warmup"&&typeof briefVisual==="function")return briefVisual(p,g);   // the map loads: the 60-second brief
   const ph=g.round_phase,ct=g.side==="CT",out=[];
   const TS=(p.advice.plan||{}).tside,r=ct?tsidePredict(TS,g.map,g,evFor(g)):null;
   if(ph==="freezetime"){out.push(vSituation(p,g),vKey(p,g));
+    {if(typeof antiEco==="function"&&antiEco(p,g))out.push(`<span class="vchip bad">! eco kill spots on the map: clear them, no close duel</span>`)}
     if(ct&&r)out.push(vOdds(r),vRush(TS,g,r)||vEntries(TS,g,r));
     if(!ct){out.push(vTimeline(p,g),vCTdots(p,g),vTchips(p,g))}}   // the plays and the grenades are on the map
   else if(ph==="live"){const el=g.elapsed||0,planted=g.bomb==="planted";
-    if(planted){const left=g.phase_left!=null?g.phase_left:Math.max(0,40-(g.since_plant||0));
-      out.push(`<div class="vbig ${ct?"bad":"good"}"><b>💣 ${Math.ceil(left)}s</b><span>${ct?"retake together":"hold the bomb"}</span></div>`)}
+    if(planted){const left=g.phase_left!=null?g.phase_left:Math.max(0,40-(g.since_plant||0)),as=typeof autoSite==="function"?autoSite(p,g):null;
+      out.push(`<div class="vbig ${ct?"bad":"good"}"><b>💣 ${Math.ceil(left)}s</b><span>${ct?"retake together":"hold the bomb"}${as?` · ${as.site} ${as.p}%`:""}</span></div>`)}
     else if(ct){if(r){out.push(vOdds(r));
         const PLs=tsidePlays(TS,g.map,g,evFor(g),r),M=TS&&TS.maps&&TS.maps[g.map];
         const rush=el<32?vRush(TS,g,r):"";out.push(rush||vFights(M,g,r));
@@ -2476,9 +2485,10 @@ function winsRank(p,g){const TS=(p.advice.plan||{}).tside,M=TS&&TS.maps&&TS.maps
     const pc=playCtx(M,k,tb,eb,run),wr=Math.round(100*pc.p),shift=LGT(CLP(pc.p))-LGT(pc.base);
     const rs=(RT[k]||[]).filter(x=>x.n>=6),route=rs.sort((a,b)=>lb(b.win,b.n)-lb(a.win,a.n))[0]||(RT[k]||[])[0]||null;
     const rwin=route?Math.round(100*SIG(LGT(CLP(route.win/100))+shift)):null;   // the route's own rounds, moved like its play for this round
-    return {k,n,wr,use,route,rwin,won:Math.round(n*w/100),s:lb(wr,n)}}).filter(r=>r.n>=8).sort((a,b)=>b.s-a.s).slice(0,4);
-  rows.forEach((r,i)=>{r.rank=i+1;r.col=WIN_C[i]});
-  return {rows,rt,ctx:true,run,eb,label:P_.label||{}}}
+    return {k,n,wr,use,route,rwin,won:Math.round(n*w/100),s:lb(wr,n)}}).filter(r=>r.n>=8).sort((a,b)=>b.s-a.s).slice(0,6);
+  const PM=planMemory(g,rows);const rows2=PM.rows.slice(0,4);
+  rows2.forEach((r,i)=>{r.rank=i+1;r.col=WIN_C[i]});
+  return {rows:rows2,rt,ctx:true,run,eb,rotated:PM.rotated,label:P_.label||{}}}
 function vWins(p,g){const W=winsRank(p,g);if(!W||!W.rows.length)return "";const rows=W.rows,rt=W.rt,P_={label:W.label};
 
   const ctx=W.ctx,mx=Math.max(...rows.map(r=>r.wr),1);   // ctx false: too few rounds of this kind, the numbers are for all rounds
@@ -2498,19 +2508,20 @@ const W_SHORT={"Desert Eagle":"DEAGLE","Five-SeveN":"FIVE-7","CZ75-Auto":"CZ","S
 const DEF_PISTOL=new Set(["Glock-18","USP-S","P2000"]);
 const SIDE_ONLY={T:new Set(["AK-47","Galil AR","SG 553","MAC-10","Tec-9","Glock-18","Sawed-Off","G3SG1"]),CT:new Set(["M4A1-S","M4A4","AUG","FAMAS","MP9","Five-SeveN","USP-S","P2000","MAG-7","SCAR-20"])};
 const canBuy=(side,w)=>!SIDE_ONLY[side==="T"?"CT":"T"].has(w);   // the base counts picked-up weapons too: you can only buy your side's
-const KEY_L={pistol:"PISTOL ROUND",eco_full:"ECO vs FULL",force_full:"FORCE vs FULL"};
+const KEY_L={pistol:"PISTOL ROUND",eco_full:"ECO vs FULL",force_full:"FORCE vs FULL",eco_force:"ECO vs SMG"};
 // the key situation of this round: the pistol round, or your eco / force-buy (what you hold once bought, else the advice)
 // against a full buy
 function keySit(p,g){if(!g||!g.side||g.round==null||g.practice)return null;if(g.round===halfStart(g.round))return "pistol";
-  const eb=enemyBuy(p,g)||{};if((eb.full||0)<.5)return null;
+  const eb=enemyBuy(p,g)||{},full=(eb.full||0)>=.5,frc=(eb.force||0)>=.5;if(!full&&!frc)return null;
   const pr=g.primary,pi=g.pistol;let mine=null;
   if(pr)mine=FULL_W.has(pr)?"full":"force";else if(pi&&!DEF_PISTOL.has(pi))mine="eco";
   if(!mine)mine=advisedType(g);
+  if(!full)return mine==="eco"?"eco_force":null;   // their SMGs and upgrades after a won pistol
   return mine==="eco"?"eco_full":mine==="force"?"force_full":null}
 // the weapons to look at: yours, and while buying the ones you can pay without losing your next buy
 function keyWeapons(p,g,k){const W=((((p.advice.plan||{}).tside||{}).setplay_w||{})[g.side]||{})[k]||[],mine=g.primary||(g.pistol&&!DEF_PISTOL.has(g.pistol)?g.pistol:null);
   let budget=g.money||0;
-  if(k==="eco_full"){const need=g.side==="T"?3700:3900;budget=Math.max(0,(g.money||0)+ECON.bonus[Math.min(g.losses||0,4)]-need)}   // an eco keeps the next full buy
+  if(k==="eco_full"||k==="eco_force"){const need=g.side==="T"?3700:3900;budget=Math.max(0,(g.money||0)+ECON.bonus[Math.min(g.losses||0,4)]-need)}   // an eco keeps the next full buy
   const buying=g.round_phase==="freezetime";
   const ok=w=>w.w===mine||(buying&&canBuy(g.side,w.w)&&(W_PRICE[w.w]??99999)<=budget+(mine?W_PRICE[mine]||0:0));
   const by=k==="pistol"?(a,b)=>b.win-a.win:(a,b)=>b.adr-a.adr;   // pistol: kevlar and the round count most; eco / force: what a weapon does
@@ -2520,13 +2531,15 @@ function keyWeapons(p,g,k){const W=((((p.advice.plan||{}).tside||{}).setplay_w||
 function vKey(p,g){const k=keySit(p,g);if(!k)return "";const M=(((p.advice.plan||{}).tside||{}).maps||{})[g.map]||{},SP=((M.setplays||{})[g.side]||{})[k];
   const {list,mine,budget}=keyWeapons(p,g,k),pis=k==="pistol",val=w=>pis?w.win:w.adr,mx=Math.max(...list.map(val),1);
   const rows=list.map((w,i)=>`<div class="vrow${w.w===mine?" best":""}" style="--c:${w.w===mine?"var(--good)":"var(--flash)"}${w.w===mine||!i?"":";opacity:.7"}"><span>${w.w===mine?"✓ ":""}${esc(W_SHORT[w.w]||w.w.toUpperCase())}</span><i><u style="width:${Math.max(4,Math.round(100*val(w)/mx))}%"></u></i><b>${pis?w.win+"%":w.adr}</b><small>${pis?`${w.adr} dmg`:`${w.win}% won`}</small></div>`).join("");
-  return `<div class="vsit key"><span>🔑 ${KEY_L[k]}</span>${SP?`<b class="${vTone(SP.win)}">${SP.win}%</b>`:""}</div>
-    ${rows?`<div class="vhead">${pis?"ROUNDS WON":"DAMAGE / ROUND"} · ${k==="eco_full"&&g.round_phase==="freezetime"?`budget ${kMoney(budget)}`:"base, every map"}</div><div class="vrows">${rows}</div>`:""}`}
+  return `<div class="vsit key"><span>🔑 ${KEY_L[k]}</span>${SP&&SP.n>=15?`<b class="${vTone(SP.win)}">${SP.win}%</b>`:""}</div>
+    ${rows?`<div class="vhead">${pis?"ROUNDS WON":"DAMAGE / ROUND"} · ${(k==="eco_full"||k==="eco_force")&&g.round_phase==="freezetime"?`budget ${kMoney(budget)}`:"base, every map"}</div><div class="vrows">${rows}</div>`:""}`}
 // the spots of a key round for a weapon family: this situation's, else every weapon in it, else the same family in the
 // other "against a full buy" situation (an eco and a force-buy hold the same angles with the same weapons)
 function keySpots(p,g,map,k,grp){const M=(((p.advice.plan||{}).tside||{}).maps||{})[map]||{},S_=(M.setplays||{})[g.side]||{},a=S_[k]||{};
-  const o=k==="eco_full"?S_.force_full:k==="force_full"?S_.eco_full:null;
-  return ((a.groups||{})[grp]||[]).length?a.groups[grp]:(a.spots||[]).length?a.spots:o&&((o.groups||{})[grp]||[]).length?o.groups[grp]:[]}
+  const o=k==="eco_full"?S_.force_full:k==="force_full"?S_.eco_full:k==="eco_force"?S_.eco_full:null;
+  const pi=(k==="eco_full"||k==="eco_force")?S_.pistol:null;   // an eco plays pistols: the pistol rounds' spots on this side
+  return ((a.groups||{})[grp]||[]).length?a.groups[grp]:(a.spots||[]).length?a.spots:o&&((o.groups||{})[grp]||[]).length?o.groups[grp]:
+    o&&(o.spots||[]).length?o.spots:pi&&((pi.groups||{})[grp]||[]).length?pi.groups[grp]:pi&&(pi.spots||[]).length?pi.spots:[]}
 // on the radar: the spots that pay for your weapon's family in this kind of round, and (T) a plant that wins more
 function keyRadar(p,g,map,level,lay,top,legend,here){const k=keySit(p,g);if(!k)return;const M=(((p.advice.plan||{}).tside||{}).maps||{})[map]||{};
   const SP=((M.setplays||{})[g.side]||{})[k];if(!SP)return;const {list,mine}=keyWeapons(p,g,k),w=mine||(list[0]||{}).w,grp=w?W_GRP(w):"default";
@@ -2545,7 +2558,86 @@ function keyRadar(p,g,map,level,lay,top,legend,here){const k=keySit(p,g);if(!k)r
         tip(gg,`Plant here on ${site}: the Ts win ${best.t_win}% after it (${best.share}% of plants), vs ${base}% on the site`);
         legend.push(`<span>${SW.c4}a plant on site ${site} that wins more than the usual ones</span>`)}}}}
 
+// ---------- the bomb site after the plant, without a click: the read before the plant and when it went down ----------
+// CT: the A / B read of the round at the plant time; T: your path 1's site. Then the plant time against each site's
+// usual plant times (TS evidence.plants t_q). Returns the site and how sure.
+function autoSite(p,g){if(!g||g.bomb!=="planted")return null;const TS=(p.advice.plan||{}).tside,M=((TS||{}).maps||{})[g.map]||{},PL=(M.evidence||{}).plants||{};
+  const tp=g.elapsed!=null&&g.since_plant!=null?Math.max(0,g.elapsed-g.since_plant):null;let pr={A:.5,B:.5};
+  if(g.side==="CT"){const r=tsidePredict(TS,g.map,Object.assign({},g,{bomb:null,elapsed:tp}),evFor(g));if(r&&r.A+r.B>0)pr={A:r.A/(r.A+r.B),B:r.B/(r.A+r.B)}}
+  else{const W=winsRank(p,Object.assign({},g,{bomb:null})),r1=W&&W.rows[0],s=r1?(r1.k.match(/[AB]$/)||r1.k.match(/^[AB]/)||[])[0]:null;if(s)pr={A:s==="A"?.7:.3,B:s==="B"?.7:.3}}
+  const lik=s=>{const q=(PL[s]||{}).t_q;if(!q||tp==null)return 1;const sd=Math.max(6,(q[2]-q[0])/1.35);return Math.exp(-((tp-q[1])**2)/(2*sd*sd))/sd};
+  const a=pr.A*lik("A"),b=pr.B*lik("B"),pa=a/((a+b)||1);return {site:pa>=.5?"A":"B",p:Math.round(100*Math.max(pa,1-pa)),tp}}
+// T after the plant: where the Ts hold in the rounds they win (each T's spot 3 to 30 s after the plant)
+function postplantRadar(p,g,map,level,top,legend,here,site){const PP=((((((p.advice.plan||{}).tside||{}).maps||{})[map])||{}).postplant||{})[site];if(!PP)return;
+  const hs=(PP.holds||[]).filter(here).slice(0,3);
+  hs.forEach((h,i)=>{const [x,y]=h.px,gg=el("g",{style:i?"opacity:.75":""},top);
+    el("circle",{cx:x,cy:y,r:11,style:"fill:var(--good);fill-opacity:.25;stroke:var(--good);stroke-width:2.6"},gg);
+    el("text",{x:x+15,y:y+4,class:"kwt"},gg).textContent=i?"hold":"★ hold";
+    tip(gg,`${h.zone||"Hold"} after the plant on ${site}: ${h.win}% of rounds won from here (${h.n} times), ${PP.base}% on average`)});
+  if(hs.length)legend.push(`<span>${SW.spot}after the plant: where the Ts hold in the rounds they win</span>`)}
+// anti-eco (your full buy against their eco): the spots their ecos kill from, read from their side of the key rounds
+const antiEco=(p,g)=>{if(!g||g.round==null||g.round===halfStart(g.round))return false;const eb=enemyBuy(p,g)||{};return (eb.eco||0)>=.6&&advisedType(g)!=="eco"};   // your buy against their eco
+function antiEcoRadar(p,g,map,level,top,legend,here){if(!antiEco(p,g))return;
+  const other=g.side==="T"?"CT":"T",S_=(((((p.advice.plan||{}).tside||{}).maps||{})[map]||{}).setplays||{})[other]||{};
+  const all=[];["eco_full","eco_force"].forEach(k=>{const a=S_[k]||{};[...(a.spots||[]),...Object.values(a.groups||{}).flat()].forEach(z=>all.push(z))});
+  const pick=[];all.sort((a,b)=>b.k-a.k).forEach(z=>{if(here(z)&&!pick.some(q=>q.level===z.level&&Math.hypot(q.px[0]-z.px[0],q.px[1]-z.px[1])<50))pick.push(z)});
+  pick.slice(0,4).forEach(z=>{const [x,y]=z.px,gg=el("g",{},top);
+    el("path",{d:`M${x} ${y-12}L${x+11} ${y+8}L${x-11} ${y+8}Z`,style:"fill:var(--warn);stroke:#0b0f14;stroke-width:1.6"},gg);
+    el("text",{x,y:y+6,"text-anchor":"middle",class:"pbt"},gg).textContent="!";
+    el("text",{x:x+15,y:y+4,class:"kwt",style:"fill:#ffd9a0"},gg).textContent="eco";
+    tip(gg,`${z.zone||"Spot"}: their ecos kill from here (${z.k} kills for ${z.d} deaths in the base): clear it or avoid the close angle`)});
+  if(pick.length)legend.push(`<span>${SW.eco}anti-eco: where their ecos kill from (clear it, don't take the close duel)</span>`)}
+// the 60-second brief while the map loads (warmup): the round of a full buy against a full buy for your side, and the
+// key rounds in one line each
+function briefState(g){const T=g.side==="T";return Object.assign({},g,{round:4,round_phase:"freezetime",map_phase:"live",money:6000,primary:T?"AK-47":"M4A1-S",pistol:null,armor:100,helmet:true,nades:T?{smoke:1,flash:1,molotov:1}:{smoke:1,flash:1,molotov:1},hist:{rounds:{}},losses:0,elapsed:null,bomb:null})}
+function briefVisual(p,g){const TS=(p.advice.plan||{}).tside||{},M=(TS.maps||{})[g.map]||{},T=g.side==="T",b=briefState(g),out=[];
+  out.push(`<div class="vsit key"><span>BRIEF · ${esc(MAPN(g.map))} · YOU START ${g.side||"?"}</span></div>`);
+  if(T){const W=winsRank(p,b);if(W&&W.rows.length)out.push(vHead("FULL vs FULL · PATHS ON THE MAP")+vRows(W.rows.slice(0,3).map((r,i)=>({l:`${r.rank} · ${vShort(String((M.plays.label||{})[r.k]||r.k).replace(/^([AB]) through /,"$1 · ").replace(/^Rush ([AB]) through /,"⚡$1 · "))}`,v:r.wr,c:r.col,o:[1,.8,.6][i]}))))}
+  else{const r=tsidePredict(TS,g.map,b,{});if(r)out.push(vHead("THEIR FULL BUYS"),vOdds(r))}
+  const CAP={pistol:800,eco_force:1100,eco_full:1100,force_full:3000};   // what each kind of round can pay
+  const W_=(TS.setplay_w||{})[g.side]||{},first=k=>((W_[k]||[]).filter(w=>canBuy(g.side,w.w)&&(W_PRICE[w.w]??99999)<=CAP[k]).sort(k==="pistol"?(a,c)=>c.win-a.win:(a,c)=>c.adr-a.adr)[0]||{}).w;
+  const kr=[["pistol","PISTOL"],["eco_force","R2 ECO"],["eco_full","ECO"],["force_full","FORCE"]].map(([k,l])=>{const w=first(k);return w?`<span class="vchip"><b>${l}</b> ${esc(W_SHORT[w]||w.toUpperCase())}</span>`:""}).join("");
+  if(kr)out.push(vHead("KEY ROUNDS · WEAPON"),`<div class="vchips">${kr}</div>`);
+  if(T){const d=(((M.ct_spots||{}).setup||{}).danger||[]).filter(z=>z.sneaky).slice(0,2).map(z=>esc(z.zone||"?"));if(d.length)out.push(`<span class="vchip bad">! check ${d.join(", ")}</span>`)}
+  else{const mine=(((p.advice.plan||{}).multi||{})[g.map]||{}).CT||[];if(mine.length)out.push(`<span class="vchip good">★ your multi-kills: ${[...new Set(mine.map(s=>s.zone))].slice(0,3).map(esc).join(", ")}</span>`)}
+  return `<div class="vz">${out.join("")}</div>`}
+// predictability: the plays shown as path 1 this half (kept in this browser), the ones that lost go down, a play
+// shown again and again goes down a little: the other side reads you too
+function planMemory(g,rows){if(!g||!g.map||g.round==null||!rows||!rows.length)return {rows,rotated:false};
+  const hs=halfStart(g.round),key=`pp|${g.map}|${g.side}|${hs}`;let mem={};try{mem=JSON.parse(localStorage.getItem(key)||"{}")||{}}catch(e){}
+  if(g.round===hs&&Object.keys(mem).some(n=>+n>hs))mem={};   // a new match on this map
+  const R=((g.hist||{}).rounds)||{},used={},lost={};
+  for(const [n,k] of Object.entries(mem)){if(+n>=g.round)continue;used[k]=(used[k]||0)+1;const w=(R[n]||{}).win;if(w&&w!==g.side)lost[k]=(lost[k]||0)+1}
+  const top0=rows[0].k,adj=r=>-.05*(lost[r.k]||0)-.02*Math.max(0,(used[r.k]||0)-1);
+  const out=rows.slice().sort((a,b)=>(b.s+adj(b))-(a.s+adj(a)));
+  if(!mem[g.round]&&(g.round_phase==="freezetime"||g.round_phase==="live")){mem[g.round]=out[0].k;try{localStorage.setItem(key,JSON.stringify(mem))}catch(e){}}
+  return {rows:out,rotated:out[0].k!==top0,lost:lost[top0]||0}}
+
+// ---------- what the page shows, sent to the app a few times per round (buy time, 0:20, 0:40, after the plant): the
+// app checks it against the match's demo afterwards (livecheck.py) ----------
+const LIVE_SENT=new Set();
+function liveLog(p,g){if(!D.local||!g||!g.map||g.round==null||g.practice||!g.side||g.map_phase==="warmup")return;
+  const ph=g.round_phase,el=g.elapsed||0,b=g.bomb==="planted"?"plant":ph==="freezetime"?"fz":ph==="live"&&el>=18&&el<26?"t20":ph==="live"&&el>=38&&el<46?"t40":null;
+  if(!b||(b==="fz"&&g.money==null))return;const key=`${g.map}|${g.round}|${b}|${g.side}`;if(LIVE_SENT.has(key))return;LIVE_SENT.add(key);
+  const TS=(p.advice.plan||{}).tside,body={map:g.map,round:g.round,side:g.side,bucket:b,elapsed:g.elapsed,money:g.money,score:[g.score_ct,g.score_t]};
+  try{
+    if(g.side==="CT"&&b!=="plant"){const r=tsidePredict(TS,g.map,g,evFor(g));if(r){const PLs=r.live?tsidePlays(TS,g.map,g,evFor(g),r):null;body.read={A:r.A,B:r.B,none:r.none,rush:PLs?Math.round(100*PLs.rush):r.rush}}}
+    if(g.side==="T"&&b==="fz"){const W=winsRank(p,g);if(W)body.paths=W.rows.slice(0,3).map(x=>({k:x.k,wr:x.wr}))}
+    if(b==="fz"){const pl=econPlan(p,g);body.buy=pl&&pl.best?pl.best.k:advisedType(g);body.key=keySit(p,g)}
+    if(b==="plant"){const as=autoSite(p,g);if(as){body.site=as.site;body.p_site=as.p}}
+  }catch(e){}
+  fetch("/api/live/log",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)}).catch(()=>{})}
+
 // ---------- view: review (after the session, or the next day) ----------
+// what the In game page showed in your matches, checked against their demos (livecheck.py)
+function liveCheckBlock(PL){const L=PL.livecheck,maps=Object.entries((L||{}).maps||{}).sort((a,b)=>b[1].matches-a[1].matches);
+  if(!maps.length)return D.local?`<h3>Live check</h3><p class="note">After your next match with the In game page open, the coach compares what it showed with what the demo says: the site read, the rushes, path 1, the buys, the site after the plant.</p>`:"";
+  const c=(v,n,good=60)=>v==null?`<td class="note">—</td>`:`<td><b class="${v>=good?"good":v<good-15?"bad":""}">${v}%</b> <span class="note">${n}</span></td>`;
+  return `<h3>Live check</h3><p class="note">What the In game page showed, round by round, against what the demo says. The more matches, the more it says about each map.</p>
+   <div style="overflow-x:auto"><table class="lc"><thead><tr><th>Map</th><th>Matches</th><th>CT: site read right</th><th>CT: rush read right</th><th>T: path 1 played</th><th>T: won with path 1 / other</th><th>Buy like the advice</th><th>Site found after the plant</th></tr></thead>
+   <tbody>${maps.map(([m,a])=>`<tr><td><b>${esc(MAPN(m))}</b></td><td>${a.matches}</td>${c(a.site_right,a.site_n,55)}${c(a.rush_right,a.rush_n,70)}${c(a.followed,a.t_n,40)}
+     <td>${a.win_followed!=null||a.win_other!=null?`<b>${a.win_followed??"—"}%</b> / ${a.win_other??"—"}%`:`<span class="note">—</span>`}</td>${c(a.buy_same,a.buy_n,60)}${c(a.plant_right,a.plant_n,70)}</tr>`).join("")}</tbody></table></div>`}
+
 function callsBlock(PL){const C=PL.calls||[];if(!C.length)return D.local?`<h3>Your calls</h3><p class="note">No recording yet: turn on "Your calls" in <a href="#settings" style="color:var(--ct)">Settings</a>, play, and the coach analyzes your communication after the match.</p>`:"";
   const a=C[0],pct=(x,n)=>n?Math.round(100*x/n)+"%":"—";
   const src=((PL.phases||[]).flatMap(ph=>ph.items).find(i=>i.id==="info_calls")||{}).src;
@@ -2586,6 +2678,7 @@ function renderReview(){const p=P(),v=$("#v-review"),PL=p.advice.plan||{},R=PL.r
        ${a.do.length?`<ul>${a.do.map(d=>`<li>${esc(d)}</li>`).join("")}</ul>`:""}${a.drills.length?`<p class="note">Drill: ${esc(a.drills[0])}</p>`:""}${srcLinks(a.sources,true)}</article>`).join("")}</div></div>
    </div>
    ${callsBlock(PL)}
+   ${liveCheckBlock(PL)}
    <h3>What you're testing, what you could test</h3>
    ${R.tests.active.length?`<div class="exps">${R.tests.active.map(expCard).join("")}</div>`:`<p class="note">No experiment running.</p>`}
    ${(X.suggested||[]).length?`<span class="lbl4" style="color:var(--muted)">Worth testing</span><div class="exps">${X.suggested.slice(0,3).map(suggestCard).join("")}</div>`:""}

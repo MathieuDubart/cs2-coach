@@ -233,6 +233,9 @@ class Handler(BaseHTTPRequestHandler):
             except Exception as e:
                 return self.send(400, {"error": f"Microphone: {e}"})
             return self.send(200, voice_status())
+        if u.path == "/api/live/log":   # what the In game page shows, a few times per round: checked after the match
+            import livecheck
+            return self.send(200 if livecheck.log(body) else 400, {})
         if u.path == "/api/gsi/site":  # the player marks where the T attacked, and what they saw in the round
             import gsi
             try:
