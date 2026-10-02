@@ -421,8 +421,9 @@ MOOD_RE = [
     ("frustration", "self", r"(j'ai pas touché|pas touché (un|une|de)|mourir trop tôt|c'est moi qui ai pris|je suis (nul|la salope|éclaté)|"
                             r"\bmy bad\b|ma faute|j'ai raté)"),
     ("frustration", None, TILT[:-3] + r"|j'en peux plus|ferme ta gueule|ta mère|\bpute\b|fils de|stupide|\bfuck\w*|\bshit\b|\bwtf\b|"
-                          r"dans mes veines|ça me met bien)\b"),
-    ("doubt", None, r"(qu'est-ce qu'on fait|on fait quoi|je sais pas|j'sais pas|aucune idée|je comprends pas|\bbizarre\b|\bétrange\b|"
+                          r"dans mes veines|ça me met bien|ah vas-y)\b"),
+    ("doubt", None, r"(qu'est-ce qu'on fait|on fait quoi|je sais pas|j'sais pas|aucune idée|je comprends (pas|rien)|j'comprends pas|"
+                    r"c'est quoi ce|\bpourquoi\b|\bbizarre\b|\bétrange\b|"
                     r"what do we do|\bperdu\b|\bpaumé\b)"),
     ("positive", None, r"\b(nickel|facile|easy|let'?s go|on les a|trop fort|parfait|good job|gg|bien joué|bien fait|nice|bon travail)\b"),
 ]
@@ -792,7 +793,13 @@ class LiveCalls:
             try:
                 self.pending += 1
                 self.n += 1
-                proc.stdin.write((json.dumps({"id": self.n, "t": t0, "map": self.map, "n": int(len(audio))}) + "\n").encode())
+                fr = False
+                try:   # dead, between rounds or buying: what you say then is more often how you feel than a call
+                    import gsi
+                    fr = (not gsi.STATE.get("_alive", True)) or gsi.STATE.get("round_phase") in ("over", "freezetime")
+                except Exception:
+                    pass
+                proc.stdin.write((json.dumps({"id": self.n, "t": t0, "map": self.map, "n": int(len(audio)), "fr": fr}) + "\n").encode())
                 proc.stdin.write(audio.astype("<f4").tobytes())
                 proc.stdin.flush()
             except Exception:
@@ -877,6 +884,15 @@ def live_loop():
             except Exception as e:
                 print("live mood transcription:", e, file=sys.stderr, flush=True)
                 mood_text = text
+        elif h.get("fr") and len(a) >= SR // 2 and not parse_call(text, mp):   # not a call: read in French for how you feel
+            try:
+                segs, _ = model.transcribe(a, language="fr", beam_size=1, condition_on_previous_text=False, vad_filter=False,
+                                           initial_prompt="Putain. Qu'est-ce qu'on fait ? Je comprends pas. Pourquoi tu peek ? Bien joué. Ah vas-y.",
+                                           without_timestamps=True, max_new_tokens=24, temperature=0.0)
+                fr_ = " ".join(x.text for x in segs if (x.no_speech_prob or 0) < 0.6 and (x.avg_logprob or 0) > -1.0).strip()
+                mood_text = fr_ if fr_ and mood_of(fr_) else None
+            except Exception as e:
+                print("live mood transcription:", e, file=sys.stderr, flush=True)
         sys.stdout.write(json.dumps({"id": h.get("id"), "t": h.get("t"), "map": mp, "text": text, "mood_text": mood_text,
                                      "s": round(time.time() - t, 2)}, ensure_ascii=False) + "\n")
         sys.stdout.flush()

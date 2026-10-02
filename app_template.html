@@ -543,6 +543,12 @@ table.lc{border-collapse:collapse;font-variant-numeric:tabular-nums;min-width:64
 .upd{font:600 12.5px var(--f-body);background:none;border:1px solid var(--line);color:var(--ink);border-radius:10px;padding:3px 10px;cursor:pointer;white-space:nowrap}.upd:hover{border-color:var(--ct);color:var(--ct)}.upd:disabled{opacity:.5;cursor:wait}
 .vcurve{display:block}.vct{font:600 11px var(--f-mono);fill:var(--muted)}.vcv{font:700 13px var(--f-mono);fill:var(--ink)}
 .vleg{display:flex;flex-wrap:wrap;gap:4px 10px;font:600 11px var(--f-mono);color:var(--muted)}.vleg i{display:inline-block;width:12px;height:5px;border-radius:2px;margin-right:4px;vertical-align:middle}
+.vreset{display:flex;align-items:center;flex-wrap:wrap;gap:4px 12px;padding:8px 12px;border-radius:var(--radius);border-left:6px solid var(--flash);background:color-mix(in srgb,var(--flash) 12%,transparent)}
+.vreset b{font:700 26px var(--f-display);letter-spacing:.06em;color:var(--flash)}.vreset span{font:700 16px var(--f-body)}.vreset small{flex-basis:100%;font:600 11px var(--f-mono);color:var(--muted)}
+.mood-row{display:grid;gap:2px;margin:6px 0}.mood-h{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.mood-h .vchip{padding:0 6px;font-size:11px}
+.fbar{display:flex;gap:2px;height:12px;border-radius:6px;overflow:hidden;margin:6px 0}.fbar i{display:block;min-width:3px}
+.gauge b small{font-size:.55em;color:var(--muted);font-weight:600}
+.vreset.plan{border-left-color:var(--ct);background:color-mix(in srgb,var(--ct) 12%,transparent)}.vreset.plan b{color:var(--ct)}
 </style>
 
 <div class="bar"><div class="bar-in">
@@ -1231,7 +1237,11 @@ async function renderSettings(){
   <article class="card"><h3>Paths in the team chat (numpad 1-2-3) ${ok(cc&&cc.bound)}</h3>
    <p>As T, numpad <b>1</b>, <b>2</b> or <b>3</b> says path 1, 2 or 3 of the In game page in the team chat, with its way and when it is on the site. The app rewrites the text every round; you press the key.</p>
    ${cc&&cc.bound?`<p class="note">The keys are set.</p>`:`<p>One time only, in CS2's console: <code>exec coach_binds</code> (the keys then stay in your CS2 settings).</p>`}
-   <p class="note">Numpad 1, 2, 3 were free in your CS2 keys. The In game page must be open during the match (it gives the paths). A file can only say one line in the chat, never run another command.</p></article>
+   <p class="note">Numpad 1, 2, 3 were free in your CS2 keys. The In game page must be open during the match (it gives the paths). When the path ends on a site, the key also gives CS2's own "Go A" / "Go B" of the chat wheel (the order bots follow). A file only says that line and that order, never another command.</p></article>
+  <article class="card"><h3>The coach's voice at the buy time</h3>
+   <p>When you're frustrated (a word or a shout after your death, "coach, énervé"), after two rounds lost dead without a kill, or when you don't understand ("qu'est-ce qu'on fait", "coach, perdu"): a few seconds of voice during the buy time, once per round. Calm, then one thing to do this round, or a simple plan.</p>
+   <div class="row"><label style="display:flex;gap:8px;align-items:center;font-size:14px"><input type="checkbox" id="c-voice" ${voiceOn()?"checked":""}> Speak at the buy time</label><button type="button" id="c-voice-test">Hear it</button></div>
+   <p class="note">A French voice of Windows (Julie, Paul or Hortense), on this PC: nothing is sent anywhere. The browser only lets a page speak after one click on it: click the In game page once when you open it.</p></article>
   <article class="card form"><h3>Your calls (microphone) ${ok(vs&&vs.settings&&vs.settings.auto)}</h3>
    <p>During your matches, the app records <b>your microphone</b>, transcribes your calls on this PC and lines them up with the rounds: info given before dying, "where + how many", grenades called, talking during a teammate's clutch, frustration. The result shows up in the Review.</p>
    <p class="note">Only your voice: with a headset, your teammates' voices don't reach your microphone. Nothing leaves the PC (folder <code>out/voice</code>, not versioned). Only record other people with their consent: recording someone's words without consent is illegal in France (article 226-1 of the Code pénal) and in many other countries.</p>
@@ -1282,6 +1292,8 @@ async function renderSettings(){
   const vmsg=$("#v-msg",v),vcall=async(path,body)=>{try{await api(path,Object.assign({sid},body||{}));renderSettings()}catch(e){if(vmsg)vmsg.textContent=e.message}};
   const va=$("#v-auto",v);if(va)va.onchange=()=>vcall("/api/voice/settings",{auto:va.checked});
   const vl=$("#v-live",v);if(vl)vl.onchange=()=>vcall("/api/voice/settings",{live:vl.checked});
+  const cvo=$("#c-voice",v);if(cvo)cvo.onchange=()=>{try{localStorage.setItem("coach_voice",cvo.checked?"on":"off")}catch(e){}};
+  const cvt=$("#c-voice-test",v);if(cvt)cvt.onclick=()=>{if(!coachSay("Respire. Le round d'avant est fini. Ce round, joue le trade, à côté d'un coéquipier."))cvt.textContent="No French voice of Windows found"};
   const vd=$("#v-dev",v);if(vd){fetch("/api/voice/devices").then(r=>r.json()).then(list=>{if(!Array.isArray(list))return;const cur=(vs.settings||{}).device||"";
     vd.innerHTML=`<option value="">${vs.cs2_device?`The same as CS2 (${esc(vs.cs2_device)})`:"Windows default microphone"}</option>`+list.map(d=>`<option value="${esc(d.name)}" ${d.name===cur?"selected":""}>${esc(d.name)}${d.cs2?" (used by CS2)":d.default?" (Windows default)":""}</option>`).join("")}).catch(()=>{});
     vd.onchange=()=>vcall("/api/voice/settings",{device:vd.value||null})}
@@ -1848,6 +1860,7 @@ async function gsiPoll(){clearTimeout(gsiTimer);if(!D.local||S.view!=="ingame")r
     const before=sig(gsiLast)+(gsiLast&&gsiLast.mic);gsiLast=g&&Object.keys(g).length?g:null;
     if(gsiLast&&S.player&&D.players[S.player]&&typeof liveLog==="function")liveLog(D.players[S.player],gsiLast);   // checked after the match
     if(gsiLast&&S.player===D.own&&D.players[S.player]&&typeof pathCalls==="function")pathCalls(D.players[S.player],gsiLast);   // numpad 1-2-3
+    if(gsiLast&&S.player===D.own&&D.players[S.player]&&typeof coachVoice==="function")coachVoice(D.players[S.player],gsiLast);   // the coach's voice at the buy time
     if(sig(gsiLast)+(gsiLast&&gsiLast.mic)!==before&&S.view==="ingame"&&S.player&&D.players[S.player])renderIngame()}catch(e){}
   gsiTimer=setTimeout(gsiPoll,1000)}   // the game sends every 0.25 s
 
@@ -2500,16 +2513,78 @@ function vMates(g){const M=g.mates||{},prev=(g.round||0)-1;if(prev<1||halfStart(
 function vPush(p,g){const E=typeof ctPush==="function"?ctPush(p,g):null;if(!E||!E.gates.length)return "";const el=g.round_phase==="live"?(g.elapsed||0):0;
   const rows=E.gates.map((x,i)=>({l:`${vShort(x.gate||"?")} · ${clock(x.t)}`,v:x.share,c:x.kill>=30?"var(--bad)":"var(--ct)",o:el>x.t+6?.35:[1,.85,.7,.6][i]}));
   return vHead(`➜ CT PUSHES · ${E.label} · OF ROUNDS`)+vRows(rows)}
+// after a frustrated moment (said "coach, énervé", a shout after your death or a lost round) or two rounds lost dead
+// without a kill: one thing to do this round, from your own data (an early death: no dry peek; otherwise: the trade)
+function resetWhy(g){if(g.round_phase!=="freezetime"||!g.hist)return null;const R=g.hist.rounds||{},Mk=g.hist.marks||{},cur=g.round,prev=cur-1;if(!(prev>=1))return null;
+  const mk=n=>Mk[n]||{},frus=[prev,cur].some(n=>mk(n).mood==="frustration"||mk(n).heat),doubt=[prev,cur].some(n=>mk(n).mood==="doubt");
+  const bad=n=>{const x=R[n]||{};return !!(x.win&&x.side&&x.win!==x.side&&x.dead!=null&&!(x.kills||[]).length)};
+  const early=[prev,prev-1].some(n=>{const x=R[n]||{};return x.dead!=null&&x.dead<30});
+  return frus?{k:"frus",early}:bad(prev)&&bad(prev-1)?{k:"bad",early}:doubt?{k:"doubt",early}:null}
+// the simple plan of the round: T, path 1 and when to be on the site; CT, your spot of the buy card
+function simplePlan(p,g){if(g.side==="T"){const W=typeof winsRank==="function"?winsRank(p,g):null,r=W&&W.rows[0];if(!r)return null;
+    const ps=pathShort(p,g,r),pts=(r.route||{}).pts,end=pts&&pts[pts.length-1],tm=r.timing,win=tm&&tm.win-tm.mean>=3;
+    return {head:ps.head,via:ps.via,lo:win?tm.lo:null,hi:win?tm.hi:null,at:!win&&end&&end[3]!=null?end[3]:null}}
+  const KB=(((((p.advice.plan||{}).buys||{}).maps||{})[g.map]||{})[g.side]||{}),k=KB[advisedType(g)]||KB.full||{};
+  return k.zone?{spot:k.zone.key}:null}
+function vReset(p,g){const w=resetWhy(g);if(!w)return "";
+  if(w.k==="doubt"){const sp=simplePlan(p,g);if(!sp)return "";
+    return `<div class="vreset plan"><b>PLAN</b><span>${sp.spot?`📍 ${vShort(sp.spot)} · molly for their arrival`:`${esc(sp.head)}${sp.via?` via ${esc(sp.via)}`:""} · ${sp.lo!=null?`on site ${clock(sp.lo)}-${clock(sp.hi)}`:sp.at!=null?`on site ~${clock(sp.at)}`:""}`}</span></div>`}
+  const MS=(p.advice.plan||{}).mood,data=MS&&MS.after&&MS.other&&MS.after.adr<MS.other.adr?`<small>after a tilt · ADR ${MS.after.adr} vs ${MS.other.adr}</small>`:"";
+  return `<div class="vreset"><b>RESET</b><span>${w.early?`✕ no dry peek before ${clock(30)}`:"👥 play the trade: next to a mate"}</span>${data}</div>`}
+// ---------- the coach's voice at the buy time: a few seconds in French, once per round, when the reset or plan card
+// shows. A local Windows voice only (Julie, Paul, Hortense: nothing leaves the PC); the browser lets a page speak only
+// after one click on it ----------
+const VOICE={said:null};
+function voiceOn(){try{return localStorage.getItem("coach_voice")!=="off"}catch(e){return true}}
+function frVoice(){const vs=(window.speechSynthesis&&speechSynthesis.getVoices())||[];
+  return vs.find(v=>/^fr/i.test(v.lang)&&v.localService&&/Julie|Paul|Hortense/.test(v.name))||vs.find(v=>/^fr/i.test(v.lang)&&v.localService)||null}
+function coachSay(t){if(!window.speechSynthesis)return false;const v=frVoice();if(!v)return false;
+  const u=new SpeechSynthesisUtterance(t);u.voice=v;u.lang=v.lang;u.rate=1.08;speechSynthesis.cancel();speechSynthesis.speak(u);return true}
+const sayClock=t=>{const c=clock(t).split(":");return +c[0]?`${c[0]} minute ${+c[1]}`:`${+c[1]} secondes`};
+function coachVoice(p,g){if(!voiceOn()||!g||g.practice)return;const w=resetWhy(g);if(!w)return;const key=[g.map,g.round,w.k].join("|");if(VOICE.said===key)return;
+  if(navigator.userActivation&&!navigator.userActivation.hasBeenActive)return;   // no click on the page yet: the browser would refuse
+  const pick=a=>a[Math.floor(Math.random()*a.length)];
+  const instr=w.early?`pas de peek sec avant ${sayClock(30)}`:"joue le trade, à côté d'un coéquipier";
+  let t;
+  if(w.k==="doubt"){const sp=simplePlan(p,g);if(!sp)return;
+    t=sp.spot?`Plan simple : ton spot, ${String(sp.spot).split(" / ")[0]}, et ta molly pour leur arrivée.`
+      :`Plan simple : ${sp.head}${sp.via?` par ${sp.via.replace(/ > /g,", ")}`:""}${sp.lo!=null?`, sur le site entre ${sayClock(sp.lo)} et ${sayClock(sp.hi)}`:sp.at!=null?`, sur le site vers ${sayClock(sp.at)}`:""}.`}
+  else{const MS=(p.advice.plan||{}).mood,drop=MS&&MS.after&&MS.other&&MS.other.adr?Math.round(100*(1-MS.after.adr/MS.other.adr)):0;
+    t=w.k==="frus"?pick([`Respire. Le round d'avant est fini. Ce round, ${instr}.`,`On reset. Une info utile, puis ${instr}.`])
+      :pick([`Deux rounds compliqués, ça arrive. Ce round, ${instr}.`,`On repart simple : ${instr}.`]);
+    if(drop>=10&&VOICE.data!==g.map){t+=` Après un tilt, tes dégâts baissent de ${drop} pour cent : joue simple.`;VOICE.data=g.map}}
+  if(coachSay(t))VOICE.said=key}
+// T: the site left open by what you called in the last 25 s (two CTs or more on one side and none on the other, or a
+// site said clear): where the bomb should go
+function vOpen(g){if(g.side!=="T"||g.bomb==="planted"||!g.seen||g.seen.round!==g.round)return "";
+  const now=Date.now()/1000,cs=(g.seen.calls||[]).filter(c=>now-c.t<=25);if(!cs.length)return "";
+  const n={A:0,B:0},clear={A:false,B:false};
+  cs.forEach(c=>{if(c.clear&&c.site){clear[c.site]=true;return}
+    const regs=c.regs&&c.regs.length?c.regs:(c.site?[c.site]:[]);
+    if(regs.length===1)n[regs[0]]+=c.n||1;else regs.forEach(x=>n[x]+=1)});
+  const open=["A","B"].find(s=>{const o=s==="A"?"B":"A";return (clear[s]||(n[o]>=2&&n[s]===0))&&!clear[o]&&!n[s]});
+  if(!open)return "";const o=open==="A"?"B":"A",age=Math.round(now-Math.max(...cs.map(c=>c.t)));
+  return `<div class="vbig good"><b>${open} OPEN</b><span>go ${open} · ${n[o]?`${n[o]} seen ${o}`:`${open} clear`} · ${age}s ago</span></div>`}
+// T: when the CTs push past a neutral zone, the Ts' rounds won by their answer (the site, fast or late), at equal
+// economy. Buy time: the most likely push (15% of rounds or more); in the round: the zone you just called
+function vPushAns(p,g,live){if(g.side!=="T")return "";const PA=((((p.advice.plan||{}).tside||{}).maps||{})[g.map]||{}).push_answers;if(!PA)return "";
+  const called=(g.seen&&g.seen.round===g.round?g.seen.calls||[]:[]).map(c=>c.zone).filter(Boolean);
+  let A=called.length?PA.find(a=>called.some(z=>z===a.gate||String(a.gate).includes(z)||String(z).includes(a.gate))):null;
+  if(!A&&!live){const E=typeof ctPush==="function"?ctPush(p,g):null,top=E&&E.gates[0];if(top&&top.share>=15)A=PA.find(a=>a.gate===top.gate)}
+  if(!A)return "";
+  return vHead(`IF THEY PUSH ${vShort(A.gate)} · WON`)+vRows(A.answers.slice(0,2).map((a,i)=>({l:`${a.site} ${a.tempo==="fast"?`fast ›${clock(45)}`:`late ‹${clock(45)}`}`,v:a.won,c:SITE_C[a.site],o:i?.7:1})))}
+const expOn=(p,t)=>(((((p||{}).advice||{}).plan||{}).experiments||{}).experiments||[]).some(e=>e.status==="active"&&e.template===t);
 function nowVisual(p,g,following){
   if(!following)return nowPanel(p,g,following,{noBuy:true});
   if(g.practice)return `<div class="vz"><div class="vsit"><span>PRACTICE</span></div></div>`;
   if(g.map_phase==="warmup"&&typeof briefVisual==="function")return briefVisual(p,g);   // the map loads: the 60-second brief
   const ph=g.round_phase,ct=g.side==="CT",out=[];
   const TS=(p.advice.plan||{}).tside,r=ct?tsidePredict(TS,g.map,g,evFor(g)):null;
-  if(ph==="freezetime"){out.push(vKey(p,g));
+  if(ph==="freezetime"){out.push(vReset(p,g),vKey(p,g));
+    if(voiceOn()&&navigator.userActivation&&!navigator.userActivation.hasBeenActive)out.push(`<span class="vchip">🔊 click this page once: the coach's voice</span>`);
     {if(typeof antiEco==="function"&&antiEco(p,g))out.push(`<span class="vchip bad">! eco kill spots on the map: clear them, no close duel</span>`)}
     if(ct&&r)out.push(vOdds(r),vRush(TS,g,r)||vEntries(TS,g,r),vCTline(p,g,r)||vHold(p,g,r));
-    if(!ct){out.push(vPathCurve(p,g)||vTimeline(p,g),vPush(p,g),vTchips(p,g))}}   // the plays and the grenades are on the map
+    if(!ct){out.push(vPathCurve(p,g)||vTimeline(p,g),vPush(p,g),vPushAns(p,g,false),vTchips(p,g))}}   // the plays and the grenades are on the map
   else if(ph==="live"){const el=g.elapsed||0,planted=g.bomb==="planted";out.push(vCall(g));
     if(planted){const left=g.phase_left!=null?g.phase_left:Math.max(0,40-(g.since_plant||0)),as=typeof autoSite==="function"?autoSite(p,g):null;
       out.push(`<div class="vbig ${ct?"bad":"good"}"><b>💣 ${Math.ceil(left)}s</b><span>${ct?"retake together":"hold the bomb"}${as?` · ${as.site} site, ${as.p}% sure`:""}</span></div>`)}
@@ -2517,7 +2592,7 @@ function nowVisual(p,g,following){
         const PLs=tsidePlays(TS,g.map,g,evFor(g),r),M=TS&&TS.maps&&TS.maps[g.map];
         const rush=el<32?vRush(TS,g,r):"";out.push(rush||vFights(M,g,r));if(el<75)out.push(vCTline(p,g,r)||(el<60?vHold(p,g,r):""));
         (r.evid||[]).filter(x=>/spot/.test(x)).slice(0,2).forEach(ev=>out.push(`<span class="vchip ${/fight/.test(ev)?"bad":""}">● ${esc(ev)}</span>`))}}
-    else{out.push(vPathCurve(p,g)||vTimeline(p,g),(el<45&&vPush(p,g))||vFights(TS&&TS.maps&&TS.maps[g.map],g,null));
+    else{out.push(vOpen(g),vPathCurve(p,g)||vTimeline(p,g),(el<45&&vPush(p,g))||vFights(TS&&TS.maps&&TS.maps[g.map],g,null),el<50?vPushAns(p,g,true):"");
       const left=g.phase_left!=null?g.phase_left:Math.max(0,RLEN()-el);
       if(left<=45)out.push(`<div class="vbig bad"><b>PLANT ${Math.floor(left/60)}:${String(Math.floor(left%60)).padStart(2,"0")}</b><span>${left>20?"commit now":"plant or save"}</span></div>`);
       else out.push(vTchips(p,g))}}
@@ -2548,6 +2623,7 @@ function buyVisual(p,g){if(g.money==null||!g.side||g.practice)return "";const rt
   if(ks==="pistol"){const top=kw&&kw.list[0];tags.push(top&&!DEF_PISTOL.has(top.w)?`<span class="vtag">🔑 ${esc(W_SHORT[top.w]||top.w.toUpperCase())}</span>`:`<span class="vtag">kevlar</span>`)}
   else if(ks&&kp&&!haveRifle)tags.push(`<span class="vtag">🔑 ${esc(W_SHORT[kp.w]||kp.w.toUpperCase())}${kp.exp?" 🧪":""}</span>`,...(ks==="force_full"?[`<span class="vtag">kevlar</span>`]:[]));
   else if(bk==="eco")tags.push(`<span class="vtag">save: buy nothing</span>`);   // the plan says save: no weapon to tempt you
+  else if(g.side==="CT"&&rt==="full"&&!haveRifle&&expOn(p,"full_rifle_ct"))tags.push(`<span class="vtag">M4 🧪</span><span class="vtag">kevlar + helmet</span>`);   // the experiment: no MAG-7 on a full buy
   else if(kit.kit&&!haveRifle)tags.push(...String(expSwapTxt(p,kit.kit.key)).split(" + ").filter(x=>!/grenade/i.test(x)).map(x=>`<span class="vtag">${esc(x)}</span>`));
   else if(rt==="full"&&!haveRifle)tags.push(`<span class="vtag">rifle</span><span class="vtag">kevlar + helmet</span>`);
   if(haveRifle)tags.push(`<span class="vtag got">${esc(g.primary)} ✓</span>`);
@@ -2838,11 +2914,22 @@ const CALL_SENT={k:null};
 function pathCalls(p,g){if(!D.local||!g||!g.map||g.round==null||g.practice)return;let paths=[];
   if(g.side==="T"&&g.map_phase!=="warmup"&&(g.round_phase==="freezetime"||(g.round_phase==="live"&&(g.elapsed||0)<40))){
     const W=winsRank(p,g),L=(((((p.advice.plan||{}).tside||{}).maps||{})[g.map]||{}).plays||{}).label||{};
-    if(W)paths=W.rows.slice(0,3).map(r=>{const z=((r.route||{}).zones||[]).filter(x=>!/spawn/i.test(x)).slice(0,4),pts=(r.route||{}).pts,end=pts&&pts[pts.length-1];
-      const lab=String(L[r.k]||r.k).replace(/ \/ .*$/,"").replace(/ through /," via ");
-      const os_=onSite(r.timing,end);return {rank:r.rank,text:`${lab}${z.length?`: ${z.join(" > ")}`:""}${os_?` - ${os_}`:""}`}})}
+    if(W)paths=W.rows.slice(0,3).map(r=>{const ps=pathShort(p,g,r),pts=(r.route||{}).pts,end=pts&&pts[pts.length-1],os_=onSite(r.timing,end);
+      return {rank:r.rank,site:ps.site,text:`${ps.head}${ps.via?` via ${ps.via}`:""}${os_?` - ${os_}`:""}`}})}
   const key=JSON.stringify([g.map,g.round,g.side,paths.map(x=>x.text)]);if(CALL_SENT.k===key)return;CALL_SENT.k=key;
   fetch("/api/coach/paths",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({paths})}).catch(()=>{})}
+// a path in a few words: the play (rush, split, the site) and only the zones that tell it apart, the rarest of the
+// map's T routes (the spawn, the area just out of it and the corridors almost every route takes are left out: on Nuke,
+// not "T Spawn > Outside > Lobby" every time, but "A via Squeaky"); two at most, in the order walked
+function pathShort(p,g,r){const M=(((p.advice.plan||{}).tside||{}).maps||{})[g.map]||{},lab=String(((M.plays||{}).label||{})[r.k]||r.k);
+  const all=Object.values(M.t_routes||{}).flat().map(x=>x.zones||[]),freq={};all.forEach(zs=>new Set(zs).forEach(z=>freq[z]=(freq[z]||0)+1));
+  const zs=(r.route||{}).zones||[],i0=zs.findIndex(z=>/spawn/i.test(z));
+  let cand=zs.filter((z,i)=>!/spawn/i.test(z)&&!/^([AB] Site|Bombsite)/i.test(z)&&!(i===i0+1&&/^outside$/i.test(z))&&(freq[z]||0)<0.7*Math.max(1,all.length));
+  const keep=new Set([...cand].sort((a,b)=>(freq[a]||0)-(freq[b]||0)||cand.indexOf(b)-cand.indexOf(a)).slice(0,2));cand=cand.filter((z,i)=>keep.has(z)&&cand.indexOf(z)===i);   // rarest, then nearest the site
+  const m=lab.match(/^(Rush|Split)?\s*([AB])\b/i),site=m?m[2].toUpperCase():null;
+  const head=m?`${m[1]?m[1]+" ":""}${site}`:lab.replace(/ through .*$/,"");
+  const via=cand.length?cand.join(" > "):(/ through /.test(lab)?lab.replace(/^.* through /,"").split(" / ")[0]:"");
+  return {site,head,via,zones:cand}}
 // when to be on the site with a play: its window that wins the most rounds ("on site 1:31-1:21"); when no moment wins
 // more than another (under 3 points over the play's average), the usual arrival, with a ~
 function onSite(tm,end){if(tm&&tm.win-tm.mean>=3)return `on site ${clock(tm.lo)}-${clock(tm.hi)}`;return end&&end[3]!=null?`on site ~${clock(end[3])}`:""}
@@ -2876,6 +2963,42 @@ function callsBlock(PL){const C=PL.calls||[];if(!C.length)return D.local?`<h3>Yo
    ${a.rounds.length?`<details><summary style="cursor:pointer">Your calls round by round</summary><div class="tbl" style="margin-top:8px"><table><thead><tr><th class="n">Round</th><th>What you said (seconds into the round)</th><th class="n">Died at</th></tr></thead><tbody>
      ${a.rounds.map(r=>`<tr><td class="n">${r.round}</td><td class="wrap">${r.texts.length?r.texts.map(x=>`<span class="${x.kind==="tilt"?"bad":""}">${x.t} s: ${esc(x.text)}</span>`).join("<br>"):'<span class="note">nothing</span>'}</td><td class="n">${r.died_t==null?"alive":Math.round(r.died_t)+" s"}</td></tr>`).join("")}</tbody></table></div></details>`:""}
    ${srcLinks(src,true)}`}
+// the mood of each recorded match: one column per round (background: won or lost; bar: your damage), dots above for
+// what you felt (said with "coach <word>": ringed), a line where the sides change; and what a frustrated moment costs
+const MOOD_C={frustration:"var(--bad)",doubt:"var(--flash)",suspicion:"#b07ce8",positive:"var(--good)",note:"var(--muted)"};
+function moodBlock(PL){const C=(PL.calls||[]).filter(a=>a.aligned&&(a.rounds||[]).some(r=>r.dmg!=null));if(!C.length)return "";const MS=PL.mood;
+  const strip=a=>{const rs=a.rounds,n=rs.length,W=1000,H=70,cw=W/n;
+    return `<svg viewBox="0 0 ${W} ${H}" width="100%" style="max-width:1100px;display:block" role="img" aria-label="Rounds and feelings">${rs.map((r,i)=>{const x=i*cw,h=Math.round(30*Math.min(1,(r.dmg||0)/200)),col=r.won?"var(--good)":"var(--bad)";
+      const ms=(r.moods||[]).filter(m=>MOOD_C[m.kind]).slice(0,2),sw=i&&rs[i-1].side&&r.side&&rs[i-1].side!==r.side;
+      return `${sw?`<line x1="${x}" y1="0" x2="${x}" y2="${H-12}" stroke="var(--muted)" stroke-dasharray="3 3"/>`:""}
+        <rect x="${x+1}" y="20" width="${cw-2}" height="36" rx="2" fill="${r.won==null?"var(--line)":col}" fill-opacity=".16"/>
+        <rect x="${x+cw*.25}" y="${56-h}" width="${cw*.5}" height="${h}" rx="1" fill="${r.won==null?"var(--muted)":col}" opacity=".85"/>
+        ${ms.map((m,j)=>`<circle cx="${x+cw/2}" cy="${14-j*8}" r="3.6" fill="${MOOD_C[m.kind]}"${m.coach?` stroke="var(--ink)" stroke-width="1.4"`:""}><title>${esc(m.word||m.kind)}</title></circle>`).join("")}
+        <text x="${x+cw/2}" y="${H-1}" text-anchor="middle" class="vct">${r.round}</text>`}).join("")}</svg>`};
+  const cnt=a=>Object.entries(a.moods||{}).filter(([k,v])=>v&&MOOD_C[k]).map(([k,v])=>`<span class="vchip" style="color:${MOOD_C[k]}">● ${v}</span>`).join("");
+  return `<h3>Your mood, match by match</h3>
+   <div class="vleg"><span><i style="background:var(--bad)"></i>frustration</span><span><i style="background:var(--flash)"></i>doubt</span><span><i style="background:#b07ce8"></i>suspicion</span><span><i style="background:var(--good)"></i>positive</span><span><i style="background:var(--muted)"></i>a note</span><span>ringed: said with "coach …"</span><span>bar: your damage · background: round won / lost</span></div>
+   ${MS&&MS.after&&MS.other?`<div class="gauge"><div><b>${MS.after.adr} <small>vs ${MS.other.adr}</small></b><span>ADR in the 3 rounds after a frustrated moment (${MS.after.n} rounds) vs the others</span></div><div><b>${MS.after.won}% <small>vs ${MS.other.won}%</small></b><span>rounds won after it vs the others</span></div></div>`:""}
+   ${C.slice(0,4).map(a=>`<div class="mood-row"><div class="mood-h"><b>${a.map?MAPN(a.map):"Match"}</b><span class="note">${fmtDate(a.start)}</span>${cnt(a)}</div>${strip(a)}</div>`).join("")}`}
+// what the demos say about the frustrations of the game: blocks both ways, how your flashes are played, team flashes,
+// and the enemies whose kills look odd or who got banned (indicators, not proof)
+function factsBlock(PL){const F=PL.facts;if(!F||!F.matches)return "";const fy=F.flashes.yours,pm=x=>(x/F.matches).toFixed(1),pc=(x,n)=>n?Math.round(100*x/n)+"%":"—";
+  const bar=parts=>`<div class="fbar">${parts.filter(x=>x.v>0).map(x=>`<i style="flex:${x.v};background:${x.c}"><title>${esc(x.l)}: ${x.v}</title></i>`).join("")}</div>`;
+  const S=F.suspects||[];
+  return `<h3>What the demos say · your last ${F.matches} matches</h3>
+   <div class="gauge">
+    <div><b>${pm(F.blocks.by_n)} <small>vs ${pm(F.blocks.on_n)}</small></b><span>blocks per match: a teammate blocks you vs you block a teammate${F.blocks.by.length?` (most: ${F.blocks.by.slice(0,2).map(x=>esc(x.name)).join(", ")})`:""}</span></div>
+    <div><b>${pc(fy.mate_used,fy.n)}</b><span>of your flashes that blind (${fy.n}): a teammate shoots behind within 2.5 s</span></div>
+    <div><b>${pc(fy.mate_early,fy.n)}</b><span>a teammate peeked and got hit before your flash popped</span></div>
+    <div><b>${pm(F.teamflash.by_n)} <small>vs ${pm(F.teamflash.on_n)}</small></b><span>team flashes per match: on you vs by you</span></div></div>
+   ${fy.n?`${bar([{v:fy.mate_used,c:"var(--good)",l:"a teammate shot behind"},{v:fy.self_used,c:"var(--ct)",l:"only you shot"},{v:fy.unused,c:"var(--muted)",l:"nobody shot"}])}
+   <div class="vleg"><span><i style="background:var(--good)"></i>a teammate shoots behind</span><span><i style="background:var(--ct)"></i>only you</span><span><i style="background:var(--muted)"></i>nobody: say "flash" before throwing</span></div>`:""}
+   ${S.length?`<h3>Enemies worth a look</h3>
+   <div class="tbl"><table><thead><tr><th>Player</th><th>Match</th><th class="n">Kills</th><th class="n" title="kills on a player the killer never saw in the 3 s before">👁 unseen</th><th class="n" title="through smoke">🌫 smoke</th><th class="n" title="first hits under 0.15 s after first seeing">⚡ fast</th><th>Bans</th></tr></thead><tbody>
+    ${S.map(x=>`<tr><td><a href="https://steamcommunity.com/profiles/${esc(x.steamid)}" target="_blank" rel="noopener" style="color:var(--ct)">${esc(x.name)}</a>${x.flag?' <span class="pill weak">odd</span>':""}</td><td>${MAPN(x.map)} · ${fmtDate(x.time)}</td><td class="n">${x.kills}</td>
+      <td class="n">${x.unseen+x.wallbang_unseen}</td><td class="n">${x.thrusmoke}</td><td class="n">${x.fast==null?"—":x.fast+"%"}</td>
+      <td>${x.vac||x.game?`<span class="pill ${x.ban_after?"weak":""}">${x.vac?`VAC ${x.vac}`:""}${x.vac&&x.game?" · ":""}${x.game?`game ${x.game}`:""} · ${x.ban_after?"since this match":`${x.ban_days} days ago`}</span>`:'<span class="note">none</span>'}</td></tr>`).join("")}</tbody></table></div>
+   <p class="note">Indicators from the demo, not proof: the lobby's usual share of odd kills is high (smokes, prefires). A ban "since this match" says more than anything else. Report in Overwatch rather than during the game.${F.bans_checked?"":" Steam bans not checked: no API key."}</p>`:`<p class="note">No enemy stands out in these matches${F.bans_checked?", and none of them is banned":""}.</p>`}`}
 function renderReview(){const p=P(),v=$("#v-review"),PL=p.advice.plan||{},R=PL.review,X=PL.experiments||{};
   const head=`<div class="head"><div style="display:grid;gap:4px"><span class="eyebrow">${esc(p.name)}${R?` · ${esc(R.label)}, compared with your previous ${R.n_before} matches`:""}</span><h2>Review</h2></div>
     ${R?`<div class="record"><span>${R.session.wins}<small>wins</small></span><span>${R.session.losses}<small>losses</small></span></div>`:""}</div>`;
@@ -2901,6 +3024,8 @@ function renderReview(){const p=P(),v=$("#v-review"),PL=p.advice.plan||{},R=PL.r
        ${a.do.length?`<ul>${a.do.map(d=>`<li>${esc(d)}</li>`).join("")}</ul>`:""}${a.drills.length?`<p class="note">Drill: ${esc(a.drills[0])}</p>`:""}${srcLinks(a.sources,true)}</article>`).join("")}</div></div>
    </div>
    ${callsBlock(PL)}
+   ${moodBlock(PL)}
+   ${factsBlock(PL)}
    ${liveCheckBlock(PL)}
    <h3>What you're testing, what you could test</h3>
    ${R.tests.active.length?`<div class="exps">${R.tests.active.map(expCard).join("")}</div>`:`<p class="note">No experiment running.</p>`}

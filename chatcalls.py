@@ -6,7 +6,8 @@ the page shows, and the keys run them. Nothing is sent by the app itself: you pr
 console: `exec coach_binds` (the binds then stay in your CS2 settings).
 
 The text written is cleaned (no quote, semicolon or line break, plain characters, 120 at most): a file can only ever
-say one line in the team chat, never run another command."""
+say one line in the team chat, plus, when the path ends on a site, CS2's own chat wheel order for it ("Go A" / "Go B",
+the one bots follow: `playerchatwheel CW.GoA`), a fixed line. Never another command."""
 import os
 import re
 
@@ -15,6 +16,7 @@ import gsi
 KEYS = {1: "KP_1", 2: "KP_2", 3: "KP_3"}   # numpad 1, 2, 3: CS2's names (the physical key, num lock on or off); KP_END etc. were CS:GO's
 BINDS = "coach_binds.cfg"
 _LAST = {}
+WHEEL = {"A": 'playerchatwheel CW.GoA "#Chatwheel_aplan"', "B": 'playerchatwheel CW.GoB "#Chatwheel_bplan"'}   # the chat wheel's Go A / Go B
 
 
 def clean(t):
@@ -39,7 +41,7 @@ def write(paths):
     bf = os.path.join(d, BINDS)
     if not os.path.exists(bf) or open(bf, encoding="utf-8").read() != binds_text():
         open(bf, "w", encoding="utf-8").write(binds_text())
-    by = {}
+    by, site = {}, {}
     for p in paths or []:
         try:
             r = int(p.get("rank"))
@@ -48,8 +50,10 @@ def write(paths):
         t = clean(p.get("text"))
         if r in KEYS and t:
             by[r] = t
+            if p.get("site") in WHEEL:
+                site[r] = p["site"]
     for i in KEYS:
-        body = f'say_team "{by[i]}"\n' if i in by else 'echo "Coach CS2: no path for this key this round"\n'
+        body = (f'say_team "{by[i]}"\n' + (WHEEL[site[i]] + "\n" if i in site else "")) if i in by else 'echo "Coach CS2: no path for this key this round"\n'
         if _LAST.get(i) != body:
             open(os.path.join(d, f"coach_path{i}.cfg"), "w", encoding="utf-8").write(body)
             _LAST[i] = body
