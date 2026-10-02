@@ -2560,6 +2560,13 @@ function vMates(g){const M=g.mates||{},prev=(g.round||0)-1;if(prev<1||halfStart(
   return xs.map(x=>`<span class="vchip ${x.v>=need?"good":"bad"}">👥 ${esc(vShort(x.n))} ≈${kMoney(x.v)} ${x.v>=need?"✓":"✕"}</span>`).join("")}
 // T: CTs pushing past a neutral zone, one line per zone (share of rounds, when); red: the push often gets a kill;
 // once its moment is past, the line fades
+// this match: the zones you called in the first 40 s of the rounds of this half, the ones seen in 2 rounds or more (the
+// other team's habit: "they retake the banana every round"), share of the rounds of the half
+function vEarlyMatch(g){const H=g.hist||{},Mk=H.marks||{},R=H.rounds||{},hs=halfStart(g.round||1),n=[];
+  for(let r=hs;r<(g.round||0);r++)if((R[r]||{}).side===g.side||!(R[r]||{}).side)n.push(r);if(n.length<3)return "";
+  const c={};n.forEach(r=>((Mk[r]||{}).early||[]).forEach(z=>c[z]=(c[z]||0)+1));
+  const top=Object.entries(c).filter(([,k])=>k>=2).sort((a,b)=>b[1]-a[1]).slice(0,2);if(!top.length)return "";
+  return vHead(`👁 THIS MATCH · EARLY CONTACT · ${n.length} ROUNDS`)+vRows(top.map(([z,k],i)=>({l:`${vShort(z)} · ${k}/${n.length}`,v:100*k/n.length,c:"var(--bad)",o:i?.75:1})))}
 function vPush(p,g){const E=typeof ctPush==="function"?ctPush(p,g):null;if(!E||!E.gates.length)return "";const el=g.round_phase==="live"?(g.elapsed||0):0;
   const rows=E.gates.map((x,i)=>({l:`${vShort(x.gate||"?")} · ${clock(x.t)}`,v:x.share,c:x.kill>=30?"var(--bad)":"var(--ct)",o:el>x.t+6?.35:[1,.85,.7,.6][i]}));
   return vHead(`➜ CT PUSHES · ${E.label} · OF ROUNDS`)+vRows(rows)}
@@ -2674,7 +2681,7 @@ function nowVisual(p,g,following){
     {if(typeof antiEco==="function"&&antiEco(p,g))out.push(`<span class="vchip bad">! eco kill spots on the map: clear them, no close duel</span>`)}
     if(ct&&r)out.push(vOdds(r),vRush(TS,g,r)||vEntries(TS,g,r),vCTline(p,g,r)||vHold(p,g,r),vBook(p,g,r));
     const HM=isHostage(g.map);if(HM)out.push(ct?(vFocus(p,g)||vHostRoutes(p,g,false)):vHostRoutes(p,g,true));
-    if(!ct&&!HM){out.push(vFocus(p,g)||vPathCurve(p,g)||vTimeline(p,g),vBook(p,g,null),vPush(p,g),vPushAns(p,g,false),vTchips(p,g))}}   // the plays and the grenades are on the map
+    if(!ct&&!HM){out.push(vFocus(p,g)||vPathCurve(p,g)||vTimeline(p,g),vBook(p,g,null),vEarlyMatch(g),vPush(p,g),vPushAns(p,g,false),vTchips(p,g))}}   // the plays and the grenades are on the map
   else if(ph==="live"){const el=g.elapsed||0,planted=g.bomb==="planted";out.push(vCall(g));
     if(planted){const left=g.phase_left!=null?g.phase_left:Math.max(0,40-(g.since_plant||0)),as=typeof autoSite==="function"?autoSite(p,g):null;
       out.push(`<div class="vbig ${ct?"bad":"good"}"><b>💣 ${Math.ceil(left)}s</b><span>${ct?"retake together":"hold the bomb"}${as?` · ${as.site} site, ${as.p}% sure`:""}</span></div>`)}
@@ -2759,17 +2766,19 @@ function enemyStreak(g){const R=((g.hist||{}).rounds)||{},hs=halfStart(g.round);
 const ECON_MEMO=new Map(),kMoney=m=>m>=1000?`$${(m/1000).toFixed(1).replace(/\.0$/,"")}k`:`$${m}`;
 function econPlan(p,g){if(!g||g.money==null||!g.side||g.round==null||g.practice)return null;
   const hs=halfStart(g.round);if(g.round===hs)return null;   // pistol round: everyone buys the same
-  const last=hs+(hs>24?2:11),H=Math.min(3,last-g.round+1),key=[g.side,g.round,g.money,g.losses,g.primary,g.armor,g.helmet,JSON.stringify(((g.hist||{}).rounds)||{})].join("|");
+  const last=hs+(hs>24?2:11),H=Math.min(3,last-g.round+1),key=[g.map,g.side,g.round,g.money,g.losses,g.primary,g.armor,g.helmet,JSON.stringify(((g.hist||{}).rounds)||{})].join("|");
   if(ECON_MEMO.has(key))return ECON_MEMO.get(key);
   const TS=(p.advice.plan||{}).tside||{},E=TS.econ||{},tw=econTW(TS.situations),T=g.side==="T";
-  const pw=(k,ed)=>["eco","force","full"].reduce((a,e)=>a+(ed[e]||0)*(T?tw(k,e):1-tw(e,k)),0);
+  // the attack's table for the side that attacks: the T on a bomb map, the CT on a hostage map (it goes for the hostage)
+  const A_=typeof isHostage==="function"&&isHostage(g.map)?!T:T,PL_=T&&!(typeof isHostage==="function"&&isHostage(g.map))?ECON.plant:0;
+  const pw=(k,ed)=>["eco","force","full"].reduce((a,e)=>a+(ed[e]||0)*(A_?tw(k,e):1-tw(e,k)),0);
   const st0=enemyStreak(g);
   // expected rounds won from a state over `d` rounds, then half the chance of the round after (what the money buys there)
   const V=(m,lc,es,r,hasR,d)=>{if(r>last)return 0;const ed=econEnemy(E,es,r,hs,st0.ePistolWon),os=econOpts(g.side,m,hasR,0,false);
     if(d===0)return .5*Math.max(...os.map(o=>pw(o.k,ed)));
     return Math.max(...os.map(o=>step(m,lc,es,r,hasR,o,ed,d)))};
   const step=(m,lc,es,r,hasR,o,ed,d)=>{const pr=pw(o.k,ed),left=m-o.c+o.kill,rifle=o.k==="full"||(hasR&&o.k!=="eco"&&o.k!=="half");
-    const mw=Math.min(ECON.cap,left+ECON.win),ml=Math.min(ECON.cap,left+ECON.bonus[Math.min(lc,4)]+(T?ECON.plant:0));
+    const mw=Math.min(ECON.cap,left+ECON.win),ml=Math.min(ECON.cap,left+ECON.bonus[Math.min(lc,4)]+PL_);
     const lw=Math.max(0,lc-1),ll=lc+1,ew=es<=0?1:es+1,sw=rifle?.6:0,sl=rifle?.15:0;
     return pr+pr*(sw*V(mw,lw,ew,r+1,true,d-1)+(1-sw)*V(mw,lw,ew,r+1,false,d-1))+(1-pr)*(sl*V(ml,ll,0,r+1,true,d-1)+(1-sl)*V(ml,ll,0,r+1,false,d-1))};
   const hasR=!!(g.primary&&FULL_W.has(g.primary)),eb=enemyBuy(p,g),ed0=eb&&!eb.pistol?{eco:eb.eco||0,force:eb.force||0,full:eb.full||0}:econEnemy(E,st0.es,g.round,hs,st0.ePistolWon);
@@ -2784,7 +2793,8 @@ function econPlan(p,g){if(!g||g.money==null||!g.side||g.round==null||g.practice)
   const res={opts,best,close,H,span,enemy:ed0};ECON_MEMO.set(key,res);if(ECON_MEMO.size>200)ECON_MEMO.clear();return res}
 // the plan as lines: each buy you can afford, the share of the next rounds it wins, and the money left after a loss
 function econRows(plan){if(!plan||plan.opts.length<2)return "";const mx=Math.max(...plan.opts.map(o=>o.pct),1);
-  return `<div class="vhead">NEXT ${plan.H} ROUND${plan.H>1?"S":""} · WON${plan.close?" · close: keep your next buy":""}</div><div class="vrows econ">${ECON_K.map(k=>plan.opts.find(o=>o.k===k)).filter(Boolean).map(o=>{const b=o===plan.best;
+  const now=plan.best&&plan.best.now!=null?` · THIS ROUND ${plan.best.now}%`:"";   // the round itself, not only the next ones
+  return `<div class="vhead">NEXT ${plan.H} ROUND${plan.H>1?"S":""} · WON${now}${plan.close?" · close: keep your next buy":""}</div><div class="vrows econ">${ECON_K.map(k=>plan.opts.find(o=>o.k===k)).filter(Boolean).map(o=>{const b=o===plan.best;
     return `<div class="vrow${b?" best":""}" style="--c:${b?"var(--good)":"var(--muted)"}${b?"":";opacity:.6"}"><span>${ECON_L[o.k]}</span><i><u style="width:${Math.max(4,Math.round(100*o.pct/mx))}%"></u></i><b>${o.pct}%</b><small title="money next round if this round is lost">${o.fullNext?"✓":"✕"} ${kMoney(o.lose)}</small></div>`}).join("")}</div>`}
 // T side: the plays that win most here for this kind of round, with how many were played and won (not the usual ones);
 // each with its best way from the spawn (the route of the base that wins most, among the ones taken often enough)

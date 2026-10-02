@@ -225,6 +225,8 @@ def set_mark(rnd, fields):
             clean[k] = v if v in ("A", "B") else None
         elif k == "mood":   # how you felt, said live ("coach, perdu") or read from a shout
             clean[k] = v if v in ("frustration", "doubt", "suspicion", "positive") else None
+        elif k == "early":   # the zones called in the first 40 s of the round (the other team's habits this match)
+            clean[k] = [str(z)[:30] for z in v][:6] if isinstance(v, list) else None
         elif k in ("heat", "mood_word"):
             clean[k] = (bool(v) if k == "heat" else str(v)[:24]) if v else None
     if not clean:
@@ -256,6 +258,10 @@ def voice_call(p, t_wall=None):
         return False
     log_event({"map": STATE.get("map"), "round": int(rnd), "call": {k: v for k, v in p.items() if v}, "el": el})
     site = p.get("site")
+    if p.get("zone") and el is not None and el <= 40 and not p.get("clear"):   # an early contact: kept on the round for this match's habits
+        early = list(mk.get("early") or [])
+        if p["zone"] not in early:
+            set_mark(rnd, {"early": early + [p["zone"]]})
     if side == "T" and bomb != "planted":   # the CTs you see: where, how many; a site said clear
         with LOCK:
             sn = STATE.get("seen") if (STATE.get("seen") or {}).get("round") == rnd else {"round": rnd, "calls": []}
