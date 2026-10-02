@@ -2391,13 +2391,12 @@ function vSituation(p,g){const SI=(((p.advice.plan||{}).tside)||{}).situations||
     const SP=((((((p.advice.plan||{}).tside||{}).maps||{})[g.map]||{}).setplays||{}).CT||{}).pistol;
     out.push(`<div class="vsit"><span>PISTOL</span>${SP&&SP.n>=15?`<b class="${vTone(SP.win)}">${SP.win}%</b><small>won</small>`:""}</div>`);
     if(k0&&k5)out.push(vRule("🛡","kevlar",k0[1],k5[1]));if(s1&&s2)out.push(vRule("👥","2 on site",s1[1],s2[1]));
-    out.push(`<div class="vrule"><i>✕</i><span>nades vs rush</span></div>`,vYou(p,g,"pistol"));return out.join("")}
+    out.push(`<div class="vrule"><i>✕</i><span>nades vs rush</span></div>`);return out.join("")}   // no "YOU vs the base" line: the live view is about this round
   const k=sitKey(p,g),c=k&&SI[k];if(!c)return "";
   const win=g.side==="CT"?100-c.t_win:c.t_win,e=c[`early_${g.side}`];
   out.push(`<div class="vsit"><span>${{ct_anti_eco:"ANTI-ECO",t_anti_eco:"ANTI-ECO",full_full:"FULL vs FULL",ct_force:"FORCE vs FULL",t_force:"FORCE vs FULL",t_eco:"ECO vs FULL"}[k]}</span><b class="${vTone(win)}">${win}%</b><small>won</small></div>`);
   if(e)out.push(vRule("⛔",`dead before ${clock(20)}`,e[1],e[0]));   // no AWP against an eco: on the buy card, not twice
   if(k==="t_force"||k==="t_eco")out.push(`<div class="vrule"><i>👥</i><span>together</span></div>`);
-  out.push(vYou(p,g,k));
   return out.join("")}
 // T side: the round as a strip from 1:55 to 0:00, each tempo window colored by how often the Ts win with it here;
 // what is past fades, a cursor marks now
