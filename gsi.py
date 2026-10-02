@@ -56,8 +56,8 @@ def config_text(port):
 {{
     "uri"       "http://127.0.0.1:{port}/api/gsi"
     "timeout"   "2.0"
-    "buffer"    "0.5"
-    "throttle"  "1.0"
+    "buffer"    "0.1"
+    "throttle"  "0.25"
     "heartbeat" "30.0"
     "auth"
     {{
