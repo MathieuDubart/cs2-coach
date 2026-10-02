@@ -241,6 +241,7 @@ def analyze(mid, sid):
            "flashes": flashes,
            "teamflash": {"by": sorted([{"name": nm(k), "n": v} for k, v in tf_by.items()], key=lambda z: -z["n"]), "by_n": sum(tf_by.values()), "on_n": tf_on},
            "enemies": sorted([e for e in rows if e["enemy"]], key=lambda z: (-z["flag"], -z["odd"])),
+           "all": rows,   # every player's row (the player's own too), for a player's own profile
            "lobby": {"odd_share": round(100 * med_odd), "fast": round(med_fast)}}
     os.makedirs(fdir(sid), exist_ok=True)
     json.dump(res, open(os.path.join(fdir(sid), f"{mid}.json"), "w", encoding="utf-8"), ensure_ascii=False, indent=1)
@@ -314,6 +315,32 @@ def summary(sid, limit=10):
                           "by": sorted([{"name": k, "n": v} for k, v in tf.items()], key=lambda z: -z["n"])[:4]},
             "suspects": sorted(sorted(keyed.values(), key=lambda z: z["time"] or "", reverse=True), key=lambda z: (-(z["vac"] + z["game"] > 0), -z["flag"]))[:12],
             "bans_checked": bool(B)}
+
+
+def profile(sid, n=20):
+    """A player's own kills over their latest matches against their lobbies: odd kills (unseen, through smoke) and very
+    fast first hits, match by match and in total, with the lobby's medians. Indicators, not proof."""
+    run(sid, n, only_missing=False)
+    d = fdir(sid)
+    rows = []
+    for f in sorted(os.listdir(d)) if os.path.isdir(d) else []:
+        m = json.load(open(os.path.join(d, f), encoding="utf-8"))
+        me = next((e for e in m.get("all") or [] if e["steamid"] == str(sid)), None)
+        if me:
+            rows.append({"mid": m["mid"], "map": m["map"], "kills": me["kills"], "odd": me["odd"], "unseen": me["unseen"], "smoke": me["thrusmoke"],
+                         "fast": me["fast"], "n_react": me["n_react"], "react_med": me["react_med"],
+                         "lobby_odd": m["lobby"]["odd_share"], "lobby_fast": m["lobby"]["fast"]})
+    if not rows:
+        return None
+    K = sum(r["kills"] for r in rows)
+    F = [r for r in rows if r["fast"] is not None]
+    nr = sum(r["n_react"] for r in F)
+    return {"matches": len(rows), "kills": K, "odd_share": round(100 * sum(r["odd"] for r in rows) / max(K, 1)),
+            "lobby_odd": round(sum(r["lobby_odd"] for r in rows) / len(rows)),
+            "fast": round(sum(r["fast"] * r["n_react"] for r in F) / max(nr, 1)) if F else None, "n_react": nr,
+            "lobby_fast": round(sum(r["lobby_fast"] for r in rows) / len(rows)),
+            "react_med": round(float(np.median([r["react_med"] for r in F if r["react_med"] is not None])), 2) if F else None,
+            "per_match": rows}
 
 
 def run(sid, n=10, only_missing=True):
