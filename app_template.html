@@ -650,7 +650,7 @@ function crossRadar(box,m,side,st){
     legend.push('<span><i style="background:var(--good)"></i>duel won</span><span><i style="background:var(--bad)"></i>duel lost</span>')}
   if(layers.includes("best")){Sd.best_spots.filter(b=>b.level===L).forEach(b=>{const [x,y]=b.px;
       tip(el("path",{d:`M${x} ${y-10}L${x+3} ${y-3}L${x+10} ${y-3}L${x+4} ${y+2}L${x+6} ${y+9}L${x} ${y+5}L${x-6} ${y+9}L${x-4} ${y+2}L${x-10} ${y-3}L${x-3} ${y-3}Z`,style:"fill:#ffd24a;stroke:#000;stroke-width:1"},ov),
-        `${b.zone}: ${b.k} kills for ${b.d} deaths by other players, ${b.hold_pct}% holding, around ${b.t_med} s`);});
+        `${b.zone}: ${b.k} kills for ${b.d} deaths by other players, ${b.hold_pct}% holding, around ${clock(b.t_med)}`);});
     if(Sd.best_spots.length)legend.push("<span>★ spot where other players win ≥ 65% of their duels</span>")}
   if(layers.includes("nades")){const idx=st.nades||Sd.lineups.map((_,i)=>i);
     idx.forEach(i=>{const l=Sd.lineups[i];if(!l||(l.level!==L&&l.land_level!==L))return;const col=`var(--${l.type})`,sel=st.sel===i,dim=st.sel!=null&&!sel;
@@ -661,11 +661,18 @@ function crossRadar(box,m,side,st){
   cap.innerHTML=legend.join("");
 }
 function radarShell(extraBtns=""){return `<div class="radar-box">${extraBtns}<svg class="radar" viewBox="0 0 1024 1024" role="img" aria-label="Radar"><image x="0" y="0" width="1024" height="1024"></image><g></g></svg><div class="caption"></div></div>`}
+// a grenade thrown and landing in the same big zone ("Outside → Outside"): which part, by the nearest other callout
+// trait names of profiles analyzed before everything was in English
+const TRAIT_EN={Solitaire:"Loner",Agressif:"Aggressive",Utilitaires:"Utility user",Ouvreur:"Opener","Duels longs":"Long duels"},tEN=l=>TRAIT_EN[l]||l;
+function nTo(x,map){const from=x.from??x.from_zone,to=x.to??x.to_zone,px=x.to_px,lv=x.land_level||x.level;if(!to||to!==from||!px)return to;
+  let pl=null;try{pl=P()}catch(e){}const M=((((pl||{}).advice||{}).plan||{}).tside||{}).maps,zs=M&&M[map]&&M[map].geo&&M[map].geo.zones;if(!zs)return to;
+  let best=null,bd=1e9;for(const [n,z] of Object.entries(zs)){if(n===to||!z.px||(lv&&z.level&&z.level!==lv))continue;const d=Math.hypot(z.px[0]-px[0],z.px[1]-px[1]);if(d<bd){bd=d;best=n}}
+  return best&&bd<140?`${to}, near ${best}`:to}
 function lineupCard(l,i){
   const res=l.type==="flash"?`${f1(l.enemies_blind_avg)} enemy(ies) flashed on avg.${l.mates_blind_avg?`, ${f1(l.mates_blind_avg)} teammate(s)`:""}${l.kills_after?`, ${l.kills_after} kill(s) after`:""}`:
     l.type==="smoke"?`seen ${l.uses} times, ${l.players} player(s)`:`${l.damage_avg} damage on avg.${l.damage_best?`, ${l.damage_best} at best`:""}`;
-  return `<article class="lu" data-type="${l.type}" data-i="${i}" tabindex="0"><div class="top"><span class="ty">${TYPE[l.type]} · ${l.uses} throw${l.uses>1?"s":""}</span><span class="pill">${Math.round(l.t)} s</span></div>
-    <div class="route">${esc(l.from_zone)} → ${esc(l.to_zone||"?")}</div><div class="meta">${esc(l.how)} · ${res}</div>
+  return `<article class="lu" data-type="${l.type}" data-i="${i}" tabindex="0"><div class="top"><span class="ty">${TYPE[l.type]} · ${l.uses} throw${l.uses>1?"s":""}</span><span class="pill">${clock(l.t)}</span></div>
+    <div class="route">${esc(l.from_zone)} → ${esc(nTo(l,S.cmap)||"?")}</div><div class="meta">${esc(l.how)} · ${res}</div>
     <div class="cmd"><code>${esc(l.setpos)}</code><button type="button">Copy</button></div></article>`}
 function levelBtns(m,cur){const lv=(m.levels||[]);return lv.length>1?`<div class="btns" role="group" aria-label="Level">${lv.map(l=>`<button type="button" data-level="${l.key}" aria-pressed="${l.key===cur}">${esc(l.name)}</button>`).join("")}</div>`:""}
 
@@ -710,10 +717,10 @@ function archCard(p){const A=p.advice.archetype;if(!A)return "";
   return `<article class="card arch"><div class="arch-h"><span class="ic" aria-hidden="true">${A.icon}</span><span class="nm">${esc(A.name)}</span>
     ${A.second?`<span class="note">secondary tendency: <b>${esc(A.second.name)}</b></span>`:""}
     <span class="eyebrow">Archetype over ${A.rounds} rounds · compared with ${A.n_ref.toLocaleString("en-US")} players of the base</span></div>
-    ${A.traits.length?`<div class="traits">${A.traits.map(t=>`<span title="${esc(t.text)}">${esc(t.label)}</span>`).join("")}</div>`:""}
+    ${A.traits.length?`<div class="traits">${A.traits.map(t=>`<span title="${esc(t.text)}">${esc(tEN(t.label))}</span>`).join("")}</div>`:""}
     <div class="arch-grid"><div style="display:grid;gap:12px;min-width:0">
       <ul class="desc">${A.description.map(d=>`<li>${esc(d)}</li>`).join("")}</ul>
-      ${A.traits.length?`<ul class="desc note">${A.traits.map(t=>`<li><b>${esc(t.label)}</b>: ${esc(t.text)}</li>`).join("")}</ul>`:""}
+      ${A.traits.length?`<ul class="desc note">${A.traits.map(t=>`<li><b>${esc(tEN(t.label))}</b>: ${esc(t.text)}</li>`).join("")}</ul>`:""}
       <div><span class="lbl4" style="color:var(--muted)">Weapons (share of kills)</span>
         <div class="wbar">${Object.entries(A.weapons.shares).filter(([k,v])=>v>0).map(([k,v])=>`<i style="width:${v}%;background:${WCOL[k]||"var(--muted)"}" title="${esc(k)} ${v}%"></i>`).join("")}</div>
         <div class="wleg">${Object.entries(A.weapons.shares).filter(([k,v])=>v>0).map(([k,v])=>`<span><b style="background:${WCOL[k]||"var(--muted)"}"></b>${esc(k)} ${v}%</span>`).join("")}</div></div>
@@ -749,8 +756,10 @@ function deepCard(p){const X=p.deep;if(!X)return "";const r=X.reaction,a=X.preai
    </div>
    ${X.zones_vs_pros&&X.zones_vs_pros.length?`<h3 style="margin-top:6px">Your zones against pros</h3>
     <div class="tbl"><table><thead><tr><th>Map</th><th>Side</th><th>Zone</th><th class="n">Your duels</th><th class="n">You</th><th class="n">Pros</th><th class="n">Holding (you / pros)</th></tr></thead><tbody>
-    ${X.zones_vs_pros.map(z=>`<tr><td>${MAPN(z.map)}</td><td>${z.side}</td><td>${esc(z.zone)}</td><td class="n">${z.my_duels}</td><td class="n ${z.my_win-z.pro_win>=8?"good":z.my_win-z.pro_win<=-10?"bad":""}">${z.my_win}%</td><td class="n">${z.pro_win}% <span class="note">(${z.pro_duels})</span></td><td class="n">${z.my_hold}% / ${z.pro_hold}%</td></tr>`).join("")}
-    </tbody></table></div><p class="note">Duels won in the zone, per side. Pros come from the analyzed HLTV demos.</p>`:""}
+    ${(()=>{const row=z=>`<tr><td>${MAPN(z.map)}</td><td>${z.side}</td><td>${esc(z.zone)}</td><td class="n">${z.my_duels}</td><td class="n ${z.my_duels>=8?(z.my_win-z.pro_win>=8?"good":z.my_win-z.pro_win<=-10?"bad":""):""}">${z.my_win}%</td><td class="n">${z.pro_win}% <span class="note">(${z.pro_duels})</span></td><td class="n">${z.my_hold}% / ${z.pro_hold}%</td></tr>`,
+      main=X.zones_vs_pros.filter(z=>z.my_duels>=6),rest=X.zones_vs_pros.filter(z=>z.my_duels<6);
+      return main.map(row).join("")+(rest.length?`</tbody></table></div><details><summary>${rest.length} zones with under 6 duels of yours (too few to judge)</summary><div class="tbl"><table><tbody>${rest.map(row).join("")}`:"")})()}
+    </tbody></table></div>${X.zones_vs_pros.some(z=>z.my_duels<6)?"</details>":""}<p class="note">Duels won in the zone, per side. Colored from 8 duels of yours. Pros come from the analyzed HLTV demos.</p>`:""}
    <p class="note">The 2D replay of every round is in the Matches tab. Pro grenades to add to your game are in the Maps tab.</p></article>`}
 function midCard(p){const M=(p.advice.plan||{}).mid;if(!M||(!M.weak.length&&!M.strong.length))return "";
   return `<article class="card"><h3>Mid-round at a glance</h3><ul>${M.weak.slice(0,3).map(w=>`<li>${esc(w.text)}${w.fix?` <b>${esc(w.fix)}</b>`:""}</li>`).join("")}${M.strong.slice(0,2).map(s=>`<li class="good">${esc(s.text)}</li>`).join("")}</ul>
@@ -933,7 +942,8 @@ function renderMaps(){
     ["Balance of power",[["Advantage",row("Balance of power",0)],["Outnumbered",row("Balance of power",2)]]]];
   const rp=c.repeek||{moved:{},stayed:{}};
   const TECH=[["Jiggle-peek for info","One step to the side then straight back (A-D) to see the angle without exposing yourself. You force the enemy to peek at you."],
-    ["Move after a kill",`Next duel after a kill: ${rp.moved.win??"—"}% won when you change position, ${rp.stayed.win??"—"}% when you stay in the same spot.`],
+    (()=>{const mv=rp.moved.win,st=rp.stayed.win,txt=`Next duel after a kill: ${mv??"—"}% won when you change position, ${st??"—"}% when you stay in the same spot`;
+      return mv!=null&&st!=null&&mv-st<3?["After a kill: no gain from moving yet",`${txt}: no clear difference for you. Repositioning still keeps you unpredictable; re-peek only with a teammate ready to trade.`]:["Move after a kill",`${txt}.`]})(),
     ["Grenade ready before the contact","Each map sheet gives the time of the first contact in your zones. Have your molotov or flash in hand 3 seconds before."],
     ["Hurt: fall back","Under 50 HP, call your HP, fall back one angle and cover a healthy teammate's trade."],
     ["Shot next to you = move","If a teammate dies near you, back off a meter: the enemy pre-aims the standard angle."],
@@ -956,7 +966,7 @@ function renderMaps(){
     host.innerHTML=`<div style="display:grid;gap:14px"><span class="eyebrow">${m.matches} of your matches · ${m.pool||m.matches} demos of ${MAPN(m.map)} in the base</span><div class="btns side big" role="group" aria-label="Side">${sides.map(s=>`<button type="button" data-side="${s}" aria-pressed="${s===st.side}">${s} · ${roleOf(m.map,s)}</button>`).join("")}</div>
       <div class="stage">${radarShell(`<div class="btns" role="group" aria-label="Layer">${[["zones","Your zones"],["duels","Your duels"],["best","Others' spots"],["nades","Grenades"]].map(([k,t])=>`<button type="button" data-layer="${k}" aria-pressed="${k==="zones"}">${t}</button>`).join("")}</div>${levelBtns(m,st.level)}`)}
         <div style="display:grid;gap:14px;min-width:0" id="zl"></div></div>
-      <h3>Every lineup of the zones you play</h3><div class="lineups" id="lus"></div></div>`;
+      <h3>Lineups of the zones you play, the most effective first</h3><div class="lineups" id="lus"></div></div>`;
     const box=$(".radar-box",host);
     const redraw=()=>crossRadar(box,m,st.side,st);
     function panel(){const Sd=m.sides[st.side],note=((p.cross_notes||{})[m.map]||{})[st.side];
@@ -965,22 +975,25 @@ function renderMaps(){
       $("#zl",host).innerHTML=`${note?`<div class="card"><h3>${esc(note.title)}</h3><ul>${note.plan.map(t=>`<li>${t}</li>`).join("")}</ul></div>`:""}
         ${ex.length?`<div class="zl ex"><h4>Play these more</h4><ul>${ex.map(li).join("")}</ul></div>`:""}
         ${av.length?`<div class="zl av"><h4>Avoid, or play them differently</h4><ul>${av.map(li).join("")}</ul></div>`:""}
-        <div class="zl fr"><h4>Your most played zones</h4><ul>${fr.map(z=>`<li><b>${esc(z.name)}</b> · ${Math.round(z.presence)}% of your time · ${z.k}-${z.d} · 1st contact around ${z.early_contact_s==null?"—":Math.round(z.early_contact_s)} s</li>`).join("")}</ul></div>
+        <div class="zl fr"><h4>Your most played zones</h4><ul>${fr.map(z=>`<li><b>${esc(z.name)}</b> · ${Math.round(z.presence)}% of your time · ${z.k}-${z.d} · 1st contact around ${z.early_contact_s==null?"—":clock(z.early_contact_s)}</li>`).join("")}</ul></div>
         ${(Sd.pool_zones||[]).length?`<div><h4 class="lbl4" style="color:var(--muted);margin-bottom:6px">What works for ${st.side}s on ${MAPN(m.map)} · base of ${m.pool||m.matches} demos</h4>
           <div class="tbl"><table><thead><tr><th>Zone</th><th class="n">Duels won</th><th class="n">Duels</th><th class="n">Players' time</th><th class="n">Holding</th><th class="n">Moment</th><th class="n">You</th></tr></thead><tbody>
-          ${Sd.pool_zones.filter(z=>z.k+z.d>=20).map(z=>`<tr><td>${esc(z.name)}</td><td class="n ${z.win>=56?"good":z.win<=42?"bad":""}">${z.win}%</td><td class="n">${z.k+z.d}</td><td class="n">${Math.round(z.others_presence)}%</td><td class="n">${z.hold_pct==null?"—":z.hold_pct+"%"}</td><td class="n">${z.t_med} s</td><td class="n">${Math.round(z.my_presence)}%</td></tr>`).join("")}
-          </tbody></table></div><p class="note">"Duels won": duels won by ${st.side}s standing in the zone. "Holding": share of those duels started without moving. "Moment": median moment of the duel in the round. Zones with at least 20 duels.</p></div>`:""}`;
+          ${Sd.pool_zones.filter(z=>z.k+z.d>=20).map(z=>`<tr><td>${esc(z.name)}</td><td class="n ${z.win>=56?"good":z.win<=42?"bad":""}">${z.win}%</td><td class="n">${z.k+z.d}</td><td class="n">${Math.round(z.others_presence)}%</td><td class="n">${z.hold_pct==null?"—":z.hold_pct+"%"}</td><td class="n">${clock(z.t_med)}</td><td class="n">${Math.round(z.my_presence)}%</td></tr>`).join("")}
+          </tbody></table></div><p class="note">"Duels won": duels won by ${st.side}s standing in the zone. "Holding": share of those duels started without moving. "Moment": the game clock at the duel (median). Zones with at least 20 duels.</p></div>`:""}`;
       const GA=((p.deep||{}).grenades||{})[m.map],miss=GA?GA.missing.filter(x=>x.side===st.side):[];
       $("#zl",host).insertAdjacentHTML("beforeend",miss.length?`<div><h4 class="lbl4" style="color:var(--muted);margin-bottom:6px">Pro grenades to add to your ${st.side} game</h4>
         <p class="note">Thrown by pros from the zones you play, to spots you never throw at.</p>
-        <div class="lineups">${miss.map(x=>`<article class="lu" data-type="${x.type}"><div class="top"><span class="ty">${TYPE[x.type]} · ${x.pro_uses} pro throws</span><span class="pill">${x.t} s</span></div>
-          <div class="route">${esc(x.from)} → ${esc(x.to||"?")}</div><div class="meta">${esc(x.how)} · seen from ${esc(x.by)}</div>
+        <div class="lineups">${miss.map(x=>`<article class="lu" data-type="${x.type}"><div class="top"><span class="ty">${TYPE[x.type]} · ${x.pro_uses} pro throws</span><span class="pill">${clock(x.t)}</span></div>
+          <div class="route">${esc(x.from)} → ${esc(nTo(x,S.cmap)||"?")}</div><div class="meta">${esc(x.how)} · seen from ${esc(x.by)}</div>
           <div class="cmd"><code>${esc(x.setpos)}</code><button type="button">Copy</button></div></article>`).join("")}</div></div>`:"");
       const PZ=((p.advice.pros||{}).maps||{})[m.map]||{},pz=PZ[st.side];
       $("#zl",host).insertAdjacentHTML("beforeend",pz?`<div><h4 class="lbl4" style="color:var(--muted);margin-bottom:6px">Pros who play your zones as ${st.side}</h4>
         <p class="note">Your zones: ${pz.mine.map(z=>`${esc(z.zone)} ${z.share}%`).join(" · ")}. The percentage is the share of time spent in the same zones as you.</p>
         <div class="pros">${pz.pros.map(x=>proCard(x,"overlap")).join("")}</div></div>`:"");
-      $("#lus",host).innerHTML=Sd.lineups.length?Sd.lineups.map(lineupCard).join(""):`<p class="note">Not enough grenades observed.</p>`;
+      const eff=l=>l.type==="flash"?(l.enemies_blind_avg||0)+(l.kills_after||0)/Math.max(1,l.uses):l.type==="smoke"?(l.uses||0)/100:(l.damage_avg||0)/20,
+        low=l=>(l.type==="he"&&(l.damage_avg||0)<5)||(l.type==="flash"&&(l.enemies_blind_avg||0)<.15),TO={smoke:0,flash:1,molotov:2,he:3};
+      const LU=Sd.lineups.map((l,i)=>[l,i]).sort((a,b)=>(TO[a[0].type]??9)-(TO[b[0].type]??9)||eff(b[0])-eff(a[0])),okL=LU.filter(([l])=>!low(l)),lowL=LU.filter(([l])=>low(l));
+      $("#lus",host).innerHTML=Sd.lineups.length?okL.map(([l,i])=>lineupCard(l,i)).join("")+(lowL.length?`<details style="grid-column:1/-1"><summary>${lowL.length} lineup${lowL.length>1?"s":""} with almost no effect (under 5 damage, or almost nobody flashed)</summary><div class="lineups">${lowL.map(([l,i])=>lineupCard(l,i)).join("")}</div></details>`:""):`<p class="note">Not enough grenades observed.</p>`;
       $$(".lu",host).forEach(cd=>{cd.onclick=()=>{st.sel=+cd.dataset.i;st.layers=["nades"];press(box,"[data-layer]",$('[data-layer="nades"]',box));const l=Sd.lineups[st.sel];
         if(l.level!==st.level&&m.levels.some(x=>x.key===l.level)){st.level=l.level;const b=$(`[data-level="${l.level}"]`,box);if(b)press(box,"[data-level]",b)}
         $$(".lu",host).forEach(x=>x.classList.toggle("sel",x===cd));redraw();box.scrollIntoView({behavior:"smooth",block:"nearest"})};cd.onkeydown=e=>{if(e.key==="Enter")cd.click()}});
@@ -993,7 +1006,7 @@ function renderMaps(){
 }
 
 // ---------- shared: sources, local API ----------
-const srcLinks=(l,sm)=>l&&l.length?`<div class="srcs${sm?" sm":""}"><span class="note">Sources:</span>${l.map(x=>`<a href="${esc(x.url)}" target="_blank" rel="noopener">${esc(x.label)}</a>`).join("")}</div>`:"";
+const srcLinks=(l,sm,lab)=>l&&l.length?`<div class="srcs${sm?" sm":""}"><span class="note">${lab||"Sources:"}</span>${l.map(x=>`<a href="${esc(x.url)}" target="_blank" rel="noopener">${esc(x.label)}</a>`).join("")}</div>`:"";
 async function api(path,body){const r=await fetch(path,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
   const j=await r.json().catch(()=>({}));if(!r.ok)throw new Error(j.error||"local server error");return j}
 async function reloadPlayer(){const id=S.player;delete D.players[id];await loadPlayer(id,true);RENDER[S.view]()}
@@ -1021,7 +1034,7 @@ function contextBlock(C){
    ${D.local&&!(C.sources_count||{}).steam?`<p class="note">To measure your habits over your whole history (not only demos), connect your Steam history: <a href="#settings" style="color:var(--ct)">Settings</a>.</p>`:""}
    ${recs.length?`<ul class="pl-list">${recs.map(r=>`<li class="coach">${esc(r.text)} <span class="lvl ${lvlCls(r.level)}">${esc(LVL[r.level]||r.level)}</span></li>`).join("")}</ul>`
      :`<p>No reliable personal rule yet: it takes more matches. Meanwhile, apply the general rules of "After the game".</p>`}
-   <div class="tbl"><table><thead><tr><th>Situation</th><th class="n">Games</th><th class="n">W-L</th><th class="n">Wins</th><th class="n">Rating</th><th class="n">Gap</th><th>Reliability</th></tr></thead><tbody>
+   <div class="tbl"><table><thead><tr><th>Situation</th><th class="n">Games</th><th class="n">W-L</th><th class="n">Wins</th><th class="n">Rating</th><th class="n">Rating gap</th><th>Reliability</th></tr></thead><tbody>
    ${C.factors.map(f=>`<tr><td class="grp" colspan="7">${esc(f.title)}</td></tr>`+f.rows.map(r=>`<tr><td>${esc(r.group)}</td><td class="n">${r.n}</td><td class="n">${r.w}-${r.l}</td>
      <td class="n">${r.winrate==null?"—":r.winrate+"%"}</td><td class="n">${pf(r.perf)}</td>
      <td class="n ${lvlCls(r.level)&&r.delta!=null?(r.delta>0?"good":"bad"):""}">${r.delta==null?"—":(r.delta>0?"+":"")+pf(r.delta)}</td>
@@ -1092,7 +1105,8 @@ function rotCard(site,r){const s=x=>x==null?"—":x+" s",pc=x=>x==null?"—":x+"
 function wpBlock(W,side){const cl=W&&W[side];if(!cl)return `<p class="note">Not enough rounds on this map for this side.</p>`;
   const order=["awp","pro_awp","rifle","rifle_eco","smg","shotgun","scout"];
   return `<div class="insights wide">${order.filter(k=>cl[k]&&cl[k].zones.length).map(k=>{const x=cl[k],pro=k==="pro_awp";
-    return `<article class="card"><h3>${esc(x.label)}</h3><span class="note">${x.rounds} rounds${pro?" with an AWP kill":""}</span>
+    const lab=k==="rifle"?(side==="T"?"Rifles (AK-47, SG 553)":"Rifles (M4, AUG)"):k==="rifle_eco"?(side==="T"?"Galil AR":"FAMAS"):x.label;
+    return `<article class="card"><h3>${esc(lab)}</h3><span class="note">${x.rounds} rounds${pro?" with an AWP kill":""}</span>
     <div class="tbl"><table><thead><tr><th>Zone</th><th class="n">Share</th>${pro?"":`<th class="n">Duels won</th><th class="n">Rounds won</th>`}</tr></thead><tbody>
     ${x.zones.map(z=>`<tr><td>${esc(z.name)}</td><td class="n">${z.share}%</td>${pro?"":`<td class="n ${z.duel_win!=null&&z.duel_win>=55?"good":z.duel_win!=null&&z.duel_win<=42?"bad":""}">${z.duel_win==null?"—":z.duel_win+"%"} <span class="note">(${z.duels})</span></td><td class="n">${z.round_win}%</td>`}</tr>`).join("")}
     </tbody></table></div></article>`}).join("")}</div>`}
@@ -1122,8 +1136,8 @@ function renderMidround(){
      <p class="note">"Leave": seconds between at least 2 Ts reaching the site and you leaving toward it (negative: you had left before). "Travel": from leaving to arriving. Routes: the first 3 zones crossed.</p>`
      :`<p class="note">No rotation of yours found on ${MAPN(midMap)}.</p>`}
    ${W?`<h3>Where to play with your weapon on ${MAPN(midMap)}</h3><div class="btns side" role="group" aria-label="Side">${ws.map(s=>`<button type="button" data-wps="${s}" aria-pressed="${s===wpSide}">${s}</button>`).join("")}</div>${wpBlock(W,wpSide)}
-     <p class="note">Position of each player between 15 and 25 s into the round, depending on their weapon that round (matchmaking base). "Duels won": their duels in that zone. Pro AWPers: players who got an AWP kill in the round (HLTV demos).</p>`:""}
-   ${(PL.videos||{})[midMap]?`<p><b>Videos on ${MAPN(midMap)}</b></p>${srcLinks(PL.videos[midMap])}`:""}`:""}`;
+     <p class="note">Position of each player between ${clock(15)} and ${clock(25)} on the clock, depending on their weapon that round (matchmaking base). "Duels won": their duels in that zone. Pro AWPers: players who got an AWP kill in the round (HLTV demos).</p>`:""}
+   ${(PL.videos||{})[midMap]?`${srcLinks(PL.videos[midMap],false,`Videos on ${MAPN(midMap)}:`)}`:""}`:""}`;
   $$("[data-pb]",v).forEach(b=>b.onclick=()=>{pbSide=b.dataset.pb;renderMidround()});
   $$("[data-mm]",v).forEach(b=>b.onclick=()=>{midMap=b.dataset.mm;renderMidround()});
   $$("[data-wps]",v).forEach(b=>b.onclick=()=>{wpSide=b.dataset.wps;renderMidround()});
@@ -1155,13 +1169,13 @@ function weaponsBlock(W){const RD=W.ref_duels||{};
    </tbody></table></div>
    ${W.force&&W.force.length?`<p class="note"><b>On force-buys:</b> ${W.force.filter(x=>x.rounds>=2).map(x=>`${esc(x.key)} ${x.adr} damage/round (${x.rounds} rounds)`).join(" · ")}</p>`:""}
    <p class="note">Over ${W.n_rounds} analyzed rounds. Duels: kills and deaths with the weapon in hand, compared with every player of the base.</p>`}
-function buysBlock(B){if(!B||!B.types)return "";const T=B.types;
+function buysBlock(B){if(!B||!B.types)return "";const T=B.types,p=P(),sw=s=>typeof expSwapTxt==="function"?expSwapTxt(p,s):s;
+  const cell=s=>{const b=s&&s.kits&&s.kits[0];return b?`<b>${esc(sw(b.key))}</b><br><span class="note">${b.why.map(esc).join(" · ")}</span>${s.kits.length>1?`<br><span class="note">or ${s.kits.slice(1).map(y=>esc(sw(y.key))).join(", ")}</span>`:""}`:'<span class="note">not enough rounds</span>'};
   return `<h3>Your buys by type of round</h3>
-   <p class="note">Adapted to you: your rounds first, then players of your profile (${(B.profile||[]).map(esc).join(", ")}), then the whole base. All maps together; the detail per map and side is in "In game".</p>
-   <div class="tbl"><table><thead><tr><th>Round</th><th class="n">Your rounds</th><th class="n">Won: you · your profile</th><th>Advised for you</th><th>Other options</th></tr></thead><tbody>
-   ${["pistol","eco","force","full","anti-eco"].filter(k=>T[k]).map(k=>{const x=T[k],b=x.kits[0];return `<tr><td><b>${esc(x.label)}</b></td><td class="n">${x.rounds}</td><td class="n">${x.win??"—"}% · ${x.peer_win??"—"}%</td>
-     <td class="wrap">${b?`<b>${esc(b.key)}</b><br><span class="note">${b.why.map(esc).join(" · ")}</span>`:'<span class="note">not enough rounds</span>'}</td>
-     <td class="wrap">${x.kits.slice(1).map(y=>esc(y.key)).join("<br>")||"—"}</td></tr>`}).join("")}</tbody></table></div>`}
+   <p class="note">Adapted to you: your rounds first, then players of your profile (${(B.profile||[]).map(esc).join(", ")}), then the whole base, per side. All maps together; the detail per map is in "In game". Eco: the weapon only, what keeps your next full buy.${(typeof expSwaps==="function"?expSwaps(p):[]).length?" 🧪 = the weapon of your running experiment.":""}</p>
+   <div class="tbl"><table><thead><tr><th>Round</th><th class="n">Your rounds</th><th class="n">Won: you · your profile</th><th>As T</th><th>As CT</th></tr></thead><tbody>
+   ${["pistol","eco","force","full","anti-eco"].filter(k=>T[k]).map(k=>{const x=T[k],S2=x.sides||{};return `<tr><td><b>${esc(x.label)}</b></td><td class="n">${x.rounds}</td><td class="n">${x.win??"—"}% · ${x.peer_win??"—"}%</td>
+     <td class="wrap">${cell(S2.T||(S2.CT?null:x))}</td><td class="wrap">${cell(S2.CT)}</td></tr>`}).join("")}</tbody></table></div>`}
 function renderProgress(){
   const p=P(),v=$("#v-progress"),PL=p.advice.plan;if(!PL)return noPlan(v);
   const L=PL.level,T=PL.training,X=PL.experiments,Wp=PL.weapons,K=PL.kpis||[];
@@ -1410,7 +1424,7 @@ function teamPlanView(host){
   $$("[data-tlevel]",host).forEach(b=>{b.setAttribute("aria-pressed",b.dataset.tlevel===level);if(cnt[b.dataset.tlevel])b.textContent=`${b.textContent.replace(/ \(\d+\)$/,"")} (${cnt[b.dataset.tlevel]})`});
   const box=$(".radar-box",host),side=$("#tside",host);
   teamRadarDraw(box,teamMap,level,items);
-  const nadeLi=n=>`<li><b>${TYPE[n.type]}</b> ${esc(n.from)} → ${esc(n.to)}${n.role?` <span class="pill">${{anti_rush:"anti-rush",block:"blocks the lane",flash:"flash",damage:"damage"}[n.role]||esc(n.role)}</span>`:""}${n.timer?` <span class="note">around ${esc(n.timer)}</span>`:""}${n.yours?' <span class="pill strong">yours</span>':""}${n.setpos?` <span class="cmd"><code hidden>${esc(n.setpos)}</code><button type="button" title="${esc(n.setpos)}">Copy setpos</button></span>`:""}</li>`;
+  const nadeLi=n=>`<li><b>${TYPE[n.type]}</b> ${esc(n.from)} → ${esc(nTo(n,teamMap))}${n.role?` <span class="pill">${{anti_rush:"anti-rush",block:"blocks the lane",flash:"flash",damage:"damage"}[n.role]||esc(n.role)}</span>`:""}${n.timer?` <span class="note">around ${esc(n.timer)}</span>`:""}${n.yours?' <span class="pill strong">yours</span>':""}${n.setpos?` <span class="cmd"><code hidden>${esc(n.setpos)}</code><button type="button" title="${esc(n.setpos)}">Copy setpos</button></span>`:""}</li>`;
   if(teamSide==="CT"){
     $(".caption",box).innerHTML=`<span>Red arrows: where the Ts of the base attack from (share of the attacks). Discs: the setup, a ring when it's the player's own strong spot; grey numbers are extra players. Squares: their grenades.</span>`;
     const heavy=P.heavy_site,two=P.ct.filter(sl=>sl.site===heavy).length;
@@ -1419,15 +1433,15 @@ function teamPlanView(host){
       <ul class="pl-list">${P.ct.map(sl=>`<li style="border-left-color:${who(sl.member)}"><b>${esc(sl.label)} · ${esc(sl.zone)}</b>: ${sl.member?`<b>${esc(sl.name)}</b>`:`<b>extra player ${sl.extra}</b>`}${sl.why&&sl.why.length?` (${sl.why.map(esc).join(", ")})`:""}.
        ${sl.lane?`<br>Faces <b>${esc(sl.lane.name)}</b>: ${sl.lane.odds}% of the attacks${sl.lane.rush?`, ${sl.lane.rush}% of them rushes`:""}.`:""}
        ${sl.nades&&sl.nades.length?`<ul class="nlist">${sl.nades.slice(0,sl.member?3:2).map(nadeLi).join("")}</ul>`:""}
-       <span class="note">${esc(sl.do)}${sl.base?` Base CTs on this spot: ${esc(sl.base)} in duels.`:""}${sl.base_zone?` (The base plays ${esc(sl.base_zone)} instead.)`:""}${sl.t_med?` First duel around ${Math.round(sl.t_med)} s.`:""}</span></li>`).join("")}</ul>
+       <span class="note">${esc(sl.do)}${sl.base?` Base CTs on this spot: ${esc(sl.base)} in duels.`:""}${sl.base_zone?` (The base plays ${esc(sl.base_zone)} instead.)`:""}${sl.t_med?` First duel around ${clock(sl.t_med)}.`:""}</span></li>`).join("")}</ul>
       ${P.rotations.length?`<span class="lbl4" style="color:var(--muted)">Rotations once the bomb is down on the other site</span><ul>${P.rotations.map(r=>`<li><b>${esc(r.name)}</b> to ${r.to}: ${esc(r.route)} (${s(r.travel)}, ${r.died}% die on the way, ${r.n} ${r.who==="pro"?"pro":"base"} rotations)</li>`).join("")}</ul>`:""}`;
   }else{
     $(".caption",box).innerHTML=`<span>${PL?`${esc(PL.label)}: thick arrow = main lane, thin = second lane, dashed = the lurker's. Squares: the grenades (S smoke, F flash, M molotov).`:"No play with enough rounds in the base on this map."}</span>`;
     side.innerHTML=PL?`<div class="btns" role="group" aria-label="Play">${plays.map(p=>`<button type="button" data-texec="${p.key}" aria-pressed="${p.key===teamExec}">${esc(p.label)}</button>`).join("")}</div>
-      <div class="tread">In the base: <b>${PL.t_win}%</b> of rounds won by the Ts over ${PL.n} rounds${TH.t_avg!=null?` (map average ${TH.t_avg}%)`:""}${PL.hit_t!=null?`, site taken around ${PL.hit_t} s into the round`:""}. ${PL.team_t&&PL.team_t.n?`You ran it ${PL.team_t.n} time${PL.team_t.n>1?"s":""} together: ${PL.team_t.won} won.`:"You haven't run it together yet."}</div>
+      <div class="tread">In the base: <b>${PL.t_win}%</b> of rounds won by the Ts over ${PL.n} rounds${TH.t_avg!=null?` (map average ${TH.t_avg}%)`:""}${PL.hit_t!=null?`, site taken around ${clock(PL.hit_t)}`:""}. ${PL.team_t&&PL.team_t.n?`You ran it ${PL.team_t.n} time${PL.team_t.n>1?"s":""} together: ${PL.team_t.won} won.`:"You haven't run it together yet."}</div>
       <ul class="pl-list">${PL.roles.map(r=>`<li style="border-left-color:${who(r.member)}"><b>${esc(r.name)} · ${esc(r.role_name)}</b>${r.lane?` · ${esc(r.lane.name)}`:""}<br><span class="note">${esc(r.do)}</span></li>`).join("")}</ul>
       ${PL.nades.length?`<span class="lbl4" style="color:var(--muted)">Grenades</span><div class="lineups">${PL.nades.map(it=>`<article class="lu" data-type="${it.type}" style="cursor:default"><div class="top"><span class="ty">${TYPE[it.type]} · ${esc(it.name)}</span><span class="pill ${it.known?"strong":""}">${it.known?"already thrown":"to learn"}</span></div>
-        <div class="route">${esc(it.from)} → ${esc(it.to)}${it.lane?` <span class="note">(${esc(it.lane)})</span>`:""}</div><div class="meta">${esc(it.how||"")}${it.t!=null?` · around ${Math.round(it.t)} s`:""} · ${it.uses} throws in the base</div>
+        <div class="route">${esc(it.from)} → ${esc(nTo(it,teamMap))}${it.lane?` <span class="note">(${esc(it.lane)})</span>`:""}</div><div class="meta">${esc(it.how||"")}${it.t!=null?` · around ${clock(it.t)}`:""} · ${it.uses} throws in the base</div>
         ${it.setpos?`<div class="cmd"><code>${esc(it.setpos)}</code><button type="button">Copy</button></div>`:""}</article>`).join("")}</div>`:`<p class="note">Not enough grenades observed toward this site in the base.</p>`}`
       :`<p class="note">Not enough rounds of the base on this map to suggest plays.</p>`;
     $$("[data-texec]",side).forEach(b=>b.onclick=()=>{teamExec=b.dataset.texec;teamLevel=null;teamPlanView(host)});
@@ -1446,7 +1460,7 @@ function teamPlanView(host){
     <li><b>AWPer</b>: "pick mid" or "AWP repositioned", never the same angle twice.</li>
     <li><b>IGL</b>: the plan during buy time, the adjustment at 1:00, the call to save.</li>
     <li><b>Dead</b>: one useful piece of info, then silence.</li></ul></article>
-   <article class="card"><h3>Triggers as ${teamSide}</h3><ul>${(T.playbook||[]).filter(x=>x.side===teamSide||isBoth(x)).slice(0,5).map(x=>`<li><b>If ${esc(lc(x.if))}</b> → ${esc(x.then)}</li>`).join("")}</ul>${P.videos&&P.videos.length?`<p class="note">Videos on ${MAPN(teamMap)}:</p>${srcLinks(P.videos,true)}`:""}</article>`;
+   <article class="card"><h3>Triggers as ${teamSide}</h3><ul>${(T.playbook||[]).filter(x=>x.side===teamSide||isBoth(x)).slice(0,5).map(x=>`<li><b>If ${esc(lc(x.if))}</b> → ${esc(x.then)}</li>`).join("")}</ul>${P.videos&&P.videos.length?`<p class="note"></p>${srcLinks(P.videos,true,`Videos on ${MAPN(teamMap)}:`)}`:""}</article>`;
 }
 
 // ---------- navigation: two main moments (during the game, cold review) ----------
@@ -1483,7 +1497,7 @@ const gsiFresh=()=>gsiLast&&gsiLast.age!=null&&gsiLast.age<75&&gsiLast.map;
 function buyTip(g,p){if(g.money==null||!g.side)return "";
   if(g.round===1||g.round===13){const ps=(((p.advice.plan||{}).weapons||{}).suggestions)||[];
     return ps.some(s=>s.kind==="pistol_strong")?"Your pistol duels are a strength: take the opening.":"Buy together and play grouped."}
-  const full=g.side==="CT"?4200:4000,bonus=[1400,1900,2400,2900,3400][Math.min(g.losses||0,4)];
+  const full=g.side==="CT"?3900:3700,bonus=[1400,1900,2400,2900,3400][Math.min(g.losses||0,4)];
   if(g.primary&&FULL_W.has(g.primary)){const need=g.helmet?0:(g.armor>0?350:1000);
     return need?(g.money>=need?`You have the ${g.primary}: add ${g.armor>0?"the helmet":"kevlar + helmet"}, then your grenades.`:`You have the ${g.primary} but not enough for ${g.armor>0?"the helmet":"kevlar"} (${money(g.money)}): play it carefully.`)
       :`You have the ${g.primary} and your armor: complete your grenades (${money(g.money)}).`}
@@ -1495,14 +1509,15 @@ function buyTip(g,p){if(g.money==null||!g.side)return "";
   if(g.money+bonus>=full)return `Eco advised: even if you lose this round, you'll have ${money(g.money+bonus)} next round.`;
   return `Force only if the whole team forces (${money(g.money)}).`}
 function roundType(g){if(!g||!g.side||g.round==null)return null;if(g.round===1||g.round===13)return "pistol";if(g.money==null)return null;
-  const full=g.side==="CT"?4200:4000,eq=g.equip||0,total=g.money+eq;
+  const full=g.side==="CT"?3900:3700,eq=g.equip||0,total=g.money+eq;
   if((g.primary&&FULL_W.has(g.primary))||eq>=3500||total>=full)return "full";   // saved or bought rifle, or enough to buy one
   return total<2000?"eco":"force"}
 function buyRows(p,map,side,cur){const BB=((p.advice.plan||{}).buys)||{},B=(BB.maps||{})[map];const S_=B&&B[side];if(!S_)return `<p class="note">Not enough rounds on ${MAPN(map)} as ${side} yet.</p>`;
-  const cell=(x,alts)=>x?`<b>${esc(x.key)}</b><br><span class="note">${x.why.map(esc).join(" · ")}</span>${alts&&alts.length?`<br><span class="note">other options: ${alts.map(a=>esc(a.key)).join(", ")}</span>`:""}`:'<span class="note">not enough rounds</span>';
+  const sw=s=>typeof expSwapTxt==="function"?expSwapTxt(p,s):s;   // a running "replace X with Y" experiment: Y
+  const cell=(x,alts)=>x?`<b>${esc(sw(x.key))}</b><br><span class="note">${x.why.map(esc).join(" · ")}</span>${alts&&alts.length?`<br><span class="note">other options: ${alts.map(a=>esc(sw(a.key))).join(", ")}</span>`:""}`:'<span class="note">not enough rounds</span>';
   const rows=["pistol","eco","force","full","anti-eco"].filter(k=>S_[k]);if(!rows.length)return "";
   return `<p class="note">Adapted to you: your own rounds first, then players of your profile (${(BB.profile||[]).map(esc).join(", ")}: ${BB.n_peers||0} players of the base), then the whole base. Your duels in the zone and with the weapon adjust the ranking.</p>
-   <div class="tbl"><table><thead><tr><th>Round</th><th>Where to play (15-25 s)</th><th>What to buy</th><th>You</th></tr></thead><tbody>
+   <div class="tbl"><table><thead><tr><th>Round</th><th>Where to play (${clock(15)}-${clock(25)})</th><th>What to buy</th><th>You</th></tr></thead><tbody>
    ${rows.map(k=>{const x=S_[k],on=k===cur;return `<tr${on?' style="outline:2px solid var(--flash)"':""}><td><b>${esc(x.label)}</b>${on?'<br><span class="pill" style="color:var(--flash)">this round</span>':""}<br><span class="note">rounds won: profile ${x.peer_win??"—"}%, base ${x.base_win??"—"}%</span></td>
      <td class="wrap">${cell(x.zone,x.zones)}${x.avoid?`<br><span class="note bad">avoid: ${esc(x.avoid.key)}</span>`:""}</td><td class="wrap">${cell(x.kit,x.kits)}</td>
      <td class="wrap">${x.n_me?`${x.n_me} round${x.n_me>1?"s":""}, ${x.my_win}% won`:'<span class="note">no round here</span>'}</td></tr>`}).join("")}</tbody></table></div>`}
@@ -1642,7 +1657,7 @@ function tsideLive(p,g){const TS=(p.advice.plan||{}).tside,ev=evFor(g),r=tsidePr
   if(!r.live&&r.rush>=30)tips.push(`<b>Rush likely (${r.rush}%)</b>${r.rush>=r.rush0+5?`, more than usual here (${r.rush0}%)`:""}: no dry peek in the first 30 s, keep a grenade for the entrance, listen.`);
   if(det&&det.from.length&&!(r.live&&ev.site))tips.push(`They enter ${top} through <b>${det.from.map(f=>esc(f.zone)).join("</b> or <b>")}</b>, median around ${det.timer}.`);
   if(X.first&&X.first.length&&!r.live)tips.push(`Most common first contact: <b>${esc(X.first[0].zone)}</b> (${X.first[0].pct}%), around ${X.first_timer}.`);
-  if(NN.length)tips.push(`<b>${r.live?"Grenade now":"Grenade plan"}</b>: ${NN.slice(0,2).map(x=>`${nadeName(x.type,"CT")} ${esc(x.from)} → ${esc(x.to)} (${esc(x.why)})`).join("; ")}. It's on the radar.`);
+  if(NN.length)tips.push(`<b>${r.live?"Grenade now":"Grenade plan"}</b>: ${NN.slice(0,2).map(x=>`${nadeName(x.type,"CT")} ${esc(x.from)} → ${esc(nTo(x,S.map))} (${esc(x.why)})`).join("; ")}. It's on the radar.`);
   const H=g.hist||{},SI=H.sites||{},R=H.rounds||{},done=r.cur-1;
   const asked=(g.round_phase==="over"||g.round_phase==="freezetime")&&done>=halfStart(r.cur)?done:null;
   const res=n=>{const w=(R[n]||{}).win;return w?(w==="CT"?"won":"lost"):""};   // seen from your side (CT)
@@ -1722,7 +1737,7 @@ function nadeEff(x,t){
   if(t==="he")return `${x.dmg} damage on average, hits ${x.hit}% of the time`;
   if(t==="molotov")return `blocks ${esc(x.to)} (thrown in ${Math.round(x.per100)} rounds out of 100)${x.dmg>=5?`, ${x.dmg} damage on average`:""}`;
   return `common smoke (${Math.round(x.per100)} rounds out of 100)${x.win!=null?`, rounds won ${x.win}% when it's used (${x.base_win}% on average)`:""}`}
-function nadeLine(N,side,t,x,now,post){return `<span class="nd-t" style="color:${NADE_C[t]}">${nadeName(t,side)}</span> ${esc(x.from)} → <b>${esc(x.to)}</b>, ${post?esc(nadeWin(N,side,"post")):`around ${x.t_med!=null?clock(x.t_med):x.timer}${x.best&&x.best!==x.usual&&t!=="smoke"?` (best moment: ${esc(nadeWin(N,side,x.best))})`:""}`}${now?' <span class="pill" style="color:var(--flash)">now</span>':""}<br><span class="note">${nadeEff(x,t)} · ${esc(x.how)}${x.click?`, ${esc(x.click)} click`:""}</span>`}
+function nadeLine(N,side,t,x,now,post){return `<span class="nd-t" style="color:${NADE_C[t]}">${nadeName(t,side)}</span> ${esc(x.from)} → <b>${esc(nTo(x,S.map))}</b>, ${post?esc(nadeWin(N,side,"post")):`around ${x.t_med!=null?clock(x.t_med):x.timer}${x.best&&x.best!==x.usual&&t!=="smoke"?` (best moment: ${esc(nadeWin(N,side,x.best))})`:""}`}${now?' <span class="pill" style="color:var(--flash)">now</span>':""}<br><span class="note">${nadeEff(x,t)} · ${esc(x.how)}${x.click?`, ${esc(x.click)} click`:""}</span>`}
 function nadePlan(E,cash,held,maxN){const H=Object.assign({},held||{}),plan=[];let n=Object.entries(H).filter(([t])=>t!=="decoy").reduce((a,[,v])=>a+v,0),left=cash;
   const want=E.order.map(o=>o.type),fl=E.order.find(o=>o.type==="flash");if(fl&&fl.strong)want.push("flash");   // a 2nd flash when they blind from your zones
   for(const t of want){if(n>=maxN)break;const o=E.order.find(x=>x.type===t),cap=t==="flash"?2:1;if(!o||(H[t]||0)>=cap||o.price>left)continue;plan.push(o);left-=o.price;H[t]=(H[t]||0)+1;n++}
@@ -1733,7 +1748,7 @@ function advisedType(g){const rt=roundType(g);if(rt==null||rt==="pistol")return 
   const pl=typeof econPlan==="function"&&typeof P==="function"&&P()?econPlan(P(),g):null;   // the buy that wins most over the next rounds
   if(pl&&pl.best)return pl.best.k==="half"?"eco":pl.best.k;
   if(rt!=="force")return rt;
-  const full=g.side==="CT"?4200:4000,bonus=[1400,1900,2400,2900,3400][Math.min(g.losses||0,4)];
+  const full=g.side==="CT"?3900:3700,bonus=[1400,1900,2400,2900,3400][Math.min(g.losses||0,4)];
   return g.money+bonus>=full?"eco":"force"}
 function buyCard(p,g){if(g.money==null||!g.side||g.practice)return "";const rt=advisedType(g),PL=p.advice.plan||{},N=PL.nades,E=N&&((N.maps||{})[g.map]||{})[g.side];
   const KB=((((PL.buys||{}).maps||{})[g.map]||{})[g.side]||{}),sk=sitKey(p,g);
@@ -1747,7 +1762,7 @@ function buyCard(p,g){if(g.money==null||!g.side||g.practice)return "";const rt=a
       if(full&&!(g.primary&&FULL_W.has(g.primary))){const main=(g.side==="T"?2700:2900)+(g.helmet?0:g.armor>0?350:1000);cash=Math.max(0,g.money-main);pre=`After your rifle and armor (${money(main)}), you'll have ${money(cash)} left. `}
       else if(!full&&!(g.armor>0))pre="Weapon and kevlar first, grenades after. ";
       const {plan,left,n}=nadePlan(E,cash,held,maxN),cost=plan.reduce((a,o)=>a+o.price,0);
-      const bonus=[1400,1900,2400,2900,3400][Math.min(g.losses||0,4)],next=left+bonus,need=g.side==="CT"?4200:4000,last=plan[plan.length-1];
+      const bonus=[1400,1900,2400,2900,3400][Math.min(g.losses||0,4)],next=left+bonus,need=g.side==="CT"?3900:3700,last=plan[plan.length-1];
       const proof=full?(wr("full",4)!=null?`In the base, a full buy with 4 grenades wins ${wr("full",4)}% of rounds, ${wr("full",0)}% without.`:""):(wr("force",3)!=null?`On a force-buy, 3+ grenades: ${wr("force",3)}% of rounds won, ${wr("force",0)}% without.`:"");
       const tail=next>=need||!plan.length?"":last&&next+last.price>=need?` If you lose this round, you'll have about ${money(next)} next round; without the ${nadeName(last.type,g.side)} ($${last.price}) you'd have ${money(next+last.price)}, enough to full buy again.`:` If you lose this round, you'll have about ${money(next)} next round.`;
       const have=Object.entries(held).filter(([t,v])=>v>0&&NADE_EN[t]).map(([t,v])=>`${v>1?v+" ":""}${nadeName(t,g.side)}${v>1?"es":""}`).join(", ");
@@ -1757,7 +1772,7 @@ function buyCard(p,g){if(g.money==null||!g.side||g.practice)return "";const rt=a
        ${where?`<ul class="big-list">${where}</ul>`:""}<p class="note">${esc(proof)}${tail}</p>`}}
   return `<div class="tread nd"><h3><span>Buy · ${esc(RT_EN[rt]||"round")}</span><small>${money(g.money)}</small></h3>
    <p style="font-size:16px">${esc(buyTip(g,p))}</p>
-   ${kit&&(kit.kit||kit.zone)?`<ul class="big-list">${kit.kit?`<li class="exploit"><b>Buy: ${esc(kit.kit.key)}</b><br><span class="note">${kit.kit.why.map(esc).join(" · ")}</span></li>`:""}${kit.zone?`<li class="exploit"><b>Play: ${esc(kit.zone.key)}</b><br><span class="note">${kit.zone.why.map(esc).join(" · ")}</span></li>`:""}${kit.avoid?`<li class="avoid">Avoid ${esc(kit.avoid.key)} this kind of round</li>`:""}</ul>`:""}
+   ${kit&&(kit.kit||kit.zone)?`<ul class="big-list">${kit.kit?`<li class="exploit"><b>Buy: ${esc(expSwapTxt(p,kit.kit.key))}</b><br><span class="note">${kit.kit.why.map(esc).join(" · ")}</span></li>`:""}${kit.zone?`<li class="exploit"><b>Play: ${esc(kit.zone.key)}</b><br><span class="note">${kit.zone.why.map(esc).join(" · ")}</span></li>`:""}${kit.avoid?`<li class="avoid">Avoid ${esc(kit.avoid.key)} this kind of round</li>`:""}</ul>`:""}
    ${nd}</div>`}
 function nadeLive(p,g){const N=(p.advice.plan||{}).nades,E=N&&((N.maps||{})[g.map]||{})[g.side];if(!E||g.health===0)return "";
   const w=g.bomb==="planted"?"post":g.elapsed==null?null:g.elapsed<20?"debut":g.elapsed<40?"prise":g.elapsed<70?"action":"fin";
@@ -1785,7 +1800,7 @@ function nadeTable(p,map,side){const N=(p.advice.plan||{}).nades,E=N&&((N.maps||
   return `<p class="note">${E.personal?`Effective throws from your positions (${E.zones.map(esc).join(", ")}).`:"No match of yours here yet: the most useful throws of this side in the base."}
     Buying order when money is short: ${E.order.map(o=>`${nadeName(o.type,side)} ($${o.price})`).join(" › ")}.${o0&&o0.alone&&E.none?` Bought alone, the ${nadeName(o0.type,side)} wins ${o0.alone.win}% of rounds, vs ${E.none.win}% with no grenade (base).`:""}</p>
    <div class="tbl"><table><thead><tr><th>Grenade</th><th>From → to</th><th>When</th><th>Effect in the base</th><th>How</th><th class="n">Your throws</th></tr></thead><tbody>
-   ${types.map(t=>(E.types[t].picks||[]).map(x=>`<tr><td><span class="nd-t" style="color:${NADE_C[t]}">${nadeName(t,side)}</span>${E.types[t].elsewhere?'<br><span class="note">elsewhere on the map</span>':""}</td><td>${esc(x.from)} → <b>${esc(x.to)}</b></td>
+   ${types.map(t=>(E.types[t].picks||[]).map(x=>`<tr><td><span class="nd-t" style="color:${NADE_C[t]}">${nadeName(t,side)}</span>${E.types[t].elsewhere?'<br><span class="note">elsewhere on the map</span>':""}</td><td>${esc(x.from)} → <b>${esc(nTo(x,S.map))}</b></td>
      <td>around ${x.t_med!=null?clock(x.t_med):x.timer}${x.best&&x.best!==x.usual&&t!=="smoke"?`<br><span class="note">best: ${esc(nadeWin(N,side,x.best))}</span>`:""}</td><td class="wrap">${nadeEff(x,t)}</td>
      <td class="wrap">${esc(x.how)}${x.click?`, ${esc(x.click)} click`:""}<div class="cmd"><code>${esc(x.setpos)}</code><button type="button">Copy</button></div></td><td class="n">${x.mine||"—"}</td></tr>`).join("")).join("")}</tbody></table></div>
    ${N.unused_per_death!=null?`<p class="note">In your last matches, ${N.unused_per_death} grenade still in hand per death (${(N.unused_last||[]).map(u=>`${MAPN(u.map)}: ${u.unused}`).join(", ")}). Paste the position in the console of a practice server (sv_cheats 1).</p>`:""}`}
@@ -1817,9 +1832,10 @@ function planColumns(p,m,R0){const PL=p.advice.plan||{};
   const zkey=x=>{let s=String(x).replace(/<[^>]+>/g,"").trim().toLowerCase();s=s.replace(/^(worth a try|à essayer) ?: /,"").replace(/^(play|joue plus) (souvent )?/,"");
     return s.split(/ ?: | \(|\.|,| more/)[0].trim().replace(/^bombsite (\w)/,"$1 site").replace(/^site (\w)/,"$1 site")},coachZ=new Set((coach?coach.plan:[]).map(zkey));
   const good=bl.filter(b=>b.kind==="exploit"&&!coachZ.has(zkey(b.text))),bad=bl.filter(b=>b.kind==="avoid"&&!coachZ.has(zkey(b.text))),tries=bl.filter(b=>b.kind==="try"&&!coachZ.has(zkey(b.text))),times=bl.filter(b=>b.kind==="timing");
+  const avZ=new Set([...bad.map(b=>zkey(b.text)),...cAvoid.map(zkey)]),timesOk=times.filter(b=>!avZ.has(zkey(b.text)));
   const strong=((PL.mid||{}).strong||[]).slice(0,2),rules=(p.advice.rules||[]).slice(0,2);
   const reflex=(PL.playbook||[]).filter(x=>x.side===S.side||x.side==="both"||x.side==="tous").slice().sort((a,b)=>(b.prio||0)-(a.prio||0)).slice(0,3);
-  const rot=S.side==="CT"?Object.entries((PL.routes||{})[S.map]||{}).sort().map(([s,r])=>{const b=r.pro.best||r.base.best;return b?{site:s,route:b.route,travel:b.travel,died:b.died,who:r.pro.best?"pros":"players of the base"}:null}).filter(Boolean):[];
+  const rot=S.side==="CT"?Object.entries((PL.routes||{})[S.map]||{}).sort().map(([s,r])=>{const b=[r.pro.best,r.base.best].find(x=>x&&x.travel>=3);return b?{site:s,route:b.route,travel:b.travel,died:b.died,who:r.pro.best?"pros":"players of the base"}:null}).filter(Boolean):[];
   const exps=((PL.experiments||{}).experiments||[]).filter(e=>e.status==="active"),recs=((PL.context||{}).recs||[]).filter(r=>r.kind==="stop"||r.kind==="tilt");
   const pos=R0?((R0.positions||{})[S.side]||{}):{},rifle=((pos.rifle||{}).zones||[]).filter(z=>z.duel_win!=null&&z.share>=4);
   const goodZ=rifle.filter(z=>z.duel_win>=53).sort((a,b)=>b.duel_win-a.duel_win).slice(0,3),badZ=rifle.filter(z=>z.duel_win<=47).sort((a,b)=>a.duel_win-b.duel_win).slice(0,2);
@@ -1827,7 +1843,7 @@ function planColumns(p,m,R0){const PL=p.advice.plan||{};
   const pl=(R0&&R0.plants)||{},baseGood=[],baseBad=[];
   if(R0){
     if(pl.A&&pl.B){const hi=pl.A.t_win>=pl.B.t_win?"A":"B",lo=hi==="A"?"B":"A",most=pl.A.share>=pl.B.share?"A":"B";
-      baseGood.push(S.side==="T"?`<b>Plant ${hi} rather</b>: Ts win ${pl[hi].t_win}% of the rounds where they plant ${hi}, ${pl[lo].t_win}% on ${lo}. Median plant around ${Math.round(pl[hi].plant_t)} s.`
+      baseGood.push(S.side==="T"?`<b>Plant ${hi} rather</b>: Ts win ${pl[hi].t_win}% of the rounds where they plant ${hi}, ${pl[lo].t_win}% on ${lo}. Median plant around ${clock(pl[hi].plant_t)}.`
         :`<b>Most attacked site: ${most}</b> (${pl[most].share}% of plants in the base): the extra player goes there.`)}
     goodZ.forEach(z=>baseGood.push(`<b>${esc(z.name)}</b>: ${z.duel_win}% of duels won by ${S.side}s of the base (${z.share}% of them play there).`));
     if(awpZ)baseGood.push(`<b>With the AWP: ${esc(awpZ.name)}</b> (${awpZ.duel_win}% of duels won)${proAwp.length?`. Pro AWPers: ${proAwp.map(z=>esc(z.name)).join(", ")}`:""}.`);
@@ -1837,18 +1853,19 @@ function planColumns(p,m,R0){const PL=p.advice.plan||{};
    <div class="cols3 guide">
     <div class="igcol"><h3 class="good">Your strengths here</h3>
      <ul class="big-list">${[...baseGood.map(t=>`<li class="exploit">${t}</li>`),...cGood.map(t=>`<li class="coach">${t}</li>`),...good.map(b=>`<li class="exploit">${b.text}</li>`),
-       ...tries.slice(0,1).map(b=>`<li class="try">${b.text}</li>`),...times.slice(0,2).map(b=>`<li class="timing">${b.text}</li>`),...strong.map(s=>`<li class="good">${esc(s.text)}</li>`)].join("")
+       ...tries.slice(0,1).map(b=>`<li class="try">${b.text}</li>`),...strong.map(s=>`<li class="good">${esc(s.text)}</li>`)].join("")
        ||`<li>Not enough matches ${S.map?`on ${MAPN(S.map)} `:""}as ${S.side} yet: lean on your reminders below.</li>`}</ul>
-     ${Sd&&plan&&plan.key_nades.length?`<h3>Key grenades</h3><ul class="big-list">${plan.key_nades.slice(0,3).map(i=>{const l=Sd.lineups[i];return `<li class="ct"><b>${TYPE[l.type]}</b> ${esc(l.from_zone)} → ${esc(l.to_zone||"?")} · ${esc(l.how)}${l.t!=null?` · around ${Math.round(l.t)} s`:""}</li>`}).join("")}</ul>`:""}</div>
+     ${Sd&&plan&&plan.key_nades.length?`<h3>Key grenades</h3><ul class="big-list">${plan.key_nades.slice(0,3).map(i=>{const l=Sd.lineups[i];return `<li class="ct"><b>${TYPE[l.type]}</b> ${esc(l.from_zone)} → ${esc(nTo(l,S.map)||"?")} · ${esc(l.how)}${l.t!=null?` · ${clock(l.t)}`:""}</li>`}).join("")}</ul>`:""}</div>
     <div class="igcol"><h3 class="bad">Avoid</h3>
      <ul class="big-list">${[...baseBad.map(t=>`<li class="avoid">${t}</li>`),...cAvoid.map(t=>`<li class="avoid">${t}</li>`),...bad.map(b=>`<li class="avoid">${b.text}</li>`),...rules.map(r=>`<li class="bad"><b>${esc(r.short)}</b>${r.standing?`<br><span class="note">${esc(r.standing)}</span>`:""}</li>`)].join("")||"<li>Nothing flagged yet.</li>"}</ul></div>
     <div class="igcol">${reflex.length?`<h3 class="warn">Reflexes</h3><ul class="big-list">${reflex.map(x=>`<li class="timing"><b>If ${esc(lc(x.if))}</b> → ${esc(x.then)}</li>`).join("")}</ul>`:""}
+     ${timesOk.length?`<h3 class="warn">Timings</h3><ul class="big-list">${timesOk.slice(0,2).map(b=>`<li class="timing">${b.text}</li>`).join("")}</ul>`:""}
      ${rot.length?`<h3>Rotations</h3><ul class="big-list">${rot.map(r=>`<li class="ct">To ${r.site}: <b>${esc(r.route)}</b> (${r.travel} s, ${r.died}% deaths on the way among ${r.who})</li>`).join("")}</ul>`:""}</div>
    </div>
    <div class="reminders">
     ${exps.map(e=>`<div><b>Running experiment</b>${esc(e.title)}</div>`).join("")}
     <div><b>Session rule</b>${recs.length?esc(recs[0].text):"A 10-15 min break after a loss, stop after 2 losses in a row."}</div>
-    <div><b>Economy</b>We buy together. Force only if everyone still has $4,000 next round.</div>
+    <div><b>Economy</b>We buy together. Force only if everyone can still full buy next round ($3,700 T, $3,900 CT).</div>
     ${D.local?`<div><b>Before the 1st game</b><a href="#routine" style="color:var(--flash)">journal (20 s)</a> · <a href="#progress" style="color:var(--flash)">today's warm-up</a></div>`:""}
    </div>`}}
 // T side: what to run (the plays that win on this map for your kind of round, small samples pulled toward the map's
@@ -1870,7 +1887,7 @@ function tPlanLive(p,g){const TS=(p.advice.plan||{}).tside,M=TS&&TS.maps&&TS.map
     const fk=TP.fake||{};if(fk.switch&&fk.direct&&fk.switch[0]>=20&&fk.switch[1]-fk.direct[1]>=5)
       out.push(`<p><b>Fake</b>: showing on one site first, then hitting the other, wins <b>${fk.switch[1]}%</b> <span class="note">(${fk.switch[0]})</span> vs ${fk.direct[1]}% straight in.</p>`);
     const ro=TP.rotation||{};if(ro.A||ro.B)out.push(`<p><b>After your hit</b>: CTs from the other site reach you ${["A","B"].filter(L=>ro[L]).map(L=>`on ${L} after ~${Math.round(ro[L].med)} s`).join(", ")} (1 in 4 much faster): plant and set your crossfires right away.</p>`);
-    const sm=TP.smokes||{};const sl=["A","B"].filter(L=>(sm[L]||[]).length).map(L=>`${L}: ${sm[L].slice(0,2).map(x=>`${esc(x.from)} → ${esc(x.to)} <b>${x.win}%</b> <span class="note">(${x.n}, ~${esc(x.timer)})</span>`).join(" · ")}`);
+    const sm=TP.smokes||{};const sl=["A","B"].filter(L=>(sm[L]||[]).length).map(L=>`${L}: ${sm[L].slice(0,2).map(x=>`${esc(x.from)} → ${esc(nTo(x,S.map))} <b>${x.win}%</b> <span class="note">(${x.n}, ~${esc(x.timer)})</span>`).join(" · ")}`);
     if(sl.length)out.push(`<p><b>Smokes in won rounds</b> (vs ${(sm.A||sm.B)[0].base_win}% on average): ${sl.join(" — ")}</p>`)}
   if(g.round_phase==="live"&&g.bomb!=="planted"&&el!=null&&el>=35&&el<70){const tp=(((M.tplan||{}).tempo)||{})[advisedType(g)]||{};
     out.push(`<p><b>Execute window</b>: ${tp.exec?`executes win ${tp.exec[1]}% here`:"go together"}${tp.late?`, late hits ${tp.late[1]}%`:""}. Throw your smokes and flashes, then go in together.</p>`)}
@@ -2399,7 +2416,7 @@ function nowVisual(p,g,following){
 // the buy notification of the full-screen view: one compact card, no paragraph, never scrolls
 function buyVisual(p,g){if(g.money==null||!g.side||g.practice)return "";const rt=advisedType(g),PL=p.advice.plan||{},N=PL.nades,E=N&&((N.maps||{})[g.map]||{})[g.side];
   const KB=((((PL.buys||{}).maps||{})[g.map]||{})[g.side]||{}),sk=sitKey(p,g),kit=(sk&&sk.endsWith("anti_eco")&&KB["anti-eco"])||KB[rt]||{};
-  const full=g.side==="CT"?4200:4000,bonus=[1400,1900,2400,2900,3400][Math.min(g.losses||0,4)];
+  const full=g.side==="CT"?3900:3700,bonus=[1400,1900,2400,2900,3400][Math.min(g.losses||0,4)];
   const haveRifle=g.primary&&FULL_W.has(g.primary),tags=[];
   const plan=typeof econPlan==="function"?econPlan(p,g):null,bk=plan&&plan.best?plan.best.k:null;
   const ae=typeof antiEco==="function"&&antiEco(p,g);
@@ -2407,9 +2424,9 @@ function buyVisual(p,g){if(g.money==null||!g.side||g.practice)return "";const rt
   // a key round: the card's weapon (the same as the key-round card of the panel), never another one
   const ks=typeof keySit==="function"?keySit(p,g):null,kw=ks?keyWeapons(p,g,ks):null,kp=kw&&kw.list.find(w=>!DEF_PISTOL.has(w.w)&&(W_PRICE[w.w]??99999)<=(ks==="force_full"?g.money:kw.budget));
   if(ks==="pistol"){const top=kw&&kw.list[0];tags.push(top&&!DEF_PISTOL.has(top.w)?`<span class="vtag">🔑 ${esc(W_SHORT[top.w]||top.w.toUpperCase())}</span>`:`<span class="vtag">kevlar</span>`)}
-  else if(ks&&kp&&!haveRifle)tags.push(`<span class="vtag">🔑 ${esc(W_SHORT[kp.w]||kp.w.toUpperCase())}</span>`,...(ks==="force_full"?[`<span class="vtag">kevlar</span>`]:[]));
+  else if(ks&&kp&&!haveRifle)tags.push(`<span class="vtag">🔑 ${esc(W_SHORT[kp.w]||kp.w.toUpperCase())}${kp.exp?" 🧪":""}</span>`,...(ks==="force_full"?[`<span class="vtag">kevlar</span>`]:[]));
   else if(bk==="eco")tags.push(`<span class="vtag">save: buy nothing</span>`);   // the plan says save: no weapon to tempt you
-  else if(kit.kit&&!haveRifle)tags.push(...String(kit.kit.key).split(" + ").filter(x=>!/grenade/i.test(x)).map(x=>`<span class="vtag">${esc(x)}</span>`));
+  else if(kit.kit&&!haveRifle)tags.push(...String(expSwapTxt(p,kit.kit.key)).split(" + ").filter(x=>!/grenade/i.test(x)).map(x=>`<span class="vtag">${esc(x)}</span>`));
   else if(rt==="full"&&!haveRifle)tags.push(`<span class="vtag">rifle</span><span class="vtag">kevlar + helmet</span>`);
   if(haveRifle)tags.push(`<span class="vtag got">${esc(g.primary)} ✓</span>`);
   let nd="",left=g.money;
@@ -2553,11 +2570,13 @@ function keyWeapons(p,g,k){const W=((((p.advice.plan||{}).tside||{}).setplay_w||
   const lbw=w=>{const z=1.28,p=w.win/100,n=w.n||1;return (p+z*z/(2*n)-z*Math.sqrt(p*(1-p)/n+z*z/(4*n*n)))/(1+z*z/n)};
   const by=k==="pistol"?(a,b)=>lbw(b)-lbw(a):(a,b)=>b.adr-a.adr;   // pistol: kevlar and the round count most; eco / force: what a weapon does
   const list=W.filter(ok).sort(by).slice(0,4);
+  expSwaps(p).forEach(x=>{const i=list.findIndex(w=>w.w===x.weapon);if(i<0)return;const j=list.findIndex(w=>w.w===x.alt),a=j>=0?list[j]:W.find(w=>w.w===x.alt);
+    if(j>=0)list.splice(j,1);list.splice(j>=0&&j<i?i-1:i,1,Object.assign({},a||{w:x.alt,adr:null,win:null,n:0},{exp:true}))});   // the tested weapon takes the place of the one it replaces, once
   if(mine&&!list.some(w=>w.w===mine)){const m=W.find(w=>w.w===mine);if(m)list.push(m)}
   return {list,mine,budget}}
 function vKey(p,g){const k=keySit(p,g);if(!k)return "";const M=(((p.advice.plan||{}).tside||{}).maps||{})[g.map]||{},SP=((M.setplays||{})[g.side]||{})[k];
-  const {list,mine,budget}=keyWeapons(p,g,k),pis=k==="pistol",val=w=>pis?w.win:w.adr,mx=Math.max(...list.map(val),1);
-  const rows=list.map((w,i)=>`<div class="vrow${w.w===mine?" best":""}" style="--c:${w.w===mine?"var(--good)":"var(--flash)"}${w.w===mine||!i?"":";opacity:.7"}"><span>${w.w===mine?"✓ ":""}${esc(W_SHORT[w.w]||w.w.toUpperCase())}</span><i><u style="width:${Math.max(4,Math.round(100*val(w)/mx))}%"></u></i><b>${pis?w.win+"%":w.adr}</b><small>${pis?`${w.adr} dmg`:`${w.win}% won`}</small></div>`).join("");
+  const {list,mine,budget}=keyWeapons(p,g,k),pis=k==="pistol",val=w=>pis?w.win:w.adr,mx=Math.max(...list.map(val).filter(v=>v!=null),1);
+  const rows=list.map((w,i)=>`<div class="vrow${w.w===mine?" best":""}" style="--c:${w.w===mine?"var(--good)":"var(--flash)"}${w.w===mine||!i?"":";opacity:.7"}"><span>${w.w===mine?"✓ ":""}${esc(W_SHORT[w.w]||w.w.toUpperCase())}${w.exp?" 🧪":""}</span><i><u style="width:${val(w)==null?0:Math.max(4,Math.round(100*val(w)/mx))}%"></u></i><b>${val(w)==null?"test":pis?w.win+"%":w.adr}</b><small>${w.exp&&val(w)==null?"your experiment":pis?`${w.adr} dmg`:`${w.win}% won`}</small></div>`).join("");
   const dup=(typeof sitKey==="function"&&!!sitKey(p,g))||(pis&&g.side==="CT");   // the situation card above has the header and its %
   return `<div class="vsit key"><span>🔑 ${dup?"WEAPONS":KEY_L[k]}</span>${SP&&SP.n>=15&&!dup?`<b class="${vTone(SP.win)}">${SP.win}%</b>`:""}</div>
     ${rows?`<div class="vhead">${pis?"ROUNDS WON":"DAMAGE / ROUND"} · ${(k==="eco_full"||k==="eco_force")&&g.round_phase==="freezetime"?`budget ${kMoney(budget)}`:"base, every map"}</div><div class="vrows">${rows}</div>`:""}`}
@@ -2658,6 +2677,10 @@ function liveLog(p,g){if(!D.local||!g||!g.map||g.round==null||g.practice||!g.sid
     if(b==="plant"){const as=autoSite(p,g);if(as){body.site=as.site;body.p_site=as.p}}
   }catch(e){}
   fetch("/api/live/log",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)}).catch(()=>{})}
+// a running "replace X with Y" experiment (Progress tab): the advice says Y wherever it would say X, marked 🧪
+function expSwaps(p){const E=((((p||{}).advice||{}).plan||{}).experiments||{}).experiments||[];
+  return E.filter(e=>e.status==="active"&&e.template==="weapon_swap"&&e.params&&e.params.weapon&&e.params.alt).map(e=>e.params)}
+function expSwapTxt(p,s){if(s==null)return s;let t=String(s);expSwaps(p).forEach(x=>{if(t.includes(x.weapon)&&!t.includes(x.alt))t=t.split(x.weapon).join(`${x.alt} 🧪`)});return t}
 
 // ---------- view: review (after the session, or the next day) ----------
 // what the In game page showed in your matches, checked against their demos (livecheck.py)
@@ -2673,7 +2696,7 @@ function callsBlock(PL){const C=PL.calls||[];if(!C.length)return D.local?`<h3>Yo
   const a=C[0],pct=(x,n)=>n?Math.round(100*x/n)+"%":"—";
   const src=((PL.phases||[]).flatMap(ph=>ph.items).find(i=>i.id==="info_calls")||{}).src;
   return `<h3>Your calls</h3>
-   <p class="note">${a.map?MAPN(a.map):"Match"} · ${fmtDate(a.start)} · ${a.utterances} phrases, ${Math.round((a.speech_s||0)/60)} min of speech${a.match?"":" · match not analyzed yet: update your profile"}${a.aligned?"":" · without game detection, calls aren't lined up with rounds"}.</p>
+   <p class="note">${a.map?MAPN(a.map):"Match"} · ${fmtDate(a.start)} · ${a.utterances} phrases, ${(a.speech_s||0)<60?`${Math.round(a.speech_s||0)} s`:`${Math.round(a.speech_s/60)} min`} of speech${a.match?"":" · match not analyzed yet: update your profile"}${a.aligned?"":" · without game detection, calls aren't lined up with rounds"}.</p>
    <div class="gauge">
     <div><b>${a.deaths?pct(a.deaths-a.silent_deaths,a.deaths):"—"}</b><span>of your deaths preceded by a call (10 s before)</span></div>
     <div><b>${a.info?a.complete_share+"%":"—"}</b><span>of your calls say where and how many</span></div>
@@ -2696,7 +2719,7 @@ function renderReview(){const p=P(),v=$("#v-review"),PL=p.advice.plan||{},R=PL.r
    ${R.changes.length?`<div class="chg">${R.changes.map(c=>`<article class="${c.better?"better":"worse"}"><span class="eyebrow">${esc(c.label)}</span>
      <span class="ba">${f(c.before,c.unit)}<span class="arrow" aria-hidden="true">→</span><span class="${c.better?"good":"bad"}">${f(c.after,c.unit)}</span> <span class="lvl ${c.level==="clear"||c.level==="net"?"clear":"trend"}">${c.level==="clear"||c.level==="net"?"clear gap":"trend"}</span></span>
      <span>${c.better?"Improving":"Slipping"} over ${esc(R.label)} against the ${c.n_before} matches before.</span>
-     ${c.why.length?`<details><summary class="mini" style="cursor:pointer">Possible reasons (to check over the next matches)</summary><ul class="why">${c.why.map(w=>`<li>${esc(w)}</li>`).join("")}</ul></details>`:`<span class="note">No obvious explanation in your data: keep an eye on it.</span>`}</article>`).join("")}</div>`
+     ${c.why.length?`<details><summary class="mini" style="cursor:pointer">Possible reasons (to check over the next matches)</summary><ul class="why">${c.why.map(w=>`<li>${esc(w)}</li>`).join("")}</ul></details>`:`<span class="note">${c.better?"No single cause in your data: keep doing what you did in these games.":"No obvious explanation in your data: keep an eye on it."}</span>`}</article>`).join("")}</div>`
      :`<p>Nothing moved clearly: your numbers are stable.</p>`}
    ${R.stable.length?`<p class="note">Stable: ${R.stable.map(esc).join(" · ")}.</p>`:""}
    <div class="cols3" style="grid-template-columns:repeat(auto-fit,minmax(340px,1fr))">
@@ -2763,7 +2786,7 @@ function proDetail(x){const st=x.stats;const n=(v,s="")=>v==null?"—":String(v)
   return `<article class="card prodetail"><div class="arch-h"><span class="ic" aria-hidden="true">${x.icon}</span><span class="nm">${esc(x.handle)}</span>
     ${x.prole==="igl"?`<span class="probadge">IGL</span>`:""}<span class="note">${esc(x.real_name||"")}${x.team?` · ${esc(x.team)}`:""} · ${esc(x.role_name)}</span>
     <a href="${esc(x.hltv)}" target="_blank" rel="noopener" style="color:var(--ct);font-size:13px">See on HLTV</a></div>
-    ${x.traits.length?`<div class="traits">${x.traits.map(t=>`<span title="${esc(t.text)}">${esc(t.label)}</span>`).join("")}</div>`:""}
+    ${x.traits.length?`<div class="traits">${x.traits.map(t=>`<span title="${esc(t.text)}">${esc(tEN(t.label))}</span>`).join("")}</div>`:""}
     <div class="kv"><div><b>${n(st.kpr)}</b><span>kills per round</span></div><div><b>${n(st.hs,"%")}</b><span>headshot kills</span></div>
       <div><b>${n(st.open_win,"%")}</b><span>opening duels won</span></div><div><b>${n(st.trade_rate)}</b><span>trades per round</span></div>
       <div><b>${n(st.iso_T==null?null:Math.round(st.iso_T)," u")}</b><span>distance to teammate as T</span></div><div><b>${n(st.util_pr)}</b><span>grenades per round</span></div>
@@ -2783,7 +2806,7 @@ async function renderPros(){const v=$("#v-pros");const ps=await loadPros();
    <div class="btns" style="align-items:center"><input id="pf" type="search" value="${esc(pq)}" placeholder="Filter by handle, name, team or role" aria-label="Filter pros" style="font:14px var(--f-body);background:var(--panel);color:var(--ink);border:1px solid var(--line);border-radius:3px;padding:6px 10px;min-width:260px"></div>
    <div class="players">${list.map(x=>`<button type="button" class="pcard" data-pro="${x.steamid}" aria-pressed="${x.steamid===proSel}"><b>${esc(x.handle)}${x.prole==="igl"?`<span class="probadge">IGL</span>`:""}</b>
      <span class="note">${esc(x.team||"")}${x.real_name?` · ${esc(x.real_name)}`:""}</span><span class="arch-tag" style="margin:0">${x.icon} ${esc(x.role_name)}</span>
-     <span class="note">${x.traits.slice(0,3).map(t=>esc(t.label)).join(" · ")}</span></button>`).join("")||`<div class="empty">No pro matches.</div>`}</div>
+     <span class="note">${x.traits.slice(0,3).map(t=>esc(tEN(t.label))).join(" · ")}</span></button>`).join("")||`<div class="empty">No pro matches.</div>`}</div>
    <p class="note">Pros without a recent demo (team absent from the downloaded matches) don't show up yet. Pros' Steam profiles: public community guides on Steam.</p>`;
   const pf=$("#pf",v);pf.oninput=()=>{pq=pf.value.trim().toLowerCase();const pos=pf.selectionStart;renderPros().then(()=>{const n=$("#pf");n.focus();n.setSelectionRange(pos,pos)})};
   $$("[data-pro]",v).forEach(b=>b.onclick=()=>{proSel=b.dataset.pro;renderPros();window.scrollTo(0,0)});

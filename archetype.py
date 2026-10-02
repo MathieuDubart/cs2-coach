@@ -1,4 +1,5 @@
 """Player archetype from weapons, movement, game sense, playstyle and reactions, relative to the reference base."""
+from nades import _timer  # the game clock (1:55 at the start of the round)
 import numpy as np
 import pandas as pd
 
@@ -205,19 +206,19 @@ def profile(steamid, xhair_pct=None):
         if cond:
             traits.append({"label": label, "text": text() if callable(text) else text})
     ms, iso, dl, tt, hs, up = P.get("move_share"), P.get("iso_T"), P.get("duel_len_won"), P.get("trade_time"), P.get("hs_share"), P.get("util_pr")
-    trait(ms is not None and ms >= 70, "Agressif", lambda: f"You engage while moving in {fmt(r.move_share, 'pct')} of your duels (more than {ms:.0f}% of players).")
+    trait(ms is not None and ms >= 70, "Aggressive", lambda: f"You engage while moving in {fmt(r.move_share, 'pct')} of your duels (more than {ms:.0f}% of players).")
     trait(ms is not None and ms <= 30, "Patient", lambda: f"You wait for the enemy: {fmt(r.hold_share, 'pct')} of your duels start with you standing still.")
-    trait(iso is not None and iso >= 70, "Solitaire", lambda: f"On attack, your nearest teammate is at {fmt(r.iso_T, 'u')} (median), further than for {iso:.0f}% of players.")
+    trait(iso is not None and iso >= 70, "Loner", lambda: f"On attack, your nearest teammate is at {fmt(r.iso_T, 'u')} (median), further than for {iso:.0f}% of players.")
     trait(iso is not None and iso <= 30, "Team player", lambda: f"On attack, you stay grouped: {fmt(r.iso_T, 'u')} from your nearest teammate (median).")
     trait(dl is not None and dl <= 30, "Fast reflexes", lambda: f"You finish the duels you win in {fmt(r.duel_len_won, 's')} (median), faster than {100 - dl:.0f}% of players.")
-    trait(dl is not None and dl >= 75, "Duels longs", lambda: f"The duels you win last {fmt(r.duel_len_won, 's')} (median): you win by outlasting rather than with the first shot.")
+    trait(dl is not None and dl >= 75, "Long duels", lambda: f"The duels you win last {fmt(r.duel_len_won, 's')} (median): you win by outlasting rather than with the first shot.")
     trait(tt is not None and tt <= 30 and r.trade_rate > 0, "Trade reflex", lambda: f"You avenge a teammate in {fmt(r.trade_time, 's')} (median).")
     trait(hs is not None and hs >= 75, "Headshot machine", lambda: f"{fmt(r.hs_share, 'pct')} of your kills are headshots (more than {hs:.0f}% of players).")
-    trait(up is not None and up >= 75, "Utilitaires", lambda: f"{fmt(r.util_pr, 'n')} grenade(s) per round (more than {up:.0f}% of players).")
+    trait(up is not None and up >= 75, "Utility user", lambda: f"{fmt(r.util_pr, 'n')} grenade(s) per round (more than {up:.0f}% of players).")
     trait(up is not None and up <= 25, "Few grenades", lambda: f"Only {fmt(r.util_pr, 'n')} grenade per round (fewer than {100 - up:.0f}% of players).")
     fd = P.get("first_duel_t")
-    trait(fd is not None and fd <= 25, "Early in the round", lambda: f"Your first duel comes around {fmt(r.first_duel_t, 's')}: you play for early contact.")
-    trait(fd is not None and fd >= 75, "End of round", lambda: f"Your first duel comes around {fmt(r.first_duel_t, 's')}: you let the round develop.")
+    trait(fd is not None and fd <= 25, "Early in the round", lambda: f"Your first duel comes around {_timer(r.first_duel_t)} on the clock: you play for early contact.")
+    trait(fd is not None and fd >= 75, "End of round", lambda: f"Your first duel comes around {_timer(r.first_duel_t)} on the clock: you let the round develop.")
     trait(xhair_pct is not None and xhair_pct >= 75, "Good crosshair placement", lambda: f"Your crosshair is better placed than {xhair_pct:.0f}% of players before duels.")
     # weapons
     shares = {"AWP": r.awp_share, "rifles": r.rifle_share, "SMG": r.smg_share, "shotguns": r.shotgun_share,
@@ -245,7 +246,7 @@ def profile(steamid, xhair_pct=None):
                 f"{fmt(r.iso_T, 'u')} from your nearest teammate on attack and {fmt(r.iso_CT, 'u')} on defense.")
     desc.append(f"Game sense: {fmt(r.util_pr, 'n')} grenade(s) and {fmt(r.blind_pr, 'n')} enemy(ies) flashed per round, "
                 f"{fmt(r.trade_rate, 'n')} trade(s) per round, {fmt(r.traded_share, 'pct')} of your deaths traded.")
-    desc.append(f"Reactions: duels won finished in {fmt(r.duel_len_won, 's')}, first duel of the round around {fmt(r.first_duel_t, 's')}"
+    desc.append(f"Reactions: duels won finished in {fmt(r.duel_len_won, 's')}, first duel of the round around {_timer(r.first_duel_t)} on the clock"
                 + (f", trade in {fmt(r.trade_time, 's')}" if r.trade_time == r.trade_time and r.trade_rate > 0 else "") + ".")
     return {"role": main, "name": name, "icon": role["icon"], "versatile": bool(versatile),
             "second": {"role": second, "name": ROLES[second]["name"]} if second else None,

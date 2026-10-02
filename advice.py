@@ -1,4 +1,5 @@
 """Rule-based coaching advice from a player's analyzed matches (works for any SteamID)."""
+from nades import _timer  # the game clock (1:55 at the start of the round)
 import json
 import os
 from collections import defaultdict
@@ -225,15 +226,15 @@ def map_plans(stats, cross):
             opp = [z for z in pz if (z["win"] or 0) >= 56 and z["k"] + z["d"] >= 12 and z["my_presence"] < 4
                    and "spawn" not in z["key"].lower() and z["t_med"] <= 45][:2]
             for z in opp:
-                bullets.append({"kind": "try", "text": f"<b>Worth a try: {z['name']}</b>. {side}s in the base win {z['win']}% of their duels there ({z['k'] + z['d']} duels{', mostly holding the angle' if (z['hold_pct'] or 0) >= 55 else ''}, around {z['t_med']} s). You only spend {z['my_presence']:.0f}% of your time there.".replace("l angle", "l'angle")})
+                bullets.append({"kind": "try", "text": f"<b>Worth a try: {z['name']}</b>. {side}s in the base win {z['win']}% of their duels there ({z['k'] + z['d']} duels{', mostly holding the angle' if (z['hold_pct'] or 0) >= 55 else ''}, around {_timer(z['t_med'])}). You only spend {z['my_presence']:.0f}% of your time there.".replace("l angle", "l'angle")})
             mine_ok = {z["key"] for z in S["zones"] if z["k"] + z["d"] >= 3 and (z["win"] or 0) >= 55}
-            trap = [z for z in pz[::-1] if (z["win"] or 100) <= 40 and z["k"] + z["d"] >= 12 and z["my_presence"] >= 4
+            trap = [z for z in pz[::-1] if (z["win"] or 100) <= 40 and z["k"] + z["d"] >= 12 and z["my_presence"] >= 4 and "spawn" not in z["key"].lower()
                     and z["key"] not in {a["key"] for a in av} and z["key"] not in mine_ok][:1]
             for z in trap:
                 bullets.append({"kind": "avoid", "text": f"<b>{z['name']}: trap zone</b>. {side}s in the base only win {z['win']}% of their duels there ({z['k'] + z['d']} duels), and you spend {z['my_presence']:.0f}% of your time there."})
             for z in freq:
                 if z["early_contact_s"] is not None and z["early_contact_s"] < 60:
-                    bullets.append({"kind": "timing", "text": f"<b>{z['name']}</b> ({round(z['presence'])}% of your time): first contacts around {z['early_contact_s']:.0f} s, have a grenade ready before."})
+                    bullets.append({"kind": "timing", "text": f"<b>{z['name']}</b> ({round(z['presence'])}% of your time): first contacts around {_timer(z['early_contact_s'])}, have a grenade ready before."})
             # key grenades: one per type, favouring reproducible throws with evidence
             key, seen = [], set()
             for i, l in enumerate(S["lineups"]):

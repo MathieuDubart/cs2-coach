@@ -575,7 +575,7 @@ def rotations(mp, slots, TS=None, R=None):
             r = refs.get(L, {})
             best = None
             for who in ("pro", "base"):
-                rs = [x for x in (r.get(who) or {}).get("routes", []) if x.get("travel") is not None and x["n"] >= (5 if who == "pro" else 8)]
+                rs = [x for x in (r.get(who) or {}).get("routes", []) if x.get("travel") is not None and x["travel"] >= 3 and x["n"] >= (5 if who == "pro" else 8)]
                 if rs:
                     avg = ((r.get(who) or {}).get("timing") or {}).get("died_way") or 25
                     best = min(rs, key=lambda x: ((x["died"] * x["n"] + avg * 5) / (x["n"] + 5), x["travel"]))
@@ -583,7 +583,7 @@ def rotations(mp, slots, TS=None, R=None):
                     break
             if not best:   # the base's rotations toward that site, from that very zone
                 starts = [z for z in (rot.get(L) or {}) if z == sl["zone"]] or [z for z in (rot.get(L) or {}) if R and R.of(z) == sl["site"]]
-                rs = [dict(x, start=z) for z in starts for x in rot[L][z].get("routes", []) if x["n"] >= 3]
+                rs = [dict(x, start=z) for z in starts for x in rot[L][z].get("routes", []) if x["n"] >= 3 and (x.get("travel") or 0) >= 3]
                 if rs:
                     best = dict(min(rs, key=lambda x: (x["died"], x["travel"])), who="zone")
                     best["route"] = " > ".join(([best["start"]] if best["start"] != best["route"][0] else []) + best["route"])
@@ -811,7 +811,7 @@ def economy(M, troles, awp_ok):
             "drop_order": [names[s] for s in order], "pistol_openers": [r["name"] for r in rows if r["pistol"]],
             "rules": ["We buy together: full, force or eco, called before buy time.",
                       "The richest drops first, in this order: " + ", ".join(names[s] for s in order) + (" (the AWP first)." if awper else "."),
-                      "Force only if everyone's money plus the loss bonus still makes at least $4,000 next round."],
+                      "Force only if everyone's money plus the loss bonus still pays a full buy next round ($3,700 as T, $3,900 as CT)."],
             "src": K.src("sw_economy", "h2k_economy")}
 
 

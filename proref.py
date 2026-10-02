@@ -159,11 +159,11 @@ def for_player(steamid):
             "note": "Official demos of recent pro matches (HLTV). Similarity = average closeness over 15 style indicators, in base percentiles."}
 
 
-TRAIT_TXT = [("move_share", 70, "Agressif", "engages while moving"), ("hold_share", 70, "Patient", "waits for the enemy standing still"),
-             ("iso_T", 70, "Solitaire", "plays far from the team on attack"), ("iso_T", -30, "Team player", "stays grouped on attack"),
+TRAIT_TXT = [("move_share", 70, "Aggressive", "engages while moving"), ("hold_share", 70, "Patient", "waits for the enemy standing still"),
+             ("iso_T", 70, "Loner", "plays far from the team on attack"), ("iso_T", -30, "Team player", "stays grouped on attack"),
              ("duel_len_won", -30, "Fast reflexes", "finishes duels very fast"), ("trade_rate", 70, "Trader", "often avenges teammates"),
-             ("hs_share", 75, "Headshot machine", "lots of headshot kills"), ("util_pr", 75, "Utilitaires", "throws a lot of grenades"),
-             ("open_rate_T", 75, "Ouvreur", "takes the opening duels on attack"), ("late_share", 75, "End of round", "gets kills late")]
+             ("hs_share", 75, "Headshot machine", "lots of headshot kills"), ("util_pr", 75, "Utility user", "throws a lot of grenades"),
+             ("open_rate_T", 75, "Opener", "takes the opening duels on attack"), ("late_share", 75, "End of round", "gets kills late")]
 
 
 def pro_profiles():

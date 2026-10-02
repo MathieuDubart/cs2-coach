@@ -4,6 +4,7 @@ that work from the player's zones.
 
 Writes <player>/cross_notes.json: {map: {side: {title, plan: [html], kinds: [avoid|good|tip]}}}.
 """
+from nades import _timer  # the game clock (1:55 at the start of the round)
 import json
 import os
 
@@ -61,6 +62,20 @@ def _nade_from(nd, zone_key, types=("smoke", "molotov", "flash", "he")):
     return None
 
 
+_ZONES = {}   # callout -> radar point of the map being written (set by build)
+
+
+def _near(x):
+    """ "Outside → Outside" says nothing: the nearest other callout to where it lands."""
+    if x.get("from") != x.get("to") or not x.get("to_px") or not _ZONES:
+        return nm(x["to"])
+    lv = x.get("land_level") or x.get("level")
+    c = [(((z["px"][0] - x["to_px"][0]) ** 2 + (z["px"][1] - x["to_px"][1]) ** 2) ** .5, n) for n, z in _ZONES.items()
+         if n != x["to"] and z.get("px") and (not lv or not z.get("level") or z["level"] == lv)]
+    d, n = min(c) if c else (1e9, None)
+    return f"{nm(x['to'])}, near {n}" if n and d < 140 else nm(x["to"])
+
+
 def _nade_txt(t, x, side):
     name = {"flash": "The flash", "smoke": "The smoke", "he": "The HE", "molotov": "The incendiary" if side == "CT" else "The molotov"}[t]
     if t == "flash":
@@ -72,7 +87,7 @@ def _nade_txt(t, x, side):
     else:
         eff = f"thrown in {round(x.get('per100') or 0)} rounds out of 100" + \
               (f", {x['win']}% of rounds won when it's used" if x.get("win") is not None else "")
-    return f"{name} {nm(x['from'])} → {nm(x['to'])}, around {x['timer']}: {eff} (base)."
+    return f"{name} {nm(x['from'])} → {_near(x)}, around {x['timer']}: {eff} (base)."
 
 
 def side_notes(mp, side, S, nd, regions, n_matches):
@@ -82,6 +97,7 @@ def side_notes(mp, side, S, nd, regions, n_matches):
     out = []   # (priority, kind, html)
     used = set()
     cited = set()   # grenades already in a note (type, from, to)
+    avoided = set()   # zones this sheet tells you to leave
     main = [z for z in zones if (z.get("presence") or 0) >= 5]
     for z in main:
         k, d, n = z["k"], z["d"], z["k"] + z["d"]
@@ -120,7 +136,7 @@ def side_notes(mp, side, S, nd, regions, n_matches):
                 head, kind = "change how you play it", "avoid"
                 txt += f" You take your duels there while moving ({z['my_speed_med']} u/s median)."
                 if ow is not None:
-                    txt += f" Other players win {ow}% of their duels there, and the best spot ({_p(spot['k'], 'kill', 'kills')}, {_p(spot['d'], 'death', 'deaths')}) is a held angle, around {spot['t_med']} s into the round."
+                    txt += f" Other players win {ow}% of their duels there, and the best spot ({_p(spot['k'], 'kill', 'kills')}, {_p(spot['d'], 'death', 'deaths')}) is a held angle, around {_timer(spot['t_med'])}."
             elif alt:
                 b, az = alt
                 head, kind = (f"fall back to {nm(az['name'])}" if side == "CT" else f"go through {nm(az['name'])} instead"), "avoid"
@@ -151,6 +167,8 @@ def side_notes(mp, side, S, nd, regions, n_matches):
                 txt += f" Others win {ow if ow is not None else '—'}% there: play it with a teammate within trade distance, or hold the angle instead of taking it."
             out.append((z["presence"] * (d - k + 1), kind, f"<b>{cap(z['name'])}: {head}.</b> {txt}"))
             used.add(z["key"])
+            if kind == "avoid":
+                avoided.add(z["key"])
         elif good:
             txt = f"You go {_p(k, 'kill', 'kills')} for {_p(d, 'death', 'deaths')} there ({w}%)"
             txt += f", while other players only win {ow}% there." if ow is not None and ow < w else "."
@@ -204,12 +222,13 @@ def side_notes(mp, side, S, nd, regions, n_matches):
         out.append((6, "good", f"<b>{names[:1].upper() + names[1:]}: play {pron} more often.</b> You win more duels than you lose there{how}, "
                               f"but you only spend {pres}% of your time there."))
     # the opening grenade from your main zone
-    if main:
-        z0 = main[0]
+    main_ok = [z for z in main if z["key"] not in avoided]
+    if main_ok:
+        z0 = main_ok[0]
         first = None
         for t in (("molotov", "smoke") if side == "CT" else ("smoke", "flash")):
             for x in ((nd or {}).get("types", {}).get(t) or {}).get("picks", []):
-                if x.get("from_key") in {z["key"] for z in main} and x.get("usual") in ("debut", "prise") and (t, x["from"], x["to"]) not in cited:
+                if x.get("from_key") in {z["key"] for z in main_ok} and x.get("usual") in ("debut", "prise") and (t, x["from"], x["to"]) not in cited:
                     first = (t, x)
                     break
             if first:
@@ -220,7 +239,7 @@ def side_notes(mp, side, S, nd, regions, n_matches):
             txt = _nade_txt(t, x, side)
             ec = next((z.get("early_contact_s") for z in main if z["name"] == x["from"] and z.get("early_contact_s")), z0.get("early_contact_s"))
             if ec:
-                txt += f" The first contact {at(x['from'])} comes around {round(ec)} s."
+                txt += f" The first contact {at(x['from'])} comes around {_timer(ec)}."
             head = f"Open the round with {name} toward {nm(x['to'])}" if side == "CT" else f"Before going in, {name} toward {nm(x['to'])}"
             out.append((5, "tip", f"<b>{head}.</b> {txt}"))
     # a position that pays off for everybody on this side and that you never play
@@ -230,7 +249,7 @@ def side_notes(mp, side, S, nd, regions, n_matches):
         z = max(tries, key=lambda z: z["k"] - z["d"])
         how = ", mostly holding the angle" if (z.get("hold_pct") or 0) >= 40 else ""
         out.append((3, "tip", f"<b>{cap(z['name'])}: worth a try.</b> Players in the base win {z['win']}% of their duels there ({z['k']}-{z['d']}){how}, "
-                              f"around {z['t_med']} s into the round. You almost never play there."))
+                              f"around {_timer(z['t_med'])}. You almost never play there."))
     out.sort(key=lambda b: -b[0])
     out = out[:5]
     if not out:
@@ -258,6 +277,8 @@ def build(sid, cross=None, plan=None):
         if not mp.startswith("de_"):
             continue
         regions = (meta.get(mp) or {}).get("regions", {})
+        _ZONES.clear()
+        _ZONES.update(((((plan or {}).get("tside") or {}).get("maps") or {}).get(mp) or {}).get("geo", {}).get("zones") or {})
         for side, S in (m.get("sides") or {}).items():
             n = side_notes(mp, side, S, (nd_all.get(mp) or {}).get(side), regions, m.get("matches") or 0)
             if n:

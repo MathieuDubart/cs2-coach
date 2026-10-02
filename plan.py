@@ -251,7 +251,7 @@ def kpis(sid, stats, mid_rows):
                 series["adv_throw"].append([t, round(100 * g("adv_throw") / g("adv_rounds"))])
     meta = {"rating": ("Match rating (≈ HLTV 2.0)", "", True), "adr": ("Damage per round", "", True), "traded": ("Deaths traded", "%", True),
             "nades": ("Grenades that died with you (per 24 rounds)", "", False), "xhair": ("Crosshair offset", "°", False),
-            "isolated": ("Isolated deaths (per 24 rounds)", "", False), "adv_throw": ("Avantages rendus", "%", False)}
+            "isolated": ("Isolated deaths (per 24 rounds)", "", False), "adv_throw": ("Man advantages thrown", "%", False)}
     out = []
     for k, s in series.items():
         s = sorted([x for x in s if x[0]], key=lambda x: x[0])

@@ -110,9 +110,11 @@ def load():
 def kit(row):
     """Readable buy, grouped the way the choice is made for this type of round."""
     rt, w, a, un = row["rtype"], row["weapon"], row["armor"], row["util_n"]
-    util = [u for u in (row["util"] or "").split(",") if u]
+    util = [u for u in (row["util"] or "").split(",") if u and u != "decoy"]   # a $50 decoy is not a buy decision
     ut = ", ".join(f"{k}{f' ×{v}' if v > 1 else ''}" for k, v in Counter(util).most_common())
-    if rt in ("pistol", "eco"):
+    if rt == "eco":   # the armor of an eco is often kept from the round before: the choice is the weapon
+        return " + ".join(p for p in (w if w != "?" else "default pistol", ut or None) if p)
+    if rt == "pistol":
         parts = [w if w != "?" else "default pistol", ARMOR_FR[a] if a != "none" else None, ut or None]
         return " + ".join(p for p in parts if p)
     if rt == "force":
@@ -264,6 +266,10 @@ NON_BUYS = {"full": "no grenade", "force": "no kevlar"}
 def _real_buys(kits, rt):
     bad = NON_BUYS.get(rt)
     kits = [k for k in kits if not bad or bad not in k["key"]]
+    if rt == "anti-eco":   # against an eco the AWP is the weapon you lose for nothing (the buy card says no AWP)
+        kits = [k for k in kits if not k["key"].startswith("AWP")]
+    if rt == "pistol":   # over the whole base, kevlar wins more pistol rounds (T 54 % vs 47 %, CT 51 % vs 48 %): first
+        kits = [k for k in kits if "kevlar" in k["key"]] + [k for k in kits if "kevlar" not in k["key"]]
     # one AWP per team: when it comes first, say so and keep the best rifle right behind it
     if kits and kits[0]["key"].startswith("AWP"):
         kits[0] = dict(kits[0], why=kits[0]["why"] + ["if the AWP is free on your team"])
@@ -301,10 +307,16 @@ def adapted(sid, maps, arch=None, zone_duels=None, weapons_info=None):
         by = "adr" if rt == "eco" else "win"
         b, p, m = (fits(x[x.rtype == rt], rt) for x in (Bf, Pf, me))
         kits = _real_buys(_blend(b, p, m, "kit", by, weapon_bonus, need=(40, 15, 5)), rt)
+        sides = {}
+        for side in ("T", "CT"):
+            sb = lambda x: fits(x[(x.side == side) & ~x.weapon.isin(NOT_BUYABLE[side])], rt)
+            ks = _real_buys(_blend(sb(b), sb(p), sb(m), "kit", by, weapon_bonus, need=(40, 15, 5)), rt)
+            if ks:
+                sides[side] = {"kits": ks[:3]}
         res["types"][rt] = {"label": TYPE_FR[rt], "rounds": int(len(me[me.rtype == rt])),
                             "win": round(100 * me[me.rtype == rt].won.mean()) if len(me[me.rtype == rt]) else None,
                             "peer_win": round(100 * Pf[Pf.rtype == rt].won.mean()) if len(Pf[Pf.rtype == rt]) else None,
-                            "kits": kits[:3]}
+                            "kits": kits[:3], "sides": sides}
     for mp in maps:
         for side in ("T", "CT"):
             ok_zone = lambda z: bool(z) and "spawn" not in z.lower() and not (side == "T" and z.lower().startswith("bombsite"))

@@ -277,7 +277,7 @@ class Handler(BaseHTTPRequestHandler):
                 elif body.get("action") == "stop":
                     experiments.stop(sid, body.get("id"), "done")
                 else:
-                    return self.send(400, {"error": "action inconnue"})
+                    return self.send(400, {"error": "unknown action"})
                 refresh_plan(sid)
                 return self.send(200, {"ok": True})
             if u.path == "/api/team":

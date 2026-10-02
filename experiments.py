@@ -37,23 +37,23 @@ METRICS = {
 }
 
 TEMPLATES = {
-    "weapon_swap": {"cat": "Arme", "title": "Replace {weapon} with {alt}", "metric": "weapon_duels", "min": 25, "unit_n": "duels",
+    "weapon_swap": {"cat": "Weapon", "title": "Replace {weapon} with {alt}", "metric": "weapon_duels", "min": 25, "unit_n": "duels",
                     "how": ["For 5 games, buy {alt} every time you would have bought {weapon}.", "The coach compares your duels and your damage with each of the two weapons."]},
-    "weapon_keep": {"cat": "Arme", "title": "Play {weapon} first", "metric": "weapon_adr", "min": 20, "unit_n": "rounds",
+    "weapon_keep": {"cat": "Weapon", "title": "Play {weapon} first", "metric": "weapon_adr", "min": 20, "unit_n": "rounds",
                     "how": ["Buy {weapon} as soon as the economy allows, for 5 games."]},
     "zone": {"cat": "Position", "title": "Play {zone_name} on {map_name} as {side}", "metric": "zone_duels", "min": 12, "unit_n": "duels",
              "how": ["On {map_name} as {side}, take {zone_name} whenever it's free, for 3 to 5 games on this map.", "The coach measures your duels in the zone."]},
-    "trade_distance": {"cat": "Habitude", "title": "Stay within trade distance", "metric": "isolated_pr", "min": 4, "unit_n": "games",
+    "trade_distance": {"cat": "Habit", "title": "Stay within trade distance", "metric": "isolated_pr", "min": 4, "unit_n": "games",
                        "how": ["Before every duel, a teammate must be able to avenge you within 2 seconds.", "If nobody covers you: fall back or wait."]},
-    "nades_40s": {"cat": "Habitude", "title": "40-second rule: grenades thrown", "metric": "nades_unused_pr", "min": 4, "unit_n": "games",
+    "nades_40s": {"cat": "Habit", "title": "40-second rule: grenades thrown", "metric": "nades_unused_pr", "min": 4, "unit_n": "games",
                   "how": ["As T, at 1:15 on the clock, all your grenades must be gone.", "As CT, slow down the first contact with a molotov or an HE."]},
-    "advantage": {"cat": "Habitude", "title": "With a man advantage, I play the trade", "metric": "adv_throw", "min": 4, "unit_n": "games",
+    "advantage": {"cat": "Habit", "title": "With a man advantage, I play the trade", "metric": "adv_throw", "min": 4, "unit_n": "games",
                   "how": ["As soon as your team has one more player: no more solo duels, you play in pairs and run the clock.", "Regroup on a site rather than looking for one more kill."]},
     "rotation": {"cat": "Mi-round", "title": "Rotations through the safe route, on the right signal", "metric": "rot_died", "min": 4, "unit_n": "games",
                  "how": ["Only rotate on solid info (bomb seen, 3 players, 2 flashes or more).", "Take the route that keeps you covered and call 'rotating'."]},
     "retake_group": {"cat": "Mi-round", "title": "Grouped retake, never alone", "metric": "rt_solo", "min": 4, "unit_n": "games",
                      "how": ["Bomb planted: wait for your teammates and go in on the same flash.", "Alone against 3 or more with little time: save your weapon."]},
-    "silent": {"cat": "Habitude", "title": "Walk (Shift) when you are alone", "metric": "steps_alone_pr", "min": 4, "unit_n": "games",
+    "silent": {"cat": "Habit", "title": "Walk (Shift) when you are alone", "metric": "steps_alone_pr", "min": 4, "unit_n": "games",
                "how": ["As soon as you are more than 1,200 units away from a teammate as T, and in every clutch: Shift.", "Silent reload (hold R) if an enemy is close."]},
     "prefire": {"cat": "Training", "title": "10 min of prefire before playing", "metric": "xhair", "min": 5, "unit_n": "games",
                 "how": ["Before each session: 10 minutes of a prefire map (workshop) on the map you are about to play.", "In game: crosshair at head height on the next angle, not on the floor."]},
@@ -63,7 +63,7 @@ TEMPLATES = {
                "how": ["5 min of Aim Botz or Aim Rush, 5 min of Deathmatch, 5 min of lineups on the day's map.", "Note it in the pre-session journal."]},
     "session_limit": {"cat": "Session", "title": "At most 3 games per session, stop after 2 losses", "metric": "rating", "min": 6, "unit_n": "games",
                       "how": ["After 3 games or 2 losses in a row: a break of at least 30 minutes, or end of session."]},
-    "opening": {"cat": "Habitude", "title": "Only open with a flash", "metric": "open_win", "min": 5, "unit_n": "games",
+    "opening": {"cat": "Habit", "title": "Only open with a flash", "metric": "open_win", "min": 5, "unit_n": "games",
                 "how": ["No more dry opening duels: flash (yours or a teammate's) or you leave the opening to someone else."]},
 }
 
@@ -273,8 +273,8 @@ def suggestions(sid, adv, mid_bench=None, weapons_info=None, ctx=None, cross=Non
                   "category": TEMPLATES[template]["cat"], "metric": METRICS[TEMPLATES[template]["metric"]][0], "prio": prio})
     for s in (weapons_info or {}).get("suggestions", []):
         if s["kind"] == "weapon_weak":
-            alt = {"M4A1-S": "M4A4", "M4A4": "M4A1-S", "Galil AR": "FAMAS", "FAMAS": "Galil AR", "MP9": "MP5-SD", "MAC-10": "Galil AR",
-                   "AWP": "M4A4", "Desert Eagle": "P250", "SSG 08": "Galil AR", "AK-47": "Galil AR", "MAG-7": "MP9", "Nova": "MP9"}.get(s["weapon"])
+            alt = {"M4A1-S": "M4A4", "M4A4": "M4A1-S", "Galil AR": "XM1014", "FAMAS": "XM1014", "MP9": "MP5-SD", "MAC-10": "Galil AR",
+                   "Desert Eagle": "P250", "AK-47": "Galil AR", "MAG-7": "MP9", "Nova": "XM1014"}.get(s["weapon"])   # same side, same price range
             if alt:
                 add("weapon_swap", s["text"], {"weapon": s["weapon"], "alt": alt}, 8)
         elif s["kind"] == "weapon_strong":

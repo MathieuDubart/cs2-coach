@@ -47,7 +47,7 @@ DRILLS = {
 }
 # rule id -> metrics shown as benchmarks (first = main)
 RULE_METRICS = {"trade": ["traded_pct", "last_alive_pct"], "nades": ["nades_unused_24", "flash_eff"],
-                "hold": ["peek_win", "hold_win"], "flash": ["flash_duels_pct"], "hp": ["lowhp_win"],
+                "hold": ["peek_win"], "flash": ["flash_duels_pct"], "hp": ["lowhp_win"],
                 "range": ["close_win", "far_win"], "pistol": ["pistol_moving"], "spray": ["b9_hit", "b1_hit"],
                 "eco": [], "early": ["early_death_pct"], "xhair": ["xhair"], "open": ["open_win"], "flashmates": ["flash_mates_rate"], "lastalive": ["last_alive_pct"]}
 EXTRA = {  # rules only triggered by the reference population (bottom third)
