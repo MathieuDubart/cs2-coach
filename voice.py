@@ -968,12 +968,13 @@ def parse_call(text, map_name):
     bomb = bool(re.search(r"\b(bombe|bomb|plant|plantée?|posée?|planted)\b", t))
     lone = bool(re.search(r"\b(seul|solo|lurk|lurker)\b", t)) or n == 1
     clear = bool(re.search(r"\b(clear|clean|empty|nobody|vide|personne|no one)\b", t))   # "B clear", "personne en B"
+    me = bool(re.search(r"\b(je suis|j'suis|chui|i'?m|i am|je joue|je reste|je tiens|i play|i'?ll play|i hold|moi je suis)\b", t))   # your own spot
     if not (site or zone or rush or bomb):
         return None
     if len(words) > 5 and not (n or zone or rush or bomb):
         return None   # a sentence with a letter in it, not a call
     regs = [h[1] for h in hits if h[1] in ("A", "B")]   # every zone named, with its side of the map ("1 jungle, 1 connector": A twice)
-    return {"site": site, "n": n, "zone": zone, "rush": rush, "bomb": bomb, "lone": lone, "clear": clear, "regs": regs}
+    return {"site": site, "n": n, "zone": zone, "rush": rush, "bomb": bomb, "lone": lone, "clear": clear, "regs": regs, "me": me}
 
 
 if __name__ == "__main__":
