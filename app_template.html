@@ -539,6 +539,7 @@ svg.radar .kwt{font:800 12px var(--f-mono);fill:#bff5c8;paint-order:stroke;strok
 .vsit.key span{color:var(--flash)}
 table.lc{border-collapse:collapse;font-variant-numeric:tabular-nums;min-width:640px}table.lc th,table.lc td{padding:6px 10px;border-bottom:1px solid var(--line);text-align:left;font-size:14px}table.lc th{font:600 12px var(--f-mono);color:var(--muted);text-transform:uppercase;letter-spacing:.04em}table.lc .good{color:var(--good)}table.lc .bad{color:var(--bad)}
 .vrows.econ .vrow{grid-template-columns:3.2em minmax(48px,1fr) 2.6em 4em;gap:6px}   /* the buy card fits the side column: short labels, the bar keeps its room */
+.vsit small{font:600 13px var(--f-mono);color:var(--muted);letter-spacing:.04em}   /* "won" next to a win rate */
 </style>
 
 <div class="bar"><div class="bar-in">
@@ -2185,7 +2186,7 @@ function nearT(list,t,before,after,min){if(t==null)return list;const w=list.filt
   return w.length>=min?w:list.slice().sort((a,b)=>Math.abs((a.t_med??t)-t)-Math.abs((b.t_med??t)-t)).slice(0,min)}
 // a T path: a thin line with a dark casing, chevrons for the way, the play's number where it ends; on a map with
 // levels, only the parts on the level shown; the first one also tells when to be at the site's door
-function tPath(lay,top,pts,col,ranks,level,first,pct){const on=q=>!q[2]||!level||q[2]===level;let seg=[];const segs=[];
+function tPath(lay,top,pts,col,ranks,level,first,pct,rot){const on=q=>!q[2]||!level||q[2]===level;let seg=[];const segs=[];
   pts.forEach(q=>{if(on(q))seg.push(q);else{if(seg.length>1)segs.push(seg);seg=[]}});if(seg.length>1)segs.push(seg);
   segs.forEach(sg=>{const s=sg.map(q=>q[0]+","+q[1]).join(" ");
     el("polyline",{points:s,style:"fill:none;stroke:#0b0f14;stroke-width:5.5;stroke-opacity:.7;stroke-linejoin:round;stroke-linecap:round"},lay);
@@ -2193,7 +2194,7 @@ function tPath(lay,top,pts,col,ranks,level,first,pct){const on=q=>!q[2]||!level|
     let acc=0;for(let i=0;i<sg.length-1;i++){const a=sg[i],b=sg[i+1],d=Math.hypot(b[0]-a[0],b[1]-a[1]);acc+=d;if(acc<110||d<4)continue;acc=0;   // a chevron every ~110 px
       const ux=(b[0]-a[0])/d,uy=(b[1]-a[1])/d,mx=b[0],my=b[1];
       el("path",{d:`M${mx-ux*5-uy*5} ${my-uy*5+ux*5}L${mx+ux*3} ${my+uy*3}L${mx-ux*5+uy*5} ${my-uy*5-ux*5}`,style:`fill:none;stroke:${col};stroke-width:2.4;stroke-linecap:round;stroke-linejoin:round`},lay)}});
-  const end=pts[pts.length-1];if(on(end)){const t=ranks.join("·")+(pct!=null?` · ${pct}%`:""),w=7.4*t.length+12,y=place(top,end[0],end[1]-21,w,18),gg=el("g",{},top);
+  const end=pts[pts.length-1];if(on(end)){const t=ranks.join("·")+(rot?" ↻":"")+(pct!=null?` · ${pct}% won`:""),w=7.4*t.length+12,y=place(top,end[0],end[1]-21,w,18),gg=el("g",{},top);
     el("rect",{x:end[0]-w/2,y:y-9,width:w,height:18,rx:9,style:`fill:${col};stroke:#0b0f14;stroke-width:1.5`},gg);
     el("text",{x:end[0],y:y+4,"text-anchor":"middle",class:"pbt"},gg).textContent=t;
     if(first&&end[3]!=null)qLabel(top,end[0],y,w/2,clock(end[3]),"ptt",5)}   // when the way reaches the site
@@ -2240,9 +2241,9 @@ function liveRadar(box,p,map,level,g,o){
   // T side, before the hit: the way from the spawn of the plays that win most (numbered like the side panel's lines)
   if(!ct&&on("paths")&&o.following&&g&&!planted&&(g.round_phase==="freezetime"||(live&&(g.elapsed||0)<45))){const W=winsRank(p,g);
     if(W){const seen=new Map();W.rows.slice(0,3).forEach(r=>{if(!r.route)return;const k=r.route.zones.join(">");if(seen.has(k)){seen.get(k).push(r.rank);return}seen.set(k,[r.rank]);r._k=k});
-      W.rows.slice(0,3).filter(r=>r._k).reverse().forEach(r=>tPath(Lrot,Ltop,r.route.pts,r.col,seen.get(r._k),level,r.rank===1,r.wr));   // the play's chance this round (a route alone is biased: only the ones who got there alive count)
-      if(seen.size&&W.rotated)legend.push(`<span>${SW.tpath}path 1 changed: the one shown before lost or was shown too often, they read you too</span>`);
-      if(seen.size)legend.push(`<span>${SW.tpath}your way from the spawn: 1 wins most this round (${esc(RT_EN[W.rt]||W.rt)}${W.eb&&W.eb.full>=.5?" vs their full buy":W.eb&&W.eb.eco>=.5?" vs their eco":""}, ${RUN_EN[W.run]})</span>`)}}
+      W.rows.slice(0,3).filter(r=>r._k).reverse().forEach(r=>tPath(Lrot,Ltop,r.route.pts,r.col,seen.get(r._k),level,r.rank===1,r.wr,r.rot));   // the play's chance this round (a route alone is biased: only the ones who got there alive count)
+      if(seen.size&&W.rows.some(r=>r.rot))legend.push(`<span>${SW.tpath}↻ ranked ahead of a better %: that one lost this half or was played too often, they read you too</span>`);
+      if(seen.size)legend.push(`<span>${SW.tpath}your way from the spawn, % won = rounds won by its play in this situation (${esc(RT_EN[W.rt]||W.rt)}${W.eb&&W.eb.full>=.5?" vs their full buy":W.eb&&W.eb.eco>=.5?" vs their eco":""}, ${RUN_EN[W.run]})</span>`)}}
   // T side: where the CTs stand when you get there, and the angles they kill from (! = a spot they kill a lot from for the
   // little time they spend there: the angle the Ts forget)
   const CS=!ct&&M&&M.ct_spots;
@@ -2333,16 +2334,16 @@ const vRule=(icon,label,bad,good)=>`<div class="vrule"><i>${icon}</i><span>${lab
 function vYou(p,g,sk){const PL=p.advice.plan||{},me=((PL.situ_me||{})[g.side])||{},base=((((PL.tside||{}).situations||{}).base_by_side||{})[g.side])||{};
   const key={ct_anti_eco:"anti_eco",t_anti_eco:"anti_eco",full_full:"full_full",ct_force:"force_full",t_force:"force_full",t_eco:"eco_full",pistol:"pistol"}[sk];
   const m=me[key],b=base[key];if(!m||m[0]<8||!b)return "";
-  return `<div class="vyou"><span>YOU</span><b class="${m[1]>=b[1]?"good":"bad"}">${m[1]}%</b><small>vs ${b[1]}</small><em>⛔</em><b class="${m[2]<=b[2]?"good":"bad"}">${m[2]}%</b><small>vs ${b[2]} · ${m[0]} rds</small></div>`}
+  return `<div class="vyou"><span>YOU</span><b class="${m[1]>=b[1]?"good":"bad"}">${m[1]}%</b><small>won · vs ${b[1]}</small><em>⛔</em><b class="${m[2]<=b[2]?"good":"bad"}">${m[2]}%</b><small>dead early · vs ${b[2]} · ${m[0]} rds</small></div>`}
 function vSituation(p,g){const SI=(((p.advice.plan||{}).tside)||{}).situations||{},out=[];
   if(g.side==="CT"&&(g.round===1||g.round===13)){const R=(SI.pistol_ct||{}).rush||{},k0=(R.kevlar||{})["0-2"],k5=(R.kevlar||{})["5"]||(R.kevlar||{})["3-4"],s1=(R.on_site||{})["1"],s2=(R.on_site||{})["2+"];
     const SP=((((((p.advice.plan||{}).tside||{}).maps||{})[g.map]||{}).setplays||{}).CT||{}).pistol;
-    out.push(`<div class="vsit"><span>PISTOL</span>${SP&&SP.n>=15?`<b class="${vTone(SP.win)}">${SP.win}%</b>`:""}</div>`);
+    out.push(`<div class="vsit"><span>PISTOL</span>${SP&&SP.n>=15?`<b class="${vTone(SP.win)}">${SP.win}%</b><small>won</small>`:""}</div>`);
     if(k0&&k5)out.push(vRule("🛡","kevlar",k0[1],k5[1]));if(s1&&s2)out.push(vRule("👥","2 on site",s1[1],s2[1]));
     out.push(`<div class="vrule"><i>✕</i><span>nades vs rush</span></div>`,vYou(p,g,"pistol"));return out.join("")}
   const k=sitKey(p,g),c=k&&SI[k];if(!c)return "";
   const win=g.side==="CT"?100-c.t_win:c.t_win,e=c[`early_${g.side}`];
-  out.push(`<div class="vsit"><span>${{ct_anti_eco:"ANTI-ECO",t_anti_eco:"ANTI-ECO",full_full:"FULL vs FULL",ct_force:"FORCE vs FULL",t_force:"FORCE vs FULL",t_eco:"ECO vs FULL"}[k]}</span><b class="${vTone(win)}">${win}%</b></div>`);
+  out.push(`<div class="vsit"><span>${{ct_anti_eco:"ANTI-ECO",t_anti_eco:"ANTI-ECO",full_full:"FULL vs FULL",ct_force:"FORCE vs FULL",t_force:"FORCE vs FULL",t_eco:"ECO vs FULL"}[k]}</span><b class="${vTone(win)}">${win}%</b><small>won</small></div>`);
   if(e)out.push(vRule("⛔",`dead before ${clock(20)}`,e[1],e[0]));   // no AWP against an eco: on the buy card, not twice
   if(k==="t_force"||k==="t_eco")out.push(`<div class="vrule"><i>👥</i><span>together</span></div>`);
   out.push(vYou(p,g,k));
@@ -2352,16 +2353,16 @@ function vSituation(p,g){const SI=(((p.advice.plan||{}).tside)||{}).situations||
 function vTimeline(p,g){const TS=(p.advice.plan||{}).tside,M=TS&&TS.maps&&TS.maps[g.map],TP=(M&&M.tplan)||{},rt=advisedType(g);
   const tp=(TP.tempo||{})[rt==="pistol"?"pistol":rt]||(TP.tempo||{}).full||{},L=RLEN(),el=g.round_phase==="live"?(g.elapsed||0):0;
   const seg=[["rush",0,30],["exec",30,75],["late",75,L]].filter(s=>s[2]>s[1]);
-  return `<div class="vtl">${seg.map(([k,a,b])=>{const v=(tp[k]||[])[1];
+  return vHead("ROUNDS WON · BY TEMPO")+`<div class="vtl">${seg.map(([k,a,b])=>{const v=(tp[k]||[])[1];
       return `<div class="vseg ${vTone(v)}${el>b?" past":""}" style="flex:${b-a}"><span>${k}</span>${v!=null?`<b>${v}%</b>`:""}</div>`}).join("")}
     ${g.round_phase==="live"?`<i class="vcur" style="left:${Math.min(100,100*el/L)}%"></i>`:""}</div>`}
 function vCTdots(p,g){const TS=(p.advice.plan||{}).tside,M=TS&&TS.maps&&TS.maps[g.map],TP=(M&&M.tplan)||{},rt=advisedType(g);
   const su=(TP.setup||{})[rt==="pistol"?"pistol":rt]||(TP.setup||{}).all;if(!su||!su.top||!su.top.length)return "";const t=su.top[0];
   const dots=n=>"●".repeat(n)||"○";
-  return `<div class="vdots"><span>A</span><b>${dots(t[0])}</b><em>|</em><span>B</span><b>${dots(t[1])}</b>${t[2]?`<em>|</em><span>mid</span><b>${dots(t[2])}</b>`:""}<small>${t[3]}%</small></div>`}
+  return vHead("CT SETUP · MOST USED")+`<div class="vdots"><span>A</span><b>${dots(t[0])}</b><em>|</em><span>B</span><b>${dots(t[1])}</b>${t[2]?`<em>|</em><span>mid</span><b>${dots(t[2])}</b>`:""}<small>${t[3]}% of rounds</small></div>`}
 function vTchips(p,g){const TS=(p.advice.plan||{}).tside,M=TS&&TS.maps&&TS.maps[g.map],TP=(M&&M.tplan)||{},P_=M&&M.plays,out=[];
-  const ro=TP.rotation||{};if(ro.A||ro.B)out.push(`<span class="vchip">↻ ${["A","B"].filter(L=>ro[L]).map(L=>`${L} ${Math.round(ro[L].med)}s`).join(" · ")}</span>`);
-  const fk=TP.fake||{};if(fk.switch&&fk.direct&&fk.switch[1]-fk.direct[1]>=5)out.push(`<span class="vchip good">FAKE ${fk.switch[1]}% <small>vs ${fk.direct[1]}</small></span>`);
+  const ro=TP.rotation||{};if(ro.A||ro.B)out.push(`<span class="vchip">CT ↻ ${["A","B"].filter(L=>ro[L]).map(L=>`${L} ${Math.round(ro[L].med)}s`).join(" · ")}</span>`);
+  const fk=TP.fake||{};if(fk.switch&&fk.direct&&fk.switch[1]-fk.direct[1]>=5)out.push(`<span class="vchip good">FAKE ${fk.switch[1]}% won <small>vs ${fk.direct[1]} direct</small></span>`);
   return out.length?`<div class="vchips">${out.join("")}</div>`:""}
 // one option per line: the label, a bar (the longest is the most likely), the number. Fixed order for the sites,
 // so the eye finds A and B at the same place every time
@@ -2369,13 +2370,13 @@ const SITE_C={A:"var(--siteA)",B:"var(--siteB)"};
 const vHead=t=>`<div class="vhead">${t}</div>`;
 function vRows(rows){const mx=Math.max(...rows.map(r=>r.v),1);
   return `<div class="vrows">${rows.map(r=>`<div class="vrow" style="--c:${r.c||"var(--ink)"}${r.o!=null&&r.o<1?`;opacity:${r.o}`:""}"><span>${r.l}</span><i><u style="width:${Math.max(4,Math.round(100*r.v/mx))}%"></u></i><b>${Math.round(r.v)}%</b></div>`).join("")}</div>`}
-function vOdds(r){return `<div class="vodds">${vRows([{l:"A",v:r.A,c:SITE_C.A},{l:"B",v:r.B,c:SITE_C.B},{l:"?",v:r.none,c:"var(--muted)"}])}</div>`}
+function vOdds(r,h){return vHead(h||"WHERE THEY GO · LIKELY")+`<div class="vodds">${vRows([{l:"A",v:r.A,c:SITE_C.A},{l:"B",v:r.B,c:SITE_C.B},{l:"?",v:r.none,c:"var(--muted)"}])}</div>`}
 // a rush: how likely, and where it goes (the most likely in big, the second smaller and fainter)
 function vRush(TS,g,r){const PLs=tsidePlays(TS,g.map,g,evFor(g),r);if(!PLs)return "";
   const rn=r.live?Math.round(100*PLs.rush):r.rush,rs=(PLs.list||[]).filter(x=>/^rush/.test(x.p)).sort((a,b)=>b.v-a.v);
   if(rn<15||!rs.length)return "";
   const lab=x=>`${x.site} · ${vShort(String(x.label||"").replace(/^Rush [AB]( through )?/,""))}`;
-  return `<div class="vbig ${rn>=40?"bad":"warn"}"><b>RUSH ${rn}%</b><span>until ${clock(32)}</span></div>`+
+  return `<div class="vbig ${rn>=40?"bad":"warn"}"><b>RUSH ${rn}%</b><span>likely · until ${clock(32)}</span></div>`+
     vRows(rs.slice(0,2).map((x,i)=>({l:lab(x),v:100*x.v,c:SITE_C[x.site],o:i?.6:1})))}
 // where the fights are at this moment of the round (deaths of both sides in the base, on the likely site when the
 // read leans one way): three zones, fainter as they get less likely
@@ -2384,11 +2385,11 @@ function vFights(M,g,r){const D=((M&&M.evidence)||{}).deaths;if(!D)return "";con
   for(const side of ["CT","T"]){const src=((D[side]||{})[lean]||{})[w]||((D[side]||{}).all||{})[w];if(!src)continue;
     src.zones.forEach(z=>{acc[z.zone]=(acc[z.zone]||0)+z.pct*src.n});tot+=src.n}
   const top=Object.entries(acc).sort((a,b)=>b[1]-a[1]).slice(0,3);if(!top.length||!tot)return "";
-  return vHead("⚔ FIGHTS NOW")+vRows(top.map(([z,v],i)=>({l:vShort(z),v:v/tot,c:"var(--ink)",o:[1,.75,.5][i]})))}
+  return vHead("⚔ FIGHTS NOW · SHARE OF DUELS")+vRows(top.map(([z,v],i)=>({l:vShort(z),v:v/tot,c:"var(--ink)",o:[1,.75,.5][i]})))}
 // before the round (CT): where the Ts come from, one entrance per line
 function vEntries(TS,g,r){const PLs=tsidePlays(TS,g.map,g,evFor(g),r);if(!PLs)return "";
   const top=PLs.lanes.filter(L=>L.p>=0.05).sort((a,b)=>b.p-a.p).slice(0,3);if(!top.length)return "";
-  return vHead("⇢ ENTRIES")+vRows(top.map((L,i)=>({l:`${L.site} · ${vShort(L.name)}`,v:100*L.p,c:SITE_C[L.site],o:[1,.75,.5][i]})))}
+  return vHead("⇢ ENTRIES · LIKELY")+vRows(top.map((L,i)=>({l:`${L.site} · ${vShort(L.name)}`,v:100*L.p,c:SITE_C[L.site],o:[1,.75,.5][i]})))}
 function nowVisual(p,g,following){
   if(!following)return nowPanel(p,g,following,{noBuy:true});
   if(g.practice)return `<div class="vz"><div class="vsit"><span>PRACTICE</span></div></div>`;
@@ -2528,9 +2529,12 @@ function winsRank(p,g){const TS=(p.advice.plan||{}).tside,M=TS&&TS.maps&&TS.maps
     const pc=playCtx(M,k,tb,eb,run),wr=Math.round(100*pc.p),shift=LGT(CLP(pc.p))-LGT(pc.base);
     const rs=(RT[k]||[]).filter(x=>x.n>=6),route=rs.sort((a,b)=>lb(b.win,b.n)-lb(a.win,a.n))[0]||(RT[k]||[])[0]||null;
     const rwin=route?Math.round(100*SIG(LGT(CLP(route.win/100))+shift)):null;   // the route's own rounds, moved like its play for this round
-    return {k,n,wr,use,route,rwin,won:Math.round(n*w/100),s:lb(wr,n)}}).filter(r=>r.n>=8).sort((a,b)=>b.s-a.s).slice(0,6);
+    return {k,n,wr,use,route,rwin,won:Math.round(n*w/100)}}).filter(r=>r.n>=8);
+  const nb=rows.reduce((a,r)=>a+r.n,0),mean=nb?rows.reduce((a,r)=>a+r.wr*r.n,0)/nb:50;
+  rows.forEach(r=>{r.wr=Math.round((r.wr*r.n+mean*20)/(r.n+20));r.s=r.wr/100+r.n*1e-7});   // few rounds: closer to the mean
+  rows.sort((a,b)=>b.s-a.s);rows.splice(6);
   const PM=planMemory(g,rows);const rows2=PM.rows.slice(0,4);
-  rows2.forEach((r,i)=>{r.rank=i+1;r.col=WIN_C[i]});
+  rows2.forEach((r,i)=>{r.rank=i+1;r.col=WIN_C[i];r.rot=rows2.slice(i+1).some(x=>x.wr>r.wr)});   // ↻: ahead of a better % to stay unpredictable
   return {rows:rows2,rt,ctx:true,run,eb,rotated:PM.rotated,label:P_.label||{}}}
 function vWins(p,g){const W=winsRank(p,g);if(!W||!W.rows.length)return "";const rows=W.rows,rt=W.rt,P_={label:W.label};
 
@@ -2640,7 +2644,7 @@ function briefState(g){const T=g.side==="T";return Object.assign({},g,{round:4,r
 function briefVisual(p,g){const TS=(p.advice.plan||{}).tside||{},M=(TS.maps||{})[g.map]||{},T=g.side==="T",b=briefState(g),out=[];
   out.push(`<div class="vsit key"><span>BRIEF · ${esc(MAPN(g.map))} · YOU START ${g.side||"?"}</span></div>`);
   if(T){const W=winsRank(p,b);if(W&&W.rows.length)out.push(vHead("FULL vs FULL · PATHS ON THE MAP"),`<div class="vchips">${W.rows.slice(0,3).map(r=>`<span class="vchip"><em class="rk" style="background:${r.col};display:inline-grid;place-items:center;width:16px;height:16px;border-radius:8px;color:#1a1206;font:800 11px var(--f-mono);font-style:normal;margin-right:4px">${r.rank}</em>${vShort(String((M.plays.label||{})[r.k]||r.k).replace(/^([AB]) through /,"$1 · ").replace(/^Rush ([AB]) through /,"⚡$1 · "))}</span>`).join("")}</div>`)}
-  else{const r=tsidePredict(TS,g.map,b,{});if(r)out.push(vHead("THEIR FULL BUYS"),vOdds(r))}
+  else{const r=tsidePredict(TS,g.map,b,{});if(r)out.push(vOdds(r,"THEIR FULL BUYS · WHERE THEY GO"))}
   // the typical money of each key round: R2 after a lost pistol, an eco after 2 lost rounds, a force after 3
   const TYP={pistol:{round:1,money:800,losses:0},eco_force:{round:2,money:1900,losses:1},eco_full:{round:4,money:2400,losses:2},force_full:{round:5,money:3300,losses:3}};
   const first=k=>{const kw=keyWeapons(p,{...b,...TYP[k],side:g.side,round_phase:"freezetime",primary:null,pistol:null},k),L=kw.list;
