@@ -540,6 +540,7 @@ svg.radar .kwt{font:800 12px var(--f-mono);fill:#bff5c8;paint-order:stroke;strok
 table.lc{border-collapse:collapse;font-variant-numeric:tabular-nums;min-width:640px}table.lc th,table.lc td{padding:6px 10px;border-bottom:1px solid var(--line);text-align:left;font-size:14px}table.lc th{font:600 12px var(--f-mono);color:var(--muted);text-transform:uppercase;letter-spacing:.04em}table.lc .good{color:var(--good)}table.lc .bad{color:var(--bad)}
 .vrows.econ .vrow{grid-template-columns:3.2em minmax(48px,1fr) 2.6em 4em;gap:6px}   /* the buy card fits the side column: short labels, the bar keeps its room */
 .vsit small{font:600 13px var(--f-mono);color:var(--muted);letter-spacing:.04em}   /* "won" next to a win rate */
+.upd{font:600 12.5px var(--f-body);background:none;border:1px solid var(--line);color:var(--ink);border-radius:10px;padding:3px 10px;cursor:pointer;white-space:nowrap}.upd:hover{border-color:var(--ct);color:var(--ct)}.upd:disabled{opacity:.5;cursor:wait}
 </style>
 
 <div class="bar"><div class="bar-in">
@@ -551,6 +552,7 @@ table.lc{border-collapse:collapse;font-variant-numeric:tabular-nums;min-width:64
     <a href="#players" data-view="players">Explore</a>
   </nav>
   <span class="whochip" id="whochip"></span>
+  <button type="button" class="upd" id="updbtn" hidden title="Fetch your new matches from Steam and analyze them">↻ Update</button>
   <form class="search" id="search" role="search" autocomplete="off">
     <input id="q" name="q" type="search" placeholder="Steam link, SteamID64, name or CSGO-… share code" aria-label="Find a player: Steam profile link, SteamID64 or name">
     <button type="submit" id="qbtn">Analyze</button>
@@ -2926,9 +2928,9 @@ function poll(){clearTimeout(polling);polling=setTimeout(async()=>{
   const logs=(j.log||[]).slice(-60).map(esc).join("\n");
   if(j.running){
     if(j.partial&&partialShown!==j.partial&&mayGo()){partialShown=j.partial;try{D.index=await (await fetch(`index.json?t=${Date.now()}`)).json();playerOptions();delete D.players[j.partial];await setPlayer(j.partial,true);go(j.partial===D.own?"ingame":"analysis");jobFrom=S.view}catch(e){}}
-    jobPanel(`<div class="row"><b><span class="spin" aria-hidden="true"></span>${partialShown?"First preview shown. Full demo analysis running…":j.view==="matches"?"Analyzing the match again…":`Analyzing ${esc(j.query)}…`}</b><span class="note">The profile completes itself at the end (from a few seconds to a few minutes).</span></div><pre>${logs||"Starting…"}</pre>`);poll();return}
+    jobPanel(`<div class="row"><b><span class="spin" aria-hidden="true"></span>${partialShown?"First preview shown. Full demo analysis running…":j.view==="matches"?"Analyzing the match again…":/^Steam sync/.test(j.query||"")?"Updating your matches…":`Analyzing ${esc(j.query)}…`}</b><span class="note">The profile completes itself at the end (from a few seconds to a few minutes).</span></div><pre>${logs||"Starting…"}</pre>`);poll();return}
   $("#qbtn").disabled=false;const go_=mayGo();jobFrom=null;
-  if(j.error){jobPanel(`<b>${esc(j.error)}</b><pre>${logs}</pre>`,"err");return}
+  if(j.error){updFrom=null;const ub=$("#updbtn");if(ub)ub.disabled=false;jobPanel(`<b>${esc(j.error)}</b><pre>${logs}</pre>`,"err");return}
   if(j.players&&j.players.length){D.index=await (await fetch(`index.json?t=${Date.now()}`)).json();playerOptions();
     const nm=((j.query||"").match(/CSGO(-[\w]{5}){5}/g)||[]).length,ps=[...j.players].sort((a,b)=>(b.steamid===D.own)-(a.steamid===D.own)),
       btn=p=>`<button type="button" data-mp="${p.steamid}">${esc(p.name)}</button>`;
@@ -2940,7 +2942,9 @@ function poll(){clearTimeout(polling);polling=setTimeout(async()=>{
       jobPanel(`<b>The match is analyzed again.</b> Profile, plan and in-game sheet updated.${go_?"":openBtn(j.steamid,null,"matches")}<pre>${logs}</pre>`,"ok");bindOpen()}
     catch(e){jobPanel(`<b>The match could not be shown.</b><pre>${logs}</pre>`,"err")}return}
   if(j.steamid){try{D.index=await (await fetch(`index.json?t=${Date.now()}`)).json();playerOptions();delete D.players[j.steamid];
-      const e=(D.index||[]).find(x=>x.steamid===j.steamid)||{},view=j.steamid===D.own?"ingame":"analysis";
+      const upd=updFrom;updFrom=null;const ub=$("#updbtn");if(ub)ub.disabled=false;
+      if(upd&&/(^|\D)0 new match/.test((j.log||[]).slice(-3).join(" "))&&!(j.log||[]).some(l=>/demo\(s\) from Valve|Analyzing/.test(l))){if(S.player===j.steamid)await setPlayer(j.steamid,true);go(upd);jobPanel(`<b>Up to date</b>: no new match since the last analysis.`,"ok");return}
+      const e=(D.index||[]).find(x=>x.steamid===j.steamid)||{},view=upd||(j.steamid===D.own?"ingame":"analysis");
       if(go_){await setPlayer(j.steamid,true);S.map=null}
       jobPanel(`<b>${esc(e.name||j.steamid)} is analyzed.</b> ${e.light?"Light profile (Leetify stats, no demo available).":e.n!=null?`${e.n} demo(s) analyzed.`:""}${go_?"":openBtn(j.steamid,e.name,view)}<pre>${logs}</pre>`,"ok");bindOpen();if(go_)go(view)}
     catch(e){jobPanel(`<b>Nothing to show for this player.</b><pre>${logs}</pre>`,"err")}}},1000)}
@@ -2979,6 +2983,12 @@ S.map=HOST(store("map"))?null:store("map");S.side=store("side")||"T";
 window.addEventListener("hashchange",()=>show(location.hash.slice(1)));
 S.view=ALIAS[location.hash.slice(1)]||location.hash.slice(1)||"ingame";if(!RENDER[S.view])S.view="ingame";
 if(store("focus"))document.body.classList.add("focus");
+// Update: your new matches fetched and analyzed (the same as the automatic sync, now)
+let updFrom=null;
+{const ub=$("#updbtn");if(ub&&D.local&&D.own){ub.hidden=false;
+  ub.onclick=async()=>{ub.disabled=true;updFrom=S.view;jobFrom=S.view;
+    try{await api("/api/steam/sync",{sid:D.own});poll()}
+    catch(e){if(/already running/i.test(e.message||""))poll();else{ub.disabled=false;updFrom=null;jobPanel(`<b>${esc(e.message||"Update impossible")}</b>`,"err")}}}}}
 const sp=store("player");
 setPlayer(sp&&IDX()[sp]?sp:(D.own&&IDX()[D.own]?D.own:(D.local&&D.own?null:(D.default||(D.index[0]||{}).steamid||null))));
 if(D.local){
