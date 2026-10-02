@@ -12,7 +12,7 @@ import re
 
 import gsi
 
-KEYS = {1: "KP_END", 2: "KP_DOWNARROW", 3: "KP_PGDN"}   # numpad 1, 2, 3 (num lock off or on: the same keys in CS2)
+KEYS = {1: "KP_1", 2: "KP_2", 3: "KP_3"}   # numpad 1, 2, 3: CS2's names (the physical key, num lock on or off); KP_END etc. were CS:GO's
 BINDS = "coach_binds.cfg"
 _LAST = {}
 
