@@ -2389,7 +2389,11 @@ function liveRadar(box,p,map,level,g,o){
     if(NP.length)legend.push(`<span>${SW.nade}your grenades for this moment: from the white dot to its icon</span>`)}
   // after the plant: the way to the site from where you are, and where the bomb usually is
   const you=o.following&&g&&g.pos&&GEO?worldPx(GEO,g.pos):null;
-  if(ct&&on("rot")&&planted&&site&&M&&GEO){const from=you?nearestZone(GEO,you.px,you.level):(SP[0]||{}).name,R=rotationFor(M,site,from,GEO);
+  // before the plant, when the read leans hard to one site (70%+): the rotation from the other one (you may be holding it)
+  let rotSite=planted?site:null,rotFrom=null;
+  if(ct&&!planted&&live&&o.following&&g&&(g.elapsed||0)>=15&&(g.elapsed||0)<=80&&M&&M.plays){const r_=tsidePredict(TS,map,g,evFor(g));
+    if(r_&&Math.max(r_.A,r_.B)>=70){rotSite=r_.A>r_.B?"A":"B";rotFrom=`${rotSite==="A"?"B":"A"} Site`}}
+  if(ct&&on("rot")&&rotSite&&M&&GEO){const site=rotSite,from=rotFrom||(you?nearestZone(GEO,you.px,you.level):(SP[0]||{}).name),R=rotationFor(M,site,from,GEO);
     if(R&&R.routes){R.routes.slice().reverse().forEach((rt,j)=>{const i=R.routes.length-1-j,col=rt.died>=40?"var(--bad)":rt.died>=20?"#e0a526":"var(--good)";let m_;
         if(rt.pts&&rt.pts.length>2){   // the walk of the base (the corridors)
           const w=you&&i===0&&you.level===level?[[you.px[0],you.px[1],you.level],...rt.pts]:rt.pts,sg=rotPath(Lrot,w,col,i===0,level);if(!sg.length)return;
@@ -2688,7 +2692,9 @@ function nowVisual(p,g,following){
     else if(isHostage(g.map))out.push(ct?(vFocus(p,g)||(el<45?vHostRoutes(p,g,false):"")):(el<45?vHostRoutes(p,g,true):""));
     else if(ct){if(r){out.push(vOdds(r));
         const PLs=tsidePlays(TS,g.map,g,evFor(g),r),M=TS&&TS.maps&&TS.maps[g.map];
-        const rush=el<32?vRush(TS,g,r):"";out.push(rush||vFights(M,g,r));if(el<75)out.push(vCTline(p,g,r)||(el<60?vHold(p,g,r):""));
+        const rush=el<32?vRush(TS,g,r):"";out.push(rush||vFights(M,g,r));
+        if(el>=15&&el<=80&&Math.max(r.A,r.B)>=70&&typeof rotationFor==="function"){const X=r.A>r.B?"A":"B",o=X==="A"?"B":"A",R=rotationFor(M,X,`${o} Site`,M.geo),rt=R&&R.routes&&R.routes[0];
+          if(rt)out.push(`<div class="vbig warn"><b>${o} → ${X}</b><span>if you hold ${o}: rotate · ${rt.travel!=null?`${Math.round(rt.travel)} s · `:""}${rt.died}% die on the way</span></div>`)}   // the hit leans hard to one siteif(el<75)out.push(vCTline(p,g,r)||(el<60?vHold(p,g,r):""));
         (r.evid||[]).filter(x=>/spot/.test(x)).slice(0,2).forEach(ev=>out.push(`<span class="vchip ${/fight/.test(ev)?"bad":""}">● ${esc(ev)}</span>`))}}
     else{out.push(vOpen(g),vFocus(p,g)||vPathCurve(p,g)||vTimeline(p,g),(el<45&&vPush(p,g))||vFights(TS&&TS.maps&&TS.maps[g.map],g,null),el<50?vPushAns(p,g,true):"");
       const left=g.phase_left!=null?g.phase_left:Math.max(0,RLEN()-el);
