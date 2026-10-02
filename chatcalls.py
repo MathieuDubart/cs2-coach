@@ -16,6 +16,7 @@ import gsi
 
 KEYS = {1: "KP_1", 2: "KP_2", 3: "KP_3"}   # numpad 1, 2, 3: CS2's names (the physical key, num lock on or off); KP_END etc. were CS:GO's
 FOCUS_OFF = "KP_MINUS"   # numpad minus: drop the focus on a path
+EXTRA = {"eco": "KP_DEL", "sit": "KP_0"}   # numpad ".": the economy plan; numpad 0: the situation, recent and global
 BINDS = "coach_binds.cfg"
 _LAST = {}
 WHEEL = {"A": 'playerchatwheel CW.GoA "#Chatwheel_aplan"', "B": 'playerchatwheel CW.GoB "#Chatwheel_bplan"'}   # the chat wheel's Go A / Go B
@@ -32,12 +33,14 @@ def binds_text():
     lines = ["// Coach CS2: numpad 1, 2 and 3 say path 1, 2 and 3 of the In game page in the team chat"]
     lines += [f'bind "{k}" "exec coach_path{i}"' for i, k in KEYS.items()]
     lines += [f'bind "{FOCUS_OFF}" "exec coach_focus0"']
+    lines += [f'bind "{k}" "exec coach_{name}"' for name, k in EXTRA.items()]
     lines += ['echo "Coach CS2: numpad 1-2-3 say the paths in the team chat"']
     return "\n".join(lines) + "\n"
 
 
-def write(paths):
-    """paths: [{"rank": 1, "text": "..."}, ...] from the page; a rank without a path only prints a note in the console."""
+def write(paths, extra=None):
+    """paths: [{"rank": 1, "text": "..."}, ...] from the page; a rank without a path only prints a note in the console.
+    extra: {"eco": "...", "sit": "..."}, the economy plan and the situation, for numpad "." and 0 (one line each)."""
     d = gsi.cfg_dir()
     if not d:
         return False
@@ -63,6 +66,12 @@ def write(paths):
         if _LAST.get(i) != body:
             open(os.path.join(d, f"coach_path{i}.cfg"), "w", encoding="utf-8").write(body)
             _LAST[i] = body
+    for name in EXTRA:
+        t = clean((extra or {}).get(name)) if isinstance(extra, dict) else ""
+        body = f'say_team "{t}"\n' if t else f'echo "Coach CS2: nothing to say for this key now"\n'
+        if _LAST.get(name) != body:
+            open(os.path.join(d, f"coach_{name}.cfg"), "w", encoding="utf-8").write(body)
+            _LAST[name] = body
     return True
 
 
