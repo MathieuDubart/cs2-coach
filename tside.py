@@ -622,7 +622,7 @@ def econ_table(df):
 
 
 SUMMARY = os.path.join(config.OUT, "population", "tside_summary.json")
-VERSION = 31   # bump when the summary changes shape: the cache is rebuilt
+VERSION = 32   # bump when the summary changes shape: the cache is rebuilt
 
 
 def _stamp():
@@ -722,6 +722,7 @@ def _tendencies(maps, df):
             res["maps"][mp]["ct_spots"] = _ct_spots(mp, dirs.get(mp, []))
             res["maps"][mp]["ct_push"] = _ct_push(mp, dirs.get(mp, []))
             res["maps"][mp]["push_answers"] = _push_answers(mp, g)
+            res["maps"][mp]["fakes"] = _fakes(mp, g, dirs.get(mp, []))
             res["maps"][mp]["play_timing"] = _play_timing(g)
             res["maps"][mp]["util_war"] = _util_war(mp, g, dirs.get(mp, []))
             res["maps"][mp]["t_timeline"] = _t_timeline(mp, g, dirs.get(mp, []))
@@ -1416,6 +1417,100 @@ def _ctx_of(r):
 
 
 _PUSH_ROWS = {}   # map -> the pushes of _ct_push, one row per round, for _push_answers
+
+
+def _fakes(mp, g, dirs, shown_t=30.0, k=60):
+    """Show one site, hit the other: per target site, the rounds where two Ts or more stood in the other site's region
+    before shown_t s and the hit went to the target; the Ts' rounds won at equal economy (each round against what its
+    two buys win on the map) against the direct hits; the hit's time; the medoid walk of the Ts who showed the other
+    site, then reached the target bombsite. None when the regions make it meaningless (fakes over 60% of the hits)."""
+    import re
+    import team
+    regions = (team.map_meta().get(mp) or {}).get("regions") or {}
+    reg = lambda z: "A" if z == "BombsiteA" else "B" if z == "BombsiteB" else regions.get(z)
+    G = g[(g.T_buy != "pistol") & g.site.isin(["A", "B"]) & g.t_paths.notna()]
+    if len(G) < 150:
+        return None
+    allp = float(G.T_won.mean())
+    mr = {kk: (float(x.T_won.sum()) + 10 * allp) / (len(x) + 10) for kk, x in G.groupby(["T_buy", "CT_buy"])}
+    rows = []
+    for x in G.itertuples():
+        other = "B" if x.site == "A" else "A"
+        pl = [[(m.group(1), float(m.group(2))) for m in re.finditer(r"([A-Za-z\u2020]+)@([\d.]+)", p)] for p in str(x.t_paths).split(";")]
+        shown = sum(1 for p in pl if any(reg(z) == other and t <= shown_t for z, t in p))
+        rows.append({"key": (str(x.match), int(x.round)), "site": x.site, "fake": shown >= 2, "won": bool(x.T_won), "hit_t": x.hit_t,
+                     "res": float(x.T_won) - mr.get((x.T_buy, x.CT_buy), allp)})
+    R = pd.DataFrame(rows)
+    out = {}
+    for site in ("A", "B"):
+        q = R[R.site == site]
+        fk, dr = q[q.fake], q[~q.fake]
+        if len(fk) < 20 or len(dr) < 20 or len(fk) > 0.6 * len(q):
+            continue
+        out[site] = {"n": int(len(fk)), "won": round(100 * (allp + float(fk.res.mean()))), "won_direct": round(100 * (allp + float(dr.res.mean()))),
+                     "t_hit": round(float(fk.hit_t.median()), 1), "keys": set(fk.key)}
+    if not out:
+        return None
+    # the walk: a T in the other site's region before shown_t s, then on the target bombsite, in those rounds
+    walks = {site: [] for site in out}
+    for d in dirs:
+        mid = os.path.basename(d)
+        fs = os.path.join(d, "samples.parquet")
+        if not os.path.exists(fs):
+            continue
+        need = {(mid, r): site for site, o in out.items() for (m_, r) in o["keys"] if m_ == mid}
+        if not need:
+            continue
+        S = pd.read_parquet(fs, columns=["steamid", "side", "round", "t", "px", "py", "level", "zone", "health"])
+        S = S[(S.side == "T") & S.px.notna()].sort_values("t")
+        for (rnd, sid), x in S[S["round"].isin([r for (_, r) in need])].groupby(["round", "steamid"]):
+            site = need.get((mid, int(rnd)))
+            if not site or len(walks[site]) >= 80:
+                continue
+            other, pts, showed, arrived, zs = ("B" if site == "A" else "A"), [], False, False, []
+            for z, t, px_, py_, lv, hp in zip(x.zone, x.t, x.px, x.py, x.level, x.health):
+                if hp is not None and hp <= 0:
+                    break
+                pts.append((float(px_), float(py_), lv, float(t)))
+                if isinstance(z, str) and z and (not zs or zs[-1] != z):
+                    zs.append(z)
+                if reg(z) == other and t <= shown_t:
+                    showed = True
+                if showed and z == "Bombsite" + site:
+                    arrived = True
+                    break
+            if showed and arrived and len(pts) >= 6:
+                walks[site].append((pts, zs))
+    for site, o in list(out.items()):
+        o.pop("keys")
+        W = walks.get(site) or []
+        if len(W) < 4:
+            continue
+        def resample(pts, kk=k):
+            xy = np.array([[p[0], p[1]] for p in pts])
+            dd = np.r_[0, np.cumsum(np.hypot(*np.diff(xy, axis=0).T))]
+            if dd[-1] <= 0:
+                return None
+            ss = np.linspace(0, dd[-1], kk)
+            idx = np.clip(np.searchsorted(dd, ss), 0, len(pts) - 1)
+            return np.c_[np.interp(ss, dd, xy[:, 0]), np.interp(ss, dd, xy[:, 1])], [pts[i][2] for i in idx], [pts[i][3] for i in idx]
+        rs, zz = [], []
+        for w, zs in W:
+            r_ = resample(w)
+            if r_ is not None:
+                rs.append(r_)
+                zz.append(zs)
+        A = np.array([r[0] for r in rs])
+        med = int(np.argmin([np.mean(np.hypot(*(A - a).transpose(2, 0, 1))) for a in A]))
+        xy, lv, ts = rs[med]
+        sm = xy.copy()
+        sm[1:-1] = (xy[:-2] + xy[1:-1] + xy[2:]) / 3
+        o["route"] = {"n": len(W), "win": o["won"], "zones": [humanize(z, mp) for z in zz[med]],
+                      "pts": [[round(float(a)), round(float(b)), l, round(float(t))] for (a, b), l, t in zip(sm, lv, ts)]}
+    return out or None
+
+
+
 
 
 def _push_answers(mp, g):

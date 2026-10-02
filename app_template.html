@@ -2816,13 +2816,23 @@ function winsRank(p,g){const TS=(p.advice.plan||{}).tside,M=TS&&TS.maps&&TS.maps
     const rs=(RT[k]||[]).filter(x=>x.n>=6),route=rs.sort((a,b)=>lb(b.win,b.n)-lb(a.win,a.n))[0]||(RT[k]||[])[0]||null;
     const rwin=route?Math.round(100*SIG(LGT(CLP(route.win/100))+shift)):null;   // the route's own rounds, moved like its play for this round
     return {k,n,wr,use,route,rwin,won:Math.round(n*w/100)}}).filter(r=>r.n>=8);
+  // show one site, hit the other: two Ts or more on the other side before 1:25, then the hit (rounds won at equal economy)
+  const LBL=Object.assign({},P_.label||{});
+  // on the scale of this round: the site's hits in this situation, plus half the measured edge of showing the other site
+  // first (half: the rounds where the Ts had the time to show it are a bit easier)
+  const siteOf=k=>(k.match(/[AB]$/)||k.match(/^[AB]/)||[])[0];
+  for(const [s,F] of Object.entries(M.fakes||{})){if(!F||!F.route||F.n<20||!F.won_direct)continue;const o=s==="A"?"B":"A",k="fake"+s;
+    const same=rows.filter(r=>siteOf(r.k)===s&&!/^rush/.test(r.k)),nn=same.reduce((a,r)=>a+r.n,0);if(!nn)continue;
+    const ctx=same.reduce((a,r)=>a+r.wr*r.n,0)/nn,edge=LGT(CLP(F.won/100))-LGT(CLP(F.won_direct/100));
+    LBL[k]=`Show ${o}, hit ${s}`;const wr=Math.round(100*SIG(LGT(CLP(ctx/100))+.5*edge));
+    rows.push({k,n:F.n,wr,use:true,route:F.route,rwin:wr,won:Math.round(F.n*wr/100),fake:true})}
   const nb=rows.reduce((a,r)=>a+r.n,0),mean=nb?rows.reduce((a,r)=>a+r.wr*r.n,0)/nb:50;
   rows.forEach(r=>{r.wr=Math.round((r.wr*r.n+mean*20)/(r.n+20));r.s=r.wr/100+r.n*1e-7;r.wr0=r.wr;r.wr=calPath(r.wr)});   // few rounds: closer to the mean
   rows.sort((a,b)=>b.s-a.s);rows.splice(6);
   const PM=planMemory(g,rows);const rows2=PM.rows.slice(0,4);
   rows2.forEach((r,i)=>{r.rank=i+1;r.col=WIN_C[i];r.rot=rows2.slice(i+1).some(x=>x.wr>r.wr);
     const PT=(M.play_timing||{})[r.k]||{};r.timing=(rt==="pistol"&&PT.pistol)||PT.other||null});   // ↻: ahead of a better % to stay unpredictable
-  return {rows:rows2,rt,ctx:true,run,eb,rotated:PM.rotated,label:P_.label||{}}}
+  return {rows:rows2,rt,ctx:true,run,eb,rotated:PM.rotated,label:LBL}}
 function vWins(p,g){const W=winsRank(p,g);if(!W||!W.rows.length)return "";const rows=W.rows,rt=W.rt,P_={label:W.label};
 
   const ctx=W.ctx,mx=Math.max(...rows.map(r=>r.wr),1);   // ctx false: too few rounds of this kind, the numbers are for all rounds
@@ -2951,9 +2961,13 @@ function planMemory(g,rows){if(!g||!g.map||g.round==null||!rows||!rows.length)re
   if(g.round===hs&&Object.keys(mem).some(n=>+n>hs))mem={};   // a new match on this map
   const R=((g.hist||{}).rounds)||{},used={},lost={};
   for(const [n,k] of Object.entries(mem)){if(+n>=g.round)continue;used[k]=(used[k]||0)+1;const w=(R[n]||{}).win;if(w&&w!==g.side)lost[k]=(lost[k]||0)+1}
-  const top0=rows[0].k,adj=r=>-.05*(lost[r.k]||0)-.02*Math.max(0,(used[r.k]||0)-1);
-  const out=rows.slice().sort((a,b)=>(b.s+adj(b))-(a.s+adj(a)));
-  if(!mem[g.round]&&(g.round_phase==="freezetime"||g.round_phase==="live")){mem[g.round]=out[0].k;try{localStorage.setItem(key,JSON.stringify(mem))}catch(e){}}
+  const recent=new Set(Object.entries(mem).filter(([n])=>+n<g.round&&+n>=g.round-2).map(([,k])=>k));   // played in the last 2 rounds
+  const top0=rows[0].k,adj=r=>-.08*(lost[r.k]||0)-.02*Math.max(0,(used[r.k]||0)-1)-(recent.has(r.k)?.04:0);
+  const sorted=rows.slice().sort((a,b)=>(b.s+adj(b))-(a.s+adj(a))),out=[],rest=[];
+  sorted.forEach(r=>{const rush=/^rush/.test(r.k);if(rush&&out.some(x=>/^rush/.test(x.k))&&out.length<4)rest.push(r);else out.push(r)});   // one rush at most among the paths shown
+  out.push(...rest);
+  const f=g.focus,fn=f&&f.round===g.round&&f.n>=1&&f.n<=3?f.n:0;   // the path you pressed is the one you played
+  if((g.round_phase==="freezetime"||g.round_phase==="live")&&(fn&&out[fn-1]?mem[g.round]!==out[fn-1].k:!mem[g.round])){mem[g.round]=(fn&&out[fn-1]?out[fn-1]:out[0]).k;try{localStorage.setItem(key,JSON.stringify(mem))}catch(e){}}
   return {rows:out,rotated:out[0].k!==top0,lost:lost[top0]||0}}
 
 // ---------- what the page shows, sent to the app a few times per round (buy time, 0:20, 0:40, after the plant): the
@@ -3035,13 +3049,13 @@ function focusN(g){const f=g&&g.focus;return f&&f.n>=1&&f.n<=3&&f.round===g.roun
 // hostage maps: the CTs' ways out of their spawn as the paths of the attack (most taken first), rounds won, when there
 function hostageRank(p,g){const H=((p.advice.plan||{}).hostage||{})[g.map];if(!H||!(H.routes||[]).length)return null;const tot=H.routes.reduce((a,r)=>a+r.n,0)||1;
   return {rows:H.routes.map((r,i)=>({rank:i+1,k:"h"+i,route:{zones:r.zones,pts:r.pts},col:WIN_C[i],wr:r.won,share:Math.round(100*r.n/tot),timing:{at:r.t_end},t_end:r.t_end,n:r.n})),hostage:true}}
-function pathShort(p,g,r){const M=(((p.advice.plan||{}).tside||{}).maps||{})[g.map]||{},lab=String(((M.plays||{}).label||{})[r.k]||r.k);
+function pathShort(p,g,r){const M=(((p.advice.plan||{}).tside||{}).maps||{})[g.map]||{},lab=String(((M.plays||{}).label||{})[r.k]||r.k);   // fakes: their label is made below
   const all=Object.values(M.t_routes||{}).flat().map(x=>x.zones||[]),freq={};all.forEach(zs=>new Set(zs).forEach(z=>freq[z]=(freq[z]||0)+1));
   const zs=(r.route||{}).zones||[],i0=zs.findIndex(z=>/spawn/i.test(z));
   let cand=zs.filter((z,i)=>!/spawn/i.test(z)&&!/^([AB] Site|Bombsite)/i.test(z)&&!(i===i0+1&&/^outside$/i.test(z))&&(freq[z]||0)<0.7*Math.max(1,all.length));
   const keep=new Set([...cand].sort((a,b)=>(freq[a]||0)-(freq[b]||0)||cand.indexOf(b)-cand.indexOf(a)).slice(0,2));cand=cand.filter((z,i)=>keep.has(z)&&cand.indexOf(z)===i);   // rarest, then nearest the site
-  const m=lab.match(/^(Rush|Split)?\s*([AB])\b/i),site=m?m[2].toUpperCase():null;
-  const head=m?`${m[1]?m[1]+" ":""}${site}`:lab.replace(/ through .*$/,"");
+  const fk=/^fake[AB]$/.test(r.k)?r.k.slice(4):null,m=fk?null:lab.match(/^(Rush|Split)?\s*([AB])\b/i),site=fk||(m?m[2].toUpperCase():null);
+  const head=fk?`Show ${fk==="A"?"B":"A"}, hit ${fk}`:m?`${m[1]?m[1]+" ":""}${site}`:lab.replace(/ through .*$/,"");
   const via=cand.length?cand.join(" > "):(/ through /.test(lab)?lab.replace(/^.* through /,"").split(" / ")[0]:"");
   return {site,head,via,zones:cand}}
 // when to be on the site with a play: its window that wins the most rounds ("on site 1:31-1:21"); when no moment wins
