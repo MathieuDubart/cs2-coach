@@ -1624,7 +1624,7 @@ function tsidePredict(TS,map,g,ev){const M=TS&&TS.maps&&TS.maps[map];if(!M||!g||
       if(Rc.pos15&&GEO){const w=worldPx(GEO,Rc.pos15);zn=w&&nearestZone(GEO,w.px,w.level);W={[(zn&&SE.regions[zn])||"mid"]:1}}
       else W=habitRegions(map,SE);
       const tk=[...SE.t].reverse().find(t=>t<=g.elapsed);
-      const tc=Math.min(...[Rc.hurt,Rc.dead,...(Rc.kills||[])].filter(x=>x!=null)),fought=isFinite(tc)&&tc<=tk;
+      const tc=Math.min(...[Rc.hurt,Rc.dead,Rc.util,Rc.hit,...(Rc.kills||[])].filter(x=>x!=null)),fought=isFinite(tc)&&tc<=tk;   // damage, a kill, a flash or a molotov on you, a hit
       if(W){const o={A:0,B:0,none:0};let tot=0;
         for(const [reg,wt] of Object.entries(W)){const L=(SE.lik[reg]||{})[String(tk)];if(!L)continue;tot+=wt;
           for(const k of ["A","B","none"])o[k]+=wt*L[fought?"contact":"quiet"][k]}
@@ -1635,7 +1635,7 @@ function tsidePredict(TS,map,g,ev){const M=TS&&TS.maps&&TS.maps[map];if(!M||!g||
           evid.push(fought?"a fight at your spot":"quiet at your spot")}}
       const MT=((((typeof P==="function"&&P())||{}).advice||{}).plan||{}).mates||{};
       for(const [sid,mr] of Object.entries(Rc.mates||{})){const MW=((MT[sid]||{}).maps||{})[map];if(!MW||mr.seen==null||mr.seen>tk)continue;
-        const f2=(mr.hurt!=null&&mr.hurt<=tk)||(mr.dead!=null&&mr.dead<=tk),o={A:0,B:0,none:0};let tot=0;
+        const f2=[mr.hurt,mr.dead,mr.util,mr.hit].some(x=>x!=null&&x<=tk),o={A:0,B:0,none:0};let tot=0;
         for(const [reg,wt] of Object.entries(MW)){const L=(SE.lik[reg]||{})[String(tk)];if(!L)continue;tot+=wt;for(const k of ["A","B","none"])o[k]+=wt*L[f2?"contact":"quiet"][k]}
         if(!tot)continue;const top=Object.entries(MW).sort((x,y)=>y[1]-x[1])[0],nm=(MT[sid]||{}).name||"your teammate",spot=`usually ${top[0]==="mid"?"mid":top[0]+" side"}`;
         shift(f2?`A fight at ${nm}'s spot (${spot}) before ${clock(tk)}`:`Nothing at ${nm}'s spot (${spot}) by ${clock(tk)}`,o.A/tot,o.B/tot,o.none/tot);

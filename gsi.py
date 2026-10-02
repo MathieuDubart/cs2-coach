@@ -287,7 +287,8 @@ def _mate(pl, st, phase, now):
         m.update(money=st.get("money"), money_round=cur, money_phase=phase)
     hp = st.get("health")
     prev = m.get("hp") if m.get("hp_round") == cur else None
-    m.update(hp=hp, hp_round=cur)
+    pk = m.get("kills") if m.get("hp_round") == cur else None   # CS2 doesn't send the damage dealt: their kills
+    m.update(hp=hp, hp_round=cur, kills=st.get("round_kills"))
     if not HIST or phase != "live" or not STATE.get("live_since") or hp is None:
         return
     el = round(now - STATE["live_since"], 1)
@@ -305,11 +306,16 @@ def _mate(pl, st, phase, now):
             pass
     if hp == 0 and (prev or 0) > 0 and "dead" not in r:
         r["dead"], changed = el, True
+    if hp and ((st.get("flashed") or 0) > 30 or (st.get("burning") or 0) > 0) and "util" not in r:
+        r["util"], changed = el, True
+    if pk is not None and (st.get("round_kills") or 0) > pk and "hit" not in r:
+        r["hit"], changed = el, True
     if changed:
         _hist_save()
 
 
-def _hist_times(cur, phase, bomb, prev_phase, prev_bomb, health, prev_health, kills, prev_kills, now, hp=None, prev_hp=None, pos=None):
+def _hist_times(cur, phase, bomb, prev_phase, prev_bomb, health, prev_health, kills, prev_kills, now, hp=None, prev_hp=None, pos=None,
+                util=False, dmg=None, prev_dmg=None):
     """Seconds since the end of the freeze time, per round: the plant, the end of the round, your death, your kills,
     the first damage you took, and where you stood until 20 s in. Read the Ts' tempo (a plant 35 s in is a fast hit)
     and what happens at your spot (a fight there or nothing yet) without any click."""
@@ -333,6 +339,10 @@ def _hist_times(cur, phase, bomb, prev_phase, prev_bomb, health, prev_health, ki
             changed = True
         if phase == "live" and hp is not None and prev_hp is not None and hp < prev_hp and "hurt" not in r:
             r["hurt"], changed = el, True
+        if phase == "live" and util and "util" not in r:   # flashed or burning: utility thrown at your spot
+            r["util"], changed = el, True
+        if phase == "live" and dmg is not None and prev_dmg is not None and dmg > prev_dmg and "hit" not in r:   # you hit someone
+            r["hit"], changed = el, True
         if phase == "live" and pos and health and el <= 20 and r.get("pos15") != pos:   # the last spot before 20 s
             r["pos15"] = pos
             changed = changed or el >= 12
@@ -414,7 +424,11 @@ def update(payload):
                 _hist_times(STATE.get("round"), rd.get("phase"), rd.get("bomb"), STATE.get("round_phase"), STATE.get("bomb"),
                             1 if alive else 0, 1 if STATE.get("_alive") else 0,
                             st.get("round_kills") if own else None, STATE.get("round_kills"), now,
-                            hp=st.get("health") if own else None, prev_hp=STATE.get("health") if STATE.get("_alive") or alive else None, pos=mypos)
+                            hp=st.get("health") if own else None, prev_hp=STATE.get("health") if STATE.get("_alive") or alive else None, pos=mypos,
+                            util=bool(own and alive and ((st.get("flashed") or 0) > 30 or (st.get("burning") or 0) > 0)),
+                            dmg=st.get("round_totaldmg") if own else None, prev_dmg=STATE.get("_dmg"))
+                if own:
+                    STATE["_dmg"] = st.get("round_totaldmg")
         except Exception as e:
             print("round times:", e, flush=True)
         STATE["_alive"] = alive
