@@ -534,6 +534,8 @@ svg.radar .mkt.o{fill:#eef2f6}
 .vnade em{font:500 11px var(--f-mono);font-style:normal;color:var(--muted);opacity:.8;margin-left:2px;padding-left:6px;border-left:1px solid var(--line)}
 svg.radar .pbt{font:800 12px var(--f-mono);fill:#1a1206}
 svg.radar .ptt{font:800 13px var(--f-mono);fill:#ffd9a0;paint-order:stroke;stroke:#0b0f14;stroke-width:3.5px}
+svg.radar .kwt{font:800 12px var(--f-mono);fill:#bff5c8;paint-order:stroke;stroke:#0b0f14;stroke-width:3.5px}
+.vsit.key span{color:var(--flash)}
 </style>
 
 <div class="bar"><div class="bar-in">
@@ -2121,6 +2123,7 @@ const SW={lane:`<svg width="26" height="12" aria-hidden="true"><path d="M1 2L20 
   spot:`<svg width="16" height="16" aria-hidden="true"><circle cx="8" cy="8" r="6" style="fill:none;stroke:var(--good);stroke-width:3"/></svg>`,
   star:`<svg width="16" height="16" aria-hidden="true"><path d="${starPath(8,8,7,3,5)}" style="fill:#ffd24a;stroke:#5a4100"/></svg>`,
   wstar:`<svg width="16" height="16" aria-hidden="true"><path d="${starPath(8,8,6,2.6,5)}" style="fill:#f2f5f8;stroke:#0b0f14"/></svg>`,
+  key:`<svg width="18" height="18" aria-hidden="true"><path d="M9 1L16 5V13L9 17L2 13V5Z" style="fill:var(--good);stroke:#0b0f14"/></svg>`,
   ctpos:`<svg width="16" height="16" aria-hidden="true"><circle cx="8" cy="8" r="6" style="fill:var(--ct);fill-opacity:.32;stroke:var(--ct);stroke-width:2"/></svg>`,
   danger:`<svg width="18" height="18" aria-hidden="true"><circle cx="9" cy="9" r="5" style="fill:none;stroke:var(--bad);stroke-width:2"/><path d="M1 9H4M14 9H17M9 1V4M9 14V17" style="stroke:var(--bad);stroke-width:2"/></svg>`,
   tpath:`<svg width="26" height="12" aria-hidden="true"><path d="M1 6H25" style="stroke:#0b0f14;stroke-width:5"/><path d="M1 6H25" style="stroke:#ffb347;stroke-width:2.5"/></svg>`,
@@ -2130,8 +2133,8 @@ const SW={lane:`<svg width="26" height="12" aria-hidden="true"><path d="M1 2L20 
   c4:`<svg width="20" height="14" aria-hidden="true"><rect x="1" y="1" width="18" height="12" rx="2" style="fill:var(--bad)"/></svg>`};
 // T side: the multi-kill stars on top of your zones
 function spotStars(box,spots,level){const ov=$("g",box);PLACED.set(ov,[]);(spots||[]).filter(s=>s.multi2&&s.px&&(!s.level||!level||s.level===level)).forEach(s=>mkStar(ov,s.px[0]-6,s.px[1]-24,s))}
-const RLAYERS=[["paths","T paths"],["ctpos","CT spots"],["danger","CT kill angles"],["strong","Strong spots"],["multi","Multi-kills"],["nades","Grenades"],["spots","Your spots"],["rot","Rotation"]];
-function liveLayers(){let L=store("rlayers4");if(!Array.isArray(L))L=RLAYERS.map(x=>x[0]);return L}
+const RLAYERS=[["key","Key rounds"],["paths","T paths"],["ctpos","CT spots"],["danger","CT kill angles"],["strong","Strong spots"],["multi","Multi-kills"],["nades","Grenades"],["spots","Your spots"],["rot","Rotation"]];
+function liveLayers(){let L=store("rlayers5");if(!Array.isArray(L))L=RLAYERS.map(x=>x[0]);return L}
 // the moment the radar is about: now in a live round, the setup during freeze time, none when you browse
 function radarT(g,o){return !o.following||!g?null:g.round_phase==="live"?(g.elapsed||0):g.round_phase==="freezetime"?0:null}
 // the spots that fit this moment (from a bit before now to a bit after), or the nearest ones in time
@@ -2188,6 +2191,8 @@ function liveRadar(box,p,map,level,g,o){
     const others=nearT(base,t,15,30,2).slice(0,4);
     others.forEach(s=>mkMark(Ltop,s,false));mine.forEach(s=>mkMark(Ltop,s,true,t!=null&&s.t_med!=null&&Math.abs(s.t_med-t)>35));
     if(mine.length||others.length)legend.push(`<span>${SW.star}your multi-kills (2+ kills from that spot in a round)</span>${others.length?`<span>${SW.wstar}other players' multi-kills on your spots</span>`:""}`)}
+  // key rounds (pistol, eco or force against a full buy): the spots that pay for your weapon, a plant that wins more
+  if(on("key")&&o.following&&g&&!planted&&(g.round_phase==="freezetime"||(live&&(g.elapsed||0)<45))&&typeof keyRadar==="function")keyRadar(p,g,map,level,Lstrong,Ltop,legend,here);
   // T side, before the hit: the way from the spawn of the plays that win most (numbered like the side panel's lines)
   if(!ct&&on("paths")&&o.following&&g&&!planted&&(g.round_phase==="freezetime"||(live&&(g.elapsed||0)<45))){const W=winsRank(p,g);
     if(W){const seen=new Map();W.rows.slice(0,3).forEach(r=>{if(!r.route)return;const k=r.route.zones.join(">");if(seen.has(k)){seen.get(k).push(r.rank);return}seen.set(k,[r.rank]);r._k=k});
@@ -2343,7 +2348,7 @@ function nowVisual(p,g,following){
   if(g.practice)return `<div class="vz"><div class="vsit"><span>PRACTICE</span></div></div>`;
   const ph=g.round_phase,ct=g.side==="CT",out=[];
   const TS=(p.advice.plan||{}).tside,r=ct?tsidePredict(TS,g.map,g,evFor(g)):null;
-  if(ph==="freezetime"){out.push(vSituation(p,g));
+  if(ph==="freezetime"){out.push(vSituation(p,g),vKey(p,g));
     if(ct&&r)out.push(vOdds(r),vRush(TS,g,r)||vEntries(TS,g,r));
     if(!ct){out.push(vTimeline(p,g),vCTdots(p,g),vTchips(p,g))}}   // the plays and the grenades are on the map
   else if(ph==="live"){const el=g.elapsed||0,planted=g.bomb==="planted";
@@ -2478,6 +2483,61 @@ function vWins(p,g){const W=winsRank(p,g);if(!W||!W.rows.length)return "";const 
   const ctx=W.ctx,mx=Math.max(...rows.map(r=>r.wr),1);   // ctx false: too few rounds of this kind, the numbers are for all rounds
   const lab=k=>{const L=String((P_.label||{})[k]||k);return /^Rush/.test(L)?`⚡${L.replace(/^Rush ([AB]) through /,"$1 · ")}`:/^Split/.test(L)?`⇉${L.replace(/^Split ([AB]):.*/,"$1 split")}`:L.replace(/^([AB]) through /,"$1 · ")};
   return `<div class="vhead">✓ WHAT WINS · ${ctx?esc(RT_EN[rt]||rt||""):"all rounds"}</div><div class="vrows">${rows.map((r,i)=>`<div class="vrow" style="--c:${r.col}${i?`;opacity:${[1,.85,.7,.6][i]}`:""}"><span><em class="rk" style="background:${r.col}">${r.rank}</em>${vShort(lab(r.k))}</span><i><u style="width:${Math.max(4,Math.round(100*r.wr/mx))}%"></u></i><b>${r.wr}%</b><small>${r.won}/${r.n}</small></div>`).join("")}</div>`}
+
+// ---------- key rounds: pistol, eco or force-buy against a full buy (the rounds pros prepare) ----------
+// What each weapon does there (every map of the base together), the spots that pay on this map for your weapon's family
+// (close range, long range, default pistols), and for the T side a plant spot that wins more than the usual ones
+const W_PRICE={"Tec-9":500,"Five-SeveN":500,"CZ75-Auto":500,"P250":300,"Desert Eagle":700,"Dual Berettas":300,"R8 Revolver":600,"MAC-10":1050,
+  "MP9":1250,"MP7":1500,"UMP-45":1200,"P90":2350,"PP-Bizon":1400,"MP5-SD":1500,"XM1014":2000,"MAG-7":1300,"Nova":1050,"Sawed-Off":1100,"SSG 08":1700,
+  "Galil AR":1800,"FAMAS":2050,"AK-47":2700,"M4A1-S":2900,"M4A4":3100,"AWP":4750,"AUG":3300,"SG 553":3000,"Glock-18":0,"USP-S":0,"P2000":0};
+const W_GRP=w=>["Tec-9","Five-SeveN","CZ75-Auto","Dual Berettas","MAC-10","MP9","MP7","UMP-45","P90","PP-Bizon","MP5-SD","XM1014","MAG-7","Nova","Sawed-Off"].includes(w)?"close":
+  ["Desert Eagle","R8 Revolver","SSG 08","AK-47","M4A1-S","M4A4","Galil AR","FAMAS","AWP","AUG","SG 553"].includes(w)?"long":"default";
+const W_SHORT={"Desert Eagle":"DEAGLE","Five-SeveN":"FIVE-7","CZ75-Auto":"CZ","SSG 08":"SCOUT","XM1014":"XM","Galil AR":"GALIL","Dual Berettas":"DUALIES",
+  "R8 Revolver":"R8","Glock-18":"GLOCK","USP-S":"USP","M4A1-S":"M4A1-S","PP-Bizon":"BIZON","UMP-45":"UMP","MP5-SD":"MP5"};
+const DEF_PISTOL=new Set(["Glock-18","USP-S","P2000"]);
+const SIDE_ONLY={T:new Set(["AK-47","Galil AR","SG 553","MAC-10","Tec-9","Glock-18","Sawed-Off","G3SG1"]),CT:new Set(["M4A1-S","M4A4","AUG","FAMAS","MP9","Five-SeveN","USP-S","P2000","MAG-7","SCAR-20"])};
+const canBuy=(side,w)=>!SIDE_ONLY[side==="T"?"CT":"T"].has(w);   // the base counts picked-up weapons too: you can only buy your side's
+const KEY_L={pistol:"PISTOL ROUND",eco_full:"ECO vs FULL",force_full:"FORCE vs FULL"};
+// the key situation of this round: the pistol round, or your eco / force-buy (what you hold once bought, else the advice)
+// against a full buy
+function keySit(p,g){if(!g||!g.side||g.round==null||g.practice)return null;if(g.round===halfStart(g.round))return "pistol";
+  const eb=enemyBuy(p,g)||{};if((eb.full||0)<.5)return null;
+  const pr=g.primary,pi=g.pistol;let mine=null;
+  if(pr)mine=FULL_W.has(pr)?"full":"force";else if(pi&&!DEF_PISTOL.has(pi))mine="eco";
+  if(!mine)mine=advisedType(g);
+  return mine==="eco"?"eco_full":mine==="force"?"force_full":null}
+// the weapons to look at: yours, and while buying the ones you can pay without losing your next buy
+function keyWeapons(p,g,k){const W=((((p.advice.plan||{}).tside||{}).setplay_w||{})[g.side]||{})[k]||[],mine=g.primary||(g.pistol&&!DEF_PISTOL.has(g.pistol)?g.pistol:null);
+  let budget=g.money||0;
+  if(k==="eco_full"){const need=g.side==="T"?3700:3900;budget=Math.max(0,(g.money||0)+ECON.bonus[Math.min(g.losses||0,4)]-need)}   // an eco keeps the next full buy
+  const buying=g.round_phase==="freezetime";
+  const ok=w=>w.w===mine||(buying&&canBuy(g.side,w.w)&&(W_PRICE[w.w]??99999)<=budget+(mine?W_PRICE[mine]||0:0));
+  const by=k==="pistol"?(a,b)=>b.win-a.win:(a,b)=>b.adr-a.adr;   // pistol: kevlar and the round count most; eco / force: what a weapon does
+  const list=W.filter(ok).sort(by).slice(0,4);
+  if(mine&&!list.some(w=>w.w===mine)){const m=W.find(w=>w.w===mine);if(m)list.push(m)}
+  return {list,mine,budget}}
+function vKey(p,g){const k=keySit(p,g);if(!k)return "";const M=(((p.advice.plan||{}).tside||{}).maps||{})[g.map]||{},SP=((M.setplays||{})[g.side]||{})[k];
+  const {list,mine,budget}=keyWeapons(p,g,k),pis=k==="pistol",val=w=>pis?w.win:w.adr,mx=Math.max(...list.map(val),1);
+  const rows=list.map((w,i)=>`<div class="vrow${w.w===mine?" best":""}" style="--c:${w.w===mine?"var(--good)":"var(--flash)"}${w.w===mine||!i?"":";opacity:.7"}"><span>${w.w===mine?"✓ ":""}${esc(W_SHORT[w.w]||w.w.toUpperCase())}</span><i><u style="width:${Math.max(4,Math.round(100*val(w)/mx))}%"></u></i><b>${pis?w.win+"%":w.adr}</b><small>${pis?`${w.adr} dmg`:`${w.win}% won`}</small></div>`).join("");
+  return `<div class="vsit key"><span>🔑 ${KEY_L[k]}</span>${SP?`<b class="${vTone(SP.win)}">${SP.win}%</b>`:""}</div>
+    ${rows?`<div class="vhead">${pis?"ROUNDS WON":"DAMAGE / ROUND"} · ${k==="eco_full"&&g.round_phase==="freezetime"?`budget ${kMoney(budget)}`:"base, every map"}</div><div class="vrows">${rows}</div>`:""}`}
+// on the radar: the spots that pay for your weapon's family in this kind of round, and (T) a plant that wins more
+function keyRadar(p,g,map,level,lay,top,legend,here){const k=keySit(p,g);if(!k)return;const M=(((p.advice.plan||{}).tside||{}).maps||{})[map]||{};
+  const SP=((M.setplays||{})[g.side]||{})[k];if(!SP)return;const {list,mine}=keyWeapons(p,g,k),w=mine||(list[0]||{}).w,grp=w?W_GRP(w):"default";
+  const sp=((SP.groups||{})[grp]||SP.spots||[]).filter(here).slice(0,3),lab=W_SHORT[w]||(w||"").toUpperCase();
+  sp.forEach(z=>{const [x,y]=z.px,gg=el("g",{},top);
+    el("path",{d:`M${x} ${y-11}L${x+10} ${y-5}L${x+10} ${y+5}L${x} ${y+11}L${x-10} ${y+5}L${x-10} ${y-5}Z`,style:"fill:var(--good);fill-opacity:.85;stroke:#0b0f14;stroke-width:1.6"},gg);
+    el("text",{x:x+14,y:y+4,class:"kwt"},gg).textContent=`${lab}${z.surprise?" ★":""}`;
+    tip(gg,`${z.zone||"Spot"}: ${z.k} kills for ${z.d} deaths with a ${grp==="close"?"close-range":grp==="long"?"long-range":"default"} weapon in ${KEY_L[k].toLowerCase()} rounds, around ${clock(z.t_med)}${z.surprise?" — rarely played: a surprise":""}`)});
+  if(sp.length)legend.push(`<span>${SW.key}${KEY_L[k].toLowerCase()}: spots that pay with your ${esc(lab||"weapon")} (★ = rarely played, a surprise)</span>`);
+  if(g.side==="T"){const W_=winsRank(p,g),r1=W_&&W_.rows[0],site=r1?(r1.k.match(/[AB]$/)||r1.k.match(/^[AB]/)||[])[0]:null,PL=site&&((M.evidence||{}).plants||{})[site];
+    if(PL&&PL.spots&&PL.spots.length){const base=PL.t_win??50,best=PL.spots.slice().sort((a,b)=>(b.t_win*b.n+base*10)/(b.n+10)-(a.t_win*a.n+base*10)/(a.n+10))[0];
+      if(best&&here(best)&&best.t_win>base){const [x,y]=best.px,gg=el("g",{},top);
+        el("rect",{x:x-15,y:y-10,width:30,height:20,rx:4,style:"fill:var(--bad);stroke:#ffd24a;stroke-width:2"},gg);
+        el("text",{x,y:y+4,"text-anchor":"middle",class:"c4t"},gg).textContent="C4";
+        el("text",{x:x+19,y:y+4,class:"kwt"},gg).textContent=`★ ${best.t_win}%`;
+        tip(gg,`Plant here on ${site}: the Ts win ${best.t_win}% after it (${best.share}% of plants), vs ${base}% on the site`);
+        legend.push(`<span>${SW.c4}a plant on site ${site} that wins more than the usual ones</span>`)}}}}
 
 // ---------- view: review (after the session, or the next day) ----------
 function callsBlock(PL){const C=PL.calls||[];if(!C.length)return D.local?`<h3>Your calls</h3><p class="note">No recording yet: turn on "Your calls" in <a href="#settings" style="color:var(--ct)">Settings</a>, play, and the coach analyzes your communication after the match.</p>`:"";

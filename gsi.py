@@ -19,6 +19,8 @@ WEAPON_FR = {"ak47": "AK-47", "m4a1": "M4A4", "m4a1_silencer": "M4A1-S", "awp": 
              "mp9": "MP9", "mp7": "MP7", "mp5sd": "MP5-SD", "ump45": "UMP-45", "p90": "P90", "bizon": "PP-Bizon", "nova": "Nova",
              "xm1014": "XM1014", "mag7": "MAG-7", "sawedoff": "Sawed-Off", "negev": "Negev", "m249": "M249"}
 PRIMARY_TYPES = {"Rifle", "SniperRifle", "Submachine Gun", "Shotgun", "Machine Gun"}
+PISTOL_NAMES = {"glock": "Glock-18", "usp_silencer": "USP-S", "hkp2000": "P2000", "p250": "P250", "deagle": "Desert Eagle", "tec9": "Tec-9",
+                "fiveseven": "Five-SeveN", "cz75a": "CZ75-Auto", "elite": "Dual Berettas", "revolver": "R8 Revolver"}
 LOCK = threading.Lock()
 STATE = {}
 HIST_F = os.path.join(LOG_DIR, "match.json")
@@ -359,6 +361,11 @@ def update(payload):
                 if w.get("type") in PRIMARY_TYPES:
                     n = str(w.get("name", "")).replace("weapon_", "")
                     prim = WEAPON_FR.get(n, n)
+            pist = None   # your pistol: in an eco or a force-buy, the round's plan depends on it (Tec-9, Deagle...)
+            for w in (pl.get("weapons") or {}).values():
+                if w.get("type") == "Pistol":
+                    n = str(w.get("name", "")).replace("weapon_", "")
+                    pist = PISTOL_NAMES.get(n, n)
             held = {}
             for w in (pl.get("weapons") or {}).values():
                 if w.get("type") == "Grenade":
@@ -372,7 +379,7 @@ def update(payload):
             except ValueError:
                 STATE["pos"] = None
             STATE.update({"side": side or STATE.get("side"), "money": st.get("money"), "equip": st.get("equip_value"),
-                          "armor": st.get("armor"), "helmet": st.get("helmet"), "primary": prim if pl.get("weapons") else STATE.get("primary"),
+                          "armor": st.get("armor"), "helmet": st.get("helmet"), "primary": prim if pl.get("weapons") else STATE.get("primary"), "pistol": pist if pl.get("weapons") else STATE.get("pistol"),
                           "health": st.get("health"), "round_kills": st.get("round_kills"),
                           "stats": pl.get("match_stats")})
         if not own:

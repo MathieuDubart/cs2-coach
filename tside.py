@@ -622,7 +622,7 @@ def econ_table(df):
 
 
 SUMMARY = os.path.join(config.OUT, "population", "tside_summary.json")
-VERSION = 19   # bump when the summary changes shape: the cache is rebuilt
+VERSION = 20   # bump when the summary changes shape: the cache is rebuilt
 
 
 def _stamp():
@@ -710,8 +710,13 @@ def _tendencies(maps, df):
         try:   # the plays by economy and by the run before the round; the CTs' spots and kill angles by moment
             res["maps"][mp]["play_ctx"] = _play_ctx(g)
             res["maps"][mp]["ct_spots"] = _ct_spots(mp, dirs.get(mp, []))
+            res["maps"][mp]["setplays"] = _setplays(mp, dirs.get(mp, []))
         except Exception as e:
             print(f"{mp}: play contexts / CT spots unavailable ({e})")
+    try:   # the weapons in key rounds (pistol, eco or force against a full buy), every map together
+        res["setplay_w"] = setplay_weapons({m: dirs.get(m, []) for m in maps})
+    except Exception as e:
+        print(f"key-round weapons unavailable ({e})")
     res["retake_all"] = retake_table(pool)
     try:   # situations measured on all maps together (pistol as CT for now)
         res["situations"] = _situations(df, res["maps"])
@@ -1072,6 +1077,109 @@ def _ct_spots(mp, dirs, cell=26):
             if len(dd) == 8:
                 break
         out[w] = {"hold": hold, "danger": dd, "n": int(len(k))}
+    return out or None
+
+
+KEY_SITS = ("pistol", "eco_full", "force_full")
+W_GROUP = {**{w: "close" for w in ("Tec-9", "Five-SeveN", "CZ75-Auto", "Dual Berettas", "MAC-10", "MP9", "MP7", "UMP-45", "P90", "PP-Bizon",
+                                  "MP5-SD", "XM1014", "MAG-7", "Nova", "Sawed-Off")},
+           **{w: "long" for w in ("Desert Eagle", "R8 Revolver", "SSG 08", "AK-47", "M4A1-S", "M4A4", "Galil AR", "FAMAS", "AWP", "AUG", "SG 553")},
+           **{w: "default" for w in ("Glock-18", "USP-S", "P2000", "P250")}}
+
+
+def _key_rows(d):
+    """One match: the players' rounds in key situations (pistol, eco or force-buy against a full buy) with their weapon,
+    and the kills and deaths of those players (where on the radar)."""
+    fl, fd, fr = (os.path.join(d, f) for f in ("loadout.parquet", "duels.parquet", "rounds.parquet"))
+    if not (os.path.exists(fl) and os.path.exists(fd) and os.path.exists(fr)):
+        return None
+    R = pd.read_parquet(fr, columns=["round", "T_buy", "CT_buy", "T_n", "CT_n"])
+    if not five_v_five(R):
+        return None
+    L = pd.read_parquet(fl, columns=["round", "steamid", "side", "primary", "wclass", "pistol", "team_buy", "kills", "damage", "won", "died_t"])
+    L = L.merge(R[["round", "T_buy", "CT_buy"]], on="round", how="left")
+    enemy = np.where(L.side == "T", L.CT_buy, L.T_buy)
+    L["sit"] = np.where(L.team_buy == "pistol", "pistol", np.where((L.team_buy == "eco") & (enemy == "full"), "eco_full",
+                        np.where((L.team_buy == "force") & (enemy == "full"), "force_full", None)))
+    L = L[L.sit.notna() & L.side.isin(["T", "CT"])].copy()
+    if not len(L):
+        return None
+    L["weapon"] = np.where((L.wclass != "pistol") & L.primary.notna(), L.primary, L.pistol)
+    L["group"] = L.weapon.map(W_GROUP).fillna("other")
+    L["steamid"] = L.steamid.astype(str)
+    L["match"] = os.path.basename(d)
+    D = pd.read_parquet(fd, columns=["round", "t", "killer", "victim", "killer_side", "victim_side", "killer_px", "killer_py", "killer_level",
+                                     "killer_zone", "victim_px", "victim_py", "victim_level", "victim_zone"])
+    D = D[D.killer_side != D.victim_side].assign(killer=lambda x: x.killer.astype(str), victim=lambda x: x.victim.astype(str))
+    cols = ["round", "steamid", "side", "sit", "weapon", "group"]
+    k = D.merge(L[cols], left_on=["round", "killer"], right_on=["round", "steamid"])
+    k = k[k.killer_px.notna()][["side", "sit", "weapon", "group", "t", "killer_px", "killer_py", "killer_level", "killer_zone"]]
+    v = D.merge(L[cols], left_on=["round", "victim"], right_on=["round", "steamid"])
+    v = v[v.victim_px.notna()][["side", "sit", "weapon", "group", "t", "victim_px", "victim_py", "victim_level", "victim_zone"]]
+    ren = lambda p: {f"{p}_px": "px", f"{p}_py": "py", f"{p}_level": "level", f"{p}_zone": "zone"}
+    return L[["match", "round", "steamid", "side", "sit", "weapon", "group", "kills", "damage", "won", "died_t"]], k.rename(columns=ren("killer")), v.rename(columns=ren("victim"))
+
+
+def setplay_weapons(by_map):
+    """Every map together: in each key situation and side, what each weapon does (damage and kills per round, rounds
+    won, alive at the end), for the weapons played often enough."""
+    rows = [r[0] for ds in by_map.values() for d in ds for r in [_key_rows(d)] if r]
+    if not rows:
+        return None
+    P = pd.concat(rows, ignore_index=True)
+    out = {}
+    for (side, sit), x in P.groupby(["side", "sit"]):
+        ws = []
+        for w, y in x.groupby("weapon"):
+            if len(y) >= 30 and isinstance(w, str):
+                ws.append({"w": w, "group": W_GROUP.get(w, "other"), "n": int(len(y)), "kpr": round(float(y.kills.mean()), 2),
+                           "adr": round(float(y.damage.mean())), "win": round(100 * float(y.won.mean())), "alive": round(100 * float(y.died_t.isna().mean()))})
+        ws.sort(key=lambda z: -z["adr"])
+        out.setdefault(side, {})[sit] = ws
+    return out
+
+
+def _setplays(mp, dirs, cell=26):
+    """Key rounds on this map, each side (pistol, eco or force-buy against a full buy): the spots that pay, for every
+    weapon family (close range: Tec-9, SMGs, shotguns; long range: Deagle, scout, rifles; the default pistols) and for
+    all together: kills from there against the deaths of the same family there; a spot the side rarely plays is a
+    surprise for the other side."""
+    got = [r for r in (_key_rows(d) for d in dirs) if r]
+    if not got:
+        return None
+    P, K, V = (pd.concat([g_[i] for g_ in got], ignore_index=True) for i in range(3))
+    for x in (K, V):
+        x["c"] = list(zip(x.level, (x.px // cell).astype(int), (x.py // cell).astype(int)))
+
+    def spots(k, v, every_k, top=3):
+        vc, out = v.groupby("c").size(), []
+        for c, x in k.groupby("c"):
+            n_k, n_d = len(x), int(vc.get(c, 0))
+            if n_k < 4:
+                continue
+            ratio = (n_k + 1) / (n_k + n_d + 2)
+            share = float((every_k.c == c).mean()) if len(every_k) else 0
+            out.append({"px": [round(float(x.px.mean())), round(float(x.py.mean()))], "level": c[0], "k": n_k, "d": n_d,
+                        "zone": humanize(x.zone.mode().iloc[0], mp) if x.zone.notna().any() else None, "t_med": round(float(x.t.median())),
+                        "surprise": bool(ratio >= 0.6 and share < 0.03), "s": ratio * np.log1p(n_k)})
+        out.sort(key=lambda z: -z["s"])
+        res = []
+        for z in out:   # not two spots in the same place
+            if not any(r["level"] == z["level"] and np.hypot(r["px"][0] - z["px"][0], r["px"][1] - z["px"][1]) < 2 * cell for r in res):
+                res.append({k_: v_ for k_, v_ in z.items() if k_ != "s"})
+            if len(res) == top:
+                break
+        return res
+
+    out = {}
+    for (side, sit), x in P.groupby(["side", "sit"]):
+        if len(x) < 40:
+            continue
+        k_all, v_all = K[(K.side == side) & (K.sit == sit)], V[(V.side == side) & (V.sit == sit)]
+        groups = {gname: spots(k_all[k_all.group == gname], v_all[v_all.group == gname], k_all) for gname in ("close", "long", "default")}
+        rr = x.groupby(["match", "round"]).won.first()
+        out.setdefault(side, {})[sit] = {"n": int(len(rr)), "win": round(100 * float(rr.mean())), "spots": spots(k_all, v_all, k_all),
+                                         "groups": {k_: v_ for k_, v_ in groups.items() if v_}}
     return out or None
 
 
