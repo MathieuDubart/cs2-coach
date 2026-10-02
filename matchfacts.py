@@ -231,8 +231,8 @@ def analyze(mid, sid):
         s_ = int(e["steamid"])
         e["enemy"] = s_ in enemy
         share = e["odd"] / e["kills"] if e["kills"] else 0
-        e["flag"] = bool(e["enemy"] and e["kills"] >= 4 and ((e["odd"] >= 3 and share >= max(0.35, 2 * med_odd))
-                                                            or (e["fast"] is not None and e["n_react"] >= 8 and e["fast"] >= max(35, 2 * med_fast))))
+        e["flag"] = bool(e["enemy"] and e["kills"] >= 4 and ((e["odd"] >= 5 and share >= max(0.4, 2 * med_odd))
+                                                            or (e["fast"] is not None and e["n_react"] >= 12 and e["fast"] >= max(35, 2 * med_fast))))
     meta = json.load(open(os.path.join(d, "meta.json"), encoding="utf-8")) if os.path.exists(os.path.join(d, "meta.json")) else {}
     nm = lambda s_: names.get(int(s_), "?")
     res = {"mid": str(mid), "map": meta.get("map"), "rounds": int(len(R)),

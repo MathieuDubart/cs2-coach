@@ -2594,7 +2594,8 @@ function vReset(p,g){const w=resetWhy(g);if(!w)return "";
   if(w.k==="doubt"){const sp=simplePlan(p,g);if(!sp)return "";
     return `<div class="vreset plan"><b>PLAN</b><span>${sp.spot?`📍 ${vShort(sp.spot)} · molly for their arrival`:`${esc(sp.head)}${sp.via?` via ${esc(sp.via)}`:""} · ${sp.lo!=null?`on site ${clock(sp.lo)}-${clock(sp.hi)}`:sp.at!=null?`on site ~${clock(sp.at)}`:""}`}</span></div>`}
   if(w.k==="carry")return `<div class="vreset"><b>CALM START</b><span>👥 play the trade · ✕ no dry peek before ${clock(30)}</span><small>after a bad game · ADR rounds 2-5 ${w.C.bad.adr_first} vs ${w.C.bad.adr_rest} later</small></div>`;
-  const MS=(p.advice.plan||{}).mood,data=MS&&MS.after&&MS.other&&MS.after.adr<MS.other.adr?`<small>after a tilt · ADR ${MS.after.adr} vs ${MS.other.adr}</small>`:"";
+  const MS=(p.advice.plan||{}).mood,A_=MS&&MS.after,O_=MS&&MS.other;   // what a tilt costs you: rounds won first, else damage
+  const data=A_&&O_?(O_.won-A_.won>=3?`<small>after a tilt · won ${A_.won}% vs ${O_.won}%</small>`:O_.adr-A_.adr>=5?`<small>after a tilt · ADR ${A_.adr} vs ${O_.adr}</small>`:""):"";
   return `<div class="vreset"><b>RESET</b><span>${w.early?`✕ no dry peek before ${clock(30)}`:"👥 play the trade: next to a mate"}</span>${data}</div>`}
 // ---------- the coach's voice at the buy time: a few seconds in French, once per round, when the reset or plan card
 // shows. A local Windows voice only (Julie, Paul, Hortense: nothing leaves the PC); the browser lets a page speak only
@@ -2616,10 +2617,10 @@ function coachVoice(p,g){if(!voiceOn()||!g||g.practice)return;const w=resetWhy(g
   if(w.k==="doubt"){const sp=simplePlan(p,g);if(!sp)return;
     t=sp.spot?`Plan simple : ton spot, ${String(sp.spot).split(" / ")[0]}, et ta molly pour leur arrivée.`
       :`Plan simple : ${sp.head}${sp.via?` par ${sp.via.replace(/ > /g,", ")}`:""}${sp.lo!=null?`, sur le site entre ${sayClock(sp.lo)} et ${sayClock(sp.hi)}`:sp.at!=null?`, sur le site vers ${sayClock(sp.at)}`:""}.`}
-  else{const MS=(p.advice.plan||{}).mood,drop=MS&&MS.after&&MS.other&&MS.other.adr?Math.round(100*(1-MS.after.adr/MS.other.adr)):0;
+  else{const MS=(p.advice.plan||{}).mood,dw=MS&&MS.after&&MS.other?MS.other.won-MS.after.won:0,drop=MS&&MS.after&&MS.other&&MS.other.adr?Math.round(100*(1-MS.after.adr/MS.other.adr)):0;
     t=w.k==="frus"?pick([`Respire. Le round d'avant est fini. Ce round, ${instr}.`,`On reset. Une info utile, puis ${instr}.`])
       :pick([`Deux rounds compliqués, ça arrive. Ce round, ${instr}.`,`On repart simple : ${instr}.`]);
-    if(drop>=10&&VOICE.data!==g.map){t+=` Après un tilt, tes dégâts baissent de ${drop} pour cent : joue simple.`;VOICE.data=g.map}}
+    if(VOICE.data!==g.map&&(dw>=3||drop>=10)){t+=dw>=3?` Après un tilt, tu gagnes ${dw} rounds sur cent de moins : joue simple.`:` Après un tilt, tes dégâts baissent de ${drop} pour cent : joue simple.`;VOICE.data=g.map}}
   if(VOICE.last&&VOICE.last.map===g.map&&w.k!=="doubt"&&g.round-VOICE.last.round<3){VOICE.said=key;return}   // a reset at most every 3 rounds: not a sermon each round
   if(coachSay(t)){VOICE.said=key;if(w.k!=="doubt")VOICE.last={map:g.map,round:g.round}}}
 // T: the site left open by what you called in the last 25 s (two CTs or more on one side and none on the other, or a
