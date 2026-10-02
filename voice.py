@@ -238,19 +238,79 @@ def pause_transcription():
 HALLUCINATIONS = re.compile(r"merci d'avoir regard|sous-titr|abonnez|à bientôt pour|merci de votre attention|n'oubliez pas de|amara\.org", re.I)
 
 
-def _prompt(map_name):
-    words = ["Counter-Strike", "flash", "smoke", "molotov", "HE", "lurk", "rotate", "retake", "site A", "site B", "mid", "full buy", "éco", "force",
+def _prompt(map_name, lang="fr"):
+    words = ["Counter-Strike", "coach", "flash", "smoke", "molotov", "HE", "lurk", "rotate", "retake", "site A", "site B", "mid", "full buy", "éco", "force",
              "drop", "AWP", "heaven", "ramp", "long", "short", "one shot", "il est à 80"]
+    words += ["site clear", "good job", "nice try", "last one", "one more", "low HP"] if lang == "en" else ["bien joué", "perdu", "énervé", "confiant", "bloqué"]
     try:
         import plan
         z = (plan.zone_refs().get(map_name or "") or {}).get("zones", [])
         words += [x["name"] for x in z][:40]
     except Exception:
         pass
-    return "Calls de Counter-Strike : " + ", ".join(words) + "."
+    return ("Counter-Strike calls: " if lang == "en" else "Calls de Counter-Strike : ") + ", ".join(words) + "."
+
+
+def _words(model, path, lang, map_name):
+    segs, _ = model.transcribe(path, language=lang, vad_filter=True, word_timestamps=True, condition_on_previous_text=False,
+                               initial_prompt=_prompt(map_name, lang))
+    return [(w.start, w.end, w.word, w.probability) for s_ in segs if not HALLUCINATIONS.search(s_.text or "") for w in (s_.words or [])]
+
+
+def _spans(words, gap=0.9):
+    out, cur = [], None
+    for w in words:
+        if cur and w[0] - cur[1] <= gap:
+            cur[1] = max(cur[1], w[1])
+        else:
+            if cur:
+                out.append(cur)
+            cur = [w[0], w[1]]
+    if cur:
+        out.append(cur)
+    return out
 
 
 def transcribe(rid):
+    """Two passes over the recording, one in French and one in English (Whisper translates what isn't in the language
+    it is told: "site clear" became "cité claire"). The phrases of both passes are lined up, and each keeps the pass
+    whose words the model is surest of (mean log-probability): your English calls stay English, your French stays
+    French."""
+    import math
+    meta = json.load(open(os.path.join(DIR, rid + ".json"), encoding="utf-8"))
+    from faster_whisper import WhisperModel
+    model = WhisperModel(MODEL, device="cpu", compute_type="int8", cpu_threads=min(8, os.cpu_count() or 4))
+    path = os.path.join(DIR, meta["file"])
+    W = {lang: _words(model, path, lang, meta.get("map")) for lang in ("fr", "en")}
+    spans = sorted(_spans(W["fr"]) + _spans(W["en"]))
+    merged = []
+    for a, b in spans:
+        if merged and a <= merged[-1][1] + 0.3:
+            merged[-1][1] = max(merged[-1][1], b)
+        else:
+            merged.append([a, b])
+    out = []
+    for a, b in merged:
+        best = None
+        for lang, ws in W.items():
+            sel = [w for w in ws if w[0] >= a - 0.05 and w[1] <= b + 0.05]
+            if not sel:
+                continue
+            score = sum(math.log(max(w[3], 1e-4)) for w in sel) / len(sel)
+            if best is None or score > best[0]:
+                best = (score, lang, sel)
+        if not best:
+            continue
+        text = "".join(w[2] for w in best[2]).strip()
+        if text and not HALLUCINATIONS.search(text):
+            out.append({"start": round(best[2][0][0], 2), "end": round(best[2][-1][1], 2), "text": text, "lang": best[1],
+                        "p": round(best[0], 2)})
+    json.dump({"id": rid, "model": MODEL, "bilingual": True, "time": dt.datetime.now().isoformat(timespec="minutes"), "utterances": out},
+              open(os.path.join(DIR, rid + ".transcript.json"), "w", encoding="utf-8"), ensure_ascii=False, indent=1)
+    return len(out)
+
+
+def transcribe_mono(rid):
     meta = json.load(open(os.path.join(DIR, rid + ".json"), encoding="utf-8"))
     from faster_whisper import WhisperModel
     model = WhisperModel(MODEL, device="cpu", compute_type="int8", cpu_threads=min(8, os.cpu_count() or 4))
@@ -338,6 +398,87 @@ def classify(text, pos_re):
             "plan": bool(re.search(PLAN, t)), "tilt": bool(re.search(TILT, t))}
 
 
+# what a phrase says about how you feel. Said on purpose: "coach" then one word ("coach, perdu", "coach confiant");
+# otherwise read from the words: frustration (with the team, with yourself, or plain), doubt, suspicion, positive
+COACH_RE = re.compile(r"^\W*(?:coach|coache|coatch|couch|koch|kosh|coch|coche)\b[\s,.:;!-]*(.*)$", re.I)
+COACH_ANY = re.compile(r"\b(?:coach|coache|coatch)\b", re.I)   # anywhere: "round coach plutôt satisfait", "coach premier round ok, coach deuxième mitigé"
+COACH_WORDS = {
+    "frustration": ["énervé", "énervée", "enervé", "tilt", "tilté", "frustré", "rage", "saoulé", "soûlé", "agacé", "dégoûté", "nul", "bloqué",
+                    "déçu", "mauvais", "raté", "pas content", "pas satisfait",
+                    "seul", "lâché", "bait", "baité", "angry", "tilted", "frustrated", "blocked", "alone", "mad", "annoyed"],
+    "doubt": ["perdu", "paumé", "doute", "hésite", "hésitant", "confus", "stressé", "stress", "tendu", "fatigué", "crevé", "lent", "lost",
+              "mitigé", "moyen", "bof", "pas sûr", "incertain",
+              "confused", "stressed", "tired", "unsure", "nervous"],
+    "positive": ["confiant", "chaud", "bien", "serein", "calme", "facile", "fort", "à l'aise", "focus", "concentré", "en forme", "confident",
+                 "satisfait", "content", "ok", "propre", "réussi", "solide", "bon round",
+                 "good", "calm", "easy", "focused", "great", "comfortable"],
+    "suspicion": ["cheat", "cheater", "cheateur", "triche", "tricheur", "wallhack", "suspect", "aimbot"],
+}
+MOOD_RE = [
+    ("suspicion", None, r"\b(cheat\w*|wall ?hack|aimbot|spinbot|trich\w+|utilisateur suspect|suspect)\b"),
+    ("frustration", "team", r"(\bbloqu\w+|\bm'a bloqu|\bme bloqu|\bbait\w*|pique après|peek après|t'es mute|tu parles pas|arrête de (peek|regarder)|"
+                            r"pourquoi tu|ta smoke|smoke (est |qui )?(mal|pue)|fake info|stop peek)"),
+    ("frustration", "self", r"(j'ai pas touché|pas touché (un|une|de)|mourir trop tôt|c'est moi qui ai pris|je suis (nul|la salope|éclaté)|"
+                            r"\bmy bad\b|ma faute|j'ai raté)"),
+    ("frustration", None, TILT[:-3] + r"|j'en peux plus|ferme ta gueule|ta mère|\bpute\b|fils de|stupide|\bfuck\w*|\bshit\b|\bwtf\b|"
+                          r"dans mes veines|ça me met bien)\b"),
+    ("doubt", None, r"(qu'est-ce qu'on fait|on fait quoi|je sais pas|j'sais pas|aucune idée|je comprends pas|\bbizarre\b|\bétrange\b|"
+                    r"what do we do|\bperdu\b|\bpaumé\b)"),
+    ("positive", None, r"\b(nickel|facile|easy|let'?s go|on les a|trop fort|parfait|good job|gg|bien joué|bien fait|nice|bon travail)\b"),
+]
+MOOD_RE = [(k, sb, re.compile(rx, re.I)) for k, sb, rx in MOOD_RE]
+MOODS = ("frustration", "doubt", "suspicion", "positive")
+
+
+def _coach_word(rest):
+    """The feeling in what follows "coach": the first word of the lists found in it (a "pas" just before a positive
+    word makes it a frustration: "pas content"); nothing known: a note, kept as said."""
+    best = None
+    for kind, words in COACH_WORDS.items():
+        for w in words:
+            m = re.search(r"(?<![a-zà-ÿ])" + re.escape(w) + r"(?![a-zà-ÿ])", rest)
+            if m and (best is None or m.start() < best[0]):
+                k = kind
+                if kind == "positive" and re.search(r"\bpas (très |trop |vraiment )?$", rest[:m.start()]):
+                    k = "frustration"
+                best = (m.start(), k, w)
+    if not best:
+        return {"kind": "note", "sub": None, "word": rest.strip(" ,.")[:40], "coach": True} if rest.strip(" ,.") else None
+    sb = "team" if best[2] in ("bloqué", "seul", "lâché", "bait", "baité", "blocked", "alone") else None
+    return {"kind": best[1], "sub": sb, "word": best[2], "coach": True}
+
+
+def mood_all(text):
+    """Every feeling of a phrase: each "coach …" part on its own (one phrase can say two), else the one read from the
+    words."""
+    t = (text or "").strip()
+    parts = COACH_ANY.split(t)
+    if len(parts) > 1:
+        return [m for m in (_coach_word(normalize(p_)) for p_ in parts[1:]) if m]
+    m = mood_of(t)
+    return [m] if m else []
+
+
+ANALYSIS_V = 2   # bump when the analysis changes: mood_stats analyzes the older ones again
+
+
+def mood_of(text):
+    """-> {"kind", "sub", "word", "coach"} or None (the first feeling of the phrase)."""
+    t = (text or "").strip()
+    if COACH_ANY.search(t):
+        for p_ in COACH_ANY.split(t)[1:]:
+            m = _coach_word(normalize(p_))
+            if m:
+                return m
+        return None
+    tl = normalize(t)
+    for kind, sb, rx in MOOD_RE:
+        mm = rx.search(tl)
+        if mm:
+            return {"kind": kind, "sub": sb, "word": mm.group(0)[:30], "coach": False}
+    return None
+
+
 def _match_for(meta, sid):
     """The analyzed match played during this recording (same map, start time inside the recording)."""
     import cs2coach
@@ -369,6 +510,8 @@ def analyze(rid, sid):
     pos_re = _pos_re(meta.get("map"))
     for u in utts:
         u.update(classify(u["text"], pos_re))
+        u["moods"] = mood_all(u["text"])
+        u["mood"] = u["moods"][0] if u["moods"] else None
     mid = _match_for(meta, sid)
     # round windows from the game's marks: live start of each round, in seconds of recording
     marks = meta.get("rounds") or []
@@ -384,6 +527,7 @@ def analyze(rid, sid):
     starts = sorted(live.items())
     rounds = []
     died, clutch_windows, throws = {}, {}, []
+    L = None
     if mid and starts:
         d = os.path.join(config.DEEP, mid)
         L = pd.read_parquet(os.path.join(d, "loadout.parquet")) if os.path.exists(os.path.join(d, "loadout.parquet")) else None
@@ -423,7 +567,12 @@ def analyze(rid, sid):
         buy_us = [u for u in us if u["start"] < t0]
         announced = sum(1 for (rr, tt, typ) in throws if rr == r and any(u["util"] and t0 + tt - 6 <= u["start"] <= t0 + tt + 0.5 for u in us))
         n_throws = sum(1 for (rr, _, _) in throws if rr == r)
-        rounds.append({"round": r, "died_t": dt_, "calls": len(us), "alive_calls": len(alive_us), "info_before_death": any(u["info"] for u in before_death),
+        xr = L[(L.steamid == int(sid)) & (L["round"] == r)] if L is not None else None
+        xr = xr.iloc[0] if xr is not None and len(xr) else None
+        rounds.append({"round": r, "side": xr.side if xr is not None else None, "won": bool(xr.won) if xr is not None else None,
+                       "dmg": int(xr.damage) if xr is not None else None, "kills": int(xr.kills) if xr is not None else None,
+                       "moods": [{"t": round(u["start"] - t0, 1), **mo} for u in us for mo in u.get("moods") or []],
+                       "died_t": dt_, "calls": len(us), "alive_calls": len(alive_us), "info_before_death": any(u["info"] for u in before_death),
                        "dead_calls": len(dead_us), "clutch_talk": len(clutch_talk), "buy_calls": len(buy_us), "throws": n_throws, "announced": announced,
                        "texts": [{"t": round(u["start"] - t0, 1), "text": u["text"], "kind": "tilt" if u["tilt"] else "info" if u["info"] else "util" if u["util"] else "plan" if u["plan"] else ""} for u in us]})
     n = len(utts)
@@ -441,8 +590,10 @@ def analyze(rid, sid):
            "clutch_talk_rounds": sum(1 for r in rr if r["clutch_talk"]), "clutch_rounds": sum(1 for r in rr if r["round"] in clutch_windows),
            "throws": thr, "announced": sum(r["announced"] for r in rr),
            "examples": [u["text"] for u in utts if u["complete"]][:4],
-           "tilt_rounds": [r["round"] for r in rr if any(x["kind"] == "tilt" for x in r["texts"])][:6]}
+           "tilt_rounds": [r["round"] for r in rr if any(x["kind"] == "tilt" for x in r["texts"])][:6],
+           "moods": {k: sum(1 for u in utts for mo in u.get("moods") or [] if mo["kind"] == k) for k in MOODS + ("note",)}}
     res["tips"] = tips(res)
+    res["v"] = ANALYSIS_V
     json.dump(res, open(os.path.join(DIR, rid + ".analysis.json"), "w", encoding="utf-8"), ensure_ascii=False, indent=1)
     return res
 
@@ -464,6 +615,36 @@ def tips(a):
     if not T:
         T.append("Your calls are clean: keep saying where, how many and what you are going to do.")
     return T
+
+
+def mood_stats(sid):
+    """Every aligned recording of the player: the rounds after a frustrated moment (the 3 next rounds) against the
+    others, damage per round and rounds won. None under 10 such rounds."""
+    rows = []
+    for r in recordings():
+        if not r["transcribed"] or r.get("practice"):
+            continue
+        try:
+            m = json.load(open(os.path.join(DIR, r["id"] + ".json"), encoding="utf-8"))
+            if m.get("steamid") and str(m["steamid"]) != str(sid):
+                continue
+            f = os.path.join(DIR, r["id"] + ".analysis.json")
+            a = json.load(open(f, encoding="utf-8")) if os.path.exists(f) else None
+            if a is None or a.get("v") != ANALYSIS_V:
+                a = analyze(r["id"], sid)
+        except Exception:
+            a = None
+        if not a or not a.get("match") or not a.get("aligned"):
+            continue
+        rs = [x for x in a["rounds"] if x.get("dmg") is not None]
+        frus = {x["round"] for x in rs if any(mo["kind"] == "frustration" for mo in x.get("moods", []))}
+        for x in rs:
+            rows.append((any(x["round"] - k in frus for k in (1, 2, 3)), x["dmg"], bool(x["won"])))
+    A, O = [r for r in rows if r[0]], [r for r in rows if not r[0]]
+    if len(A) < 10 or len(O) < 10:
+        return None
+    f_ = lambda R: {"n": len(R), "adr": round(sum(r[1] for r in R) / len(R)), "won": round(100 * sum(r[2] for r in R) / len(R))}
+    return {"after": f_(A), "other": f_(O)}
 
 
 def summary(sid, limit=6):
@@ -503,7 +684,7 @@ class _Segmenter:
     not a call: skipped up to the next silence."""
     def __init__(self, rate, on_utt):
         self.rate, self.on_utt = rate, on_utt
-        self.noise, self.buf, self.voiced, self.sil, self.t0, self.skip = 0.0008, [], 0.0, 0.0, None, False
+        self.noise, self.buf, self.voiced, self.sil, self.t0, self.skip, self.e = 0.0008, [], 0.0, 0.0, None, False, 0.0
 
     def feed(self, block, now):
         import numpy as np
@@ -517,6 +698,7 @@ class _Segmenter:
             if not self.skip:
                 self.buf.append(block)
             self.voiced += dur
+            self.e += rms * rms * dur
             self.sil = 0.0
         else:
             if not self.buf and not self.skip:
@@ -533,8 +715,8 @@ class _Segmenter:
 
     def _flush(self):
         import numpy as np
-        buf, voiced, t0, skip = self.buf, self.voiced, self.t0, self.skip
-        self.buf, self.voiced, self.sil, self.skip = [], 0.0, 0.0, False
+        buf, voiced, t0, skip, e = self.buf, self.voiced, self.t0, self.skip, self.e
+        self.buf, self.voiced, self.sil, self.skip, self.e = [], 0.0, 0.0, False, 0.0
         if skip or not buf or voiced < LIVE_MIN_S:
             return
         a = np.concatenate(buf)
@@ -542,7 +724,7 @@ class _Segmenter:
             x = np.linspace(0, len(a) - 1, int(len(a) * SR / self.rate))
             a = np.interp(x, np.arange(len(a)), a)
         try:
-            self.on_utt(a.astype("float32"), t0)
+            self.on_utt(a.astype("float32"), t0, (e / voiced) ** 0.5 if voiced else 0.0)
         except Exception:
             pass
 
@@ -551,7 +733,7 @@ class LiveCalls:
     def __init__(self):
         import queue
         self.q = queue.Queue(maxsize=3)
-        self.proc, self.map, self.pending, self.n, self.last = None, None, 0, 0, None
+        self.proc, self.map, self.pending, self.n, self.last, self.levels = None, None, 0, 0, None, []
 
     def running(self):
         return bool(self.proc and self.proc.poll() is None)
@@ -583,8 +765,18 @@ class LiveCalls:
                 pass
         self.proc = None
 
-    def push(self, audio, t0):
-        """From the microphone thread: never blocks (a call that waits too long is useless anyway)."""
+    def push(self, audio, t0, rms=0.0):
+        """From the microphone thread: never blocks (a call that waits too long is useless anyway). A shout (twice as
+        loud as your usual speech, once 8 phrases are known) after your death or a lost round is a frustrated moment."""
+        if rms:
+            lv = sorted(self.levels)
+            if len(lv) >= 8 and rms >= 2.2 * lv[len(lv) // 2]:
+                try:
+                    import gsi
+                    gsi.voice_heat(t0)
+                except Exception:
+                    pass
+            self.levels = (self.levels + [rms])[-60:]
         if self.running() and self.pending < 2:
             try:
                 self.q.put_nowait((audio, t0))
@@ -614,7 +806,15 @@ class LiveCalls:
             except Exception:
                 continue
             p = parse_call(r.get("text") or "", r.get("map"))
-            self.last = {"text": r.get("text"), "s": r.get("s"), "parsed": p}
+            mo = mood_of(r.get("mood_text") or "") if r.get("mood_text") else None
+            self.last = {"text": r.get("text"), "s": r.get("s"), "parsed": p, "mood": mo}
+            if mo and mo["kind"] in MOODS:
+                try:
+                    import gsi
+                    gsi.voice_mood(mo, r.get("t"))
+                except Exception as e:
+                    print("live mood:", e, flush=True)
+                continue
             if p:
                 try:
                     import gsi
@@ -666,8 +866,19 @@ def live_loop():
             print("live transcription:", e, file=sys.stderr, flush=True)
         if HALLUCINATIONS.search(text):
             text = ""
-        sys.stdout.write(json.dumps({"id": h.get("id"), "t": h.get("t"), "map": mp, "text": text, "s": round(time.time() - t, 2)},
-                                    ensure_ascii=False) + "\n")
+        mood_text = None
+        if COACH_ANY.search(text):   # "coach, perdu": the word said in French, read again in French
+            try:
+                segs, _ = model.transcribe(a, language="fr", beam_size=1, condition_on_previous_text=False, vad_filter=False,
+                                           initial_prompt="Coach, perdu. Coach, confiant. Coach, énervé. Coach, bloqué. Coach, stressé. Coach, fatigué. Coach, cheat.",
+                                           without_timestamps=True, max_new_tokens=12, temperature=0.0)
+                fr = " ".join(x.text for x in segs).strip()
+                mood_text = fr if COACH_ANY.search(fr) else "coach " + fr
+            except Exception as e:
+                print("live mood transcription:", e, file=sys.stderr, flush=True)
+                mood_text = text
+        sys.stdout.write(json.dumps({"id": h.get("id"), "t": h.get("t"), "map": mp, "text": text, "mood_text": mood_text,
+                                     "s": round(time.time() - t, 2)}, ensure_ascii=False) + "\n")
         sys.stdout.flush()
 
 
@@ -737,11 +948,13 @@ def parse_call(text, map_name):
     rush = bool(re.search(r"\b(rush|rushent|rouch|rushs)\b", t))
     bomb = bool(re.search(r"\b(bombe|bomb|plant|plantée?|posée?|planted)\b", t))
     lone = bool(re.search(r"\b(seul|solo|lurk|lurker)\b", t)) or n == 1
+    clear = bool(re.search(r"\b(clear|clean|empty|nobody|vide|personne|no one)\b", t))   # "B clear", "personne en B"
     if not (site or zone or rush or bomb):
         return None
     if len(words) > 5 and not (n or zone or rush or bomb):
         return None   # a sentence with a letter in it, not a call
-    return {"site": site, "n": n, "zone": zone, "rush": rush, "bomb": bomb, "lone": lone}
+    regs = [h[1] for h in hits if h[1] in ("A", "B")]   # every zone named, with its side of the map ("1 jungle, 1 connector": A twice)
+    return {"site": site, "n": n, "zone": zone, "rush": rush, "bomb": bomb, "lone": lone, "clear": clear, "regs": regs}
 
 
 if __name__ == "__main__":

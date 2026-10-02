@@ -34,6 +34,8 @@ METRICS = {
     "weapon_adr": ("damage per round with the weapon", "", True),
     "zone_duels": ("duels won in the zone", "%", True),
     "first_game": ("rating of the first game of the session", "", True),
+    "ct_full_duels": ("duels won on your CT full buys", "%", True),
+    "call_before_death": ("deaths with a call in the 10 s before", "%", True),
 }
 
 TEMPLATES = {
@@ -63,6 +65,14 @@ TEMPLATES = {
                "how": ["5 min of Aim Botz or Aim Rush, 5 min of Deathmatch, 5 min of lineups on the day's map.", "Note it in the pre-session journal."]},
     "session_limit": {"cat": "Session", "title": "At most 3 games per session, stop after 2 losses", "metric": "rating", "min": 6, "unit_n": "games",
                       "how": ["After 3 games or 2 losses in a row: a break of at least 30 minutes, or end of session."]},
+    "full_rifle_ct": {"cat": "Weapon", "title": "Full buy as CT: an M4, not the MAG-7", "metric": "ct_full_duels", "min": 25, "unit_n": "duels",
+                      "how": ["As CT, when your team full-buys: M4A1-S or M4A4, not the MAG-7 (the buy card shows the M4).",
+                              "Keep the MAG-7 for force-buys if you like it there.",
+                              "The coach compares your duels on CT full buys before and after."]},
+    "calls": {"cat": "Habit", "title": "Call before the duel, say 'flash'", "metric": "call_before_death", "min": 4, "unit_n": "games",
+              "how": ["Say what you see (where, how many) before you take the duel, not after: your rounds with a call before your death are won far more often.",
+                      "Say 'flash' before you throw it: your teammates turn away and peek behind it.",
+                      "Measured on your recorded matches (Your calls on)."]},
     "opening": {"cat": "Habit", "title": "Only open with a flash", "metric": "open_win", "min": 5, "unit_n": "games",
                 "how": ["No more dry opening duels: flash (yours or a teammate's) or you leave the opening to someone else."]},
 }
@@ -191,6 +201,28 @@ def match_values(sid, m, st, template, params):
         k = int(((D.killer == sid) & (D.killer_zone == params.get("zone")) & (D.killer_side == side)).sum())
         d = int(((D.victim == sid) & (D.victim_zone == params.get("zone")) & (D.victim_side == side)).sum())
         return ("k", k, k + d)
+    if metric == "ct_full_duels":
+        d = os.path.join(config.DEEP, str(m["id"]))
+        if not (os.path.exists(os.path.join(d, "duels.parquet")) and os.path.exists(os.path.join(d, "loadout.parquet"))):
+            return None, 0
+        L = pd.read_parquet(os.path.join(d, "loadout.parquet"), columns=["round", "steamid", "side", "team_buy"])
+        full = set(L[(L.steamid == sid) & (L.side == "CT") & (L.team_buy == "full")]["round"].astype(int))
+        if not full:
+            return None, 0
+        D = pd.read_parquet(os.path.join(d, "duels.parquet"), columns=["round", "killer", "victim"])
+        D = D[D["round"].astype(int).isin(full)]
+        k, dd = int((D.killer == sid).sum()), int((D.victim == sid).sum())
+        return ("k", k, k + dd)
+    if metric == "call_before_death":
+        import glob
+        for fa in glob.glob(os.path.join(config.OUT, "voice", "*.analysis.json")):
+            try:
+                a = json.load(open(fa, encoding="utf-8"))
+            except (OSError, ValueError):
+                continue
+            if str(a.get("match")) == str(m["id"]) and a.get("aligned") and a.get("deaths"):
+                return ("k", a["deaths"] - a["silent_deaths"], a["deaths"])
+        return None, 0
     if metric == "first_game":
         return (m.get("_first_rating"), 1) if m.get("_first_rating") is not None else (None, 0)
     return None, 0

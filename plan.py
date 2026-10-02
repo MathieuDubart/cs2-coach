@@ -528,8 +528,15 @@ def build(steamid, adv, cross=None, deep=None, light=False):
         import voice
         if os.path.exists(voice.DIR):
             plan["calls"] = voice.summary(sid)
+            plan["mood"] = voice.mood_stats(sid)   # the rounds after a frustrated moment against the others
     except Exception as e:
         _miss(plan, "calls", e)
+    try:   # from the demos: blocks, flashes, team flashes, odd kills of the enemies and their Steam bans
+        import matchfacts
+        matchfacts.run(sid, 10)
+        plan["facts"] = matchfacts.summary(sid)
+    except Exception as e:
+        _miss(plan, "match facts", e)
     try:
         import review
         plan["review"] = review.build(sid, stats, mid_rows, ctx, plan["experiments"], adv)

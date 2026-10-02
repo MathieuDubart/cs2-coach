@@ -622,7 +622,7 @@ def econ_table(df):
 
 
 SUMMARY = os.path.join(config.OUT, "population", "tside_summary.json")
-VERSION = 30   # bump when the summary changes shape: the cache is rebuilt
+VERSION = 31   # bump when the summary changes shape: the cache is rebuilt
 
 
 def _stamp():
@@ -721,6 +721,7 @@ def _tendencies(maps, df):
             res["maps"][mp]["play_ctx"] = _play_ctx(g)
             res["maps"][mp]["ct_spots"] = _ct_spots(mp, dirs.get(mp, []))
             res["maps"][mp]["ct_push"] = _ct_push(mp, dirs.get(mp, []))
+            res["maps"][mp]["push_answers"] = _push_answers(mp, g)
             res["maps"][mp]["play_timing"] = _play_timing(g)
             res["maps"][mp]["util_war"] = _util_war(mp, g, dirs.get(mp, []))
             res["maps"][mp]["t_timeline"] = _t_timeline(mp, g, dirs.get(mp, []))
@@ -1414,6 +1415,40 @@ def _ctx_of(r):
             else r.CT_buy if r.CT_buy in ("eco", "force", "full") else None)
 
 
+_PUSH_ROWS = {}   # map -> the pushes of _ct_push, one row per round, for _push_answers
+
+
+def _push_answers(mp, g):
+    """When the CTs push past a neutral zone (pistol rounds aside): the Ts' rounds won by their answer, the site they
+    hit (A, B) and when (fast: on the site before 1:10; late: after), at equal economy (each round against what its two
+    buys win on this map). Per gate pushed through at least 25 times; answers with 10 rounds or more."""
+    P = _PUSH_ROWS.get(mp)
+    if P is None or not len(P) or "hit_t" not in g:
+        return None
+    G = g[g.T_buy != "pistol"]
+    allp = float(G.T_won.mean())
+    mr = {k: (float(x.T_won.sum()) + 10 * allp) / (len(x) + 10) for k, x in G.groupby(["T_buy", "CT_buy"])}
+    G = G.assign(res=G.T_won.astype(float) - [mr.get((a, b), allp) for a, b in zip(G.T_buy, G.CT_buy)],
+                 key=list(zip(G.match.astype(str), G["round"].astype(int))))
+    P = P.assign(key=list(zip(P.mid.astype(str), P["round"].astype(int))))
+    out = []
+    for gate, x in P.groupby("gate"):
+        r = G[G.key.isin(set(x.key))]
+        if len(r) < 25:
+            continue
+        base = float(r.T_won.mean())
+        ans = []
+        for site in ("A", "B"):
+            for tempo, sel in (("fast", r.hit_t <= 45), ("late", r.hit_t > 45)):
+                q = r[(r.site == site) & sel]
+                if len(q) >= 10:
+                    ans.append({"site": site, "tempo": tempo, "n": int(len(q)), "won": round(100 * (base + float(q.res.mean())))})
+        if len(ans) >= 2:
+            ans.sort(key=lambda a: -a["won"])
+            out.append({"gate": gate, "n": int(len(r)), "won": round(100 * base), "answers": ans[:3]})
+    return out or None
+
+
 def _ct_push(mp, dirs, cell=24):
     """CT pushes past the neutral zones. A neutral zone is where the Ts and the CTs who run get at the same time (the
     first arrivals of each side, round after round, within 2 s); past it, the Ts usually get there first. A CT alive
@@ -1481,12 +1516,13 @@ def _ct_push(mp, dirs, cell=24):
         dist = np.hypot(cand.px - p.px, cand.py - p.py)
         gate = cand.iloc[int(np.argmin(dist.values))]
         dd = Dd[(Dd.d == di) & (Dd["round"] == rnd) & (Dd.t >= p.t - 1) & (Dd.t <= p.t + 15)]
-        pushes.append({"ctx": p.ctx, "t": float(p.t), "px": float(p.px), "py": float(p.py), "level": p.level,
+        pushes.append({"mid": os.path.basename(dirs[di]), "round": int(rnd), "ctx": p.ctx, "t": float(p.t), "px": float(p.px), "py": float(p.py), "level": p.level,
                        "gate": humanize(gate.zone, mp) if gate.zone else None, "gx": float(gate.px), "gy": float(gate.py),
                        "kill": bool((dd.killer == p.steamid).any()), "died": bool((dd.victim == p.steamid).any())})
     if not pushes:
         return None
     P = pd.DataFrame(pushes)
+    _PUSH_ROWS[mp] = P
     out = {}
     for c, g in P.groupby("ctx"):
         n = n_ctx.get(c, 0)

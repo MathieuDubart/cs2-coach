@@ -223,6 +223,10 @@ def set_mark(rnd, fields):
             clean[k] = v if v in DYNS else None
         elif k == "bomb_site":
             clean[k] = v if v in ("A", "B") else None
+        elif k == "mood":   # how you felt, said live ("coach, perdu") or read from a shout
+            clean[k] = v if v in ("frustration", "doubt", "suspicion", "positive") else None
+        elif k in ("heat", "mood_word"):
+            clean[k] = (bool(v) if k == "heat" else str(v)[:24]) if v else None
     if not clean:
         return True
     with LOCK:
@@ -252,6 +256,12 @@ def voice_call(p, t_wall=None):
         return False
     log_event({"map": STATE.get("map"), "round": int(rnd), "call": {k: v for k, v in p.items() if v}, "el": el})
     site = p.get("site")
+    if side == "T" and bomb != "planted":   # the CTs you see: where, how many; a site said clear
+        with LOCK:
+            sn = STATE.get("seen") if (STATE.get("seen") or {}).get("round") == rnd else {"round": rnd, "calls": []}
+            regs = p.get("regs") or ([site] if site else [])
+            sn["calls"] = (sn["calls"] + [{"el": el, "t": now, "regs": regs, "n": p.get("n"), "clear": bool(p.get("clear")), "site": site, "zone": p.get("zone")}])[-12:]
+            STATE["seen"] = sn
     if bomb == "planted":
         if site:
             set_mark(rnd, {"bomb_site": site})
@@ -272,6 +282,34 @@ def voice_call(p, t_wall=None):
     if site:
         set_site(rnd, site)
     return True
+
+
+def voice_mood(mo, t_wall=None):
+    """'coach, <word>' said live: kept on the round being played (the buy time counts for the round to come)."""
+    with LOCK:
+        rnd, ph = STATE.get("round"), STATE.get("round_phase")
+        STATE["mood"] = {"round": rnd, "t": time.time(), "kind": mo.get("kind"), "word": mo.get("word")}
+    if not rnd:
+        return False
+    log_event({"map": STATE.get("map"), "round": int(rnd), "mood": mo})
+    return set_mark(rnd, {"mood": mo.get("kind"), "mood_word": mo.get("word")})
+
+
+def voice_heat(t_wall=None):
+    """A shout (much louder than your usual speech) within 15 s after your death, or once the round is lost: a
+    frustrated moment, kept on that round."""
+    now = time.time()
+    with LOCK:
+        rnd, ph, side = STATE.get("round"), STATE.get("round_phase"), STATE.get("side")
+        R = ((HIST or {}).get("rounds") or {}).get(str(rnd)) or {}
+        t0 = R.get("live")
+        el = (t_wall or now) - t0 if t0 else None
+        dead_recent = R.get("dead") is not None and el is not None and 0 <= el - R["dead"] <= 15
+        lost = ph == "over" and R.get("win") and R.get("win") != side
+    if rnd and (dead_recent or lost):
+        log_event({"map": STATE.get("map"), "round": int(rnd), "heat": True})
+        return set_mark(rnd, {"heat": True})
+    return False
 
 
 def _mate(pl, st, phase, now):
@@ -492,6 +530,8 @@ def update(payload):
         if STATE.get("map") != STATE.get("_pmap"):
             STATE.update(_pmap=STATE.get("map"), practice=False, mates={})   # a new match: the teammates' money starts over
             STATE.pop("call", None)
+            STATE.pop("seen", None)
+            STATE.pop("mood", None)
         el = now - STATE["live_since"] if STATE.get("round_phase") == "live" and STATE.get("live_since") else 0
         if STATE.get("map") and ((own and (st.get("money") or 0) > 16000) or el > 240):
             STATE["practice"] = True
