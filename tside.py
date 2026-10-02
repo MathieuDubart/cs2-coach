@@ -622,7 +622,7 @@ def econ_table(df):
 
 
 SUMMARY = os.path.join(config.OUT, "population", "tside_summary.json")
-VERSION = 16   # bump when the summary changes shape: the cache is rebuilt
+VERSION = 19   # bump when the summary changes shape: the cache is rebuilt
 
 
 def _stamp():
@@ -707,6 +707,11 @@ def _tendencies(maps, df):
             res["maps"][mp]["t_routes"] = _t_routes(mp, g, dirs.get(mp, []))
         except Exception as e:
             print(f"{mp}: T routes unavailable ({e})")
+        try:   # the plays by economy and by the run before the round; the CTs' spots and kill angles by moment
+            res["maps"][mp]["play_ctx"] = _play_ctx(g)
+            res["maps"][mp]["ct_spots"] = _ct_spots(mp, dirs.get(mp, []))
+        except Exception as e:
+            print(f"{mp}: play contexts / CT spots unavailable ({e})")
     res["retake_all"] = retake_table(pool)
     try:   # situations measured on all maps together (pistol as CT for now)
         res["situations"] = _situations(df, res["maps"])
@@ -949,7 +954,7 @@ def _t_routes(mp, g, dirs, top=2):
             if len(e["tr"]) < 80:
                 e["tr"].append(pts)
 
-    def resample(pts, k=40):
+    def resample(pts, k=60):
         xy = np.array([[p[0], p[1]] for p in pts])
         d = np.r_[0, np.cumsum(np.hypot(*np.diff(xy, axis=0).T))]
         if d[-1] <= 0:
@@ -971,10 +976,102 @@ def _t_routes(mp, g, dirs, top=2):
             A = np.array([r[0] for r in rs])
             med = int(np.argmin([np.mean(np.hypot(*(A - a).transpose(2, 0, 1))) for a in A]))   # the most typical walk
             xy, lv, ts = rs[med]
+            sm = xy.copy()   # a light smoothing (3 points) that keeps the corridor: the player's wobble goes, the corners stay
+            sm[1:-1] = (xy[:-2] + xy[1:-1] + xy[2:]) / 3
+            xy = sm
             res.append({"n": len(e["r"]), "win": round(100 * len(e["w"]) / len(e["r"])), "zones": [humanize(z, mp) for z in zs],
                         "pts": [[round(float(a)), round(float(b)), l, round(float(t))] for (a, b), l, t in zip(xy, lv, ts)]})
         if res:
             out[play] = res
+    return out or None
+
+
+def _momentum(g):
+    """For every round: the T side's run before it in the half (w2 = won the last 2+, w1, l1, l2 = lost 2-3, l4 = 4+)."""
+    out = {}
+    for (m, h), x in g.sort_values("round").groupby(["match", "half"]):
+        run = 0
+        for r, won in zip(x["round"], x.T_won):
+            out[(m, int(r))] = "w2" if run >= 2 else "w1" if run == 1 else "l1" if run == -1 else "l4" if run <= -4 else "l2" if run <= -2 else "-"
+            run = (max(run, 0) + 1) if won else (min(run, 0) - 1)
+    return out
+
+
+def _play_ctx(g):
+    """The plays' rounds won by economy (T buy | CT buy) and by the T's run before the round: what the live page needs
+    to rank the plays for the round being played, not for an average round. The run is measured beyond the economy
+    (rounds won against the rounds the two buys predicted), since a run of wins mostly means the other side is broke."""
+    mo = _momentum(g)
+    g = g.assign(mo=[mo.get((m, int(r)), "-") for m, r in zip(g.match, g["round"])])
+    allp = float(g.T_won.mean()) if len(g) else 0.5
+    mr = {k: (float(x.T_won.sum()) + 10 * allp) / (len(x) + 10) for k, x in g.groupby(["T_buy", "CT_buy"])}
+    g = g.assign(ex=[mr.get((a, b), allp) for a, b in zip(g.T_buy, g.CT_buy)])
+    p = g[g.play.notna()]
+    mu, mm = {}, {}
+    for (pl, tb, cb), x in p.groupby(["play", "T_buy", "CT_buy"]):
+        mu.setdefault(pl, {})[f"{tb}|{cb}"] = [int(len(x)), int(x.T_won.sum())]
+    for (pl, b), x in p.groupby(["play", "mo"]):
+        mm.setdefault(pl, {})[b] = [int(len(x)), int(x.T_won.sum()), round(float(x.ex.sum()), 2)]
+    allmo = {b: [int(len(x)), int(x.T_won.sum()), round(float(x.ex.sum()), 2)] for b, x in p.groupby("mo")}
+    mx = {f"{a}|{b}": [int(len(x)), int(x.T_won.sum())] for (a, b), x in g.groupby(["T_buy", "CT_buy"])}   # the map's rounds by economy
+    return {"mu": mu, "mo": mm, "mo_all": allmo, "mx": mx, "all": [int(len(p)), int(p.T_won.sum())]}
+
+
+def _ct_spots(mp, dirs, cell=26):
+    """What the T side meets, by moment of the round: where the CTs stand most (share of their time), and where they
+    kill the Ts from (with the spots where they kill a lot for the little time they spend there: the angles the Ts
+    forget to check)."""
+    pres, kills = [], []
+    for d in dirs[:60]:
+        fs, fd = os.path.join(d, "samples.parquet"), os.path.join(d, "duels.parquet")
+        if not os.path.exists(fs) or not os.path.exists(fd):
+            continue
+        S = pd.read_parquet(fs, columns=["side", "t", "px", "py", "level", "zone", "health"])
+        pres.append(S[(S.side == "CT") & S.px.notna() & (S.health > 0)][["t", "px", "py", "level", "zone"]])
+        D = pd.read_parquet(fd, columns=["t", "killer_side", "victim_side", "killer_px", "killer_py", "killer_level", "killer_zone"])
+        kills.append(D[(D.killer_side == "CT") & (D.victim_side == "T") & D.killer_px.notna()])
+    if not pres or not kills:
+        return None
+    P, K = pd.concat(pres, ignore_index=True), pd.concat(kills, ignore_index=True)
+    edges, names = [lo for _, lo, _ in WINDOWS] + [999], [k for k, _, _ in WINDOWS]
+    P["w"], K["w"] = pd.cut(P.t, edges, labels=names, right=False), pd.cut(K.t, edges, labels=names, right=False)
+    P["c"] = list(zip(P.level, (P.px // cell).astype(int), (P.py // cell).astype(int)))
+    K["c"] = list(zip(K.killer_level, (K.killer_px // cell).astype(int), (K.killer_py // cell).astype(int)))
+    out = {}
+    for w in names:
+        p, k = P[P.w == w], K[K.w == w]
+        if len(p) < 200 or len(k) < 30:
+            continue
+        pc, kc = p.groupby("c"), k.groupby("c")
+        share = pc.size() / len(p)
+        hold = []
+        for c, n in share.sort_values(ascending=False).items():   # the CTs' spots now, not two in the same place
+            x = pc.get_group(c)
+            pt = (float(x.px.mean()), float(x.py.mean()))
+            if any(h["level"] == c[0] and np.hypot(h["px"][0] - pt[0], h["px"][1] - pt[1]) < 2.2 * cell for h in hold):
+                continue
+            hold.append({"px": [round(pt[0]), round(pt[1])], "level": c[0], "share": round(100 * float(n), 1), "zone": humanize(x.zone.mode().iloc[0], mp) if x.zone.notna().any() else None})
+            if len(hold) == 8:
+                break
+        danger = []
+        avg = len(k) / max(1, len(p))
+        for c, x in kc:
+            if len(x) < 6:
+                continue
+            seen = int(share.get(c, 0) * len(p))
+            rate = len(x) / max(seen, 1)   # kills for the CT time spent there
+            danger.append({"px": [round(float(x.killer_px.mean())), round(float(x.killer_py.mean()))], "level": c[0], "kills": int(len(x)),
+                           "share": round(100 * len(x) / len(k), 1), "zone": humanize(x.killer_zone.mode().iloc[0], mp) if x.killer_zone.notna().any() else None,
+                           "sneaky": bool(rate >= 3 * avg and len(x) >= 8)})
+        danger.sort(key=lambda z: -z["kills"])
+        dd = []
+        for z in danger:
+            if any(h["level"] == z["level"] and np.hypot(h["px"][0] - z["px"][0], h["px"][1] - z["px"][1]) < 2.2 * cell for h in dd):
+                continue
+            dd.append(z)
+            if len(dd) == 8:
+                break
+        out[w] = {"hold": hold, "danger": dd, "n": int(len(k))}
     return out or None
 
 
