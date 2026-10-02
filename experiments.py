@@ -356,7 +356,7 @@ def suggestions(sid, adv, mid_bench=None, weapons_info=None, ctx=None, cross=Non
 def report(sid, adv=None, mid_bench=None, weapons_info=None, ctx=None, cross=None):
     hist = context.history(sid)
     cache = {}
-    exps = [evaluate(sid, e, hist, cache) for e in load(sid)]
+    exps = [evaluate(sid, e, hist, cache) for e in load(sid) if e.get("template") in TEMPLATES]   # an unknown one (older code): left aside, never fatal
     active = {(e["template"], json.dumps({k: v for k, v in e["params"].items()}, sort_keys=True)) for e in exps if e["status"] == "active"}
     sug = [s for s in suggestions(sid, adv, mid_bench, weapons_info, ctx, cross) if (s["template"], json.dumps(s["params"], sort_keys=True)) not in active]
     return {"experiments": exps, "suggested": sug, "templates": {k: {"cat": v["cat"], "title": v["title"]} for k, v in TEMPLATES.items()}}
