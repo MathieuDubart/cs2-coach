@@ -622,7 +622,7 @@ def econ_table(df):
 
 
 SUMMARY = os.path.join(config.OUT, "population", "tside_summary.json")
-VERSION = 14   # bump when the summary changes shape: the cache is rebuilt
+VERSION = 16   # bump when the summary changes shape: the cache is rebuilt
 
 
 def _stamp():
@@ -703,6 +703,10 @@ def _tendencies(maps, df):
             res["maps"][mp]["tplan"] = _tplan(mp, g, dirs.get(mp, []), res["maps"][mp])
         except Exception as e:
             print(f"{mp}: T plan unavailable ({e})")
+        try:   # the T's ways from their spawn to each site, play by play, with how often the round is won
+            res["maps"][mp]["t_routes"] = _t_routes(mp, g, dirs.get(mp, []))
+        except Exception as e:
+            print(f"{mp}: T routes unavailable ({e})")
     res["retake_all"] = retake_table(pool)
     try:   # situations measured on all maps together (pistol as CT for now)
         res["situations"] = _situations(df, res["maps"])
@@ -901,6 +905,77 @@ def multi_spots(events, r=30, top=12, min_n=1):
     cl.sort(key=lambda c: (-c["n"], -c["best"]))
     return [{"px": [round(c["x"] / c["n"]), round(c["y"] / c["n"])], "level": c["level"], "n": c["n"], "best": c["best"],
              "t_med": round(float(np.median(c["ts"]))), "zone": max(set(c["zones"]), key=c["zones"].count)} for c in cl[:top]]
+
+
+def _t_routes(mp, g, dirs, top=2):
+    """T side, per play: the ways the players of the base walk from their spawn to the site, the most taken first, each
+    drawn as the walk of one real player (the most typical of the ones who took that way: the medoid), with when they
+    pass there, and how often the round is won when one takes it."""
+    play_of = {(str(m), int(r)): (p, w) for m, r, p, w in zip(g.match, g["round"], g.play, g.T_won) if isinstance(p, str) and p != "none"}
+    if not play_of:
+        return None
+    ways = {}
+    for d in dirs:
+        mid = os.path.basename(d)
+        f = os.path.join(d, "samples.parquet")
+        if not os.path.exists(f):
+            continue
+        S = pd.read_parquet(f, columns=["steamid", "side", "round", "t", "px", "py", "level", "zone", "health"])
+        S = S[(S.side == "T") & S.px.notna()].sort_values("t")
+        for (rnd, sid), x in S.groupby(["round", "steamid"]):
+            pw = play_of.get((mid, int(rnd)))
+            if not pw:
+                continue
+            play, won = pw
+            target = "Bombsite" + (play[-1] if play.startswith(("rush", "split")) else play[0])
+            zs, pts = [], []
+            for z, t, px_, py_, lv, hp in zip(x.zone, x.t, x.px, x.py, x.level, x.health):
+                if hp is not None and hp <= 0:
+                    break
+                pts.append((float(px_), float(py_), lv, float(t)))
+                if isinstance(z, str) and z and (not zs or zs[-1] != z):
+                    if z in zs:   # back to a zone already passed: the loop is cut
+                        zs = zs[:zs.index(z) + 1]
+                    else:
+                        zs.append(z)
+                if zs and zs[-1] == target:
+                    break
+            if len(zs) < 3 or zs[-1] != target or len(pts) < 4:
+                continue
+            e = ways.setdefault((play, tuple(zs)), {"r": set(), "w": set(), "tr": []})
+            e["r"].add((mid, int(rnd)))
+            if won:
+                e["w"].add((mid, int(rnd)))
+            if len(e["tr"]) < 80:
+                e["tr"].append(pts)
+
+    def resample(pts, k=40):
+        xy = np.array([[p[0], p[1]] for p in pts])
+        d = np.r_[0, np.cumsum(np.hypot(*np.diff(xy, axis=0).T))]
+        if d[-1] <= 0:
+            return None
+        s = np.linspace(0, d[-1], k)
+        idx = np.clip(np.searchsorted(d, s), 0, len(pts) - 1)
+        return np.c_[np.interp(s, d, xy[:, 0]), np.interp(s, d, xy[:, 1])], [pts[i][2] for i in idx], [pts[i][3] for i in idx]
+
+    out = {}
+    for play in sorted({p for p, _ in ways}):
+        best = sorted(((zs, e) for (p, zs), e in ways.items() if p == play), key=lambda kv: -len(kv[1]["r"]))[:top]
+        res = []
+        for zs, e in best:
+            if len(e["r"]) < 4:
+                continue
+            rs = [r for r in (resample(t) for t in e["tr"]) if r is not None]
+            if not rs:
+                continue
+            A = np.array([r[0] for r in rs])
+            med = int(np.argmin([np.mean(np.hypot(*(A - a).transpose(2, 0, 1))) for a in A]))   # the most typical walk
+            xy, lv, ts = rs[med]
+            res.append({"n": len(e["r"]), "win": round(100 * len(e["w"]) / len(e["r"])), "zones": [humanize(z, mp) for z in zs],
+                        "pts": [[round(float(a)), round(float(b)), l, round(float(t))] for (a, b), l, t in zip(xy, lv, ts)]})
+        if res:
+            out[play] = res
+    return out or None
 
 
 def _multi(mp, dirs):
