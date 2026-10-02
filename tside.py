@@ -622,7 +622,7 @@ def econ_table(df):
 
 
 SUMMARY = os.path.join(config.OUT, "population", "tside_summary.json")
-VERSION = 22   # bump when the summary changes shape: the cache is rebuilt
+VERSION = 23   # bump when the summary changes shape: the cache is rebuilt
 
 
 def _stamp():
@@ -710,6 +710,7 @@ def _tendencies(maps, df):
         try:   # the plays by economy and by the run before the round; the CTs' spots and kill angles by moment
             res["maps"][mp]["play_ctx"] = _play_ctx(g)
             res["maps"][mp]["ct_spots"] = _ct_spots(mp, dirs.get(mp, []))
+            res["maps"][mp]["ct_early"] = _ct_early(mp, dirs.get(mp, []))
             res["maps"][mp]["setplays"] = _setplays(mp, dirs.get(mp, []))
         except Exception as e:
             print(f"{mp}: play contexts / CT spots unavailable ({e})")
@@ -1082,6 +1083,73 @@ def _ct_spots(mp, dirs, cell=26):
             if len(dd) == 8:
                 break
         out[w] = {"hold": hold, "danger": dd, "n": int(len(k))}
+    return out or None
+
+
+EARLY_S = 30   # before 1:25 on the clock: the CTs who come to meet the Ts
+
+
+def _ct_early(mp, dirs, cell=30):
+    """Where a CT meets the Ts early in the round (before 1:25), by the CTs' kind of round: their pistol, eco,
+    force-buy, full buy, and a full buy against the Ts' eco. One contact per round (the first duel with a CT in it),
+    at the CT's spot (the killer's or the victim's): the share of rounds it happens there, when, and who wins it."""
+    rows, n_ctx = [], {}
+    for d in dirs:
+        fr, fd = os.path.join(d, "rounds.parquet"), os.path.join(d, "duels.parquet")
+        if not os.path.exists(fr) or not os.path.exists(fd):
+            continue
+        R = pd.read_parquet(fr)
+        if not len(R) or not five_v_five(R):
+            continue
+        D = pd.read_parquet(fd, columns=["round", "t", "killer_side", "victim_side", "killer_px", "killer_py", "killer_level", "killer_zone",
+                                         "victim_px", "victim_py", "victim_level", "victim_zone"])
+        D = D[(D.t <= EARLY_S) & (D.killer_side != D.victim_side) & D.killer_side.isin(["T", "CT"])]
+        ctx = {}
+        for r in R.itertuples():
+            c = ("pistol" if r.CT_buy == "pistol" else "anti_eco" if r.CT_buy == "full" and r.T_buy == "eco"
+                 else r.CT_buy if r.CT_buy in ("eco", "force", "full") else None)
+            if c:
+                ctx[int(r.round)] = c
+                n_ctx[c] = n_ctx.get(c, 0) + 1
+        for rnd, g in D.sort_values("t").groupby("round"):
+            c = ctx.get(int(rnd))
+            if not c:
+                continue
+            k = g.iloc[0]
+            ctk = k.killer_side == "CT"
+            px, py, lv, zn = (k.killer_px, k.killer_py, k.killer_level, k.killer_zone) if ctk else (k.victim_px, k.victim_py, k.victim_level, k.victim_zone)
+            if pd.isna(px) or pd.isna(py):
+                continue
+            rows.append({"ctx": c, "t": float(k.t), "px": float(px), "py": float(py), "level": lv, "zone": zn, "ct_won": bool(ctk)})
+    if not rows:
+        return None
+    E = pd.DataFrame(rows)
+    out = {}
+    for c, g in E.groupby("ctx"):
+        n = n_ctx.get(c, 0)
+        if n < 20:
+            continue
+        spots = []
+        cells = g.assign(cell=list(zip(g.level, (g.px // cell).astype(int), (g.py // cell).astype(int)))).groupby("cell")
+        for cl, x in sorted(cells, key=lambda kv: -len(kv[1])):
+            pt = (float(x.px.mean()), float(x.py.mean()))
+            near = next((s_ for s_ in spots if s_["level"] == cl[0] and np.hypot(s_["px"][0] - pt[0], s_["px"][1] - pt[1]) < 2.2 * cell), None)
+            if near:
+                near["_t"] += list(x.t)
+                near["_w"] += int(x.ct_won.sum())
+                near["_z"] += list(x.zone.dropna())
+                continue
+            spots.append({"px": [round(pt[0]), round(pt[1])], "level": cl[0], "_t": list(x.t), "_w": int(x.ct_won.sum()), "_z": list(x.zone.dropna())})
+        res = []
+        for s_ in spots:
+            k = len(s_["_t"])
+            if k < 4:
+                continue
+            z = pd.Series(s_["_z"]).mode()
+            res.append({"px": s_["px"], "level": s_["level"], "zone": humanize(z.iloc[0], mp) if len(z) else None,
+                        "share": round(100 * k / n, 1), "t_med": round(float(np.median(s_["_t"])), 1), "ct_win": round(100 * s_["_w"] / k), "n": k})
+        res.sort(key=lambda x: -x["share"])
+        out[c] = {"n": int(n), "early": round(100 * len(g) / n), "spots": res[:6]}
     return out or None
 
 
