@@ -2431,7 +2431,9 @@ function vNadePicks(p,g){const N=(p.advice.plan||{}).nades,E=N&&((N.maps||{})[g.
   const eff0=eff,effW=x=>eff0(x)+(bonus[way(x)]||0),tag=x=>x&&Object.assign({},x,{way:way(x)});
   const FX=focusN(g),noOff=l=>l.filter(x=>FX?["site","way","from"].includes(way(x)):way(x)!=="off");   // a throw toward the other site only helps a fake: never shown; with a focus, only the throws of that path
   const picks=t=>{if(w==="post")return (E.types[t].post||[]).slice(0,2);
-    if(el==null||!w)return noOff((E.types[t].picks||[]).slice().sort((a,b)=>effW(b)-effW(a))).slice(0,2).map(tag);   // buy time: the best ones of the round, for your way
+    if(el==null||!w){const L0=noOff((E.types[t].picks||[]).slice().sort((a,b)=>effW(b)-effW(a)));
+      const rushL=RF&&/^rush/.test(RF.k)?L0.filter(x=>x.t_med!=null&&x.t_med<=28):[];   // a rush: the throws made in its first seconds
+      return (rushL.length?rushL:L0).slice(0,2).map(tag)}   // buy time: the best ones of the round, for your way
     const fit=x=>x.best===w||x.usual===w||(x.t_med!=null&&x.t_med>=el-8&&x.t_med<=el+25);
     return noOff(all(t).filter(fit).sort((a,b)=>effW(b)-effW(a)||Math.abs((a.t_med??el)-el)-Math.abs((b.t_med??el)-el))).slice(0,2).map(tag)};
   return Object.entries(g.nades||{}).filter(([t,v])=>v>0&&E.types[t]).map(([t,v])=>{const ps=picks(t);return {type:t,n:v,x:ps[0]||null,alt:ps[1]||null,el:g.round_phase==="live"?el:null}})}
