@@ -1228,6 +1228,8 @@ async function renderSettings(){
    <p class="note">Only your voice: with a headset, your teammates' voices don't reach your microphone. Nothing leaves the PC (folder <code>out/voice</code>, not versioned). Only record other people with their consent: recording someone's words without consent is illegal in France (article 226-1 of the Code pénal) and in many other countries.</p>
    ${vs&&vs.available?`
     <div class="row"><label style="display:flex;gap:8px;align-items:center;font-size:14px"><input type="checkbox" id="v-auto" ${vs.settings.auto?"checked":""}> Record automatically during my matches (with game detection)</label></div>
+    <div class="row"><label style="display:flex;gap:8px;align-items:center;font-size:14px"><input type="checkbox" id="v-live" ${(vs.live||{}).on!==false?"checked":""}> Live calls: my short calls ("3 B", "rush A", "bombe B", "one Banana") count like a tap on the T read, no click</label></div>
+    <p class="note">Short calls only (a sentence is not read), transcribed on this PC by a small model at low priority, on the processor: the graphics card stays for the game. About 2 to 3 s after you speak.${(vs.live||{}).last&&(vs.live||{}).last.text?` Last heard: "${esc(vs.live.last.text)}"${vs.live.last.parsed?` → ${esc([vs.live.last.parsed.rush?"rush":"",vs.live.last.parsed.n||"",vs.live.last.parsed.site||"",vs.live.last.parsed.zone||"",vs.live.last.parsed.bomb?"bomb":""].filter(Boolean).join(" · "))}`:" (not a call)"}.`:""}</p>
     <p class="note">Recorded microphone: <b>${esc(vs.device||"Windows default microphone")}</b>${vs.cs2_device&&vs.device===vs.cs2_device?" (the same as in CS2)":""}.</p>
     <div class="row"><span class="f">Microphone</span><select id="v-dev" style="font:14px var(--f-body);background:var(--bg);color:var(--ink);border:1px solid var(--line);border-radius:3px;padding:5px 8px;max-width:360px"><option value="">Windows default microphone</option></select></div>
     ${vs.recording?`<p><b class="bad">● Recording</b> ${vs.current.map?`(${MAPN(vs.current.map)})`:""}, since ${fmtDate(vs.current.start_iso)} <button type="button" id="v-stop">Stop</button></p>`:""}
@@ -1270,6 +1272,7 @@ async function renderSettings(){
   const msg=$("#st-msg",v),sid=st.steamid;
   const vmsg=$("#v-msg",v),vcall=async(path,body)=>{try{await api(path,Object.assign({sid},body||{}));renderSettings()}catch(e){if(vmsg)vmsg.textContent=e.message}};
   const va=$("#v-auto",v);if(va)va.onchange=()=>vcall("/api/voice/settings",{auto:va.checked});
+  const vl=$("#v-live",v);if(vl)vl.onchange=()=>vcall("/api/voice/settings",{live:vl.checked});
   const vd=$("#v-dev",v);if(vd){fetch("/api/voice/devices").then(r=>r.json()).then(list=>{if(!Array.isArray(list))return;const cur=(vs.settings||{}).device||"";
     vd.innerHTML=`<option value="">${vs.cs2_device?`The same as CS2 (${esc(vs.cs2_device)})`:"Windows default microphone"}</option>`+list.map(d=>`<option value="${esc(d.name)}" ${d.name===cur?"selected":""}>${esc(d.name)}${d.cs2?" (used by CS2)":d.default?" (Windows default)":""}</option>`).join("")}).catch(()=>{});
     vd.onchange=()=>vcall("/api/voice/settings",{device:vd.value||null})}
@@ -1537,8 +1540,10 @@ const RLEN=()=>{const g=typeof gsiLast!=="undefined"?gsiLast:null;if(g&&g.round_
   const R=((g&&g.hist)||{}).rounds||{},seen=Math.max(0,...Object.values(R).map(r=>Math.max(r&&r.plant||0,r&&r.plant==null&&r.end||0)));
   return seen<=117?115:seen<=137?135:seen<=152?150:Math.ceil(seen/5)*5};
 const clock=t=>{const s=Math.max(0,RLEN()-t);return `${Math.floor(s/60)}:${String(Math.floor(s%60)).padStart(2,"0")}`};
-function evFor(g){const key=`${g.map}|${g.round}`;if(igEv.key!==key){const H=g.hist||{},mk=(H.marks||{})[g.round]||{},s=(H.sites||{})[g.round];   // what you marked survives a reload
-  igEv={key,contact:mk.contact||null,alone:mk.alone??null,site:g.round_phase==="live"&&(s==="A"||s==="B")?s:null}}return igEv}
+// what you marked survives a reload; a mark that arrives from the app (a call you made, a tap on another screen) is
+// read as soon as it changes
+function evFor(g){const key=`${g.map}|${g.round}`,H=g.hist||{},mk=(H.marks||{})[g.round]||{},s=(H.sites||{})[g.round],sig=JSON.stringify([mk,s||null,g.round_phase==="live"]);
+  if(igEv.key!==key||igEv.sig!==sig)igEv={key,sig,contact:mk.contact||null,alone:mk.alone??null,site:g.round_phase==="live"&&(s==="A"||s==="B")?s:null};return igEv}
 const DYN_EN={rush:"rush",fast:"fast push by 1-2 Ts",exec:"execute",late:"late hit",none:"no attack"},DYN_SHORT={rush:"rush",fast:"fast",exec:"exec",late:"late",none:""};
 // the shape of a finished round: what you marked, or read from the clock (the bomb goes down about 7 s after the site is taken)
 function roundDyn(TS,H,n){const R=(H.rounds||{})[n]||{},mk=(H.marks||{})[n]||{},site=(H.sites||{})[n],rs=(TS&&TS.rush_s)||30,ls=(TS&&TS.late_s)||75;
@@ -1627,9 +1632,18 @@ function tsidePredict(TS,map,g,ev){const M=TS&&TS.maps&&TS.maps[map];if(!M||!g||
             :`usually ${top[0]==="mid"?"mid":top[0]+" side"}, ${Math.round(100*top[1])}% of your CT time here`;
           shift(fought?`A fight at your spot (${spot}) before ${clock(tk)}: attacks come your way more often`
                       :`Nothing at your spot (${spot}) by ${clock(tk)}: the attack tends to go elsewhere`,o.A/tot,o.B/tot,o.none/tot);
-          evid.push(fought?"a fight at your spot":"quiet at your spot")}}}}
+          evid.push(fought?"a fight at your spot":"quiet at your spot")}}
+      const MT=((((typeof P==="function"&&P())||{}).advice||{}).plan||{}).mates||{};
+      for(const [sid,mr] of Object.entries(Rc.mates||{})){const MW=((MT[sid]||{}).maps||{})[map];if(!MW||mr.seen==null||mr.seen>tk)continue;
+        const f2=(mr.hurt!=null&&mr.hurt<=tk)||(mr.dead!=null&&mr.dead<=tk),o={A:0,B:0,none:0};let tot=0;
+        for(const [reg,wt] of Object.entries(MW)){const L=(SE.lik[reg]||{})[String(tk)];if(!L)continue;tot+=wt;for(const k of ["A","B","none"])o[k]+=wt*L[f2?"contact":"quiet"][k]}
+        if(!tot)continue;const top=Object.entries(MW).sort((x,y)=>y[1]-x[1])[0],nm=(MT[sid]||{}).name||"your teammate",spot=`usually ${top[0]==="mid"?"mid":top[0]+" side"}`;
+        shift(f2?`A fight at ${nm}'s spot (${spot}) before ${clock(tk)}`:`Nothing at ${nm}'s spot (${spot}) by ${clock(tk)}`,o.A/tot,o.B/tot,o.none/tot);
+        evid.push(f2?`a fight at ${nm}'s spot`:`quiet at ${nm}'s spot`)}}}
   if(!half.length&&!evid.length)why.push("First round of the half: the numbers come from the base.");
-  return {A:Math.round(100*a),B:Math.round(100*b),none:Math.round(100*n),rush:Math.round(100*rush),rush0:Math.round(100*rush0),dyns,ctx:main,mix,X,why,seq,rih,cur,evid,live,planted,E}}
+  const raw={A:Math.round(100*a),B:Math.round(100*b),none:Math.round(100*n),rush:Math.round(100*rush)};
+  if(typeof calSite==="function"){if(!(live&&ev0.site))[a,b,n]=calSite(map,a,b,n);rush=calRush(rush)}
+  return {A:Math.round(100*a),B:Math.round(100*b),none:Math.round(100*n),rush:Math.round(100*rush),raw,rush0:Math.round(100*rush0),dyns,ctx:main,mix,X,why,seq,rih,cur,evid,live,planted,E}}
 function askDyn(TS,H,n){const d=roundDyn(TS,H,n)||{},R=(H.rounds||{})[n]||{},mk=(H.marks||{})[n]||{};
   const hint=!d.dyn&&R.win==="CT"&&R.plant==null&&R.end!=null&&R.end<=35?`All the Ts were dead at ${clock(R.end)}: a rush?`:d.auto?`Read from the clock (${d.how}). Fix it if you saw otherwise.`:"";
   return `<div class="ask sm" role="group" aria-label="How the Ts played round ${n}"><b>How?</b>
@@ -1819,7 +1833,7 @@ function liveBar(){if(!D.local)return "";const g=gsiLast,focus=document.body.cla
   return `<div class="live"><span class="dot" aria-hidden="true"></span>${st&&st.installed?"<span>Detection is on: this page follows your match as soon as you're in game.</span>"
     :`<span>Pick your map and side, or <a href="#settings" style="color:var(--ct)">turn on game detection</a>: this page will follow your match by itself.</span>`}<span class="sp">${micBtn()}${fb}</span></div>`}
 async function gsiPoll(){clearTimeout(gsiTimer);if(!D.local||S.view!=="ingame")return;
-  try{const g=await (await fetch("/api/gsi/state")).json();const sig=x=>x?[x.map,x.side,x.round,x.round_phase,x.money,x.bomb,x.age!=null&&x.age<75,JSON.stringify(x.hist||{}),JSON.stringify(x.nades||{}),x.health===0,x.elapsed==null?"":Math.floor(x.elapsed/5),x.pos?x.pos.map(c=>Math.round(c/100)).join(","):""].join("|"):"";
+  try{const g=await (await fetch("/api/gsi/state")).json();const sig=x=>x?[x.map,x.side,x.round,x.round_phase,x.money,x.bomb,x.age!=null&&x.age<75,JSON.stringify(x.hist||{}),JSON.stringify(x.nades||{}),x.health===0,x.elapsed==null?"":Math.floor(x.elapsed/5),x.pos?x.pos.map(c=>Math.round(c/100)).join(","):"",x.call?x.call.t:""].join("|"):"";
     const before=sig(gsiLast)+(gsiLast&&gsiLast.mic);gsiLast=g&&Object.keys(g).length?g:null;
     if(gsiLast&&S.player&&D.players[S.player]&&typeof liveLog==="function")liveLog(D.players[S.player],gsiLast);   // checked after the match
     if(sig(gsiLast)+(gsiLast&&gsiLast.mic)!==before&&S.view==="ingame"&&S.player&&D.players[S.player])renderIngame()}catch(e){}
@@ -2373,7 +2387,7 @@ function vRows(rows){const mx=Math.max(...rows.map(r=>r.v),1);
 function vOdds(r,h){return vHead(h||"WHERE THEY GO · LIKELY")+`<div class="vodds">${vRows([{l:"A",v:r.A,c:SITE_C.A},{l:"B",v:r.B,c:SITE_C.B},{l:"?",v:r.none,c:"var(--muted)"}])}</div>`}
 // a rush: how likely, and where it goes (the most likely in big, the second smaller and fainter)
 function vRush(TS,g,r){const PLs=tsidePlays(TS,g.map,g,evFor(g),r);if(!PLs)return "";
-  const rn=r.live?Math.round(100*PLs.rush):r.rush,rs=(PLs.list||[]).filter(x=>/^rush/.test(x.p)).sort((a,b)=>b.v-a.v);
+  const rn=r.live?Math.round(100*calRush(PLs.rush)):r.rush,rs=(PLs.list||[]).filter(x=>/^rush/.test(x.p)).sort((a,b)=>b.v-a.v);
   if(rn<15||!rs.length)return "";
   const lab=x=>`${x.site} · ${vShort(String(x.label||"").replace(/^Rush [AB]( through )?/,""))}`;
   return `<div class="vbig ${rn>=40?"bad":"warn"}"><b>RUSH ${rn}%</b><span>likely · until ${clock(32)}</span></div>`+
@@ -2390,6 +2404,15 @@ function vFights(M,g,r){const D=((M&&M.evidence)||{}).deaths;if(!D)return "";con
 function vEntries(TS,g,r){const PLs=tsidePlays(TS,g.map,g,evFor(g),r);if(!PLs)return "";
   const top=PLs.lanes.filter(L=>L.p>=0.05).sort((a,b)=>b.p-a.p).slice(0,3);if(!top.length)return "";
   return vHead("⇢ ENTRIES · LIKELY")+vRows(top.map((L,i)=>({l:`${L.site} · ${vShort(L.name)}`,v:100*L.p,c:SITE_C[L.site],o:[1,.75,.5][i]})))}
+// the call you just made, as the coach understood it (it counts like a tap on the T read)
+function vCall(g){const c=g&&g.call;if(!c||c.round!==g.round||Date.now()/1000-c.t>12)return "";
+  const bits=[c.rush?"rush":"",c.n?String(c.n):"",c.site||"",c.zone?vShort(c.zone):"",c.bomb?"💣":""].filter(Boolean);
+  return bits.length?`<span class="vchip good">🎙 ${esc(bits.join(" · "))}</span>`:""}
+// your teammates' money, seen while you watched them last round: what they'll have now (≈: their kills not counted)
+function vMates(g){const M=g.mates||{},prev=(g.round||0)-1;if(prev<1||halfStart(g.round)===g.round)return "";
+  const R=((g.hist||{}).rounds||{})[prev]||{},won=R.win===g.side,L=g.losses||0,gain=won?ECON.win:ECON.bonus[Math.max(0,Math.min(L-1,4))],need=g.side==="CT"?3900:3700;
+  const xs=Object.values(M).filter(m=>m.money!=null&&m.money_round===prev).map(m=>({n:m.name||"mate",v:Math.min(ECON.cap,m.money+gain)})).slice(0,3);
+  return xs.map(x=>`<span class="vchip ${x.v>=need?"good":"bad"}">👥 ${esc(vShort(x.n))} ≈${kMoney(x.v)} ${x.v>=need?"✓":"✕"}</span>`).join("")}
 function nowVisual(p,g,following){
   if(!following)return nowPanel(p,g,following,{noBuy:true});
   if(g.practice)return `<div class="vz"><div class="vsit"><span>PRACTICE</span></div></div>`;
@@ -2400,13 +2423,13 @@ function nowVisual(p,g,following){
     {if(typeof antiEco==="function"&&antiEco(p,g))out.push(`<span class="vchip bad">! eco kill spots on the map: clear them, no close duel</span>`)}
     if(ct&&r)out.push(vOdds(r),vRush(TS,g,r)||vEntries(TS,g,r));
     if(!ct){out.push(vTimeline(p,g),vCTdots(p,g),vTchips(p,g))}}   // the plays and the grenades are on the map
-  else if(ph==="live"){const el=g.elapsed||0,planted=g.bomb==="planted";
+  else if(ph==="live"){const el=g.elapsed||0,planted=g.bomb==="planted";out.push(vCall(g));
     if(planted){const left=g.phase_left!=null?g.phase_left:Math.max(0,40-(g.since_plant||0)),as=typeof autoSite==="function"?autoSite(p,g):null;
       out.push(`<div class="vbig ${ct?"bad":"good"}"><b>💣 ${Math.ceil(left)}s</b><span>${ct?"retake together":"hold the bomb"}${as?` · ${as.site} site, ${as.p}% sure`:""}</span></div>`)}
     else if(ct){if(r){out.push(vOdds(r));
         const PLs=tsidePlays(TS,g.map,g,evFor(g),r),M=TS&&TS.maps&&TS.maps[g.map];
         const rush=el<32?vRush(TS,g,r):"";out.push(rush||vFights(M,g,r));
-        const ev=(r.evid||[]).find(x=>/spot/.test(x));if(ev)out.push(`<span class="vchip ${/fight/.test(ev)?"bad":""}">● ${/fight/.test(ev)?"fight at your spot":"quiet at your spot"}</span>`)}}
+        (r.evid||[]).filter(x=>/spot/.test(x)).slice(0,2).forEach(ev=>out.push(`<span class="vchip ${/fight/.test(ev)?"bad":""}">● ${esc(ev)}</span>`))}}
     else{out.push(vTimeline(p,g),vFights(TS&&TS.maps&&TS.maps[g.map],g,null));
       const left=g.phase_left!=null?g.phase_left:Math.max(0,RLEN()-el);
       if(left<=45)out.push(`<div class="vbig bad"><b>PLANT ${Math.floor(left/60)}:${String(Math.floor(left%60)).padStart(2,"0")}</b><span>${left>20?"commit now":"plant or save"}</span></div>`);
@@ -2440,7 +2463,7 @@ function buyVisual(p,g){if(g.money==null||!g.side||g.practice)return "";const rt
   const rows=econRows(plan);   // the plan already says what a loss leaves: no separate chip then
   return `<div class="vbuy"><div class="vbuy-h"><b>${RT}</b><span>${money(g.money)}</span></div>
     ${rows}${tags.length?`<div class="vtags">${tags.join("")}</div>`:""}${nd}
-    <div class="vchips">${spot}${avoid}${awp}${rows?"":`<span class="vchip ${okNext?"good":"bad"}">lost → ${money(next)} ${okNext?"✓ full":"✕ no full"}</span>`}</div></div>`}
+    <div class="vchips">${vMates(g)}${spot}${avoid}${awp}${rows?"":`<span class="vchip ${okNext?"good":"bad"}">lost → ${money(next)} ${okNext?"✓ full":"✕ no full"}</span>`}</div></div>`}
 
 // ---------- buys over the rounds left in the half, not just this one ----------
 // What a buy wins now AND what it leaves for the next rounds: the base's win rates by buy (full / force / eco on each
@@ -2531,7 +2554,7 @@ function winsRank(p,g){const TS=(p.advice.plan||{}).tside,M=TS&&TS.maps&&TS.maps
     const rwin=route?Math.round(100*SIG(LGT(CLP(route.win/100))+shift)):null;   // the route's own rounds, moved like its play for this round
     return {k,n,wr,use,route,rwin,won:Math.round(n*w/100)}}).filter(r=>r.n>=8);
   const nb=rows.reduce((a,r)=>a+r.n,0),mean=nb?rows.reduce((a,r)=>a+r.wr*r.n,0)/nb:50;
-  rows.forEach(r=>{r.wr=Math.round((r.wr*r.n+mean*20)/(r.n+20));r.s=r.wr/100+r.n*1e-7});   // few rounds: closer to the mean
+  rows.forEach(r=>{r.wr=Math.round((r.wr*r.n+mean*20)/(r.n+20));r.s=r.wr/100+r.n*1e-7;r.wr0=r.wr;r.wr=calPath(r.wr)});   // few rounds: closer to the mean
   rows.sort((a,b)=>b.s-a.s);rows.splice(6);
   const PM=planMemory(g,rows);const rows2=PM.rows.slice(0,4);
   rows2.forEach((r,i)=>{r.rank=i+1;r.col=WIN_C[i];r.rot=rows2.slice(i+1).some(x=>x.wr>r.wr)});   // ↻: ahead of a better % to stay unpredictable
@@ -2614,10 +2637,11 @@ function keyRadar(p,g,map,level,lay,top,legend,here){const k=keySit(p,g);if(!k)r
 // usual plant times (TS evidence.plants t_q). Returns the site and how sure.
 function autoSite(p,g){if(!g||g.bomb!=="planted")return null;const TS=(p.advice.plan||{}).tside,M=((TS||{}).maps||{})[g.map]||{},PL=(M.evidence||{}).plants||{};
   const tp=g.elapsed!=null&&g.since_plant!=null?Math.max(0,g.elapsed-g.since_plant):null;let pr={A:.5,B:.5};
+  const said=(((g.hist||{}).marks||{})[g.round]||{}).bomb_site;if(said==="A"||said==="B")return {site:said,p:95,tp,said:true};
   if(g.side==="CT"){const r=tsidePredict(TS,g.map,Object.assign({},g,{bomb:null,elapsed:tp}),evFor(g));if(r&&r.A+r.B>0)pr={A:r.A/(r.A+r.B),B:r.B/(r.A+r.B)}}
   else{const W=winsRank(p,Object.assign({},g,{bomb:null})),r1=W&&W.rows[0],s=r1?(r1.k.match(/[AB]$/)||r1.k.match(/^[AB]/)||[])[0]:null;if(s)pr={A:s==="A"?.7:.3,B:s==="B"?.7:.3}}
   const lik=s=>{const q=(PL[s]||{}).t_q;if(!q||tp==null)return 1;const sd=Math.max(6,(q[2]-q[0])/1.35);return Math.exp(-((tp-q[1])**2)/(2*sd*sd))/sd};
-  const a=pr.A*lik("A"),b=pr.B*lik("B"),pa=a/((a+b)||1);return {site:pa>=.5?"A":"B",p:Math.round(100*Math.max(pa,1-pa)),tp}}
+  const a=pr.A*lik("A"),b=pr.B*lik("B"),pa=a/((a+b)||1),pc=calPlant(pa);return {site:pc>=.5?"A":"B",p:Math.round(100*Math.max(pc,1-pc)),p0:Math.round(100*Math.max(pa,1-pa)),tp}}
 // T after the plant: where the Ts hold in the rounds they win (each T's spot 3 to 30 s after the plant)
 function postplantRadar(p,g,map,level,top,legend,here,site){const PP=((((((p.advice.plan||{}).tside||{}).maps||{})[map])||{}).postplant||{})[site];if(!PP)return;
   const hs=(PP.holds||[]).filter(here).slice(0,3);
@@ -2675,23 +2699,36 @@ function liveLog(p,g){if(!D.local||!g||!g.map||g.round==null||g.practice||!g.sid
   if(!b||(b==="fz"&&g.money==null))return;const key=`${g.map}|${g.round}|${b}|${g.side}`;if(LIVE_SENT.has(key))return;LIVE_SENT.add(key);
   const TS=(p.advice.plan||{}).tside,body={map:g.map,round:g.round,side:g.side,bucket:b,elapsed:g.elapsed,money:g.money,score:[g.score_ct,g.score_t]};
   try{
-    if(g.side==="CT"&&b!=="plant"){const r=tsidePredict(TS,g.map,g,evFor(g));if(r){const PLs=r.live?tsidePlays(TS,g.map,g,evFor(g),r):null;body.read={A:r.A,B:r.B,none:r.none,rush:PLs?Math.round(100*PLs.rush):r.rush}}}
-    if(g.side==="T"&&b==="fz"){const W=winsRank(p,g);if(W)body.paths=W.rows.slice(0,3).map(x=>({k:x.k,wr:x.wr}))}
+    if(g.side==="CT"&&b!=="plant"){const r=tsidePredict(TS,g.map,g,evFor(g));if(r){const PLs=r.live?tsidePlays(TS,g.map,g,evFor(g),r):null;const R0=r.raw||r;body.read={A:R0.A,B:R0.B,none:R0.none,rush:PLs?Math.round(100*PLs.rush):R0.rush}}}
+    if(g.side==="T"&&b==="fz"){const W=winsRank(p,g);if(W)body.paths=W.rows.slice(0,3).map(x=>({k:x.k,wr:x.wr0??x.wr}))}
     if(b==="fz"){const pl=econPlan(p,g);body.buy=pl&&pl.best?pl.best.k:advisedType(g);body.key=keySit(p,g)}
-    if(b==="plant"){const as=autoSite(p,g);if(as){body.site=as.site;body.p_site=as.p}}
+    if(b==="plant"){const as=autoSite(p,g);if(as){body.site=as.site;if(!as.said)body.p_site=as.p0??as.p}}
   }catch(e){}
   fetch("/api/live/log",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)}).catch(()=>{})}
 // a running "replace X with Y" experiment (Progress tab): the advice says Y wherever it would say X, marked 🧪
 function expSwaps(p){const E=((((p||{}).advice||{}).plan||{}).experiments||{}).experiments||[];
   return E.filter(e=>e.status==="active"&&e.template==="weapon_swap"&&e.params&&e.params.weapon&&e.params.alt).map(e=>e.params)}
 function expSwapTxt(p,s){if(s==null)return s;let t=String(s);expSwaps(p).forEach(x=>{if(t.includes(x.weapon)&&!t.includes(x.alt))t=t.split(x.weapon).join(`${x.alt} 🧪`)});return t}
+// ---------- the automatic calibration (live check after each match): how sure the read should be, from your matches.
+// A temperature above 1 flattens a read that was too sure of itself, below 1 sharpens a shy one; few rounds checked:
+// close to no change ----------
+function CAL(){let p=null;try{p=P()}catch(e){}return ((((p||{}).advice||{}).plan||{}).livecheck||{}).calib||null}
+function calSite(map,a,b,n){const c=CAL();if(!c)return [a,b,n];const T=((c.maps||{})[map]||{}).site_T||c.site_T||1;if(Math.abs(T-1)<.01)return [a,b,n];
+  const w=[a,b,n].map(x=>Math.pow(Math.max(1e-4,x),1/T)),s=w[0]+w[1]+w[2];return w.map(x=>x/s)}
+function calRush(p){const c=CAL(),r=c&&c.rush;if(!r||(r[0]===1&&r[1]===0))return p;return SIG(r[0]*LGT(CLP(p))+r[1])}
+function calPlant(pa){const c=CAL(),T=c&&c.plant_T;if(!T||Math.abs(T-1)<.01)return pa;return SIG(LGT(CLP(pa))/T)}
+function calPath(wr){const c=CAL(),d=c&&c.path_d;if(!d)return wr;return Math.round(100*SIG(LGT(CLP(wr/100))+d))}
 
 // ---------- view: review (after the session, or the next day) ----------
 // what the In game page showed in your matches, checked against their demos (livecheck.py)
 function liveCheckBlock(PL){const L=PL.livecheck,maps=Object.entries((L||{}).maps||{}).sort((a,b)=>b[1].matches-a[1].matches);
   if(!maps.length)return D.local?`<h3>Live check</h3><p class="note">After your next match with the In game page open, the coach compares what it showed with what the demo says: the site read, the rushes, path 1, the buys, the site after the plant.</p>`:"";
   const c=(v,n,good=60)=>v==null?`<td class="note">—</td>`:`<td><b class="${v>=good?"good":v<good-15?"bad":""}">${v}%</b> <span class="note">${n}</span></td>`;
+  const K=(L||{}).calib||{},cal=[K.site_n?`site read ${K.site_T>1.05?`was too sure of itself: its odds are flattened (×${K.site_T})`:K.site_T<.95?`was too shy: its odds are sharpened (×${K.site_T})`:"is right as it is"} · ${K.site_n} rounds`:"",
+    K.rush_n&&(K.rush[0]!==1||K.rush[1]!==0)?`rush odds ${K.rush[1]>0?"raised":"lowered"} · ${K.rush_n} rounds`:"",K.plant_n&&Math.abs(K.plant_T-1)>.05?`site after the plant ${K.plant_T>1?"less":"more"} sure · ${K.plant_n} rounds`:"",
+    K.path_n&&K.path_d?`paths' % ${K.path_d>0?"raised":"lowered"} · ${K.path_n} rounds`:""].filter(Boolean);
   return `<h3>Live check</h3><p class="note">What the In game page showed, round by round, against what the demo says. The more matches, the more it says about each map.</p>
+   ${cal.length?`<p><b>Automatic calibration</b>: ${cal.map(esc).join(" · ")}. With few rounds the change stays small; it grows with your matches.</p>`:""}
    <div style="overflow-x:auto"><table class="lc"><thead><tr><th>Map</th><th>Matches</th><th>CT: site read right</th><th>CT: rush read right</th><th>T: path 1 played</th><th>T: won with path 1 / other</th><th>Buy like the advice</th><th>Site found after the plant</th></tr></thead>
    <tbody>${maps.map(([m,a])=>`<tr><td><b>${esc(MAPN(m))}</b></td><td>${a.matches}</td>${c(a.site_right,a.site_n,55)}${c(a.rush_right,a.rush_n,70)}${c(a.followed,a.t_n,40)}
      <td>${a.win_followed!=null||a.win_other!=null?`<b>${a.win_followed??"—"}%</b> / ${a.win_other??"—"}%`:`<span class="note">—</span>`}</td>${c(a.buy_same,a.buy_n,60)}${c(a.plant_right,a.plant_n,70)}</tr>`).join("")}</tbody></table></div>`}

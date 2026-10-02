@@ -100,10 +100,14 @@ class Recorder:
             self.meta = {"id": rid, "file": rid + ".flac", "start": time.time(), "start_iso": now.isoformat(timespec="seconds"),
                          "map": map_name, "steamid": str(steamid or ""), "device": info["name"], "rate": rate, "source": source, "rounds": []}
 
+            seg = _Segmenter(rate, LIVE.push) if settings().get("live", True) else None
+
             def cb(indata, frames, tinfo, status):
                 try:
                     block = indata[:, 0].copy()
                     self.file.write(block)
+                    if seg is not None:
+                        seg.feed(block, time.time())
                     p = float(abs(block).max()) if len(block) else 0.0
                     if p > self.peak:
                         self.peak = p
@@ -167,6 +171,7 @@ def on_gsi(g):
         try:
             pause_transcription()  # all the power for the game
             REC.start(g.get("map"), g.get("steamid"), "auto")
+            LIVE.start(g.get("map"))
         except Exception as e:
             print("microphone unavailable:", e, flush=True)
             return
@@ -196,6 +201,7 @@ def watchdog(g):
 
 
 def finish():
+    LIVE.stop()
     m = REC.stop()
     LAST.update(key=None, gameover=None)
     if m and m.get("duration", 0) >= 60 and not m.get("silent"):
@@ -480,7 +486,267 @@ def summary(sid, limit=6):
     return out
 
 
+# ---------- your calls, live ----------
+# The calls you already make ("3 B", "rush A", "bombe B", "un Banana") count like a tap on the T read, without a click.
+# Only short utterances (a call, not a sentence: dictation is long), transcribed by a low-priority child process on
+# the CPU (the graphics card stays for the game). Measured on your own calls: large-v2 takes 10-25 s for a 3 s call on
+# 4 cores, small about 1.6 s on 6, base 0.6 s but it gets the words wrong. It listens in English: your callouts are
+# English words, and French gets written the English way ("trois" -> "three", "en bas" -> "down").
+LIVE_MODEL = "small"
+LIVE_THREADS = 6
+LIVE_MAX_S, LIVE_MIN_S = 4.5, 0.25
+LIVE_FLOOR = 0.003   # speech of a desk microphone can peak at 0.01 RMS
+
+
+class _Segmenter:
+    """Cuts the microphone into utterances (speech, then half a second of silence). A sentence longer than 4.5 s is
+    not a call: skipped up to the next silence."""
+    def __init__(self, rate, on_utt):
+        self.rate, self.on_utt = rate, on_utt
+        self.noise, self.buf, self.voiced, self.sil, self.t0, self.skip = 0.0008, [], 0.0, 0.0, None, False
+
+    def feed(self, block, now):
+        import numpy as np
+        if not len(block):
+            return
+        dur = len(block) / self.rate
+        rms = float(np.sqrt(np.mean(block * block)))
+        if rms > max(LIVE_FLOOR, self.noise * 4):
+            if not self.buf and not self.skip:
+                self.t0 = now - dur
+            if not self.skip:
+                self.buf.append(block)
+            self.voiced += dur
+            self.sil = 0.0
+        else:
+            if not self.buf and not self.skip:
+                self.noise = 0.98 * self.noise + 0.02 * rms
+                return
+            self.sil += dur
+            if not self.skip:
+                self.buf.append(block)
+            if self.sil >= 0.5:
+                self._flush()
+                return
+        if not self.skip and sum(len(b) for b in self.buf) / self.rate > LIVE_MAX_S + 0.5:
+            self.buf, self.skip = [], True   # a sentence: not a call
+
+    def _flush(self):
+        import numpy as np
+        buf, voiced, t0, skip = self.buf, self.voiced, self.t0, self.skip
+        self.buf, self.voiced, self.sil, self.skip = [], 0.0, 0.0, False
+        if skip or not buf or voiced < LIVE_MIN_S:
+            return
+        a = np.concatenate(buf)
+        if self.rate != SR:
+            x = np.linspace(0, len(a) - 1, int(len(a) * SR / self.rate))
+            a = np.interp(x, np.arange(len(a)), a)
+        try:
+            self.on_utt(a.astype("float32"), t0)
+        except Exception:
+            pass
+
+
+class LiveCalls:
+    def __init__(self):
+        import queue
+        self.q = queue.Queue(maxsize=3)
+        self.proc, self.map, self.pending, self.n, self.last = None, None, 0, 0, None
+
+    def running(self):
+        return bool(self.proc and self.proc.poll() is None)
+
+    def start(self, map_name):
+        if not settings().get("live", True):
+            return
+        self.map = map_name
+        if self.running():
+            return
+        try:
+            flags = getattr(subprocess, "BELOW_NORMAL_PRIORITY_CLASS", 0) | getattr(subprocess, "CREATE_NO_WINDOW", 0)
+            os.makedirs(DIR, exist_ok=True)
+            self.proc = subprocess.Popen([sys.executable, os.path.join(config.HERE, "voice.py"), "live"], cwd=config.HERE,
+                                         stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                                         stderr=open(os.path.join(DIR, "live.log"), "w", encoding="utf-8"), creationflags=flags)
+            self.pending = 0
+            threading.Thread(target=self._send, args=(self.proc,), daemon=True).start()
+            threading.Thread(target=self._read, args=(self.proc,), daemon=True).start()
+        except Exception as e:
+            print("live calls unavailable:", e, flush=True)
+            self.proc = None
+
+    def stop(self):
+        if self.running():
+            try:
+                self.proc.terminate()
+            except Exception:
+                pass
+        self.proc = None
+
+    def push(self, audio, t0):
+        """From the microphone thread: never blocks (a call that waits too long is useless anyway)."""
+        if self.running() and self.pending < 2:
+            try:
+                self.q.put_nowait((audio, t0))
+            except Exception:
+                pass
+
+    def _send(self, proc):
+        while proc.poll() is None:
+            try:
+                audio, t0 = self.q.get(timeout=1)
+            except Exception:
+                continue
+            try:
+                self.pending += 1
+                self.n += 1
+                proc.stdin.write((json.dumps({"id": self.n, "t": t0, "map": self.map, "n": int(len(audio))}) + "\n").encode())
+                proc.stdin.write(audio.astype("<f4").tobytes())
+                proc.stdin.flush()
+            except Exception:
+                return
+
+    def _read(self, proc):
+        for line in proc.stdout:
+            self.pending = max(0, self.pending - 1)
+            try:
+                r = json.loads(line.decode("utf-8"))
+            except Exception:
+                continue
+            p = parse_call(r.get("text") or "", r.get("map"))
+            self.last = {"text": r.get("text"), "s": r.get("s"), "parsed": p}
+            if p:
+                try:
+                    import gsi
+                    gsi.voice_call(p, r.get("t"))
+                except Exception as e:
+                    print("live call:", e, flush=True)
+
+
+LIVE = LiveCalls()
+
+
+def _live_prompt(map_name):
+    words = ["A", "B", "mid", "one", "two", "three", "un", "deux", "trois", "rush", "bomb", "full"]
+    try:
+        import plan
+        words += [x["name"] for x in (plan.zone_refs().get(map_name or "") or {}).get("zones", [])][:30]
+    except Exception:
+        pass
+    return "Calls: " + ", ".join(words) + "."
+
+
+def live_loop():
+    """Child process: utterances in on stdin (a JSON line, then the 16 kHz samples), their text out on stdout."""
+    import numpy as np
+    from faster_whisper import WhisperModel
+    model = WhisperModel(LIVE_MODEL, device="cpu", compute_type="int8", cpu_threads=LIVE_THREADS)
+    inp, prompts = sys.stdin.buffer, {}
+    while True:
+        line = inp.readline()
+        if not line:
+            break
+        try:
+            h = json.loads(line)
+            a = np.frombuffer(inp.read(4 * int(h["n"])), dtype="<f4")
+        except Exception:
+            continue
+        mp = h.get("map")
+        if mp not in prompts:
+            prompts[mp] = _live_prompt(mp)
+        t = time.time()
+        try:
+            segs, _ = model.transcribe(a, language="en", beam_size=1, condition_on_previous_text=False, vad_filter=False,
+                                       initial_prompt=prompts[mp], without_timestamps=True, max_new_tokens=20,
+                                       temperature=0.0)   # no retries: a late call is useless
+            # unsure (noise, a mumble): the model tends to repeat its prompt, dropped
+            text = " ".join(x.text for x in segs if (x.no_speech_prob or 0) < 0.6 and (x.avg_logprob or 0) > -1.0).strip()
+        except Exception as e:
+            text = ""
+            print("live transcription:", e, file=sys.stderr, flush=True)
+        if HALLUCINATIONS.search(text):
+            text = ""
+        sys.stdout.write(json.dumps({"id": h.get("id"), "t": h.get("t"), "map": mp, "text": text, "s": round(time.time() - t, 2)},
+                                    ensure_ascii=False) + "\n")
+        sys.stdout.flush()
+
+
+# what a call says: a site, how many, a zone (with its side of the map), a rush, the bomb, one alone
+CALL_NUM = {"un": 1, "une": 1, "1": 1, "deux": 2, "2": 2, "trois": 3, "3": 3, "quatre": 4, "4": 4, "cinq": 5, "5": 5, "full": 5, "tous": 5,
+            "one": 1, "two": 2, "three": 3, "four": 4, "five": 5}   # your calls mix French and English
+LEVEL_SITE = {"de_nuke": {"bas": "B", "lower": "B", "down": "B", "downstairs": "B", "haut": "A", "upper": "A", "upstairs": "A"}}   # Nuke: B is downstairs
+_VOCAB = {}
+
+
+def _zone_vocab(map_name):
+    """Spoken word -> (callout, side of the map) for a map: the words of its callouts, plus the French ones."""
+    if map_name in _VOCAB:
+        return _VOCAB[map_name]
+    v = {}
+    try:
+        import team
+        from map_analysis import humanize
+        for key, reg in ((team.map_meta().get(map_name) or {}).get("regions") or {}).items():
+            name = humanize(key, map_name) if key != "?" else None
+            if not name or "spawn" in name.lower():
+                continue
+            for w in re.findall(r"[a-zà-ÿ]+", name.lower()):
+                if len(w) >= 4 and w not in ("site", "main", "long", "short", "back", "upper", "lower", "middle", "side", "room"):
+                    v.setdefault(w, (name, reg))
+    except Exception:
+        pass
+    fr = {"banane": "banana", "appart": "apps", "apparts": "apps", "appartements": "apartments", "rampe": "ramp", "fenêtre": "window",
+          "palais": "palace", "connecteur": "connector", "tunnel": "tunnels", "pont": "bridge"}
+    for w_fr, w_en in fr.items():
+        if w_en in v and w_fr not in v:
+            v[w_fr] = v[w_en]
+    _VOCAB[map_name] = v
+    return v
+
+
+A_CTX = (r"(?:\b(?:en|sur|site|vers|bombe|bomb|rush|full|tous|sont|est|c'est|go|là|on|at|in|to|is|are)\s+"
+         r"|\b(?:un|une|deux|trois|quatre|cinq|one|two|three|four|five|[1-5])\s+(?:en\s+|on\s+|at\s+)?)a\b"
+         r"|\ba\s+(?:site|main|long|short)\b|^a(?:\s+a)*$")
+
+
+def parse_call(text, map_name):
+    """A short call ("3 B", "rush A", "bombe B", "un seul Banana") read for the T read; None for anything else (a
+    sentence, small talk)."""
+    if not text or HALLUCINATIONS.search(text):
+        return None
+    t = normalize(text).strip(" .!?,")
+    words = [re.sub(r"'s$", "", w) for w in re.findall(r"[a-zà-ÿ0-9']+", t)]
+    if not words or len(words) > 8:
+        return None
+    site = "B" if re.search(r"\b(b|bé|bee)\b", t) else None
+    if re.search(A_CTX, t):
+        site = "A" if site is None else None   # both letters: unclear
+    n = next((CALL_NUM[w] for w in words if w in CALL_NUM), None)
+    zone = reg = None
+    vocab = _zone_vocab(map_name)
+    hits = [vocab.get(w) or vocab.get(w + "s") for w in words]
+    hits = [h for h in hits if h]
+    if len({h[0] for h in hits}) >= 3:
+        return None   # a list of callouts: the model repeating its prompt, not a call
+    if hits:
+        zone, reg = hits[0]
+    if site is None and reg in ("A", "B"):
+        site = reg
+    if site is None:
+        site = next((LEVEL_SITE.get(map_name, {})[w] for w in words if w in LEVEL_SITE.get(map_name, {})), None)
+    rush = bool(re.search(r"\b(rush|rushent|rouch|rushs)\b", t))
+    bomb = bool(re.search(r"\b(bombe|bomb|plant|plantée?|posée?|planted)\b", t))
+    lone = bool(re.search(r"\b(seul|solo|lurk|lurker)\b", t)) or n == 1
+    if not (site or zone or rush or bomb):
+        return None
+    if len(words) > 5 and not (n or zone or rush or bomb):
+        return None   # a sentence with a letter in it, not a call
+    return {"site": site, "n": n, "zone": zone, "rush": rush, "bomb": bomb, "lone": lone}
+
+
 if __name__ == "__main__":
     sys.stdout.reconfigure(encoding="utf-8")
-    if len(sys.argv) > 2 and sys.argv[1] == "transcribe":
+    if len(sys.argv) > 1 and sys.argv[1] == "live":
+        live_loop()
+    elif len(sys.argv) > 2 and sys.argv[1] == "transcribe":
         print(transcribe(sys.argv[2]), "phrases")

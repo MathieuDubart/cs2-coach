@@ -221,6 +221,8 @@ def set_mark(rnd, fields):
             clean[k] = num(v)
         elif k == "dyn":
             clean[k] = v if v in DYNS else None
+        elif k == "bomb_site":
+            clean[k] = v if v in ("A", "B") else None
     if not clean:
         return True
     with LOCK:
@@ -235,6 +237,76 @@ def set_mark(rnd, fields):
         _hist_save()
         log_event({"map": HIST.get("map"), "round": int(rnd), "mark": clean})
     return True
+
+
+def voice_call(p, t_wall=None):
+    """A call you made, understood live ("3 B", "rush A", "bombe B", "un Banana"): it counts like a tap on the T read.
+    In the buy time a call is a plan, not information; on attack, a site called is your own team's plan."""
+    now = time.time()
+    with LOCK:
+        rnd, side, ph, bomb = STATE.get("round"), STATE.get("side"), STATE.get("round_phase"), STATE.get("bomb")
+        el = round((t_wall or now) - STATE["live_since"], 1) if ph == "live" and STATE.get("live_since") else None
+        STATE["call"] = {"round": rnd, "t": now, **{k: v for k, v in p.items() if v}}
+        mk = dict((HIST.get("marks") or {}).get(str(rnd)) or {}) if HIST and rnd else {}
+    if not rnd or ph != "live":
+        return False
+    log_event({"map": STATE.get("map"), "round": int(rnd), "call": {k: v for k, v in p.items() if v}, "el": el})
+    site = p.get("site")
+    if bomb == "planted":
+        if site:
+            set_mark(rnd, {"bomb_site": site})
+        return True
+    if side != "CT":
+        return True
+    f = {}
+    if p.get("zone") and not mk.get("contact"):
+        f.update(contact=p["zone"], contact_t=el)
+        if p.get("lone"):
+            f["alone"] = True
+        elif p.get("n") and p["n"] >= 2:
+            f["alone"] = False
+    if p.get("rush") and el is not None and el <= 35:
+        f["dyn"] = "rush"
+    if f:
+        set_mark(rnd, f)
+    if site:
+        set_site(rnd, site)
+    return True
+
+
+def _mate(pl, st, phase, now):
+    """Dead, you watch a teammate and the game sends their state: their money (for the next buy), and in the round
+    the first damage they take and their death (the fight reaches their spot)."""
+    sid = str(pl.get("steamid") or "")
+    cur = STATE.get("round")
+    if not sid or not cur:
+        return
+    m = STATE.setdefault("mates", {}).setdefault(sid, {})
+    m.update(name=pl.get("name"), seen=round(now, 1))
+    if st.get("money") is not None:
+        m.update(money=st.get("money"), money_round=cur, money_phase=phase)
+    hp = st.get("health")
+    prev = m.get("hp") if m.get("hp_round") == cur else None
+    m.update(hp=hp, hp_round=cur)
+    if not HIST or phase != "live" or not STATE.get("live_since") or hp is None:
+        return
+    el = round(now - STATE["live_since"], 1)
+    r = HIST.setdefault("rounds", {}).setdefault(str(cur), {}).setdefault("mates", {}).setdefault(sid, {})
+    changed = False
+    if "seen" not in r:
+        r["seen"], changed = el, True
+    if prev is not None and hp < prev and "hurt" not in r:
+        r["hurt"], changed = el, True
+        try:
+            pos = [round(float(v)) for v in str(pl.get("position") or "").split(",")] if pl.get("position") else None
+            if pos and len(pos) == 3:
+                r["pos"] = pos
+        except ValueError:
+            pass
+    if hp == 0 and (prev or 0) > 0 and "dead" not in r:
+        r["dead"], changed = el, True
+    if changed:
+        _hist_save()
 
 
 def _hist_times(cur, phase, bomb, prev_phase, prev_bomb, health, prev_health, kills, prev_kills, now, hp=None, prev_hp=None, pos=None):
@@ -290,6 +362,14 @@ def _sample(payload):
           bool((payload.get("player") or {}).get("position")), str((payload.get("player") or {}).get("steamid")) == str((payload.get("provider") or {}).get("steamid")))
     if sum(1 for x in RAW["samples"] if x[0] == ph) < 2 and len(RAW["samples"]) < 40:
         RAW["samples"].append((ph, {k: v for k, v in payload.items() if k != "auth"}))
+        if not ph[4]:   # watching someone else: what does a real match give?
+            try:
+                import json
+                os.makedirs(LOG_DIR, exist_ok=True)
+                json.dump({"keys": RAW["keys"], "samples": [x for x in RAW["samples"] if not x[0][4]]},
+                          open(os.path.join(LOG_DIR, "spectating_samples.json"), "w", encoding="utf-8"), ensure_ascii=False, indent=1)
+            except Exception:
+                pass
 
 
 def update(payload):
@@ -384,6 +464,11 @@ def update(payload):
                           "stats": pl.get("match_stats")})
         if not own:
             STATE["pos"] = None   # dead: the game shows the teammate you spectate
+            if pl.get("steamid") and STATE.get("map"):
+                try:
+                    _mate(pl, st, rd.get("phase"), now)
+                except Exception as e:
+                    print("teammate:", e, flush=True)
         key = (STATE.get("map"), STATE.get("round"), STATE.get("round_phase"), STATE.get("side"))
         if STATE.get("map") and key != STATE.get("_key"):
             STATE["_key"] = key
@@ -391,7 +476,8 @@ def update(payload):
         # a practice or custom server: more than the $16,000 a real match allows, or a round longer than any real one
         # (1:55 + 40 s of bomb): the live advice and the automatic recording stay off there (analyses still wait)
         if STATE.get("map") != STATE.get("_pmap"):
-            STATE.update(_pmap=STATE.get("map"), practice=False)
+            STATE.update(_pmap=STATE.get("map"), practice=False, mates={})   # a new match: the teammates' money starts over
+            STATE.pop("call", None)
         el = now - STATE["live_since"] if STATE.get("round_phase") == "live" and STATE.get("live_since") else 0
         if STATE.get("map") and ((own and (st.get("money") or 0) > 16000) or el > 240):
             STATE["practice"] = True

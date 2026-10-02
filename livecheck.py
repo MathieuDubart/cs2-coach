@@ -108,7 +108,7 @@ def check_match(sid, m, logs):
             ct["n"] += 1
             ct["right"] += guess == real
             ct["logloss"] += -math.log(p)
-            rec.update(read=guess, real=real, p=round(100 * p))
+            rec.update(read=guess, real=real, p=round(100 * p), dist=[rd.get("A", 0), rd.get("B", 0), rd.get("none", 0)])
             fz = by.get((rnd, "fz")) or snap
             if isinstance((fz or {}).get("read"), dict) and fz["read"].get("rush") is not None:
                 said, did = fz["read"]["rush"] >= 40, tr["dyn"] == "rush"
@@ -128,7 +128,7 @@ def check_match(sid, m, logs):
             else:
                 t["n_nf"] += 1
                 t["won_nf"] += won
-            rec.update(p1=p1, play=tr["play"], won=won)
+            rec.update(p1=p1, play=tr["play"], won=won, wr=fz["paths"][0].get("wr"))
         if fz and fz.get("buy"):
             team = tr["T_buy"] if my == "T" else tr["CT_buy"]
             adv = {"half": "eco"}.get(fz["buy"], fz["buy"])
@@ -140,7 +140,7 @@ def check_match(sid, m, logs):
         if pl and pl.get("site") and tr["plant"] in ("A", "B"):
             plant["n"] += 1
             plant["right"] += pl["site"] == tr["plant"]
-            rec.update(site_said=pl["site"], plant=tr["plant"])
+            rec.update(site_said=pl["site"], plant=tr["plant"], p_site=pl.get("p_site"))
         if len(rec) > 2:
             rounds.append(rec)
     if not rounds:
@@ -177,6 +177,84 @@ def summary(res):
                 "plant_right": pct(a["plant_right"], a["plant_n"]), "plant_n": a["plant_n"]} for m, a in maps.items()}
 
 
+def _shrink(fit, neutral, n, k=40):
+    """Few rounds checked: the fit stays close to 'no change'. 40 rounds: half of it."""
+    return neutral + (fit - neutral) * n / (n + k)
+
+
+def calibrate(res):
+    """The automatic calibration of the live read, from every checked round (all maps together, per map once a map has
+    enough): a temperature for the site read (above 1: the read was too sure of itself, its odds get flatter; below
+    1: it was too shy), the same for the plant site, a correction of the rush odds, and of the paths' win %."""
+    rows = [r for m in res.values() for r in m.get("rounds", [])]
+    lg = lambda p: math.log(p / (1 - p))
+    sg = lambda z: 1 / (1 + math.exp(-z))
+    cl = lambda p: min(.97, max(.03, p))
+    out = {"maps": {}}
+
+    def site_t(rs):
+        best, bl = 1.0, None
+        for i in range(10, 61):
+            T = i / 20
+            ll = 0.0
+            for r in rs:
+                w = [max(1e-3, v / 100) ** (1 / T) for v in r["dist"]]
+                k = {"A": 0, "B": 1, "none": 2}[r["real"]]
+                ll -= math.log(w[k] / sum(w))
+            if bl is None or ll < bl:
+                best, bl = T, ll
+        return best
+    site = [r for r in rows if r.get("dist") and r.get("real") in ("A", "B", "none") and sum(r["dist"]) > 0]
+    out["site_n"] = len(site)
+    out["site_T"] = round(_shrink(site_t(site), 1.0, len(site)), 2) if site else 1.0
+    by_map = {}
+    for m in res.values():
+        by_map.setdefault(m["map"], []).extend(r for r in m.get("rounds", []) if r in site)
+    for mp, rs in by_map.items():
+        if len(rs) >= 40:
+            out["maps"][mp] = {"site_T": round(_shrink(site_t(rs), out["site_T"], len(rs)), 2), "site_n": len(rs)}
+    # rush: a slope and a shift on the log-odds (1 and 0: unchanged)
+    rush = [(cl(r["rush_said"] / 100), bool(r["rush"])) for r in rows if r.get("rush_said") is not None and "rush" in r]
+    out["rush_n"] = len(rush)
+    a_b = (1.0, 0.0)
+    if rush:
+        bl = None
+        zs = [lg(p) for p, _ in rush]
+        spread = (sum((z - sum(zs) / len(zs)) ** 2 for z in zs) / len(zs)) ** .5
+        for ai in (range(5, 16) if spread >= .3 else (10,)):   # the same odds every time: only the shift can be measured
+            for bi in range(-20, 21):
+                a, b = ai / 10, bi / 10
+                ll = -sum(math.log(sg(a * lg(p) + b) if y else 1 - sg(a * lg(p) + b)) for p, y in rush)
+                if bl is None or ll < bl:
+                    a_b, bl = (a, b), ll
+    out["rush"] = [round(_shrink(a_b[0], 1.0, len(rush)), 2), round(_shrink(a_b[1], 0.0, len(rush)), 2)]
+    # the plant site: how sure the page should be
+    pl = [(cl(r["p_site"] / 100), r["site_said"] == r["plant"]) for r in rows if r.get("p_site") and r.get("plant")]
+    out["plant_n"] = len(pl)
+    tb = 1.0
+    if pl:
+        bl = None
+        for i in range(10, 61):
+            T = i / 20
+            ll = -sum(math.log(sg(lg(p) / T) if y else 1 - sg(lg(p) / T)) for p, y in pl)
+            if bl is None or ll < bl:
+                tb, bl = T, ll
+    out["plant_T"] = round(_shrink(tb, 1.0, len(pl)), 2)
+    # the paths: the % shown against the rounds won when the team followed path 1
+    pa = [(cl(r["wr"] / 100), bool(r["won"])) for r in rows if r.get("wr") is not None and r.get("p1") and r.get("play") == r.get("p1")]
+    out["path_n"] = len(pa)
+    d = 0.0
+    if pa:
+        bl = None
+        for di in range(-15, 16):
+            dd = di / 10
+            ll = -sum(math.log(sg(lg(p) + dd) if y else 1 - sg(lg(p) + dd)) for p, y in pa)
+            if bl is None or ll < bl:
+                d, bl = dd, ll
+    out["path_d"] = round(_shrink(d, 0.0, len(pa)), 2)
+    return out
+
+
 def run(sid):
     """Every match of the player with snapshots: checked (again when its demo got analyzed since), saved with the
     player, and the per-map numbers returned for the plan."""
@@ -184,7 +262,7 @@ def run(sid):
     old = config.read_json(path, {}) or {}
     logs = _logs()
     if not logs:
-        return {"maps": summary(old.get("matches", {})), "matches": []}
+        return {"maps": summary(old.get("matches", {})), "matches": [], "calib": calibrate(old.get("matches", {}))}
     site = os.path.join(config.OUT, "site", "players", f"{sid}.json")
     try:
         matches = json.load(open(site, encoding="utf-8")).get("matches") or []
@@ -201,4 +279,5 @@ def run(sid):
             res[str(m["id"])] = r
     config.write_json(path, {"matches": res, "updated": dt.datetime.now().isoformat(timespec="minutes")})
     last = sorted(res.values(), key=lambda r: r["time"], reverse=True)[:5]
-    return {"maps": summary(res), "matches": [{k: v for k, v in r.items() if k != "rounds"} | {"rounds": r["rounds"][:30]} for r in last]}
+    return {"maps": summary(res), "matches": [{k: v for k, v in r.items() if k != "rounds"} | {"rounds": r["rounds"][:30]} for r in last],
+            "calib": calibrate(res)}

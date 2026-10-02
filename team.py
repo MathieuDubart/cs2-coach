@@ -935,3 +935,35 @@ if __name__ == "__main__":
     sys.stdout.reconfigure(encoding="utf-8")
     p = build(sys.argv[1:])
     print(json.dumps({k: p[k] for k in ("id", "members", "picks", "to_work", "igl", "missing_roles")}, ensure_ascii=False, indent=1)[:4000])
+
+
+def mates_regions(sid, limit=6):
+    """Your frequent teammates who have a profile, and where each one plays as CT on each map (share of their time on
+    the A side, the B side, mid). Dead, you watch one of them: a fight at their spot tells where the Ts are."""
+    meta = map_meta()
+    out = {}
+    for s in suggestions(sid, limit=limit):
+        if not s.get("analyzed") or (s.get("together") or 0) < 2:   # a teammate met once won't be watched again
+            continue
+        f = os.path.join(config.player_dir(s["steamid"]), "cross.json")
+        if not os.path.exists(f):
+            continue
+        try:
+            cross = json.load(open(f, encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        maps = {}
+        for m in cross.get("maps", []):
+            regs = (meta.get(m.get("map")) or {}).get("regions") or {}
+            W = {}
+            for z in (((m.get("sides") or {}).get("CT") or {}).get("zones") or []):
+                if "spawn" in str(z.get("key", "")).lower() or not z.get("presence"):
+                    continue
+                r = regs.get(z.get("key")) or "mid"
+                W[r] = W.get(r, 0) + z["presence"]
+            tot = sum(W.values())
+            if tot >= 20:
+                maps[m["map"]] = {k: round(v / tot, 2) for k, v in W.items()}
+        if maps:
+            out[str(s["steamid"])] = {"name": s.get("name"), "maps": maps}
+    return out

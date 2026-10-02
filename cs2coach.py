@@ -377,7 +377,12 @@ def attach_plan(sid):
         adv["plan_error"] = f"{type(e).__name__}: {e}"[:200]   # the previous plan stays; the page says it is not up to date
         config.write_json(p, adv, indent=1, default=str)
         return
-    try:   # what the In game page showed in your matches, against their demos
+    try:   # your frequent teammates' usual CT spots: dead, the one you watch tells where the fight is
+        import team
+        adv["plan"]["mates"] = team.mates_regions(sid)
+    except Exception as e:
+        log(f"Teammates' spots unavailable: {e}")
+    try:   # what the In game page showed in your matches, against their demos (and the calibration it gives)
         import livecheck
         adv["plan"]["livecheck"] = livecheck.run(sid)
     except Exception as e:

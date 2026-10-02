@@ -214,11 +214,14 @@ class Handler(BaseHTTPRequestHandler):
             act = u.path.rsplit("/", 1)[-1]
             try:
                 if act == "settings":
-                    voice.save_settings(**{k: body[k] for k in ("auto", "device") if k in body})
+                    voice.save_settings(**{k: body[k] for k in ("auto", "device", "live") if k in body})
+                    if body.get("live") is False:
+                        voice.LIVE.stop()
                 elif act == "start":
                     g = gsi.state()
                     voice.pause_transcription()
                     voice.REC.start(g.get("map"), body.get("sid") or config.settings().get("own_steamid"), "manual")
+                    voice.LIVE.start(g.get("map"))
                 elif act == "stop":
                     voice.finish()
                 elif act == "transcribe":
@@ -338,7 +341,8 @@ def voice_status():
     return {"available": True, "settings": voice.settings(), "device": voice.chosen_device(), "cs2_device": voice.cs2_voice_device(),
             "recording": bool(m), "level": round(voice.REC.peak, 4) if m else None,
             "current": m and {k: m[k] for k in ("id", "map", "start_iso", "device", "source")},
-            "transcribing": voice.transcribing(), "recordings": voice.recordings()[:12]}
+            "transcribing": voice.transcribing(), "recordings": voice.recordings()[:12],
+            "live": {"on": voice.settings().get("live", True), "running": voice.LIVE.running(), "last": voice.LIVE.last}}
 
 
 def voice_watch(every=15):
