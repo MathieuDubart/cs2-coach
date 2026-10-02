@@ -422,6 +422,8 @@ if __name__ == "__main__":
             print("game detection:", e)
         threading.Thread(target=auto_sync, daemon=True).start()
         threading.Thread(target=voice_watch, daemon=True).start()
+        import chatcalls
+        threading.Thread(target=chatcalls.watch, daemon=True).start()   # numpad keys of the paths: the focus
     if "--no-browser" not in sys.argv:
         webbrowser.open(url)
     srv.serve_forever()

@@ -531,6 +531,11 @@ def build(steamid, adv, cross=None, deep=None, light=False):
             plan["mood"] = voice.mood_stats(sid)   # the rounds after a frustrated moment against the others
     except Exception as e:
         _miss(plan, "calls", e)
+    try:   # hostage maps: the CTs attack (their ways out of the spawn, the Ts' holds and kill spots)
+        import hostage
+        plan["hostage"] = hostage.summary()
+    except Exception as e:
+        _miss(plan, "hostage maps", e)
     try:   # from the demos: blocks, flashes, team flashes, odd kills of the enemies and their Steam bans
         import matchfacts
         matchfacts.run(sid, 10)

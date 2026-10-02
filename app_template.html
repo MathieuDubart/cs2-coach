@@ -549,6 +549,9 @@ table.lc{border-collapse:collapse;font-variant-numeric:tabular-nums;min-width:64
 .fbar{display:flex;gap:2px;height:12px;border-radius:6px;overflow:hidden;margin:6px 0}.fbar i{display:block;min-width:3px}
 .gauge b small{font-size:.55em;color:var(--muted);font-weight:600}
 .vreset.plan{border-left-color:var(--ct);background:color-mix(in srgb,var(--ct) 12%,transparent)}.vreset.plan b{color:var(--ct)}
+.vfocus{display:flex;align-items:center;gap:10px;padding:8px 12px;border-radius:var(--radius);border-left:6px solid var(--c);background:color-mix(in srgb,var(--c) 14%,transparent)}
+.vfocus>b{font:700 34px var(--f-display);color:var(--c);line-height:1}.vfocus div{display:grid;flex:1}.vfocus span{font:700 17px var(--f-body)}.vfocus small{font:600 12px var(--f-mono);color:var(--muted)}
+.vfocus em{font:600 11px var(--f-mono);font-style:normal;color:var(--muted);border:1px solid var(--line);border-radius:3px;padding:1px 5px}
 </style>
 
 <div class="bar"><div class="bar-in">
@@ -1235,7 +1238,9 @@ async function renderSettings(){
    <p class="note">This is Valve's Game State Integration, the official feature used by HUDs and RGB keyboards. During a match, CS2 only sends your own info, never the enemies'.${gs&&gs.path?` File: <code>${esc(gs.path)}</code>.`:""}${gs&&gs.installed?(gs.receiving?" CS2 is sending its data.":" Restart CS2 so it picks it up."):""}</p>
    <div class="btns">${gs&&gs.installed?`<button type="button" id="gsi-off">Turn detection off</button>`:`<button type="button" class="primary" id="gsi-on" ${gs&&gs.cfg_dir?"":"disabled"}>Turn detection on</button>`}${gs&&!gs.cfg_dir?`<span class="note">CS2 folder not found on this PC.</span>`:""}</div></article>
   <article class="card"><h3>Paths in the team chat (numpad 1-2-3) ${ok(cc&&cc.bound)}</h3>
-   <p>As T, numpad <b>1</b>, <b>2</b> or <b>3</b> says path 1, 2 or 3 of the In game page in the team chat, with its way and when it is on the site. The app rewrites the text every round; you press the key.</p>
+   <p>When you attack (T, or CT on a hostage map), numpad <b>1</b>, <b>2</b> or <b>3</b> says path 1, 2 or 3 of the In game page in the team chat, with its way and when it is on the site, and the page focuses on it (the last key pressed wins): only that path on the map, your grenades for it and the zones to check. Numpad <b>minus</b> drops the focus. The app rewrites the text every round; you press the key.</p>
+   ${cc&&!cc.console?`<p class="note">The focus needs CS2's console log (game/csgo/console.log, written when CS2 starts with <code>-condebug</code> in its launch options): not found or old.</p>`:""}
+   ${cc&&cc.bound&&!cc.focus_bound?`<p>Numpad minus is new: run <code>exec coach_binds</code> once more in CS2's console.</p>`:""}
    ${cc&&cc.bound?`<p class="note">The keys are set.</p>`:`<p>One time only, in CS2's console: <code>exec coach_binds</code> (the keys then stay in your CS2 settings).</p>`}
    <p class="note">Numpad 1, 2, 3 were free in your CS2 keys. The In game page must be open during the match (it gives the paths). When the path ends on a site, the key also gives CS2's own "Go A" / "Go B" of the chat wheel (the order bots follow). A file only says that line and that order, never another command.</p></article>
   <article class="card"><h3>The coach's voice at the buy time</h3>
@@ -2006,7 +2011,7 @@ function renderIngame(){
   {const TS_=PL.tside,M_=TS_&&TS_.maps&&TS_.maps[S.map],site_=live&&!igManual&&gsiLast.map===S.map&&igEv.key===`${gsiLast.map}|${gsiLast.round}`&&igEv.site;   // show the plant spots' level
    const sp_=site_&&M_&&(((M_.evidence||{}).plants||{})[site_]||{}).spots;if(m&&sp_&&sp_.length&&sp_[0].level&&m.levels.some(l=>l.key===sp_[0].level))S.level=sp_[0].level}
   const R0=!m?refs[S.map]:null,following=!!(live&&!igManual&&gsiLast.map===S.map&&gsiLast.side===S.side),focus=document.body.classList.contains("focus");
-  const TSm=PL.tside&&PL.tside.maps&&PL.tside.maps[S.map],GEOm=TSm&&TSm.geo,liveR=!!(TSm&&GEOm&&GEOm.radar&&(S.side==="CT"?TSm.plays&&GEOm.sites:following));   // live radar: CT always, T while following the game
+  const TSm=PL.tside&&PL.tside.maps&&PL.tside.maps[S.map],GEOm=TSm&&TSm.geo,liveR=!!((TSm&&GEOm&&GEOm.radar&&(S.side==="CT"?TSm.plays&&GEOm.sites:following))||(following&&typeof isHostage==="function"&&isHostage(S.map)&&(PL.hostage||{})[S.map]));   // live radar: CT always, T while following the game; hostage maps while following
   const LVs=(m&&m.levels)||(R0&&R0.levels)||((GEOm&&GEOm.radar&&GEOm.radar.levels)||[]).map(l=>({key:l.key,name:l.key==="lower"?"Lower level":l.key==="upper"?"Main level":"Map"}));
   if(liveR&&LVs.length&&!LVs.some(l=>l.key===S.level))S.level=LVs[0].key;
   const TABS=[["plan","Game plan"],["buys","Buys"],["nades","Grenades"],...(S.side==="CT"?[["t","T habits"]]:[])];
@@ -2262,10 +2267,11 @@ function mkMark(ov,s,mine,dim){const [x,y]=s.px,R=mine?13:9,g=el("g",{class:"mks
   const t=mine?(s.best>=2?`${s.best}K`:""):(s.n>=2?`×${s.n}`:"");
   obstacle(ov,x,y,2*R,2*R);if(t)qLabel(ov,x,y,R,t,"mkt"+(mine?"":" o"),mine?2:1);
   return tip(g,mine?`${s.zone}: you got ${s.best} kills from here in one round${s.n>1?` (${s.n} rounds)`:""}`:`${s.zone}: ${s.n} rounds where a player got 2+ kills from here (best ${s.best})`)}
-function layerBtns(){const L=liveLayers();return `<div class="btns" role="group" aria-label="What the radar shows">${RLAYERS.map(([k,t])=>`<button type="button" data-rlayer="${k}" aria-pressed="${L.includes(k)}">${t}</button>`).join("")}</div>`}
+function layerBtns(){const L=liveLayers(),H=typeof isHostage==="function"&&isHostage(S.map),HN={paths:"Your ways",ctpos:"T spots",danger:"T kill angles"};   // hostage maps: the CTs attack
+  return `<div class="btns" role="group" aria-label="What the radar shows">${RLAYERS.filter(([k])=>!H||!["key","post"].includes(k)).map(([k,t])=>`<button type="button" data-rlayer="${k}" aria-pressed="${L.includes(k)}">${H&&HN[k]||t}</button>`).join("")}</div>`}
 
 function liveRadar(box,p,map,level,g,o){
-  const PL=p.advice.plan||{},TS=PL.tside,M=TS&&TS.maps&&TS.maps[map],GEO=M&&M.geo,ct=o.side==="CT",on=k=>o.layers.includes(k)&&(ct?!["paths","ctpos","danger"].includes(k):!["strong","multi","spots"].includes(k));   // T: the CTs, not your own spots
+  const PL=p.advice.plan||{},TS=PL.tside,M=TS&&TS.maps&&TS.maps[map],GEO=M&&M.geo,ct=o.side==="CT",HMAP=isHostage(map),att=HMAP?ct:!ct,on=k=>o.layers.includes(k)&&(att?!["strong","multi","spots"].includes(k):!["paths","ctpos","danger"].includes(k));   // the attack (T, or CT on a hostage map): the enemies, not your own spots
   const svg=$("svg",box),img=$("image",svg),ov=$("g",svg),cap=$(".caption",box);
   img.setAttribute("href",D.radars[`${map}:${level}`]||"");svg.setAttribute("viewBox",(D.viewboxes[map]||[0,0,1024,1024]).join(" "));ov.replaceChildren();PLACED.set(ov,[]);
   const here=x=>x&&x.px&&(!x.level||!level||x.level===level),legend=[];
@@ -2290,11 +2296,13 @@ function liveRadar(box,p,map,level,g,o){
   if(on("key")&&o.following&&g&&!planted&&(g.round_phase==="freezetime"||(live&&(g.elapsed||0)<45))&&typeof keyRadar==="function"){keyRadar(p,g,map,level,Lstrong,Ltop,legend,here);antiEcoRadar(p,g,map,level,Ltop,legend,here)}
   if(on("post")&&!ct&&planted&&site&&typeof postplantRadar==="function")postplantRadar(p,g,map,level,Ltop,legend,here,site);
   // T side, before the hit: the way from the spawn of the plays that win most (numbered like the side panel's lines)
-  if(!ct&&on("paths")&&o.following&&g&&!planted&&(g.round_phase==="freezetime"||(live&&(g.elapsed||0)<45))){const W=winsRank(p,g);
+  const FN=o.following&&g?focusN(g):0;   // the path you pressed: the only one drawn
+  if(att&&on("paths")&&o.following&&g&&!planted&&(g.round_phase==="freezetime"||(live&&(g.elapsed||0)<45))){const W0=HMAP?hostageRank(p,g):winsRank(p,g),W=W0&&FN&&W0.rows.some(r=>r.rank===FN)?{...W0,rows:W0.rows.filter(r=>r.rank===FN)}:W0;
     if(W){const seen=new Map();W.rows.slice(0,3).forEach(r=>{if(!r.route)return;const k=r.route.zones.join(">");if(seen.has(k)){seen.get(k).push(r.rank);return}seen.set(k,[r.rank]);r._k=k});
       W.rows.slice(0,3).filter(r=>r._k).reverse().forEach(r=>tPath(Lrot,Ltop,r.route.pts,r.col,seen.get(r._k),level,r.rank===1,r.wr,r.rot,r.timing));   // the play's chance this round (a route alone is biased: only the ones who got there alive count)
       if(seen.size&&W.rows.some(r=>r.rot))legend.push(`<span>${SW.tpath}↻ ranked ahead of a better %: that one lost this half or was played too often, they read you too</span>`);
-      if(seen.size)legend.push(`<span>${SW.tpath}your way from the spawn, % won = rounds won by its play in this situation; "on site 1:31-1:21": be on the site between these times of the game clock, when this play wins the most rounds at equal numbers alive (a fast arrival in an easy round doesn't count for more; ~1:17: no moment wins more, the usual time); numpad 1-2-3 say the path in the team chat (${esc(RT_EN[W.rt]||W.rt)}${W.eb&&W.eb.full>=.5?" vs their full buy":W.eb&&W.eb.eco>=.5?" vs their eco":""}, ${RUN_EN[W.run]})</span>`)}}
+      if(seen.size&&HMAP)legend.push(`<span>${SW.tpath}your way out of the spawn toward the hostages, % won = the CTs' rounds won when one takes it, "there ~1:41": when they get to its end (game clock); numpad 1-2-3 say it in the team chat and focus on it, numpad minus drops the focus</span>`);
+      else if(seen.size)legend.push(`<span>${SW.tpath}your way from the spawn, % won = rounds won by its play in this situation; "on site 1:31-1:21": be on the site between these times of the game clock, when this play wins the most rounds at equal numbers alive (a fast arrival in an easy round doesn't count for more; ~1:17: no moment wins more, the usual time); numpad 1-2-3 say the path in the team chat (${esc(RT_EN[W.rt]||W.rt)}${W.eb&&W.eb.full>=.5?" vs their full buy":W.eb&&W.eb.eco>=.5?" vs their eco":""}, ${RUN_EN[W.run]})</span>`)}}
   // T side: where the CTs stand when you get there, and the angles they kill from (! = a spot they kill a lot from for the
   // little time they spend there: the angle the Ts forget)
   // T, the first moments (buy time, then up to 1:10): CTs pushing past a neutral zone, for their buy this round: an
@@ -2310,12 +2318,25 @@ function liveRadar(box,p,map,level,g,o){
         qLabel(Ltop,x1,y1,9,clock(x.t),"kwt",3);
         tip(gg,`${x.gate||"Neutral zone"}: a CT pushes past it in ${Math.round(x.share)}% of rounds (${CP.label.toLowerCase()}), around ${clock(x.t)}; the pushing CT gets a kill ${x.kill}% of the time`)});
       legend.push(`<span>${SW.push}a CT pushing past a neutral zone (white dot: where both sides arrive at the same time), for their buy this round; the time is when, red: the push often gets a kill</span>`);earlyDone=true}}
+  const FR=FN&&!HMAP?((winsRank(p,g)||{rows:[]}).rows.find(r=>r.rank===FN)||{}).route:null,nearF=s=>!FR||FR.pts.some(q=>Math.hypot(q[0]-s.px[0],q[1]-s.px[1])<90);   // focus: only the spots along your path
+  // hostage maps, CT: where the Ts hold 20 to 40 s in, and the spots they kill CTs from (along the path you pressed)
+  const HS=HMAP&&ct?((PL.hostage||{})[map]):null;
+  if(HS&&o.following&&g&&(g.round_phase==="freezetime"||(live&&(g.elapsed||0)<60))){const FRh=FN?((hostageRank(p,g)||{rows:[]}).rows.find(r=>r.rank===FN)||{}).route:null,nr=s=>!FRh||FRh.pts.some(q=>Math.hypot(q[0]-s.px[0],q[1]-s.px[1])<90);
+    if(on("ctpos")){const hs=(HS.holds||[]).filter(h=>here(h)&&nr(h)&&!/spawn/i.test(h.zone||"")).slice(0,6),mx=Math.max(...hs.map(h=>h.share),1);
+      hs.forEach(h=>tip(el("circle",{cx:h.px[0],cy:h.px[1],r:7+9*h.share/mx,style:"fill:var(--t);fill-opacity:.32;stroke:var(--t);stroke-width:2;stroke-opacity:.8"},Lstrong),`${h.zone||"T spot"}: ${h.share}% of the Ts' time 20 to 40 s in`));
+      if(hs.length)legend.push(`<span>${SW.ctpos}where the Ts hold 20 to 40 s in (bigger = more often)</span>`)}
+    if(on("danger")){const ds=(HS.danger||[]).filter(h=>here(h)&&nr(h)).slice(0,5);
+      ds.forEach(z=>{const gg=el("g",{},Ltop),r=8+Math.min(6,z.share/3);
+        el("circle",{cx:z.px[0],cy:z.px[1],r,style:"fill:none;stroke:var(--bad);stroke-width:2.4"},gg);
+        el("path",{d:`M${z.px[0]-r-4} ${z.px[1]}H${z.px[0]-r+4}M${z.px[0]+r-4} ${z.px[1]}H${z.px[0]+r+4}M${z.px[0]} ${z.px[1]-r-4}V${z.px[1]-r+4}M${z.px[0]} ${z.px[1]+r-4}V${z.px[1]+r+4}`,style:"stroke:var(--bad);stroke-width:2.4;stroke-linecap:round"},gg);
+        tip(gg,`${z.zone||"T angle"}: ${z.kills} CTs killed from here in the first minute`)});
+      if(ds.length)legend.push(`<span>${SW.danger}spots the Ts kill CTs from in the first minute</span>`)}}
   const CS=!ct&&M&&M.ct_spots;
   if(CS&&!earlyDone&&(on("ctpos")||on("danger"))){const tt=t==null?25:Math.max(t+15,20),wn=tt<20?"early":tt<40?"setup":tt<70?"hit":"late",W_=CS[wn]||CS.setup;
-    if(W_&&on("ctpos")){const hs=W_.hold.filter(h=>here(h)&&h.zone!=="CT Spawn").slice(0,6),mx=Math.max(...hs.map(h=>h.share),1);
+    if(W_&&on("ctpos")){const hs=W_.hold.filter(h=>here(h)&&nearF(h)&&h.zone!=="CT Spawn").slice(0,6),mx=Math.max(...hs.map(h=>h.share),1);
       hs.forEach(h=>tip(el("circle",{cx:h.px[0],cy:h.px[1],r:7+9*h.share/mx,style:"fill:var(--ct);fill-opacity:.32;stroke:var(--ct);stroke-width:2;stroke-opacity:.8"},Lstrong),`${h.zone||"CT spot"}: ${h.share}% of the CTs' time at this moment`));
       if(hs.length)legend.push(`<span>${SW.ctpos}where the CTs stand when you get there (bigger = more often)</span>`)}
-    if(W_&&on("danger")){const ds=W_.danger.filter(here).slice(0,5);
+    if(W_&&on("danger")){const ds=W_.danger.filter(z=>here(z)&&nearF(z)).slice(0,5);
       ds.forEach(z=>{const gg=el("g",{},Ltop),r=8+Math.min(6,z.share/3);
         el("circle",{cx:z.px[0],cy:z.px[1],r,style:"fill:none;stroke:var(--bad);stroke-width:2.4"},gg);
         el("path",{d:`M${z.px[0]-r-4} ${z.px[1]}H${z.px[0]-r+4}M${z.px[0]+r-4} ${z.px[1]}H${z.px[0]+r+4}M${z.px[0]} ${z.px[1]-r-4}V${z.px[1]-r+4}M${z.px[0]} ${z.px[1]+r-4}V${z.px[1]+r+4}`,style:"stroke:var(--bad);stroke-width:2.4;stroke-linecap:round"},gg);
@@ -2346,8 +2367,8 @@ function liveRadar(box,p,map,level,g,o){
       `${nadeName(x.type,"CT")} ${x.from} → ${x.to}: ${x.why}. ${x.how||""}${x.click?`, ${x.click} click`:""}${x.yours?"":" (from a spot you don't play)"}`));
     o.nadesOut&&o.nadesOut(NN);
     if(NN.length)legend.push(`<span>${SW.nade}grenade worth throwing ${live?"now":"this round"}: from the white dot to its icon (cloud smoke, flame molotov, burst flash, HE)</span>`)}
-  if(!ct&&on("nades")&&o.following&&typeof vNadePicks==="function"){const NP=vNadePicks(p,g).filter(x=>x.x);
-    NP.forEach(n=>drawNade({...n.x,type:n.type},nadeName(n.type,"T")+({site:" · site 1",way:" · way 1"}[n.x.way]||""),`${nadeName(n.type,"T")} ${n.x.from} → ${n.x.to}${n.x.how?`. ${n.x.how}`:""}`));
+  if(att&&on("nades")&&o.following&&typeof vNadePicks==="function"){const NP=vNadePicks(p,g).filter(x=>x.x);
+    NP.forEach(n=>drawNade({...n.x,type:n.type},nadeName(n.type,"T")+({site:` · site ${FN||1}`,way:` · path ${FN||1}`}[n.x.way]||""),`${nadeName(n.type,"T")} ${n.x.from} → ${n.x.to}${n.x.how?`. ${n.x.how}`:""}`));
     NP.filter(n=>n.alt&&n.alt.to_px&&n.alt.from_px&&here({px:n.alt.to_px,level:n.alt.land_level||n.alt.level})).forEach(n=>{const a=n.alt,gg=el("g",{style:"opacity:.45"},Lnades);   // the other good throw, faint
       nadeArc(gg,a.from_px[0],a.from_px[1],a.to_px[0],a.to_px[1],n.type);tip(el("circle",{cx:a.to_px[0],cy:a.to_px[1],r:9,style:`fill:var(--${n.type});fill-opacity:.6;stroke:#0b0f14`},gg),`Other ${nadeName(n.type,"T")}: ${a.from} → ${a.to}`)});
     if(NP.length)legend.push(`<span>${SW.nade}your grenades for this moment: from the white dot to its icon</span>`)}
@@ -2378,15 +2399,22 @@ function vNadePicks(p,g){const N=(p.advice.plan||{}).nades,E=N&&((N.maps||{})[g.
   // what a throw brings: rounds won when it's thrown vs the map's average (shrunk on few throws), else its own score
   const eff=x=>x.win!=null&&x.base_win!=null?((x.win*(x.n||0)+x.base_win*10)/((x.n||0)+10)-x.base_win)/100:(x.score||0)/4;
   // T side: the throws that serve your way (path 1 of the radar) come first, the ones landing on the other site last
-  const W=g.side==="T"&&typeof winsRank==="function"?winsRank(p,g):null,R1=W&&W.rows[0]&&W.rows[0].route,pts=R1?R1.pts:null;
+  const W=g.side===attackSide(g.map)?(isHostage(g.map)?hostageRank(p,g):typeof winsRank==="function"?winsRank(p,g):null):null;
+  const RF=W&&(W.rows.find(x=>x.rank===focusN(g))||W.rows[0]),R1=RF&&RF.route,pts=R1?R1.pts:null;   // the path you pressed, else path 1
   const GEO=((((p.advice.plan||{}).tside||{}).maps||{})[g.map]||{}).geo,end=pts?pts[pts.length-1]:null;
-  const oth=end&&GEO&&GEO.sites?Object.values(GEO.sites).map(s=>s.px).filter(s=>s&&Math.hypot(s[0]-end[0],s[1]-end[1])>200)[0]:null;
-  const near=(a,d)=>a&&pts&&pts.some(q=>Math.hypot(q[0]-a[0],q[1]-a[1])<d);
-  const S1=R1&&GEO&&GEO.sites?(GEO.sites[(W.rows[0].k.match(/[AB]$/)||W.rows[0].k.match(/^[AB]/)||[])[0]]||{}).px:null;   // the site of path 1
-  const way=x=>!pts||!x.to_px?null:(end&&Math.hypot(x.to_px[0]-end[0],x.to_px[1]-end[1])<160)||(S1&&Math.hypot(x.to_px[0]-S1[0],x.to_px[1]-S1[1])<170)?"site":near(x.to_px,50)?"way":oth&&Math.hypot(x.to_px[0]-oth[0],x.to_px[1]-oth[1])<160?"off":near(x.from_px,60)?"from":null;
+  // the level counts (Nuke: A is right above B): a throw is near a point only on the same level, when both are known
+  const lvOK=(a,b)=>!a||!b||a===b,sk=RF?(RF.k.match(/[AB]$/)||RF.k.match(/^[AB]/)||[])[0]:null;
+  const S1g=R1&&GEO&&GEO.sites&&sk?GEO.sites[sk]:null,S1=S1g?S1g.px:null;   // the site of that path
+  const othG=GEO&&GEO.sites&&sk?GEO.sites[sk==="A"?"B":"A"]:null,oth=othG?othG.px:null;
+  const near=(a,d,lv)=>a&&pts&&pts.some(q=>Math.hypot(q[0]-a[0],q[1]-a[1])<d&&lvOK(lv,q[2]));
+  const way=x=>{if(!pts||!x.to_px)return null;const lv=x.land_level||x.level;
+    if((end&&Math.hypot(x.to_px[0]-end[0],x.to_px[1]-end[1])<160&&lvOK(lv,end[2]))||(S1&&Math.hypot(x.to_px[0]-S1[0],x.to_px[1]-S1[1])<170&&lvOK(lv,S1g.level)))return "site";
+    if(near(x.to_px,50,lv))return "way";
+    if(oth&&Math.hypot(x.to_px[0]-oth[0],x.to_px[1]-oth[1])<160&&lvOK(lv,othG.level))return "off";
+    return near(x.from_px,60,x.level)?"from":null};
   const bonus={site:.06,way:.04,from:.02,off:-.06};
   const eff0=eff,effW=x=>eff0(x)+(bonus[way(x)]||0),tag=x=>x&&Object.assign({},x,{way:way(x)});
-  const noOff=l=>{const ok=l.filter(x=>way(x)!=="off");return ok.length?ok:[]};   // a throw toward the other site only helps a fake: never shown
+  const FX=focusN(g),noOff=l=>l.filter(x=>FX?["site","way","from"].includes(way(x)):way(x)!=="off");   // a throw toward the other site only helps a fake: never shown; with a focus, only the throws of that path
   const picks=t=>{if(w==="post")return (E.types[t].post||[]).slice(0,2);
     if(el==null||!w)return noOff((E.types[t].picks||[]).slice().sort((a,b)=>effW(b)-effW(a))).slice(0,2).map(tag);   // buy time: the best ones of the round, for your way
     const fit=x=>x.best===w||x.usual===w||(x.t_med!=null&&x.t_med>=el-8&&x.t_med<=el+25);
@@ -2573,6 +2601,26 @@ function vPushAns(p,g,live){if(g.side!=="T")return "";const PA=((((p.advice.plan
   if(!A&&!live){const E=typeof ctPush==="function"?ctPush(p,g):null,top=E&&E.gates[0];if(top&&top.share>=15)A=PA.find(a=>a.gate===top.gate)}
   if(!A)return "";
   return vHead(`IF THEY PUSH ${vShort(A.gate)} · WON`)+vRows(A.answers.slice(0,2).map((a,i)=>({l:`${a.site} ${a.tempo==="fast"?`fast ›${clock(45)}`:`late ‹${clock(45)}`}`,v:a.won,c:SITE_C[a.site],o:i?.7:1})))}
+// the zones to check on a path: the enemy spots within 90 px of its way (bomb maps: where the CTs stand and the angles
+// they kill from at that moment; hostage maps: where the Ts hold and the spots they kill CTs from), kill spots first
+function focusChecks(p,g,r){if(!r||!r.route||!r.route.pts)return [];const pts=r.route.pts,near=s=>s&&s.px&&pts.some(q=>Math.hypot(q[0]-s.px[0],q[1]-s.px[1])<90&&(!s.level||!q[2]||s.level===q[2]));
+  let hold=[],dang=[];
+  if(isHostage(g.map)){const H=((p.advice.plan||{}).hostage||{})[g.map]||{};hold=H.holds||[];dang=H.danger||[]}
+  else{const CS=((((p.advice.plan||{}).tside||{}).maps||{})[g.map]||{}).ct_spots||{},el=g.round_phase==="live"?(g.elapsed||0):0,tt=Math.max(el+15,20),W=CS[tt<20?"early":tt<40?"setup":tt<70?"hit":"late"]||CS.setup||{};hold=W.hold||[];dang=W.danger||[]}
+  const out=[],seen=new Set();
+  [...dang.filter(near).map(s=>({zone:s.zone,d:true})),...hold.filter(near).map(s=>({zone:s.zone,d:false}))].forEach(z=>{if(z.zone&&!/spawn/i.test(z.zone)&&!seen.has(z.zone)){seen.add(z.zone);out.push(z)}});
+  return out.slice(0,4)}
+// the focus on the path you pressed: the path, when to be there, your grenades for it, the zones to check
+function vFocus(p,g){const n=focusN(g);if(!n)return "";const H=isHostage(g.map),W=H?hostageRank(p,g):typeof winsRank==="function"?winsRank(p,g):null,r=W&&W.rows.find(x=>x.rank===n);if(!r)return "";
+  let head,when;
+  if(H){head=`Hostages via ${r.route.zones.slice(-2).join(" > ")}`;when=`there ~${clock(r.t_end)}`}
+  else{const ps=pathShort(p,g,r),pts=(r.route||{}).pts,end=pts&&pts[pts.length-1];head=`${ps.head}${ps.via?` via ${ps.via}`:""}`;when=onSite(r.timing,end)}
+  const nd=vNades(vNadePicks(p,g)),chk=focusChecks(p,g,r);
+  return `<div class="vfocus" style="--c:${r.col}"><b>${n}</b><div><span>${esc(head)}</span><small>${esc(when||"")}${r.wr!=null?` · ${Math.round(r.wr)}% won`:""}</small></div><em title="numpad minus drops the focus">− off</em></div>
+    ${nd}${chk.length?`<div class="vchips">${chk.map(z=>`<span class="vchip ${z.d?"bad":""}">${z.d?"⚠":"👁"} ${vShort(z.zone)}</span>`).join("")}</div>`:""}`}
+// hostage maps: the CTs' ways (attack: rounds won; defense: share of the CT walks, where they come from)
+function vHostRoutes(p,g,def){const W=hostageRank(p,g);if(!W)return "";
+  return vHead(def?"THEY COME FROM · OF CT WALKS":"YOUR WAYS · ROUNDS WON")+vRows(W.rows.map((r,i)=>({l:`${r.rank} · ${vShort(r.route.zones.slice(-2).join(" > "))} · ${clock(r.t_end)}`,v:def?r.share:r.wr,c:r.col,o:[1,.8,.65][i]})))}
 const expOn=(p,t)=>(((((p||{}).advice||{}).plan||{}).experiments||{}).experiments||[]).some(e=>e.status==="active"&&e.template===t);
 function nowVisual(p,g,following){
   if(!following)return nowPanel(p,g,following,{noBuy:true});
@@ -2584,15 +2632,17 @@ function nowVisual(p,g,following){
     if(voiceOn()&&navigator.userActivation&&!navigator.userActivation.hasBeenActive)out.push(`<span class="vchip">🔊 click this page once: the coach's voice</span>`);
     {if(typeof antiEco==="function"&&antiEco(p,g))out.push(`<span class="vchip bad">! eco kill spots on the map: clear them, no close duel</span>`)}
     if(ct&&r)out.push(vOdds(r),vRush(TS,g,r)||vEntries(TS,g,r),vCTline(p,g,r)||vHold(p,g,r));
-    if(!ct){out.push(vPathCurve(p,g)||vTimeline(p,g),vPush(p,g),vPushAns(p,g,false),vTchips(p,g))}}   // the plays and the grenades are on the map
+    const HM=isHostage(g.map);if(HM)out.push(ct?(vFocus(p,g)||vHostRoutes(p,g,false)):vHostRoutes(p,g,true));
+    if(!ct&&!HM){out.push(vFocus(p,g)||vPathCurve(p,g)||vTimeline(p,g),vPush(p,g),vPushAns(p,g,false),vTchips(p,g))}}   // the plays and the grenades are on the map
   else if(ph==="live"){const el=g.elapsed||0,planted=g.bomb==="planted";out.push(vCall(g));
     if(planted){const left=g.phase_left!=null?g.phase_left:Math.max(0,40-(g.since_plant||0)),as=typeof autoSite==="function"?autoSite(p,g):null;
       out.push(`<div class="vbig ${ct?"bad":"good"}"><b>💣 ${Math.ceil(left)}s</b><span>${ct?"retake together":"hold the bomb"}${as?` · ${as.site} site, ${as.p}% sure`:""}</span></div>`)}
+    else if(isHostage(g.map))out.push(ct?(vFocus(p,g)||(el<45?vHostRoutes(p,g,false):"")):(el<45?vHostRoutes(p,g,true):""));
     else if(ct){if(r){out.push(vOdds(r));
         const PLs=tsidePlays(TS,g.map,g,evFor(g),r),M=TS&&TS.maps&&TS.maps[g.map];
         const rush=el<32?vRush(TS,g,r):"";out.push(rush||vFights(M,g,r));if(el<75)out.push(vCTline(p,g,r)||(el<60?vHold(p,g,r):""));
         (r.evid||[]).filter(x=>/spot/.test(x)).slice(0,2).forEach(ev=>out.push(`<span class="vchip ${/fight/.test(ev)?"bad":""}">● ${esc(ev)}</span>`))}}
-    else{out.push(vOpen(g),vPathCurve(p,g)||vTimeline(p,g),(el<45&&vPush(p,g))||vFights(TS&&TS.maps&&TS.maps[g.map],g,null),el<50?vPushAns(p,g,true):"");
+    else{out.push(vOpen(g),vFocus(p,g)||vPathCurve(p,g)||vTimeline(p,g),(el<45&&vPush(p,g))||vFights(TS&&TS.maps&&TS.maps[g.map],g,null),el<50?vPushAns(p,g,true):"");
       const left=g.phase_left!=null?g.phase_left:Math.max(0,RLEN()-el);
       if(left<=45)out.push(`<div class="vbig bad"><b>PLANT ${Math.floor(left/60)}:${String(Math.floor(left%60)).padStart(2,"0")}</b><span>${left>20?"commit now":"plant or save"}</span></div>`);
       else out.push(vTchips(p,g))}}
@@ -2912,8 +2962,9 @@ function ctPush(p,g){const M=(((p.advice.plan||{}).tside||{}).maps||{})[g.map],C
 // the keys (chatcalls.py). T side, buy time and the first 40 s; anything else: the keys only print a note ----------
 const CALL_SENT={k:null};
 function pathCalls(p,g){if(!D.local||!g||!g.map||g.round==null||g.practice)return;let paths=[];
-  if(g.side==="T"&&g.map_phase!=="warmup"&&(g.round_phase==="freezetime"||(g.round_phase==="live"&&(g.elapsed||0)<40))){
-    const W=winsRank(p,g),L=(((((p.advice.plan||{}).tside||{}).maps||{})[g.map]||{}).plays||{}).label||{};
+  if(g.side===attackSide(g.map)&&g.map_phase!=="warmup"&&(g.round_phase==="freezetime"||(g.round_phase==="live"&&(g.elapsed||0)<40))){
+    if(isHostage(g.map)){const H=hostageRank(p,g);if(H)paths=H.rows.map(r=>({rank:r.rank,site:null,text:`Hostages via ${r.route.zones.slice(-2).join(" > ")} - there ~${clock(r.t_end)}`}))}
+    const W=isHostage(g.map)?null:winsRank(p,g),L=(((((p.advice.plan||{}).tside||{}).maps||{})[g.map]||{}).plays||{}).label||{};
     if(W)paths=W.rows.slice(0,3).map(r=>{const ps=pathShort(p,g,r),pts=(r.route||{}).pts,end=pts&&pts[pts.length-1],os_=onSite(r.timing,end);
       return {rank:r.rank,site:ps.site,text:`${ps.head}${ps.via?` via ${ps.via}`:""}${os_?` - ${os_}`:""}`}})}
   const key=JSON.stringify([g.map,g.round,g.side,paths.map(x=>x.text)]);if(CALL_SENT.k===key)return;CALL_SENT.k=key;
@@ -2921,6 +2972,13 @@ function pathCalls(p,g){if(!D.local||!g||!g.map||g.round==null||g.practice)retur
 // a path in a few words: the play (rush, split, the site) and only the zones that tell it apart, the rarest of the
 // map's T routes (the spawn, the area just out of it and the corridors almost every route takes are left out: on Nuke,
 // not "T Spawn > Outside > Lobby" every time, but "A via Squeaky"); two at most, in the order walked
+// hostage maps (cs_*): the CTs attack (they get a hostage and bring it back), the Ts defend
+const isHostage=m=>/^cs_/.test(m||""),attackSide=m=>isHostage(m)?"CT":"T";
+// the path you pressed (numpad 1, 2 or 3, the last one wins) for this round, on the attacking side; 0: none
+function focusN(g){const f=g&&g.focus;return f&&f.n>=1&&f.n<=3&&f.round===g.round&&g.side===attackSide(g.map)?f.n:0}
+// hostage maps: the CTs' ways out of their spawn as the paths of the attack (most taken first), rounds won, when there
+function hostageRank(p,g){const H=((p.advice.plan||{}).hostage||{})[g.map];if(!H||!(H.routes||[]).length)return null;const tot=H.routes.reduce((a,r)=>a+r.n,0)||1;
+  return {rows:H.routes.map((r,i)=>({rank:i+1,k:"h"+i,route:{zones:r.zones,pts:r.pts},col:WIN_C[i],wr:r.won,share:Math.round(100*r.n/tot),timing:{at:r.t_end},t_end:r.t_end,n:r.n})),hostage:true}}
 function pathShort(p,g,r){const M=(((p.advice.plan||{}).tside||{}).maps||{})[g.map]||{},lab=String(((M.plays||{}).label||{})[r.k]||r.k);
   const all=Object.values(M.t_routes||{}).flat().map(x=>x.zones||[]),freq={};all.forEach(zs=>new Set(zs).forEach(z=>freq[z]=(freq[z]||0)+1));
   const zs=(r.route||{}).zones||[],i0=zs.findIndex(z=>/spawn/i.test(z));
@@ -2932,7 +2990,8 @@ function pathShort(p,g,r){const M=(((p.advice.plan||{}).tside||{}).maps||{})[g.m
   return {site,head,via,zones:cand}}
 // when to be on the site with a play: its window that wins the most rounds ("on site 1:31-1:21"); when no moment wins
 // more than another (under 3 points over the play's average), the usual arrival, with a ~
-function onSite(tm,end){if(tm&&tm.win-tm.mean>=3)return `on site ${clock(tm.lo)}-${clock(tm.hi)}`;return end&&end[3]!=null?`on site ~${clock(end[3])}`:""}
+// hostage maps: "there ~1:41", when the CTs get to the end of their way
+function onSite(tm,end){if(tm&&tm.at!=null)return `there ~${clock(tm.at)}`;if(tm&&tm.win-tm.mean>=3)return `on site ${clock(tm.lo)}-${clock(tm.hi)}`;return end&&end[3]!=null?`on site ~${clock(end[3])}`:""}
 
 // ---------- view: review (after the session, or the next day) ----------
 // what the In game page showed in your matches, checked against their demos (livecheck.py)

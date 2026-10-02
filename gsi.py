@@ -284,6 +284,20 @@ def voice_call(p, t_wall=None):
     return True
 
 
+def set_focus(n):
+    """Numpad 1, 2 or 3 pressed (the path you take: the page focuses on it), or numpad minus (0: no focus). A key
+    pressed after a round ended counts for the next one."""
+    with LOCK:
+        if not n:
+            STATE.pop("focus", None)
+            return True
+        rnd = STATE.get("round")
+        if rnd and STATE.get("round_phase") == "over":
+            rnd += 1
+        STATE["focus"] = {"n": int(n), "round": rnd, "t": time.time()}
+    return True
+
+
 def voice_mood(mo, t_wall=None):
     """'coach, <word>' said live: kept on the round being played (the buy time counts for the round to come)."""
     with LOCK:
@@ -532,6 +546,7 @@ def update(payload):
             STATE.pop("call", None)
             STATE.pop("seen", None)
             STATE.pop("mood", None)
+            STATE.pop("focus", None)
         el = now - STATE["live_since"] if STATE.get("round_phase") == "live" and STATE.get("live_since") else 0
         if STATE.get("map") and ((own and (st.get("money") or 0) > 16000) or el > 240):
             STATE["practice"] = True
