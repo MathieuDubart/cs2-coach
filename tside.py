@@ -710,7 +710,7 @@ def _tendencies(maps, df):
         try:   # the plays by economy and by the run before the round; the CTs' spots and kill angles by moment
             res["maps"][mp]["play_ctx"] = _play_ctx(g)
             res["maps"][mp]["ct_spots"] = _ct_spots(mp, dirs.get(mp, []))
-            res["maps"][mp]["ct_early"] = _ct_early(mp, dirs.get(mp, []))
+            res["maps"][mp]["ct_push"] = _ct_push(mp, dirs.get(mp, []))
             res["maps"][mp]["setplays"] = _setplays(mp, dirs.get(mp, []))
         except Exception as e:
             print(f"{mp}: play contexts / CT spots unavailable ({e})")
@@ -1086,70 +1086,101 @@ def _ct_spots(mp, dirs, cell=26):
     return out or None
 
 
-EARLY_S = 30   # before 1:25 on the clock: the CTs who come to meet the Ts
+PUSH_MAX_T = 50   # pushes before 1:05 on the clock: later, a CT on the T side is a retake or a flank
 
 
-def _ct_early(mp, dirs, cell=30):
-    """Where a CT meets the Ts early in the round (before 1:25), by the CTs' kind of round: their pistol, eco,
-    force-buy, full buy, and a full buy against the Ts' eco. One contact per round (the first duel with a CT in it),
-    at the CT's spot (the killer's or the victim's): the share of rounds it happens there, when, and who wins it."""
-    rows, n_ctx = [], {}
-    for d in dirs:
-        fr, fd = os.path.join(d, "rounds.parquet"), os.path.join(d, "duels.parquet")
-        if not os.path.exists(fr) or not os.path.exists(fd):
+def _ctx_of(r):
+    return ("pistol" if r.CT_buy == "pistol" else "anti_eco" if r.CT_buy == "full" and r.T_buy == "eco"
+            else r.CT_buy if r.CT_buy in ("eco", "force", "full") else None)
+
+
+def _ct_push(mp, dirs, cell=24):
+    """CT pushes past the neutral zones. A neutral zone is where the Ts and the CTs who run get at the same time (the
+    first arrivals of each side, round after round, within 2 s); past it, the Ts usually get there first. A CT alive
+    on that side before 1:05 has pushed: through which neutral zone (the nearest one), when, by the CTs' kind of round
+    (pistol, eco, force, full, full against the Ts' eco), and what came of it (a kill for the CT, the CT's death)."""
+    first, early, n_ctx, duels = [], [], {}, []
+    for di, d in enumerate(dirs):
+        fs, fr, fd = (os.path.join(d, x) for x in ("samples.parquet", "rounds.parquet", "duels.parquet"))
+        if not (os.path.exists(fs) and os.path.exists(fr)):
             continue
         R = pd.read_parquet(fr)
         if not len(R) or not five_v_five(R):
             continue
-        D = pd.read_parquet(fd, columns=["round", "t", "killer_side", "victim_side", "killer_px", "killer_py", "killer_level", "killer_zone",
-                                         "victim_px", "victim_py", "victim_level", "victim_zone"])
-        D = D[(D.t <= EARLY_S) & (D.killer_side != D.victim_side) & D.killer_side.isin(["T", "CT"])]
-        ctx = {}
-        for r in R.itertuples():
-            c = ("pistol" if r.CT_buy == "pistol" else "anti_eco" if r.CT_buy == "full" and r.T_buy == "eco"
-                 else r.CT_buy if r.CT_buy in ("eco", "force", "full") else None)
+        S = pd.read_parquet(fs, columns=["steamid", "side", "round", "t", "px", "py", "level", "zone", "health"])
+        S = S[(S.health > 0) & S.px.notna() & S.side.isin(["T", "CT"])]
+        S = S.assign(cx=(S.px // cell).astype(int), cy=(S.py // cell).astype(int))
+        # the first arrival of each side in each cell, per round
+        fa = S[S.t <= 60].groupby(["round", "side", "level", "cx", "cy"]).t.min().reset_index()
+        first.append(fa.assign(d=di))
+        ctx = {int(r.round): _ctx_of(r) for r in R.itertuples()}
+        for c in ctx.values():
             if c:
-                ctx[int(r.round)] = c
                 n_ctx[c] = n_ctx.get(c, 0) + 1
-        for rnd, g in D.sort_values("t").groupby("round"):
-            c = ctx.get(int(rnd))
-            if not c:
-                continue
-            k = g.iloc[0]
-            ctk = k.killer_side == "CT"
-            px, py, lv, zn = (k.killer_px, k.killer_py, k.killer_level, k.killer_zone) if ctk else (k.victim_px, k.victim_py, k.victim_level, k.victim_zone)
-            if pd.isna(px) or pd.isna(py):
-                continue
-            rows.append({"ctx": c, "t": float(k.t), "px": float(px), "py": float(py), "level": lv, "zone": zn, "ct_won": bool(ctk)})
-    if not rows:
+        ct = S[(S.side == "CT") & (S.t <= PUSH_MAX_T)]
+        early.append(ct.assign(d=di, ctx=ct["round"].map(ctx)))
+        if os.path.exists(fd):
+            D = pd.read_parquet(fd, columns=["round", "t", "killer", "victim", "killer_side", "victim_side"])
+            duels.append(D.assign(d=di))
+    if not first:
         return None
-    E = pd.DataFrame(rows)
+    F = pd.concat(first, ignore_index=True)
+    q = F.groupby(["side", "level", "cx", "cy"]).t.agg(lambda x: float(x.quantile(.2)) if len(x) >= 8 else np.nan).unstack("side")
+    if "T" not in q or "CT" not in q:
+        return None
+    q = q.dropna(subset=["T"])
+    neutral = q[q.CT.notna() & ((q["T"] - q["CT"]).abs() <= 2)]
+    tside_ = q[(q["T"] <= 35) & (q.CT.isna() | (q.CT - q["T"] >= 3))]   # the Ts get there clearly first
+    if not len(neutral) or not len(tside_):
+        return None
+    # a real push goes past the line: T-side cells at least 2 cells (about 6 m) from any cell the CTs reach as soon as
+    # the Ts or sooner (a CT holding an angle one step out is not pushing)
+    ctr = q[q.CT.notna() & (q.CT - q["T"] < 3)].reset_index()
+    tset = set()
+    for (lv, cx, cy) in tside_.index:
+        o = ctr[ctr.level == lv]
+        if not len(o) or float(np.min(np.hypot(o.cx - cx, o.cy - cy))) >= 2:
+            tset.add((lv, cx, cy))
+    nz = neutral.reset_index()
+    nz = nz.assign(px=(nz.cx + .5) * cell, py=(nz.cy + .5) * cell)
+    # the zone name of each neutral cell (the most seen in it)
+    E = pd.concat(early, ignore_index=True)
+    zcell = E.groupby(["level", "cx", "cy"]).zone.agg(lambda z: z.mode().iloc[0] if z.notna().any() else None)
+    nz["zone"] = [zcell.get((r.level, r.cx, r.cy)) for r in nz.itertuples()]
+    E = E[E.ctx.notna()]
+    E = E[[k in tset for k in zip(E.level, E.cx, E.cy)]]
+    if not len(E):
+        return None
+    Dd = pd.concat(duels, ignore_index=True) if duels else pd.DataFrame(columns=["d", "round", "t", "killer", "victim"])
+    pushes = []
+    for (di, rnd), g in E.sort_values("t").groupby(["d", "round"]):
+        p = g.iloc[0]
+        cand = nz[nz.level == p.level]
+        if not len(cand):
+            continue
+        dist = np.hypot(cand.px - p.px, cand.py - p.py)
+        gate = cand.iloc[int(np.argmin(dist.values))]
+        dd = Dd[(Dd.d == di) & (Dd["round"] == rnd) & (Dd.t >= p.t - 1) & (Dd.t <= p.t + 15)]
+        pushes.append({"ctx": p.ctx, "t": float(p.t), "px": float(p.px), "py": float(p.py), "level": p.level,
+                       "gate": humanize(gate.zone, mp) if gate.zone else None, "gx": float(gate.px), "gy": float(gate.py),
+                       "kill": bool((dd.killer == p.steamid).any()), "died": bool((dd.victim == p.steamid).any())})
+    if not pushes:
+        return None
+    P = pd.DataFrame(pushes)
     out = {}
-    for c, g in E.groupby("ctx"):
+    for c, g in P.groupby("ctx"):
         n = n_ctx.get(c, 0)
         if n < 20:
             continue
-        spots = []
-        cells = g.assign(cell=list(zip(g.level, (g.px // cell).astype(int), (g.py // cell).astype(int)))).groupby("cell")
-        for cl, x in sorted(cells, key=lambda kv: -len(kv[1])):
-            pt = (float(x.px.mean()), float(x.py.mean()))
-            near = next((s_ for s_ in spots if s_["level"] == cl[0] and np.hypot(s_["px"][0] - pt[0], s_["px"][1] - pt[1]) < 2.2 * cell), None)
-            if near:
-                near["_t"] += list(x.t)
-                near["_w"] += int(x.ct_won.sum())
-                near["_z"] += list(x.zone.dropna())
+        gates = []
+        for (gname, lv), x in g.groupby(["gate", "level"]):
+            if len(x) < 3:
                 continue
-            spots.append({"px": [round(pt[0]), round(pt[1])], "level": cl[0], "_t": list(x.t), "_w": int(x.ct_won.sum()), "_z": list(x.zone.dropna())})
-        res = []
-        for s_ in spots:
-            k = len(s_["_t"])
-            if k < 4:
-                continue
-            z = pd.Series(s_["_z"]).mode()
-            res.append({"px": s_["px"], "level": s_["level"], "zone": humanize(z.iloc[0], mp) if len(z) else None,
-                        "share": round(100 * k / n, 1), "t_med": round(float(np.median(s_["_t"])), 1), "ct_win": round(100 * s_["_w"] / k), "n": k})
-        res.sort(key=lambda x: -x["share"])
-        out[c] = {"n": int(n), "early": round(100 * len(g) / n), "spots": res[:6]}
+            gates.append({"gate": gname, "level": lv, "share": round(100 * len(x) / n, 1), "n": int(len(x)), "t_med": round(float(x.t.median()), 1),
+                          "kill": round(100 * float(x.kill.mean())), "died": round(100 * float(x.died.mean())),
+                          "from": [round(float(x.gx.median())), round(float(x.gy.median()))], "to": [round(float(x.px.median())), round(float(x.py.median()))]})
+        gates.sort(key=lambda x: -x["share"])
+        out[c] = {"n": int(n), "push": round(100 * len(g) / n), "gates": gates[:5]}
     return out or None
 
 
