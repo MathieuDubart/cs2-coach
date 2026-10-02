@@ -622,7 +622,7 @@ def econ_table(df):
 
 
 SUMMARY = os.path.join(config.OUT, "population", "tside_summary.json")
-VERSION = 28   # bump when the summary changes shape: the cache is rebuilt
+VERSION = 30   # bump when the summary changes shape: the cache is rebuilt
 
 
 def _stamp():
@@ -660,6 +660,7 @@ def _tendencies(maps, df):
            "ctx_fr": CTX_FR, "tempo": tempo_model(df), "alone": alone_gamma(df), "dyn_after": _dyn_after(df), "dyn_fr": DYN_FR}
     r_map, r_ctx = _rush_rates(df) if "dyn" in df else ({}, {})
     dirs = _map_dirs()
+    _UW_POOL.clear()
     rot = None
     pool = []
     for mp in maps:
@@ -722,6 +723,7 @@ def _tendencies(maps, df):
             res["maps"][mp]["ct_push"] = _ct_push(mp, dirs.get(mp, []))
             res["maps"][mp]["play_timing"] = _play_timing(g)
             res["maps"][mp]["util_war"] = _util_war(mp, g, dirs.get(mp, []))
+            res["maps"][mp]["t_timeline"] = _t_timeline(mp, g, dirs.get(mp, []))
             res["maps"][mp]["setplays"] = _setplays(mp, dirs.get(mp, []))
         except Exception as e:
             print(f"{mp}: play contexts / CT spots unavailable ({e})")
@@ -734,6 +736,11 @@ def _tendencies(maps, df):
     except Exception as e:
         print(f"key-round weapons unavailable ({e})")
     res["retake_all"] = retake_table(pool)
+    try:   # the CTs' blocking utility by the two buys and for a rush; the CTs' buy on the Ts' rush
+        res["util_econ"] = _util_econ(_UW_POOL)
+        res["rush_ct"] = _rush_ct(df)
+    except Exception as e:
+        print(f"utility by economy unavailable ({e})")
     try:   # situations measured on all maps together (pistol as CT for now)
         res["situations"] = _situations(df, res["maps"])
     except Exception as e:
@@ -1137,6 +1144,45 @@ def _play_timing(g, bw=7.0, k=8.0, min_n=10.0):
 
 
 UTIL_DUR = {"molotov": 7.0, "smoke": 18.0}   # a molotov burns about 7 s, a smoke stays about 18 s
+_UW_POOL = []   # the hits of every map, for _util_econ
+
+
+def _util_econ(hits):
+    """Every map together: the Ts' rounds won on a hit that meets the CTs' blocking utility still active, after it is
+    spent, or with none thrown before, at equal numbers alive, by the Ts' buy (eco or force: "low"; full), by the CTs'
+    buy, and for a rush or not. Against a force-buy or a rush, a molotov or smoke on the hit costs the Ts much more."""
+    if not hits:
+        return None
+    H = pd.DataFrame(hits)
+    H = H[H.d.notna()]
+    out = {}
+    for key, sel in (("T_low", H.tb == "low"), ("T_full", H.tb == "full"), ("CT_low", H.cb == "low"), ("CT_full", H.cb == "full"),
+                     ("rush", H.rush.astype(bool)), ("slow", ~H.rush.astype(bool))):
+        h = H[sel]
+        if len(h) < 100:
+            continue
+        adv = h.groupby("d").won.mean()
+        res = h.won - h.d.map(adv)
+        base = float(h.won.mean())
+        out[key] = {c: [int(len(x)), round(100 * (base + float(res[x.index].mean())))] for c, x in h.groupby("cat") if len(x) >= 40}
+    return out or None
+
+
+def _rush_ct(df):
+    """How the CTs' buy moves the Ts' rush (logit shifts on the map's rate for the Ts' buy, every map together; kept
+    when clear of the noise): Ts rush far more into CTs on an eco. Pistol rounds and round 2 aside (their kind of
+    round already says the CTs' buy)."""
+    if "dyn" not in df or "CT_buy" not in df:
+        return None
+    r_map, r_ctx = _rush_rates(df)
+    d = df[df.ctx.isin(["eco", "force", "full"]) & df.CT_buy.isin(["eco", "force", "full"])]
+    if len(d) < 500:
+        return None
+    p0 = np.clip(np.array([r_ctx[(m, c)] for m, c in zip(d["map"], d.ctx)]), .02, .98)
+    X = np.column_stack([(d.CT_buy == b).to_numpy(dtype=float) for b in ("eco", "force", "full")])
+    y = (d.dyn == "rush").to_numpy(dtype=float)
+    b, se = _fit(X, y, np.log(p0 / (1 - p0)))
+    return {k: round(float(v), 3) if abs(v) >= 1.5 * e else 0.0 for k, v, e in zip(("eco", "force", "full"), b, se)}
 
 
 def _util_war(mp, g, dirs):
@@ -1150,6 +1196,10 @@ def _util_war(mp, g, dirs):
     regions = (team.map_meta().get(mp) or {}).get("regions") or {}
     reg = lambda z: "A" if z == "BombsiteA" else "B" if z == "BombsiteB" else regions.get(z)
     rows = {(str(m), int(r)): x for m, r, x in zip(g.match, g["round"], g.itertuples()) if x.T_buy != "pistol"}
+    ectx = lambda b: "pistol" if b == "pistol" else "full" if b == "full" else "low"
+    n_ctx = {}
+    for x in rows.values():
+        n_ctx[ectx(x.CT_buy)] = n_ctx.get(ectx(x.CT_buy), 0) + 1
     hits, util = [], []
     for d in dirs:
         mid = os.path.basename(d)
@@ -1167,7 +1217,7 @@ def _util_war(mp, g, dirs):
             if h is not None:
                 on = ct[(ct.region == x.site) & (ct.t <= h)]
                 cat = "active" if ((on.end >= h)).any() else "spent" if len(on) else "kept"
-                hits.append({"site": x.site, "cat": cat, "won": bool(x.T_won),
+                hits.append({"site": x.site, "cat": cat, "won": bool(x.T_won), "tb": ectx(x.T_buy), "cb": ectx(x.CT_buy), "rush": x.dyn == "rush",
                              "d": float(np.clip(x.t_alive_hit - x.ct_alive_hit, -3, 3)) if x.t_alive_hit == x.t_alive_hit and x.ct_alive_hit == x.ct_alive_hit else np.nan})
             dr = D[(D["round"] == rnd)] if len(D) else D
             for u in ct.itertuples():
@@ -1180,10 +1230,11 @@ def _util_war(mp, g, dirs):
                     after = bool(((dr.victim == u.thrower) & (dr.t >= u.t) & (dr.t <= u.t + 10)).any())
                 util.append({"site": u.region, "type": u.type, "land": humanize(u.land_zone, mp) if isinstance(u.land_zone, str) else None,
                              "t": float(u.t), "px": float(u.land_px), "py": float(u.land_py), "level": u.land_level, "near": near,
-                             "alive": not after, "key": (mid, rnd),
+                             "alive": not after, "key": (mid, rnd), "ctx": ectx(x.CT_buy),
                              "met": h is not None and x.site == u.region and u.t <= h <= u.t + UTIL_DUR[u.type], "won": bool(x.T_won)})
     if not hits:
         return None
+    _UW_POOL.extend(hits)
     H = pd.DataFrame(hits)
     H = H[H.d.notna()]
     adv = H.groupby("d").won.mean()
@@ -1208,9 +1259,61 @@ def _util_war(mp, g, dirs):
                           "end": round(float(x.t.median()) + UTIL_DUR[ty], 1), "near": round(float(x.near.mean()), 2),
                           "alive": round(100 * float(x.alive.mean())), "px": [round(float(x.px.median())), round(float(x.py.median()))],
                           "level": x.level.mode().iloc[0] if x.level.notna().any() else None,
-                          "met_n": int(len(met)), "met_t_won": round(100 * float(met.won.mean())) if len(met) >= 8 else None})
+                          "met_n": int(len(met)), "met_t_won": round(100 * float(met.won.mean())) if len(met) >= 8 else None,
+                          "ctx": {c: round(100 * x[x.ctx == c].key.nunique() / n) for c, n in n_ctx.items() if n >= 20}})   # their buy
         items.sort(key=lambda z: -z["share"])
         out[site] = {"hits": cats, "n": int(len(h)), "util": items[:5]}
+    return out or None
+
+
+T_UTIL_DUR = {"smoke": 18.0, "molotov": 7.0, "flash": 2.0, "he": 1.0}
+
+
+def _t_timeline(mp, g, dirs):
+    """For the CT side, per T economy (pistol, eco or force, full buy): when the Ts are on each site (the rounds where
+    they take it around each moment, every 5 s, as a share of the rounds), and their utility landing on that side of
+    the map before the hit (type, where it lands, how often, when it is thrown, how long it lasts)."""
+    import team
+    regions = (team.map_meta().get(mp) or {}).get("regions") or {}
+    reg = lambda z: "A" if z == "BombsiteA" else "B" if z == "BombsiteB" else regions.get(z)
+    ctx = lambda b: "pistol" if b == "pistol" else "full" if b == "full" else "low"
+    g = g.assign(ctx=g.T_buy.map(ctx))
+    rows = {(str(m), int(r)): x for m, r, x in zip(g.match, g["round"], g.itertuples())}
+    tu = []
+    for d in dirs:
+        mid = os.path.basename(d)
+        fg = os.path.join(d, "grenades.parquet")
+        if not os.path.exists(fg):
+            continue
+        G = pd.read_parquet(fg, columns=["round", "t", "type", "side", "land_zone"])
+        G = G[(G.side == "T") & (G.t <= 80)]
+        for u in G.itertuples():
+            x = rows.get((mid, int(u.round)))
+            r_ = reg(u.land_zone)
+            if x is None or r_ not in ("A", "B") or (x.hit_t == x.hit_t and u.t > x.hit_t):
+                continue
+            tu.append({"ctx": x.ctx, "site": r_, "type": u.type, "land": humanize(u.land_zone, mp) if isinstance(u.land_zone, str) else None,
+                       "t": float(u.t), "key": (mid, int(u.round))})
+    U = pd.DataFrame(tu) if tu else pd.DataFrame(columns=["ctx", "site", "type", "land", "t", "key"])
+    out = {}
+    for c, gc in g.groupby("ctx"):
+        n = len(gc)
+        if n < 30:
+            continue
+        e = {"n": int(n)}
+        for site in ("A", "B"):
+            h = gc[(gc.site == site) & gc.hit_t.notna()].hit_t.to_numpy(float)
+            curve = [[t0, round(100 * float(((h >= t0 - 5) & (h < t0 + 5)).sum()) / n, 1)] for t0 in range(5, 106, 5)]
+            u = U[(U.ctx == c) & (U.site == site)]
+            items = []
+            for (ty, la), x in (u.groupby(["type", "land"]) if len(u) else []):
+                rr = x.key.nunique()
+                if rr >= 6 and 100 * rr / n >= 5:
+                    items.append({"type": ty, "land": la, "share": round(100 * rr / n), "t": round(float(x.t.median()), 1),
+                                  "end": round(float(x.t.median()) + T_UTIL_DUR.get(ty, 2.0), 1)})
+            items.sort(key=lambda z: -z["share"])
+            e[site] = {"share": round(100 * len(h) / n), "curve": curve, "util": items[:4]}
+        out[c] = e
     return out or None
 
 

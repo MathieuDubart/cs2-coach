@@ -1598,6 +1598,8 @@ function tsidePredict(TS,map,g,ev){const M=TS&&TS.maps&&TS.maps[map];if(!M||!g||
   if(TB.rush_won&&last&&last.known&&last.won&&lastDy&&lastDy.dyn==="rush"){zr+=TB.rush_won;whyT.push("they rushed and won the last round, and teams often do it again")}
   const kn=dyns.filter(d=>d&&d.dyn),nR=kn.filter(d=>d.dyn==="rush").length;
   if(TB.half_excess&&kn.length>=2){const ex=(nR-kn.length*(M.rush_p??.2))/Math.sqrt(kn.length);if(Math.abs(ex)>.3){zr+=TB.half_excess*ex;whyT.push(nR?`${nR} rush${nR>1?"es":""} in the ${kn.length} rounds you know of this half`:`no rush in the ${kn.length} rounds you know of this half`)}}
+  const RC=TS.rush_ct||{},ob=g.side==="CT"&&rih>=3?roundType(g):null;   // your buy: Ts rush far more into an eco
+  if(ob&&RC[ob]){zr+=RC[ob];whyT.push(ob==="eco"?"you're on an eco: Ts rush more into it":`your ${ob} buy`)}
   rush=sigm(zr);
   let z=logit(pA);
   for(const k of ["repeat_lost","repeat_won","streak2","pref"]){if(!x[k]||!B_[k])continue;const z2=z+B_[k]*x[k],d=Math.round(100*(sigm(z2)-sigm(z))*(1-none));z=z2;if(!d)continue;
@@ -1774,7 +1776,7 @@ function advisedType(g){const rt=roundType(g);if(rt==null||rt==="pistol")return 
   if(rt!=="force")return rt;
   const full=g.side==="CT"?3900:3700,bonus=[1400,1900,2400,2900,3400][Math.min(g.losses||0,4)];
   return g.money+bonus>=full?"eco":"force"}
-function buyCard(p,g){if(g.money==null||!g.side||g.practice)return "";const rt=advisedType(g),PL=p.advice.plan||{},N=PL.nades,E=N&&((N.maps||{})[g.map]||{})[g.side];
+function buyCard(p,g){if(g.money==null||!g.side||g.practice)return "";const rt=advisedType(g),PL=p.advice.plan||{},N=PL.nades,E=nadeCtx(p,g,N&&((N.maps||{})[g.map]||{})[g.side]).E;
   const KB=((((PL.buys||{}).maps||{})[g.map]||{})[g.side]||{}),sk=sitKey(p,g);
   let kit=(sk&&sk.endsWith("anti_eco")&&KB["anti-eco"])||KB[rt];
   const pl_=typeof econPlan==="function"?econPlan(p,g):null;if(kit&&pl_&&pl_.best&&pl_.best.k==="eco")kit=Object.assign({},kit,{kit:null});   // a save: no weapon to buy
@@ -2382,23 +2384,6 @@ function vNades(list){if(!list.length)return "";
   return `<div class="vnades">${list.map(o=>`<span class="vnade${o.x?(o.now?" now":""):" keep"}" style="--c:${NADE_C[o.type]||"#ccc"}"><i>${vLetter[o.type]||"?"}</i>${o.x?`${vShort(o.x.to||o.x.land)}<small>${when(o.x,o.el)}</small>${o.alt?`<em>${vShort(o.alt.to||o.alt.land)} ${when(o.alt,o.el)}</em>`:""}`:"<small>keep</small>"}</span>`).join("")}</div>`}
 // a rule as icons and two numbers: what your side wins when you do it / when you don't
 const vRule=(icon,label,bad,good)=>`<div class="vrule"><i>${icon}</i><span>${label}</span><b class="bad">${bad}%</b><em>→</em><b class="good">${good}%</b></div>`;
-// you in this situation (your matches) against the base: rounds won, died before 0:20
-function vYou(p,g,sk){const PL=p.advice.plan||{},me=((PL.situ_me||{})[g.side])||{},base=((((PL.tside||{}).situations||{}).base_by_side||{})[g.side])||{};
-  const key={ct_anti_eco:"anti_eco",t_anti_eco:"anti_eco",full_full:"full_full",ct_force:"force_full",t_force:"force_full",t_eco:"eco_full",pistol:"pistol"}[sk];
-  const m=me[key],b=base[key];if(!m||m[0]<8||!b)return "";
-  return `<div class="vyou"><span>YOU</span><b class="${m[1]>=b[1]?"good":"bad"}">${m[1]}%</b><small>won · vs ${b[1]}</small><em>⛔</em><b class="${m[2]<=b[2]?"good":"bad"}">${m[2]}%</b><small>dead early · vs ${b[2]} · ${m[0]} rds</small></div>`}
-function vSituation(p,g){const SI=(((p.advice.plan||{}).tside)||{}).situations||{},out=[];
-  if(g.side==="CT"&&(g.round===1||g.round===13)){const R=(SI.pistol_ct||{}).rush||{},k0=(R.kevlar||{})["0-2"],k5=(R.kevlar||{})["5"]||(R.kevlar||{})["3-4"],s1=(R.on_site||{})["1"],s2=(R.on_site||{})["2+"];
-    const SP=((((((p.advice.plan||{}).tside||{}).maps||{})[g.map]||{}).setplays||{}).CT||{}).pistol;
-    out.push(`<div class="vsit"><span>PISTOL</span>${SP&&SP.n>=15?`<b class="${vTone(SP.win)}">${SP.win}%</b><small>won</small>`:""}</div>`);
-    if(k0&&k5)out.push(vRule("🛡","kevlar",k0[1],k5[1]));if(s1&&s2)out.push(vRule("👥","2 on site",s1[1],s2[1]));
-    out.push(`<div class="vrule"><i>✕</i><span>nades vs rush</span></div>`);return out.join("")}   // no "YOU vs the base" line: the live view is about this round
-  const k=sitKey(p,g),c=k&&SI[k];if(!c)return "";
-  const win=g.side==="CT"?100-c.t_win:c.t_win,e=c[`early_${g.side}`];
-  out.push(`<div class="vsit"><span>${{ct_anti_eco:"ANTI-ECO",t_anti_eco:"ANTI-ECO",full_full:"FULL vs FULL",ct_force:"FORCE vs FULL",t_force:"FORCE vs FULL",t_eco:"ECO vs FULL"}[k]}</span><b class="${vTone(win)}">${win}%</b><small>won</small></div>`);
-  if(e)out.push(vRule("⛔",`dead before ${clock(20)}`,e[1],e[0]));   // no AWP against an eco: on the buy card, not twice
-  if(k==="t_force"||k==="t_eco")out.push(`<div class="vrule"><i>👥</i><span>together</span></div>`);
-  return out.join("")}
 // T side: the round as a strip from 1:55 to 0:00, each tempo window colored by how often the Ts win with it here;
 // what is past fades, a cursor marks now
 function vTimeline(p,g){const TS=(p.advice.plan||{}).tside,M=TS&&TS.maps&&TS.maps[g.map],TP=(M&&M.tplan)||{},rt=advisedType(g);
@@ -2413,7 +2398,8 @@ function vTimeline(p,g){const TS=(p.advice.plan||{}).tside,M=TS&&TS.maps&&TS.map
 function vPathCurve(p,g){const W=typeof winsRank==="function"?winsRank(p,g):null;if(!W)return "";
   const rows=W.rows.slice(0,3).filter(r=>r.timing&&r.timing.curve&&r.timing.curve.length>=3);if(!rows.length||rows[0].rank!==1)return "";
   const site1=(rows[0].k.match(/[AB]$/)||rows[0].k.match(/^[AB]/)||[])[0],UW=((((((p.advice.plan||{}).tside||{}).maps||{})[g.map]||{}).util_war||{})[site1])||null;
-  const ub=((UW&&UW.util)||[]).filter(u=>u.share>=15).slice(0,3);   // their usual blocking utility there: when it stands
+  const ew=econW(p,g),wsh=u=>u.ctx&&Object.keys(u.ctx).length?Object.entries(ew).reduce((a,[c,w])=>a+w*(u.ctx[c]??u.share),0):u.share;
+  const ub=((UW&&UW.util)||[]).map(u=>({...u,share:Math.round(wsh(u))})).filter(u=>u.share>=15).sort((a,b)=>b.share-a.share).slice(0,3);   // their usual blocking utility there, for their buy
   const Wd=320,H=86+ub.length*7,L=RLEN(),all=rows.flatMap(r=>r.timing.curve.map(c=>c[1])),lo=Math.min(...all)-4,hi=Math.max(...all)+6;
   const X=c=>Math.round(Wd*c/L),Y=v=>Math.round(6+(H-20)*(1-(v-lo)/Math.max(1,hi-lo)));
   const line=r=>r.timing.curve.map(([c,v],i)=>`${i?"L":"M"}${X(c)} ${Y(v)}`).join("");
@@ -2430,6 +2416,35 @@ function vPathCurve(p,g){const W=typeof winsRank==="function"?winsRank(p,g):null
     ${ticks}${now!=null?`<line x1="${X(now)}" y1="0" x2="${X(now)}" y2="${base}" stroke="#fff" stroke-width="1.6"/>`:""}</svg>`;
   const hz=(UW&&UW.hits)||{},act=hz.active,aft=hz.spent||hz.kept,into=act&&aft&&aft[1]-act[1]>=5?vRule("⚠",`into their utility ${site1}`,act[1],aft[1]):"";
   return vHead(`ON THE SITE AT · ROUNDS WON · PATH${rows.length>1?`S 1-${rows.length}`:" 1"}`)+svg+(ub.length?`<div class="vleg">${ub.map(u=>`<span><i style="background:${u.type==="molotov"?"var(--molotov)":"var(--smoke)"}"></i>${u.type==="molotov"?"molly":"smoke"} ${esc(vShort(u.land||"?"))} ${clock(u.t)}-${clock(u.end)}</span>`).join("")}</div>`:"")+into}
+// the other team's economy as weights over the kinds of round of the base: their pistol, eco or force ("low"), full
+function econW(p,g){if(g.round===halfStart(g.round))return {pistol:1};const eb=enemyBuy(p,g)||{},lo=(eb.eco||0)+(eb.force||0),fu=eb.full||0,s=lo+fu;
+  return s>0?{low:lo/s,full:fu/s}:{full:1}}
+// CT: when the Ts are on each site for their buy (A and B, share of rounds around each moment, game clock), their
+// smokes and mollies on that side before they come, the moment to throw the one you held (green:
+// just before their usual arrival) and now
+const UCOL={smoke:"var(--smoke)",flash:"var(--flash)",molotov:"var(--molotov)",he:"var(--he)"};
+function vCTline(p,g,r){const M=(((p.advice.plan||{}).tside||{}).maps||{})[g.map]||{},TT=M.t_timeline;if(!TT)return "";const ew=econW(p,g);
+  const mix=site=>{const acc={};let any=false;for(const [c,w] of Object.entries(ew)){const X=TT[c]&&TT[c][site];if(!X||!w)continue;any=true;X.curve.forEach(([t,v])=>acc[t]=(acc[t]||0)+w*v)}
+    return any?Object.entries(acc).map(([t,v])=>[+t,v]).sort((a,b)=>a[0]-b[0]):null};
+  const A=mix("A"),B=mix("B");if(!A&&!B)return "";
+  const site=r&&r.A!==r.B?(r.A>r.B?"A":"B"):((A||[]).reduce((s,x)=>s+x[1],0)>=(B||[]).reduce((s,x)=>s+x[1],0)?"A":"B");
+  const UT={};for(const [c,w] of Object.entries(ew)){((TT[c]&&TT[c][site]&&TT[c][site].util)||[]).forEach(u=>{const k=u.type+"|"+u.land,o=UT[k]||(UT[k]={...u,share:0});o.share+=w*u.share})}
+  const ut=Object.values(UT).filter(u=>u.share>=10&&(u.type==="smoke"||u.type==="molotov")&&u.t>=5).sort((a,b)=>b.share-a.share).slice(0,2);   // their smokes and mollies on that side, not the spawn ones
+  const Wd=320,L=RLEN(),H=78+ut.length*7,base=H-14-ut.length*7,mx=Math.max(1,...(A||[]).map(x=>x[1]),...(B||[]).map(x=>x[1]));
+  const X=t=>Math.round(Wd*t/L),Y=v=>Math.round(4+(base-6)*(1-v/mx));
+  const path=c=>c.map(([t,v],i)=>`${i?"L":"M"}${X(t)} ${Y(v)}`).join(""),area=c=>`${path(c)}L${X(c[c.length-1][0])} ${base}L${X(c[0][0])} ${base}Z`;
+  const S=site==="A"?A:B,pk=S?S.reduce((a,b)=>b[1]>a[1]?b:a):null,now=g.round_phase==="live"?(g.elapsed||0):null;
+  const ticks=[[25,"1:30"],[55,"1:00"],[85,"0:30"]].map(([c,t])=>`<line x1="${X(c)}" y1="${base}" x2="${X(c)}" y2="${base+4}" stroke="var(--muted)"/><text x="${X(c)}" y="${H-1}" text-anchor="middle" class="vct">${t}</text>`).join("");
+  const svg=`<svg class="vcurve" viewBox="0 0 ${Wd} ${H}" width="100%" height="${H}" role="img" aria-label="When the Ts are on each site">
+    <line x1="0" y1="${base}" x2="${Wd}" y2="${base}" stroke="var(--line)"/>
+    ${pk?`<rect x="${X(Math.max(0,pk[0]-6))}" y="0" width="${X(8)}" height="${base}" fill="var(--good)" fill-opacity=".22"/>`:""}
+    ${[["B",B],["A",A]].filter(([,c])=>c).map(([s_,c])=>`<path d="${area(c)}" fill="${SITE_C[s_]}" fill-opacity="${s_===site?.28:.12}"/><path d="${path(c)}" fill="none" stroke="${SITE_C[s_]}" stroke-width="${s_===site?2.4:1.4}" stroke-linejoin="round" opacity="${s_===site?1:.7}"/>`).join("")}
+    ${ut.map((u,i)=>`<rect x="${X(u.t)}" y="${base+2+i*7}" width="${Math.max(3,X(u.end)-X(u.t))}" height="5" rx="2" fill="${UCOL[u.type]||"#ccc"}"/>`).join("")}
+    ${ticks}${now!=null?`<line x1="${X(now)}" y1="0" x2="${X(now)}" y2="${base}" stroke="#fff" stroke-width="1.6"/>`:""}</svg>`;
+  // the one to hold (the hold card's best: your rounds won when it meets their hit, and when thrown early)
+  const UW=(M.util_war||{})[site],h=((UW&&UW.util)||[]).filter(u=>u.met_t_won!=null).sort((a,b)=>a.met_t_won-b.met_t_won)[0],sp=((UW&&UW.hits)||{}).spent;
+  const mine=`your ${h?`${h.type==="molotov"?"molly":"smoke"} ${esc(vShort(h.land||"?"))}`:"molly/smoke"} ${pk?`${clock(Math.max(0,pk[0]-6))}-${clock(pk[0]+2)}`:""}${h?` · won ${100-h.met_t_won}%${sp?` vs ${100-sp[1]}% early`:""}`:""}`;
+  return vHead(`THEY'RE ON THE SITE · ${site} · OF ROUNDS`)+svg+`<div class="vleg"><span><i style="background:var(--good)"></i>${mine}</span>${ut.map(u=>`<span><i style="background:${UCOL[u.type]||"#ccc"}"></i>their ${u.type==="molotov"?"molly":u.type} ${esc(vShort(u.land||"?"))} ${clock(u.t)}</span>`).join("")}</div>`}
 // CT: what to keep for their hit on the likely site: your rounds won when it meets their hit, and what thrown-early
 // utility gives
 function vHold(p,g,r){const M=(((p.advice.plan||{}).tside||{}).maps||{})[g.map]||{},site=r&&r.A!==r.B?(r.A>r.B?"A":"B"):null,UW=site&&(M.util_war||{})[site];if(!UW)return "";
@@ -2491,16 +2506,16 @@ function nowVisual(p,g,following){
   if(g.map_phase==="warmup"&&typeof briefVisual==="function")return briefVisual(p,g);   // the map loads: the 60-second brief
   const ph=g.round_phase,ct=g.side==="CT",out=[];
   const TS=(p.advice.plan||{}).tside,r=ct?tsidePredict(TS,g.map,g,evFor(g)):null;
-  if(ph==="freezetime"){out.push(ct?vSituation(p,g):"",vKey(p,g));
+  if(ph==="freezetime"){out.push(vKey(p,g));
     {if(typeof antiEco==="function"&&antiEco(p,g))out.push(`<span class="vchip bad">! eco kill spots on the map: clear them, no close duel</span>`)}
-    if(ct&&r)out.push(vOdds(r),vRush(TS,g,r)||vEntries(TS,g,r),vHold(p,g,r));
+    if(ct&&r)out.push(vOdds(r),vRush(TS,g,r)||vEntries(TS,g,r),vCTline(p,g,r)||vHold(p,g,r));
     if(!ct){out.push(vPathCurve(p,g)||vTimeline(p,g),vPush(p,g),vTchips(p,g))}}   // the plays and the grenades are on the map
   else if(ph==="live"){const el=g.elapsed||0,planted=g.bomb==="planted";out.push(vCall(g));
     if(planted){const left=g.phase_left!=null?g.phase_left:Math.max(0,40-(g.since_plant||0)),as=typeof autoSite==="function"?autoSite(p,g):null;
       out.push(`<div class="vbig ${ct?"bad":"good"}"><b>💣 ${Math.ceil(left)}s</b><span>${ct?"retake together":"hold the bomb"}${as?` · ${as.site} site, ${as.p}% sure`:""}</span></div>`)}
     else if(ct){if(r){out.push(vOdds(r));
         const PLs=tsidePlays(TS,g.map,g,evFor(g),r),M=TS&&TS.maps&&TS.maps[g.map];
-        const rush=el<32?vRush(TS,g,r):"";out.push(rush||vFights(M,g,r));if(el<60)out.push(vHold(p,g,r));
+        const rush=el<32?vRush(TS,g,r):"";out.push(rush||vFights(M,g,r));if(el<75)out.push(vCTline(p,g,r)||(el<60?vHold(p,g,r):""));
         (r.evid||[]).filter(x=>/spot/.test(x)).slice(0,2).forEach(ev=>out.push(`<span class="vchip ${/fight/.test(ev)?"bad":""}">● ${esc(ev)}</span>`))}}
     else{out.push(vPathCurve(p,g)||vTimeline(p,g),(el<45&&vPush(p,g))||vFights(TS&&TS.maps&&TS.maps[g.map],g,null));
       const left=g.phase_left!=null?g.phase_left:Math.max(0,RLEN()-el);
@@ -2510,7 +2525,18 @@ function nowVisual(p,g,following){
   const html=out.filter(Boolean).join("");
   return `<div class="vz">${html||`<div class="vsit"><span>ROUND ${g.round||""}</span></div>`}</div>`}
 // the buy notification of the full-screen view: one compact card, no paragraph, never scrolls
-function buyVisual(p,g){if(g.money==null||!g.side||g.practice)return "";const rt=advisedType(g),PL=p.advice.plan||{},N=PL.nades,E=N&&((N.maps||{})[g.map]||{})[g.side];
+// the grenades to buy, for the two economies. CT: molly and smoke first (a hit that meets one still burning or
+// standing costs the Ts 10 to 20 points of rounds won, every map together), the molly ahead when a rush is likely, with
+// what it does to a rush; T against eco CTs: flash and molly first, for the close spots where they wait
+function nadeCtx(p,g,E){if(!E||!E.order||!E.order.length)return {E,chip:""};
+  const TS=(p.advice.plan||{}).tside||{},UE=TS.util_econ||{},ew=econW(p,g),low=(ew.pistol||0)+(ew.low||0);
+  const re=first=>({...E,order:[...first.map(t=>E.order.find(o=>o.type===t)).filter(Boolean),...E.order.filter(o=>!first.includes(o.type))]});
+  if(g.side==="CT"){const r=TS.maps?tsidePredict(TS,g.map,g,evFor(g)):null,rush=r?r.rush>=30:low>=.5,U=UE.rush;
+    const chip=rush&&U&&U.active&&U.kept?`<span class="vchip good">🔥 molly/smoke on the rush · won ${100-U.active[1]}% · ${100-U.kept[1]}% without</span>`:"";
+    return {E:re(rush?["molotov","smoke"]:["smoke","molotov"]),chip}}   // against a full buy, the hold card says when
+  const ae=typeof antiEco==="function"&&antiEco(p,g);
+  return {E:ae||(ew.low||0)>=.6?re(["flash","molotov"]):E,chip:""}}
+function buyVisual(p,g){if(g.money==null||!g.side||g.practice)return "";const rt=advisedType(g),PL=p.advice.plan||{},N=PL.nades,NC=nadeCtx(p,g,N&&((N.maps||{})[g.map]||{})[g.side]),E=NC.E;
   const KB=((((PL.buys||{}).maps||{})[g.map]||{})[g.side]||{}),sk=sitKey(p,g),kit=(sk&&sk.endsWith("anti_eco")&&KB["anti-eco"])||KB[rt]||{};
   const full=g.side==="CT"?3900:3700,bonus=[1400,1900,2400,2900,3400][Math.min(g.losses||0,4)];
   const haveRifle=g.primary&&FULL_W.has(g.primary),tags=[];
@@ -2535,7 +2561,7 @@ function buyVisual(p,g){if(g.money==null||!g.side||g.practice)return "";const rt
   const rows=econRows(plan);   // the plan already says what a loss leaves: no separate chip then
   return `<div class="vbuy"><div class="vbuy-h"><b>${RT}</b><span>${money(g.money)}</span></div>
     ${rows}${tags.length?`<div class="vtags">${tags.join("")}</div>`:""}${nd}
-    <div class="vchips">${vMates(g)}${spot}${avoid}${awp}${rows?"":`<span class="vchip ${okNext?"good":"bad"}">lost → ${money(next)} ${okNext?"✓ full":"✕ no full"}</span>`}</div></div>`}
+    <div class="vchips">${nd?NC.chip:""}${vMates(g)}${spot}${avoid}${awp}${rows?"":`<span class="vchip ${okNext?"good":"bad"}">lost → ${money(next)} ${okNext?"✓ full":"✕ no full"}</span>`}</div></div>`}
 
 // ---------- buys over the rounds left in the half, not just this one ----------
 // What a buy wins now AND what it leaves for the next rounds: the base's win rates by buy (full / force / eco on each
