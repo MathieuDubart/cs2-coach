@@ -527,6 +527,9 @@ body.igfull main{max-width:none;padding:0}
 .vodds .vrow{grid-template-columns:1.4em minmax(0,1fr) 3em;font-size:22px}.vodds .vrow i{height:20px;border-radius:10px}.vodds .vrow u{border-radius:10px}
 .vodds .vrow span{color:var(--c)}
 svg.radar .mkt.o{fill:#eef2f6}
+.vrow:has(small){grid-template-columns:minmax(0,7em) minmax(0,1fr) 3em 3.6em}
+.vrow small{font:600 12px var(--f-mono);color:var(--muted);text-align:right;white-space:nowrap}
+.vrows.econ .vrow.best span{color:var(--good)}
 </style>
 
 <div class="bar"><div class="bar-in">
@@ -1475,6 +1478,9 @@ function buyTip(g,p){if(g.money==null||!g.side)return "";
   if(g.primary&&FULL_W.has(g.primary)){const need=g.helmet?0:(g.armor>0?350:1000);
     return need?(g.money>=need?`You have the ${g.primary}: add ${g.armor>0?"the helmet":"kevlar + helmet"}, then your grenades.`:`You have the ${g.primary} but not enough for ${g.armor>0?"the helmet":"kevlar"} (${money(g.money)}): play it carefully.`)
       :`You have the ${g.primary} and your armor: complete your grenades (${money(g.money)}).`}
+  const pl=typeof econPlan==="function"?econPlan(p,g):null;
+  if(pl&&pl.opts.length>1){const b=pl.best,alt=pl.opts.filter(o=>o!==b).sort((x,y)=>y.v-x.v)[0],N={eco:"Save",half:"A half buy (pistol + kevlar)",force:"A force-buy",full:"A full buy"};
+    return `${pl.close?`${N[b.k]} and ${N[pl.close.k].toLowerCase()} win about as much over the next ${pl.H} rounds (${b.pct}% vs ${pl.close.pct}%): take the one that keeps your next full buy.`:`${N[b.k]} wins the most over the next ${pl.H} round${pl.H>1?"s":""}: about ${b.pct}% of them, vs ${alt.pct}% with ${N[alt.k].toLowerCase()}.`} If you lose this round, you'll have ${money(b.lose)} next round${b.fullNext?", enough for a full buy":", not enough for a full buy"}.`}
   if((g.equip||0)+g.money>=full&&g.money<full)return `With your gear, this is a full buy: complete what's missing (${money(g.money)}).`;
   if(g.money>=full)return `Full buy possible (${money(g.money)}).`;
   if(g.money+bonus>=full)return `Eco advised: even if you lose this round, you'll have ${money(g.money+bonus)} next round.`;
@@ -1714,12 +1720,16 @@ function nadePlan(E,cash,held,maxN){const H=Object.assign({},held||{}),plan=[];l
   return {plan,left,n}}
 // the round type the card advises (the same decision as buyTip): with money for a force but a full buy assured next
 // round even after a loss, the advice is an eco, and the kit and grenades shown follow it
-function advisedType(g){const rt=roundType(g);if(rt!=="force")return rt;
+function advisedType(g){const rt=roundType(g);if(rt==null||rt==="pistol")return rt;
+  const pl=typeof econPlan==="function"&&typeof P==="function"&&P()?econPlan(P(),g):null;   // the buy that wins most over the next rounds
+  if(pl&&pl.best)return pl.best.k==="half"?"eco":pl.best.k;
+  if(rt!=="force")return rt;
   const full=g.side==="CT"?4200:4000,bonus=[1400,1900,2400,2900,3400][Math.min(g.losses||0,4)];
   return g.money+bonus>=full?"eco":"force"}
 function buyCard(p,g){if(g.money==null||!g.side||g.practice)return "";const rt=advisedType(g),PL=p.advice.plan||{},N=PL.nades,E=N&&((N.maps||{})[g.map]||{})[g.side];
   const KB=((((PL.buys||{}).maps||{})[g.map]||{})[g.side]||{}),sk=sitKey(p,g);
-  const kit=(sk&&sk.endsWith("anti_eco")&&KB["anti-eco"])||KB[rt];
+  let kit=(sk&&sk.endsWith("anti_eco")&&KB["anti-eco"])||KB[rt];
+  const pl_=typeof econPlan==="function"?econPlan(p,g):null;if(kit&&pl_&&pl_.best&&pl_.best.k==="eco")kit=Object.assign({},kit,{kit:null});   // a save: no weapon to buy
   const C=((N||{}).payoff||{}).count||{},wr=(k,n)=>((C[k]||{})[n]||{}).win;
   let nd="";
   if(E&&E.order.length&&rt&&rt!=="pistol"){
@@ -1836,9 +1846,10 @@ function tPlanLive(p,g){const TS=(p.advice.plan||{}).tside,M=TS&&TS.maps&&TS.map
   const el=g.elapsed,out=[];
   if(g.round_phase==="freezetime"||(el!=null&&el<35)){
     const rt=advisedType(g),C=((P_.win_ctx||{})[rt==="pistol"?"pistol":rt])||{},avg=(M.all&&M.all.t_win)||45;
-    const rows=Object.entries(P_.win).filter(([k])=>k!=="none").map(([k,w])=>{const c=C[k],n=c?c[0]:(P_.n||{})[k]||0,wr=c?c[1]:w;
-      return {k,n,wr,score:(wr*n+50*12)/(n+12)}}).sort((a,b)=>b.score-a.score).slice(0,3);
-    if(rows.length)out.push(`<p><b>Plays that win here</b>${C&&Object.keys(C).length?` (${esc(RT_EN[rt]||rt)} rounds)`:""}: ${rows.map(r=>`${esc((P_.label||{})[r.k]||r.k)} <b>${r.wr}%</b> <span class="note">(${r.n})</span>`).join(" · ")}</p>`);
+    const lb=(w,n)=>{const z=1.28,ph=w/100;return n?(ph+z*z/(2*n)-z*Math.sqrt(ph*(1-ph)/n+z*z/(4*n*n)))/(1+z*z/n):0};   // same ranking as the full-screen panel: a small sample doesn't win
+    const rows=Object.entries(P_.win).filter(([k])=>k!=="none").map(([k,w])=>{const c=C[k],use=c&&c[0]>=8,n=use?c[0]:(P_.n||{})[k]||0,wr=use?c[1]:w;
+      return {k,n,wr,use,won:Math.round(n*wr/100),score:lb(wr,n)}}).filter(r=>r.n>=8).sort((a,b)=>b.score-a.score).slice(0,3);
+    if(rows.length)out.push(`<p><b>Plays that win here</b> (${rows.some(r=>r.use)?`${esc(RT_EN[rt]||rt)} rounds`:"all rounds"}, won / played): ${rows.map(r=>`${esc((P_.label||{})[r.k]||r.k)} <b>${r.wr}%</b> <span class="note">(${r.won}/${r.n})</span>`).join(" · ")}</p>`);
     const TP=M.tplan||{},ck=rt==="pistol"?"pistol":rt,tp=(TP.tempo||{})[ck]||{},DN={rush:"rush",fast:"1-2 Ts early",exec:"execute",late:"late hit"};
     const tps=Object.entries(tp).sort((a,b)=>b[1][1]-a[1][1]);
     if(tps.length)out.push(`<p><b>Tempo</b>: ${tps.map(([k,v])=>`${DN[k]} <b>${v[1]}%</b> <span class="note">(${v[0]})</span>`).join(" · ")}${tp.late&&tp.late[1]<40?". Hit before 0:45: late hits lose.":""}</p>`);
@@ -1864,6 +1875,7 @@ function enemyBuy(p,g){const TS=(p.advice.plan||{}).tside,R=((g.hist||{}).rounds
   for(let n=g.round-1;n>=hs;n--){const w=(R[n]||{}).win;if(!w)break;if(last===null)last=w;if(w===g.side)streak++;else break}
   if(last===null)return null;
   if(g.round===hs+1&&last===g.side)return {eco:.9,force:.1,full:0};   // they lost the pistol
+  if(g.round===hs+1)return {eco:0,force:.6,full:.4};   // they won it: SMGs and upgrades, rifles for the ones with kills
   const x=E[last!==g.side?"won":streak>=3?"lost3":"lost"+streak];
   return x?{eco:x.eco/100,force:x.force/100,full:x.full/100}:null}
 // the economic situation of the round: your buy against theirs, and the card measured for it in the base
@@ -2243,9 +2255,6 @@ function vCTdots(p,g){const TS=(p.advice.plan||{}).tside,M=TS&&TS.maps&&TS.maps[
 function vTchips(p,g){const TS=(p.advice.plan||{}).tside,M=TS&&TS.maps&&TS.maps[g.map],TP=(M&&M.tplan)||{},P_=M&&M.plays,out=[];
   const ro=TP.rotation||{};if(ro.A||ro.B)out.push(`<span class="vchip">↻ ${["A","B"].filter(L=>ro[L]).map(L=>`${L} ${Math.round(ro[L].med)}s`).join(" · ")}</span>`);
   const fk=TP.fake||{};if(fk.switch&&fk.direct&&fk.switch[1]-fk.direct[1]>=5)out.push(`<span class="vchip good">FAKE ${fk.switch[1]}% <small>vs ${fk.direct[1]}</small></span>`);
-  if(P_&&P_.win&&(g.round_phase==="freezetime"||(g.elapsed||0)<35)){const rt=advisedType(g),C=((P_.win_ctx||{})[rt])||{};
-    Object.entries(P_.win).filter(([k])=>k!=="none").map(([k,w])=>{const c=C[k],n=c?c[0]:(P_.n||{})[k]||0,wr=c?c[1]:w;return {k,n,wr,s:(wr*n+50*12)/(n+12)}})
-      .sort((a,b)=>b.s-a.s).slice(0,2).forEach(r=>out.push(`<span class="vchip ${vTone(r.wr)}">${esc(((P_.label||{})[r.k]||r.k).replace(/ through /," ").split(" / ")[0])} <b>${r.wr}%</b></span>`))}
   return out.length?`<div class="vchips">${out.join("")}</div>`:""}
 // one option per line: the label, a bar (the longest is the most likely), the number. Fixed order for the sites,
 // so the eye finds A and B at the same place every time
@@ -2280,7 +2289,7 @@ function nowVisual(p,g,following){
   const TS=(p.advice.plan||{}).tside,r=ct?tsidePredict(TS,g.map,g,evFor(g)):null;
   if(ph==="freezetime"){out.push(vSituation(p,g));
     if(ct&&r)out.push(vOdds(r),vRush(TS,g,r)||vEntries(TS,g,r));
-    if(!ct){out.push(vTimeline(p,g),vCTdots(p,g),vTchips(p,g))}}
+    if(!ct){out.push(vTimeline(p,g),vWins(p,g),vCTdots(p,g),vTchips(p,g))}}
   else if(ph==="live"){const el=g.elapsed||0,planted=g.bomb==="planted";
     if(planted){const left=g.phase_left!=null?g.phase_left:Math.max(0,40-(g.since_plant||0));
       out.push(`<div class="vbig ${ct?"bad":"good"}"><b>💣 ${Math.ceil(left)}s</b><span>${ct?"retake together":"hold the bomb"}</span></div>`)}
@@ -2294,7 +2303,7 @@ function nowVisual(p,g,following){
     else{out.push(vTimeline(p,g),vFights(TS&&TS.maps&&TS.maps[g.map],g,null));
       const left=g.phase_left!=null?g.phase_left:Math.max(0,RLEN()-el);
       if(left<=45)out.push(`<div class="vbig bad"><b>PLANT ${Math.floor(left/60)}:${String(Math.floor(left%60)).padStart(2,"0")}</b><span>${left>20?"commit now":"plant or save"}</span></div>`);
-      else{out.push(vCTdots(p,g),vTchips(p,g))}}
+      else{if(el<30)out.push(vWins(p,g));out.push(vCTdots(p,g),vTchips(p,g))}}
     if(!(ct&&!planted))out.push(vNades(vNadePicks(p,g).map(o=>Object.assign(o,{now:!!o.x}))));
     else{const held=vNadePicks(p,g);if(held.length&&!(out.join("").includes("vnades")))out.push(vNades(held.map(o=>Object.assign(o,{now:false}))))}}
   else if(ph==="over"){out.push(`<div class="vsit"><span>ROUND ${g.round}</span>${g.win_team?`<b class="${g.win_team===g.side?"good":"bad"}">${g.win_team===g.side?"WON":"LOST"}</b>`:""}</div>`)}
@@ -2305,8 +2314,10 @@ function buyVisual(p,g){if(g.money==null||!g.side||g.practice)return "";const rt
   const KB=((((PL.buys||{}).maps||{})[g.map]||{})[g.side]||{}),sk=sitKey(p,g),kit=(sk&&sk.endsWith("anti_eco")&&KB["anti-eco"])||KB[rt]||{};
   const full=g.side==="CT"?4200:4000,bonus=[1400,1900,2400,2900,3400][Math.min(g.losses||0,4)];
   const haveRifle=g.primary&&FULL_W.has(g.primary),tags=[];
-  const RT={pistol:"PISTOL",eco:"ECO · SAVE",force:"FORCE",full:"FULL BUY"}[rt]||"BUY";
-  if(kit.kit&&!haveRifle)tags.push(...String(kit.kit.key).split(" + ").filter(x=>!/grenade/i.test(x)).map(x=>`<span class="vtag">${esc(x)}</span>`));
+  const plan=typeof econPlan==="function"?econPlan(p,g):null,bk=plan&&plan.best?plan.best.k:null;
+  const RT=(bk?{eco:"ECO · SAVE",half:"HALF BUY",force:"FORCE",full:"FULL BUY"}[bk]:{pistol:"PISTOL",eco:"ECO · SAVE",force:"FORCE",full:"FULL BUY"}[rt])||"BUY";
+  if(bk==="eco")tags.push(`<span class="vtag">save: buy nothing</span>`);   // the plan says save: no weapon to tempt you
+  else if(kit.kit&&!haveRifle)tags.push(...String(kit.kit.key).split(" + ").filter(x=>!/grenade/i.test(x)).map(x=>`<span class="vtag">${esc(x)}</span>`));
   else if(rt==="full"&&!haveRifle)tags.push(`<span class="vtag">rifle</span><span class="vtag">kevlar + helmet</span>`);
   if(haveRifle)tags.push(`<span class="vtag got">${esc(g.primary)} ✓</span>`);
   let nd="",left=g.money;
@@ -2316,9 +2327,77 @@ function buyVisual(p,g){if(g.money==null||!g.side||g.practice)return "";const rt
   const next=(rt==="eco"?g.money:left)+bonus,okNext=next>=full;
   const spot=kit.zone?`<span class="vchip">📍 ${vShort(kit.zone.key)}</span>`:"",avoid=kit.avoid?`<span class="vchip bad">✕ ${vShort(kit.avoid.key)}</span>`:"";
   const awp=sk&&sk.endsWith("anti_eco")?`<span class="vchip bad">✕ AWP</span>`:"";
+  const rows=econRows(plan);   // the plan already says what a loss leaves: no separate chip then
   return `<div class="vbuy"><div class="vbuy-h"><b>${RT}</b><span>${money(g.money)}</span></div>
-    ${tags.length?`<div class="vtags">${tags.join("")}</div>`:""}${nd}
-    <div class="vchips">${spot}${avoid}${awp}<span class="vchip ${okNext?"good":"bad"}">lost → ${money(next)} ${okNext?"✓ full":"✕ no full"}</span></div></div>`}
+    ${rows}${tags.length?`<div class="vtags">${tags.join("")}</div>`:""}${nd}
+    <div class="vchips">${spot}${avoid}${awp}${rows?"":`<span class="vchip ${okNext?"good":"bad"}">lost → ${money(next)} ${okNext?"✓ full":"✕ no full"}</span>`}</div></div>`}
+
+// ---------- buys over the rounds left in the half, not just this one ----------
+// What a buy wins now AND what it leaves for the next rounds: the base's win rates by buy (full / force / eco on each
+// side), CS2's money (win $3,250, loss bonus $1,400 to $3,400 that drops one step after a win, kill rewards, a rifle
+// kept when you survive), what the other side probably buys after their win or loss (TS.econ), and a small search
+// over the next rounds (up to 3, never past the half): the buy now that wins the most rounds over them.
+const ECON={win:3250,bonus:[1400,1900,2400,2900,3400],cap:16000,plant:240};   // plant: the T's loss bonus for a plant, on average
+const ECON_K=["eco","half","force","full"],ECON_L={eco:"ECO",half:"HALF",force:"FORCE",full:"FULL"};
+// T win chance by T buy and CT buy, from the base's situations; a half buy (pistol + kevlar) sits between eco and force
+function econTW(SI){const f=(k,d)=>{const x=SI&&SI[k];return x&&x.t_win!=null?x.t_win/100:d};
+  const B={full:{full:f("full_full",.47),force:f("ct_force",.66),eco:f("t_anti_eco",.82)},force:{full:f("t_force",.32),force:.47,eco:.68},
+    eco:{full:f("t_eco",.14),force:.3,eco:.47}};
+  const tw=(t,c)=>t==="half"?tw("eco",c)+.45*(tw("force",c)-tw("eco",c)):c==="half"?tw(t,"eco")+.45*(tw(t,"force")-tw(t,"eco")):B[t][c];
+  return tw}
+// what you can buy with this money: cost, kill reward expected, whether it is a rifle you can keep
+function econOpts(side,m,hasR,armor,helmet){const T=side==="T",rifle=T?2700:2900,arm=helmet?0:armor>0?350:1000,o=[{k:"eco",c:0,kill:90}];
+  if(m>=1150)o.push({k:"half",c:1150,kill:120});
+  const fc=T?(m>=2450?2450:1700):(m>=2700?2700:1900);if(m>=fc)o.push({k:"force",c:fc,kill:fc<=1900?360:180});
+  const full=(hasR?0:rifle)+arm+(T?0:400);if(m>=full)o.push({k:"full",c:full+Math.min(600,m-full),kill:210});
+  return o}
+// the other side's buy: right after a lost pistol they save, after a won pistol they upgrade; then the base's table
+function econEnemy(E,es,r,hs,ePistolWon){if(r===hs+1)return ePistolWon?{eco:0,force:.7,full:.3}:{eco:.9,force:.1,full:0};
+  const x=es<=0?E.won:E["lost"+Math.min(es,3)];return x?{eco:x.eco/100,force:x.force/100,full:x.full/100}:{eco:.1,force:.3,full:.6}}
+// the other side's losses in a row (0 when they won the last round), from the rounds of the half
+function enemyStreak(g){const R=((g.hist||{}).rounds)||{},hs=halfStart(g.round);let es=0,last=null;
+  for(let n=g.round-1;n>=hs;n--){const w=(R[n]||{}).win;if(!w)break;if(last===null)last=w;if(w===g.side)es++;else break}
+  const pw=(R[hs]||{}).win;return {es,known:last!==null,ePistolWon:pw?pw!==g.side:null}}
+const ECON_MEMO=new Map(),kMoney=m=>m>=1000?`$${(m/1000).toFixed(1).replace(/\.0$/,"")}k`:`$${m}`;
+function econPlan(p,g){if(!g||g.money==null||!g.side||g.round==null||g.practice)return null;
+  const hs=halfStart(g.round);if(g.round===hs)return null;   // pistol round: everyone buys the same
+  const last=hs+(hs>24?2:11),H=Math.min(3,last-g.round+1),key=[g.side,g.round,g.money,g.losses,g.primary,g.armor,g.helmet,JSON.stringify(((g.hist||{}).rounds)||{})].join("|");
+  if(ECON_MEMO.has(key))return ECON_MEMO.get(key);
+  const TS=(p.advice.plan||{}).tside||{},E=TS.econ||{},tw=econTW(TS.situations),T=g.side==="T";
+  const pw=(k,ed)=>["eco","force","full"].reduce((a,e)=>a+(ed[e]||0)*(T?tw(k,e):1-tw(e,k)),0);
+  const st0=enemyStreak(g);
+  // expected rounds won from a state over `d` rounds, then half the chance of the round after (what the money buys there)
+  const V=(m,lc,es,r,hasR,d)=>{if(r>last)return 0;const ed=econEnemy(E,es,r,hs,st0.ePistolWon),os=econOpts(g.side,m,hasR,0,false);
+    if(d===0)return .5*Math.max(...os.map(o=>pw(o.k,ed)));
+    return Math.max(...os.map(o=>step(m,lc,es,r,hasR,o,ed,d)))};
+  const step=(m,lc,es,r,hasR,o,ed,d)=>{const pr=pw(o.k,ed),left=m-o.c+o.kill,rifle=o.k==="full"||(hasR&&o.k!=="eco"&&o.k!=="half");
+    const mw=Math.min(ECON.cap,left+ECON.win),ml=Math.min(ECON.cap,left+ECON.bonus[Math.min(lc,4)]+(T?ECON.plant:0));
+    const lw=Math.max(0,lc-1),ll=lc+1,ew=es<=0?1:es+1,sw=rifle?.6:0,sl=rifle?.15:0;
+    return pr+pr*(sw*V(mw,lw,ew,r+1,true,d-1)+(1-sw)*V(mw,lw,ew,r+1,false,d-1))+(1-pr)*(sl*V(ml,ll,0,r+1,true,d-1)+(1-sl)*V(ml,ll,0,r+1,false,d-1))};
+  const hasR=!!(g.primary&&FULL_W.has(g.primary)),eb=enemyBuy(p,g),ed0=eb&&!eb.pistol?{eco:eb.eco||0,force:eb.force||0,full:eb.full||0}:econEnemy(E,st0.es,g.round,hs,st0.ePistolWon);
+  const span=H+(g.round+H<=last?.5:0),lc=g.losses||0;
+  const opts=econOpts(g.side,g.money,hasR,g.armor||0,!!g.helmet).map(o=>{const v=step(g.money,lc,st0.es,g.round,hasR,o,ed0,H);
+    const left=g.money-o.c,lose=left+ECON.bonus[Math.min(lc,4)],need=T?3700:3900;   // next round after a loss: enough for a rifle + armor?
+    return Object.assign({},o,{v,pct:Math.round(100*v/span),now:Math.round(100*pw(o.k,ed0)),lose,fullNext:lose>=need||(hasR&&lose>=1000)})});
+  let best=opts.reduce((a,b)=>b.v>a.v+.005?b:a,opts[0]),close=null;
+  // a near tie (the model can't tell them apart): the buy that keeps a full buy for the next round, the long game
+  const keep=opts.filter(o=>o!==best&&o.fullNext&&best.v-o.v<=.025*span).sort((a,b)=>b.v-a.v)[0];
+  if(best.k!=="full"&&!best.fullNext&&keep){close=best;best=keep}   // a full buy stays a full buy
+  const res={opts,best,close,H,span,enemy:ed0};ECON_MEMO.set(key,res);if(ECON_MEMO.size>200)ECON_MEMO.clear();return res}
+// the plan as lines: each buy you can afford, the share of the next rounds it wins, and the money left after a loss
+function econRows(plan){if(!plan||plan.opts.length<2)return "";const mx=Math.max(...plan.opts.map(o=>o.pct),1);
+  return `<div class="vhead">NEXT ${plan.H} ROUND${plan.H>1?"S":""} · WON${plan.close?" · close: keep your next buy":""}</div><div class="vrows econ">${ECON_K.map(k=>plan.opts.find(o=>o.k===k)).filter(Boolean).map(o=>{const b=o===plan.best;
+    return `<div class="vrow${b?" best":""}" style="--c:${b?"var(--good)":"var(--muted)"}${b?"":";opacity:.6"}"><span>${ECON_L[o.k]}</span><i><u style="width:${Math.max(4,Math.round(100*o.pct/mx))}%"></u></i><b>${o.pct}%</b><small title="money next round if this round is lost">${o.fullNext?"✓":"✕"} ${kMoney(o.lose)}</small></div>`}).join("")}</div>`}
+// T side: the plays that win most here for this kind of round, with how many were played and won (not the usual ones)
+function vWins(p,g){const TS=(p.advice.plan||{}).tside,M=TS&&TS.maps&&TS.maps[g.map],P_=M&&M.plays;if(!P_||!P_.win)return "";
+  const rt=advisedType(g),C=((P_.win_ctx||{})[rt==="pistol"?"pistol":rt])||{};
+  const lb=(w,n)=>{const z=1.28,ph=w/100;return n?(ph+z*z/(2*n)-z*Math.sqrt(ph*(1-ph)/n+z*z/(4*n*n)))/(1+z*z/n):0};   // Wilson lower bound: a small sample doesn't win
+  const rows=Object.entries(P_.win).filter(([k])=>k!=="none").map(([k,w])=>{const c=C[k],use=c&&c[0]>=8,n=use?c[0]:(P_.n||{})[k]||0,wr=use?c[1]:w;
+    return {k,n,wr,use,won:Math.round(n*wr/100),s:lb(wr,n)}}).filter(r=>r.n>=8).sort((a,b)=>b.s-a.s).slice(0,4);
+  if(!rows.length)return "";
+  const ctx=rows.some(r=>r.use),mx=Math.max(...rows.map(r=>r.wr),1);   // ctx false: too few rounds of this kind, the numbers are for all rounds
+  const lab=k=>{const L=String((P_.label||{})[k]||k);return /^Rush/.test(L)?`⚡${L.replace(/^Rush ([AB]) through /,"$1 · ")}`:/^Split/.test(L)?`⇉${L.replace(/^Split ([AB]):.*/,"$1 split")}`:L.replace(/^([AB]) through /,"$1 · ")};
+  return `<div class="vhead">✓ WHAT WINS · ${ctx?esc(RT_EN[rt]||rt||""):"all rounds"}</div><div class="vrows">${rows.map((r,i)=>`<div class="vrow" style="--c:var(--t)${i?`;opacity:${[1,.85,.7,.6][i]}`:""}"><span>${vShort(lab(r.k))}</span><i><u style="width:${Math.max(4,Math.round(100*r.wr/mx))}%"></u></i><b>${r.wr}%</b><small>${r.won}/${r.n}</small></div>`).join("")}</div>`}
 
 // ---------- view: review (after the session, or the next day) ----------
 function callsBlock(PL){const C=PL.calls||[];if(!C.length)return D.local?`<h3>Your calls</h3><p class="note">No recording yet: turn on "Your calls" in <a href="#settings" style="color:var(--ct)">Settings</a>, play, and the coach analyzes your communication after the match.</p>`:"";
