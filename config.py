@@ -6,6 +6,9 @@ import re
 import threading
 import time
 
+# tools run in the background never open a console window (it would take the focus away from the game)
+NO_WINDOW = getattr(__import__("subprocess"), "CREATE_NO_WINDOW", 0)
+
 HERE = os.path.dirname(os.path.abspath(__file__))
 OUT = os.path.join(HERE, "out")
 CACHE = os.path.join(HERE, "cache")

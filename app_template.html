@@ -1266,7 +1266,7 @@ async function renderSettings(){
    <p class="note">On <a href="${esc(L.auth)}" target="_blank" rel="noopener" style="color:var(--ct)">Steam's CS2 help page</a> (signed in to your account): "Create authentication code". The same page shows the code of your last match. If it's empty, the coach finds it from your last 8 matches (Steam open, CS2 closed).</p>
    <div class="row"><button type="button" class="primary" id="st-save">Save and check</button>
      <button type="button" class="primary" id="st-sync" ${st.has_auth?"":"disabled"}>Sync now</button><span class="note" id="st-msg" role="status"></span></div>
-   ${st.has_auth?`<div class="row"><label style="display:flex;gap:8px;align-items:center;font-size:14px"><input type="checkbox" id="st-auto" ${st.auto_sync?"checked":""}> Sync automatically when the app starts, then every 30 minutes</label></div>
+   ${st.has_auth?`<div class="row"><label style="display:flex;gap:8px;align-items:center;font-size:14px"><input type="checkbox" id="st-auto" ${st.auto_sync?"checked":""}> Sync automatically when the app starts, then every 30 minutes (off: the ↻ Update button at the top does it when you want)</label></div>
      <p class="note">Last sync: ${st.last_sync?fmtDate(st.last_sync):"never"} · ${st.known_matches} match(es) known for this account${st.pending?` · ${st.pending} pending (Steam must be open and CS2 closed)`:""}${st.friends!=null?` · ${st.friends} Steam friends (used to detect your group)`:""}.</p>`:""}
   </article>
   <article class="card"><h3>What it unlocks</h3><ul>

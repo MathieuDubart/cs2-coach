@@ -372,7 +372,8 @@ def voice_watch(every=15):
 
 
 def auto_sync(every=1800):
-    """Steam history connected: check for new matches at start-up, then every 30 minutes (only when idle)."""
+    """Only when you turned it on in Settings (off by default: the Update button in the header does it when you want):
+    new matches at start-up, then every 30 minutes, never during a match."""
     import time
     time.sleep(20)
     while True:
@@ -381,12 +382,12 @@ def auto_sync(every=1800):
         s = config.settings()
         sid = str(s.get("own_steamid") or "")
         p = s.get("players", {}).get(sid, {})
-        if sid.isdigit() and p.get("authcode") and p.get("auto_sync", True) and LOCK.acquire(blocking=False):
+        if sid.isdigit() and p.get("authcode") and p.get("auto_sync", False) and LOCK.acquire(blocking=False):
             print("Automatic Steam sync…", flush=True)
             run_job("Steam sync", lambda: cs2coach.sync_steam(sid))  # releases LOCK
         # teammates whose history code you added: their matches without you too
         for other, op in list(config.settings().get("players", {}).items()):
-            if other != sid and other.isdigit() and op.get("authcode") and op.get("auto_sync", True) and LOCK.acquire(blocking=False):
+            if other != sid and other.isdigit() and op.get("authcode") and op.get("auto_sync", False) and LOCK.acquire(blocking=False):
                 print(f"Automatic Steam sync of {op.get('name') or other}…", flush=True)
                 run_job(f"Steam sync of {op.get('name') or other}", lambda o=other: cs2coach.sync_steam(o))
         time.sleep(every)

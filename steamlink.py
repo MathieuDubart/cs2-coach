@@ -213,7 +213,7 @@ def set_credentials(sid, key=None, auth=None, known=None):
         p = s.setdefault("players", {}).setdefault(sid, {})
         p["authcode"] = auth
         p["last_code"] = start
-        p.setdefault("auto_sync", True)
+        p.setdefault("auto_sync", False)   # the Update button does it when you want
         saved.append("history code")
     config.save_settings(s)
     return saved

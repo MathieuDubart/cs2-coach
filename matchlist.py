@@ -74,7 +74,7 @@ def ensure_boiler():
 
 def fetch():
     ensure_boiler()
-    subprocess.run([BOILER, OUT], cwd=os.path.dirname(BOILER), check=True, capture_output=True, timeout=120)
+    subprocess.run([BOILER, OUT], cwd=os.path.dirname(BOILER), check=True, capture_output=True, timeout=120, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
     return parse(open(OUT, "rb").read())
 
 
@@ -155,7 +155,7 @@ def fetch_one(match_id, outcome_id, token):
     ensure_boiler()
     out = os.path.join(os.path.dirname(OUT), f"one_{match_id}.bin")
     subprocess.run([BOILER, out, str(match_id), str(outcome_id), str(token)], cwd=os.path.dirname(BOILER),
-                   check=True, capture_output=True, timeout=120)
+                   check=True, capture_output=True, timeout=120, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
     return parse(open(out, "rb").read())
 
 
