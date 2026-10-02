@@ -2273,10 +2273,11 @@ function vNadePicks(p,g){const N=(p.advice.plan||{}).nades,E=N&&((N.maps||{})[g.
   const way=x=>!pts||!x.to_px?null:(end&&Math.hypot(x.to_px[0]-end[0],x.to_px[1]-end[1])<160)||(S1&&Math.hypot(x.to_px[0]-S1[0],x.to_px[1]-S1[1])<170)?"site":near(x.to_px,50)?"way":oth&&Math.hypot(x.to_px[0]-oth[0],x.to_px[1]-oth[1])<160?"off":near(x.from_px,60)?"from":null;
   const bonus={site:.06,way:.04,from:.02,off:-.06};
   const eff0=eff,effW=x=>eff0(x)+(bonus[way(x)]||0),tag=x=>x&&Object.assign({},x,{way:way(x)});
+  const noOff=l=>{const ok=l.filter(x=>way(x)!=="off");return ok.length?ok:[]};   // a throw toward the other site only helps a fake: never shown
   const picks=t=>{if(w==="post")return (E.types[t].post||[]).slice(0,2);
-    if(el==null||!w)return (E.types[t].picks||[]).slice().sort((a,b)=>effW(b)-effW(a)).slice(0,2).map(tag);   // buy time: the best ones of the round, for your way
+    if(el==null||!w)return noOff((E.types[t].picks||[]).slice().sort((a,b)=>effW(b)-effW(a))).slice(0,2).map(tag);   // buy time: the best ones of the round, for your way
     const fit=x=>x.best===w||x.usual===w||(x.t_med!=null&&x.t_med>=el-8&&x.t_med<=el+25);
-    return all(t).filter(fit).sort((a,b)=>effW(b)-effW(a)||Math.abs((a.t_med??el)-el)-Math.abs((b.t_med??el)-el)).slice(0,2).map(tag)};
+    return noOff(all(t).filter(fit).sort((a,b)=>effW(b)-effW(a)||Math.abs((a.t_med??el)-el)-Math.abs((b.t_med??el)-el))).slice(0,2).map(tag)};
   return Object.entries(g.nades||{}).filter(([t,v])=>v>0&&E.types[t]).map(([t,v])=>{const ps=picks(t);return {type:t,n:v,x:ps[0]||null,alt:ps[1]||null,el:g.round_phase==="live"?el:null}})}
 function vNades(list){if(!list.length)return "";
   const when=(x,el)=>x.t_med!=null&&el!=null&&x.t_med>el+3?clock(x.t_med):x.t_med!=null&&el==null?clock(x.t_med):"now";
@@ -2521,10 +2522,15 @@ function vKey(p,g){const k=keySit(p,g);if(!k)return "";const M=(((p.advice.plan|
   const rows=list.map((w,i)=>`<div class="vrow${w.w===mine?" best":""}" style="--c:${w.w===mine?"var(--good)":"var(--flash)"}${w.w===mine||!i?"":";opacity:.7"}"><span>${w.w===mine?"✓ ":""}${esc(W_SHORT[w.w]||w.w.toUpperCase())}</span><i><u style="width:${Math.max(4,Math.round(100*val(w)/mx))}%"></u></i><b>${pis?w.win+"%":w.adr}</b><small>${pis?`${w.adr} dmg`:`${w.win}% won`}</small></div>`).join("");
   return `<div class="vsit key"><span>🔑 ${KEY_L[k]}</span>${SP?`<b class="${vTone(SP.win)}">${SP.win}%</b>`:""}</div>
     ${rows?`<div class="vhead">${pis?"ROUNDS WON":"DAMAGE / ROUND"} · ${k==="eco_full"&&g.round_phase==="freezetime"?`budget ${kMoney(budget)}`:"base, every map"}</div><div class="vrows">${rows}</div>`:""}`}
+// the spots of a key round for a weapon family: this situation's, else every weapon in it, else the same family in the
+// other "against a full buy" situation (an eco and a force-buy hold the same angles with the same weapons)
+function keySpots(p,g,map,k,grp){const M=(((p.advice.plan||{}).tside||{}).maps||{})[map]||{},S_=(M.setplays||{})[g.side]||{},a=S_[k]||{};
+  const o=k==="eco_full"?S_.force_full:k==="force_full"?S_.eco_full:null;
+  return ((a.groups||{})[grp]||[]).length?a.groups[grp]:(a.spots||[]).length?a.spots:o&&((o.groups||{})[grp]||[]).length?o.groups[grp]:[]}
 // on the radar: the spots that pay for your weapon's family in this kind of round, and (T) a plant that wins more
 function keyRadar(p,g,map,level,lay,top,legend,here){const k=keySit(p,g);if(!k)return;const M=(((p.advice.plan||{}).tside||{}).maps||{})[map]||{};
   const SP=((M.setplays||{})[g.side]||{})[k];if(!SP)return;const {list,mine}=keyWeapons(p,g,k),w=mine||(list[0]||{}).w,grp=w?W_GRP(w):"default";
-  const sp=((SP.groups||{})[grp]||SP.spots||[]).filter(here).slice(0,3),lab=W_SHORT[w]||(w||"").toUpperCase();
+  const sp=keySpots(p,g,map,k,grp).filter(here).slice(0,3),lab=W_SHORT[w]||(w||"").toUpperCase();
   sp.forEach(z=>{const [x,y]=z.px,gg=el("g",{},top);
     el("path",{d:`M${x} ${y-11}L${x+10} ${y-5}L${x+10} ${y+5}L${x} ${y+11}L${x-10} ${y+5}L${x-10} ${y-5}Z`,style:"fill:var(--good);fill-opacity:.85;stroke:#0b0f14;stroke-width:1.6"},gg);
     el("text",{x:x+14,y:y+4,class:"kwt"},gg).textContent=`${lab}${z.surprise?" ★":""}`;
