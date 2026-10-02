@@ -552,6 +552,12 @@ table.lc{border-collapse:collapse;font-variant-numeric:tabular-nums;min-width:64
 .vfocus{display:flex;align-items:center;gap:10px;padding:8px 12px;border-radius:var(--radius);border-left:6px solid var(--c);background:color-mix(in srgb,var(--c) 14%,transparent)}
 .vfocus>b{font:700 34px var(--f-display);color:var(--c);line-height:1}.vfocus div{display:grid;flex:1}.vfocus span{font:700 17px var(--f-body)}.vfocus small{font:600 12px var(--f-mono);color:var(--muted)}
 .vfocus em{font:600 11px var(--f-mono);font-style:normal;color:var(--muted);border:1px solid var(--line);border-radius:3px;padding:1px 5px}
+.vbook{display:grid;grid-template-columns:1fr 1fr;gap:6px}.vbook a{display:grid;gap:2px;text-decoration:none;color:var(--ink)}
+.vbook img{width:100%;aspect-ratio:16/9;object-fit:cover;border-radius:4px;border:1px solid var(--line)}
+.vbook span{font:600 12px var(--f-body);line-height:1.2}.vbook em{font:600 10px var(--f-mono);font-style:normal;color:var(--muted)}.vbook small{font:500 11px var(--f-body);color:var(--muted);line-height:1.2}
+.book{display:grid;grid-template-columns:repeat(auto-fill,minmax(420px,1fr));gap:12px}.book article{border:1px solid var(--line);border-radius:var(--radius);padding:10px;display:grid;gap:6px}
+.book h4{margin:0;font:700 15px var(--f-body)}.book h4 em{font:600 11px var(--f-mono);font-style:normal;color:var(--muted)}
+.book .shots{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:6px}.book img{width:100%;border-radius:4px;border:1px solid var(--line)}.book p{margin:0;font-size:13px}
 </style>
 
 <div class="bar"><div class="bar-in">
@@ -1836,6 +1842,13 @@ function nadeLive(p,g){const N=(p.advice.plan||{}).nades,E=N&&((N.maps||{})[g.ma
     return `<li class="ct"><b>${v>1?v+" ":""}${nadeName(t,g.side)}${v>1?"es":""}</b><br>${ps.length?ps.map(x=>nadeLine(N,g.side,t,x,!!w&&(w==="post"||x.best===w||x.usual===w||(x.t_med!=null&&Math.abs(x.t_med-el)<=8)),w==="post"&&(E.types[t].post||[]).includes(x))).join("<br>"):`<span class="note">${keep(t)}</span>`}</li>`}).join("");
   const warn=N.unused_per_death>=0.6?`<p class="note">In your last matches, you die with ${N.unused_per_death} grenade in hand on average: throw it before taking a risky duel.</p>`:"";
   return `<div class="tread nd"><h3><span>Your grenades</span><small>${w?esc(nadeWin(N,g.side,w)):"in play"}</small></h3><ul class="big-list">${rows}</ul>${warn}</div>`}
+// the map's lineup book (a player's), your side: every lineup with where to stand, where to aim and where it lands
+function bookBlock(p,map,side){const B=((p.advice.plan||{}).lineups||{})[map];if(!B)return "";const L=(B.lineups||[]).filter(x=>x.side===side);if(!L.length)return "";
+  const im=(u,a)=>u?`<img src="${esc(u)}" alt="${a}" loading="lazy">`:"";
+  return `<h3>Lineup book · ${esc(B.author)}</h3><p class="note">By ${esc(B.author)}, from <a href="${esc(B.repo)}" target="_blank" rel="noopener" style="color:var(--ct)">their GitHub repository</a> (pictures loaded from it): position, aim, landing.</p>
+   <div class="book">${["A","Mid","B"].map(s=>L.filter(x=>x.site===s)).filter(l=>l.length).map(l=>l.map(x=>`<article><h4><span class="nd-t" style="color:${NADE_C[x.type]}">${nadeName(x.type,side)}</span> ${esc(x.title)}${x.throw?` <em>${esc(x.throw)}</em>`:""}</h4>
+     <div class="shots">${im(x.img_position,"position")}${im(x.img_aim,"aim")}${im(x.img_aim2,"aim, second picture")}${im(x.img_landing,"landing")}</div>
+     <p>${x.position?`<b>Stand:</b> ${esc(x.position)} `:""}${x.aim?`<b>Aim:</b> ${esc(x.aim)}`:""}</p></article>`).join("")).join("")}</div>`}
 function nadeTable(p,map,side){const N=(p.advice.plan||{}).nades,E=N&&((N.maps||{})[map]||{})[side];if(!E)return `<p class="note">Not enough grenade data on ${MAPN(map)} as ${side}.</p>`;
   const types=[...E.order.map(o=>o.type),...["smoke","flash","molotov","he"].filter(t=>!E.order.some(o=>o.type===t)&&E.types[t])].filter(t=>(E.types[t].picks||[]).length);
   if(!types.length)return "";
@@ -2017,7 +2030,7 @@ function renderIngame(){
   const TABS=[["plan","Game plan"],["buys","Buys"],["nades","Grenades"],...(S.side==="CT"?[["t","T habits"]]:[])];
   let tab=store("igtab")||"plan";if(!TABS.some(t=>t[0]===tab))tab="plan";
   const cols=planColumns(p,m,R0);
-  const body={plan:()=>cols.html,buys:()=>S.map?buyRows(p,S.map,S.side,following?roundType(gsiLast):null):"",nades:()=>S.map?nadeTable(p,S.map,S.side):"",t:()=>S.map?tsideTable(p,S.map):""}[tab]();
+  const body={plan:()=>cols.html,buys:()=>S.map?buyRows(p,S.map,S.side,following?roundType(gsiLast):null):"",nades:()=>S.map?nadeTable(p,S.map,S.side)+bookBlock(p,S.map,S.side):"",t:()=>S.map?tsideTable(p,S.map):""}[tab]();
   const radarHTML=liveR?radarShell(layerBtns()+levelBtns({levels:LVs},S.level)):m?radarShell(levelBtns(m,S.level)):R0?radarShell((R0.levels||[]).length>1?`<div class="btns" role="group" aria-label="Level">${R0.levels.map(l=>`<button type="button" data-blevel="${l.key}">${esc(l.name)}</button>`).join("")}</div>`:""):`<div class="empty">No radar for this map yet.</div>`;
   const full=!!(following&&store("igfull")!==false),tkey=gsiLast?`${gsiLast.map}|${gsiLast.round}`:"";
   document.body.classList.toggle("igfull",full);
@@ -2340,7 +2353,9 @@ function liveRadar(box,p,map,level,g,o){
       ds.forEach(z=>{const gg=el("g",{},Ltop),r=8+Math.min(6,z.share/3);
         el("circle",{cx:z.px[0],cy:z.px[1],r,style:"fill:none;stroke:var(--bad);stroke-width:2.4"},gg);
         el("path",{d:`M${z.px[0]-r-4} ${z.px[1]}H${z.px[0]-r+4}M${z.px[0]+r-4} ${z.px[1]}H${z.px[0]+r+4}M${z.px[0]} ${z.px[1]-r-4}V${z.px[1]-r+4}M${z.px[0]} ${z.px[1]+r-4}V${z.px[1]+r+4}`,style:"stroke:var(--bad);stroke-width:2.4;stroke-linecap:round"},gg);
-        if(z.sneaky){el("circle",{cx:z.px[0]+r+3,cy:z.px[1]-r-3,r:7,style:"fill:var(--bad);stroke:#0b0f14;stroke-width:1.2"},gg);el("text",{x:z.px[0]+r+3,y:z.px[1]-r+1,"text-anchor":"middle",class:"pbt",style:"fill:#fff"},gg).textContent="!"}
+        if(z.sneaky){const L_=PLACED.get(Ltop)||[],free=(x,y)=>!L_.some(q=>Math.abs(q.x-x)<(q.w+14)/2+1&&Math.abs(q.y-y)<(q.h+14)/2+1);   // the "!" goes on a free corner, never on a label
+          const [bx,by]=[[r+3,-r-3],[-r-3,-r-3],[r+3,r+3],[-r-3,r+3]].map(([dx,dy])=>[z.px[0]+dx,z.px[1]+dy]).find(([x,y])=>free(x,y))||[z.px[0]+r+3,z.px[1]-r-3];
+          el("circle",{cx:bx,cy:by,r:7,style:"fill:var(--bad);stroke:#0b0f14;stroke-width:1.2"},gg);el("text",{x:bx,y:by+4,"text-anchor":"middle",class:"pbt",style:"fill:#fff"},gg).textContent="!";obstacle(Ltop,bx,by,14,14)}
         tip(gg,`${z.zone||"CT angle"}: ${z.kills} T killed from here at this moment of the round${z.sneaky?" — they kill a lot from here for the little time they spend there: check it":""}`)});
       if(ds.length)legend.push(`<span>${SW.danger}angles the CTs kill from (! = often forgotten)</span>`)}}
   // the Ts' plays (CT): not drawn, the side panel shows the odds; they choose the grenades below
@@ -2626,6 +2641,18 @@ function vFocus(p,g){const n=focusN(g);if(!n)return "";const H=isHostage(g.map),
 // hostage maps: the CTs' ways (attack: rounds won; defense: share of the CT walks, where they come from)
 function vHostRoutes(p,g,def){const W=hostageRank(p,g);if(!W)return "";
   return vHead(def?"THEY COME FROM · OF CT WALKS":"YOUR WAYS · ROUNDS WON")+vRows(W.rows.map((r,i)=>({l:`${r.rank} · ${vShort(r.route.zones.slice(-2).join(" > "))} · ${clock(r.t_end)}`,v:def?r.share:r.wr,c:r.col,o:[1,.8,.65][i]})))}
+// a lineup book of the map (made by a player: where to stand, where to aim): the lineups of the site you go to for the
+// grenades you have (none yet at the buy time: the site's), two at most, as the aim picture and the title
+function bookFor(p,g,r){const B=((p.advice.plan||{}).lineups||{})[g.map];if(!B||!(B.lineups||[]).length)return null;let sites=[];
+  if(g.side==="T"){const W=typeof winsRank==="function"?winsRank(p,g):null,RF=W&&(W.rows.find(x=>x.rank===focusN(g))||W.rows[0]);
+    const s=RF?(RF.k.match(/[AB]$/)||RF.k.match(/^[AB]/)||[])[0]:null;if(s)sites.push(s);if(RF&&((RF.route||{}).zones||[]).some(z=>/mid/i.test(z)))sites.push("Mid")}
+  else{if(r&&r.A!==r.B)sites.push(r.A>r.B?"A":"B");else sites.push("A","B")}
+  const held=Object.entries(g.nades||{}).filter(([t,v])=>v>0).map(([t])=>t);
+  const L=B.lineups.filter(x=>x.side===g.side&&sites.includes(x.site)&&(!held.length||held.includes(x.type)));
+  const pri=g.side==="CT"?["molotov","smoke","flash","he"]:["smoke","flash","molotov","he"];   // CT: the molly first (it buys time), T: the smoke
+  return L.length?{book:B,list:L.sort((a,b)=>sites.indexOf(a.site)-sites.indexOf(b.site)||pri.indexOf(a.type)-pri.indexOf(b.type)).slice(0,2)}:null}
+function vBook(p,g,r){const F=bookFor(p,g,r);if(!F)return "";
+  return vHead(`📖 LINEUPS · ${esc(F.book.author)}`)+`<div class="vbook">${F.list.map(x=>`<a href="${esc(x.link)}" target="_blank" rel="noopener" title="${esc([x.position,x.aim].filter(Boolean).join(" · "))}"><img src="${esc(x.img_aim||x.img_position||"")}" alt="" loading="lazy"><span><b style="color:${NADE_C[x.type]||"#ccc"}">${vLetter[x.type]||"?"}</b> ${esc(x.title.replace(/\s*(smoke|flash|molly)$/i,""))}${x.throw?` <em>${esc(x.throw.toLowerCase())}</em>`:""}</span><small>${esc(x.position||"")}</small></a>`).join("")}</div>`}
 const expOn=(p,t)=>(((((p||{}).advice||{}).plan||{}).experiments||{}).experiments||[]).some(e=>e.status==="active"&&e.template===t);
 function nowVisual(p,g,following){
   if(!following)return nowPanel(p,g,following,{noBuy:true});
@@ -2636,9 +2663,9 @@ function nowVisual(p,g,following){
   if(ph==="freezetime"){out.push(vReset(p,g),vKey(p,g));
     if(voiceOn()&&navigator.userActivation&&!navigator.userActivation.hasBeenActive)out.push(`<span class="vchip">🔊 click this page once: the coach's voice</span>`);
     {if(typeof antiEco==="function"&&antiEco(p,g))out.push(`<span class="vchip bad">! eco kill spots on the map: clear them, no close duel</span>`)}
-    if(ct&&r)out.push(vOdds(r),vRush(TS,g,r)||vEntries(TS,g,r),vCTline(p,g,r)||vHold(p,g,r));
+    if(ct&&r)out.push(vOdds(r),vRush(TS,g,r)||vEntries(TS,g,r),vCTline(p,g,r)||vHold(p,g,r),vBook(p,g,r));
     const HM=isHostage(g.map);if(HM)out.push(ct?(vFocus(p,g)||vHostRoutes(p,g,false)):vHostRoutes(p,g,true));
-    if(!ct&&!HM){out.push(vFocus(p,g)||vPathCurve(p,g)||vTimeline(p,g),vPush(p,g),vPushAns(p,g,false),vTchips(p,g))}}   // the plays and the grenades are on the map
+    if(!ct&&!HM){out.push(vFocus(p,g)||vPathCurve(p,g)||vTimeline(p,g),vBook(p,g,null),vPush(p,g),vPushAns(p,g,false),vTchips(p,g))}}   // the plays and the grenades are on the map
   else if(ph==="live"){const el=g.elapsed||0,planted=g.bomb==="planted";out.push(vCall(g));
     if(planted){const left=g.phase_left!=null?g.phase_left:Math.max(0,40-(g.since_plant||0)),as=typeof autoSite==="function"?autoSite(p,g):null;
       out.push(`<div class="vbig ${ct?"bad":"good"}"><b>💣 ${Math.ceil(left)}s</b><span>${ct?"retake together":"hold the bomb"}${as?` · ${as.site} site, ${as.p}% sure`:""}</span></div>`)}

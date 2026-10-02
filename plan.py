@@ -531,6 +531,11 @@ def build(steamid, adv, cross=None, deep=None, light=False):
             plan["mood"] = voice.mood_stats(sid)   # the rounds after a frustrated moment against the others
     except Exception as e:
         _miss(plan, "calls", e)
+    try:   # lineup books made by players (where to stand, where to aim), read from their GitHub repository
+        import lineupbook
+        plan["lineups"] = lineupbook.all_books()
+    except Exception as e:
+        _miss(plan, "lineup books", e)
     try:   # hostage maps: the CTs attack (their ways out of the spawn, the Ts' holds and kill spots)
         import hostage
         plan["hostage"] = hostage.summary()
