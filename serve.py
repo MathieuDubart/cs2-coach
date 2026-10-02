@@ -108,6 +108,9 @@ class Handler(BaseHTTPRequestHandler):
             return self.send(200, head + build_app.shell_html(load_index(), local=True) + "</body></html>", "text/html; charset=utf-8")
         if u.path == "/api/voice/status":
             return self.send(200, voice_status())
+        if u.path == "/api/coach/status":
+            import chatcalls
+            return self.send(200, chatcalls.status())
         if u.path == "/api/voice/devices":
             try:
                 import voice
@@ -236,6 +239,9 @@ class Handler(BaseHTTPRequestHandler):
             except Exception as e:
                 return self.send(400, {"error": f"Microphone: {e}"})
             return self.send(200, voice_status())
+        if u.path == "/api/coach/paths":   # the page's paths this round: numpad 1-2-3 say them in the team chat
+            import chatcalls
+            return self.send(200 if chatcalls.write(body.get("paths")) else 400, {})
         if u.path == "/api/live/log":   # what the In game page shows, a few times per round: checked after the match
             import livecheck
             return self.send(200 if livecheck.log(body) else 400, {})

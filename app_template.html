@@ -1216,6 +1216,7 @@ async function renderSettings(){
   let st;try{st=await (await fetch("/api/steam/status"+(D.own?`?sid=${D.own}`:""))).json()}catch(e){v.innerHTML=head+`<div class="empty">The local server doesn't answer: restart "Coach CS2.bat".</div>`;return}
   let gs=null;try{gs=await (await fetch("/api/gsi/status")).json()}catch(e){}
   let vs=null;try{vs=await (await fetch("/api/voice/status")).json()}catch(e){}
+  let cc=null;try{cc=await (await fetch("/api/coach/status")).json()}catch(e){}
   const flag=new URLSearchParams(location.search).get("steam");
   const ok=b=>b?`<span class="pill strong">done</span>`:`<span class="pill">to do</span>`;
   const pt=st.playtime,L=st.links||{};
@@ -1225,6 +1226,10 @@ async function renderSettings(){
    <p>CS2 sends the app the map, your side, the round, the score, your money and your grenades: the "In game" page follows your match on its own and gives the right advice at the right time (buys during freeze time, bomb planted, end of round).</p>
    <p class="note">This is Valve's Game State Integration, the official feature used by HUDs and RGB keyboards. During a match, CS2 only sends your own info, never the enemies'.${gs&&gs.path?` File: <code>${esc(gs.path)}</code>.`:""}${gs&&gs.installed?(gs.receiving?" CS2 is sending its data.":" Restart CS2 so it picks it up."):""}</p>
    <div class="btns">${gs&&gs.installed?`<button type="button" id="gsi-off">Turn detection off</button>`:`<button type="button" class="primary" id="gsi-on" ${gs&&gs.cfg_dir?"":"disabled"}>Turn detection on</button>`}${gs&&!gs.cfg_dir?`<span class="note">CS2 folder not found on this PC.</span>`:""}</div></article>
+  <article class="card"><h3>Paths in the team chat (numpad 1-2-3) ${ok(cc&&cc.bound)}</h3>
+   <p>As T, numpad <b>1</b>, <b>2</b> or <b>3</b> says path 1, 2 or 3 of the In game page in the team chat, with its way and when it is on the site. The app rewrites the text every round; you press the key.</p>
+   ${cc&&cc.bound?`<p class="note">The keys are set.</p>`:`<p>One time only, in CS2's console: <code>exec coach_binds</code> (the keys then stay in your CS2 settings).</p>`}
+   <p class="note">Numpad 1, 2, 3 were free in your CS2 keys. The In game page must be open during the match (it gives the paths). A file can only say one line in the chat, never run another command.</p></article>
   <article class="card form"><h3>Your calls (microphone) ${ok(vs&&vs.settings&&vs.settings.auto)}</h3>
    <p>During your matches, the app records <b>your microphone</b>, transcribes your calls on this PC and lines them up with the rounds: info given before dying, "where + how many", grenades called, talking during a teammate's clutch, frustration. The result shows up in the Review.</p>
    <p class="note">Only your voice: with a headset, your teammates' voices don't reach your microphone. Nothing leaves the PC (folder <code>out/voice</code>, not versioned). Only record other people with their consent: recording someone's words without consent is illegal in France (article 226-1 of the Code pénal) and in many other countries.</p>
@@ -1838,6 +1843,7 @@ async function gsiPoll(){clearTimeout(gsiTimer);if(!D.local||S.view!=="ingame")r
   try{const g=await (await fetch("/api/gsi/state")).json();const sig=x=>x?[x.map,x.side,x.round,x.round_phase,x.money,x.bomb,x.age!=null&&x.age<75,JSON.stringify(x.hist||{}),JSON.stringify(x.nades||{}),x.health===0,x.elapsed==null?"":Math.floor(x.elapsed/5),x.pos?x.pos.map(c=>Math.round(c/100)).join(","):"",x.call?x.call.t:""].join("|"):"";
     const before=sig(gsiLast)+(gsiLast&&gsiLast.mic);gsiLast=g&&Object.keys(g).length?g:null;
     if(gsiLast&&S.player&&D.players[S.player]&&typeof liveLog==="function")liveLog(D.players[S.player],gsiLast);   // checked after the match
+    if(gsiLast&&S.player===D.own&&D.players[S.player]&&typeof pathCalls==="function")pathCalls(D.players[S.player],gsiLast);   // numpad 1-2-3
     if(sig(gsiLast)+(gsiLast&&gsiLast.mic)!==before&&S.view==="ingame"&&S.player&&D.players[S.player])renderIngame()}catch(e){}
   gsiTimer=setTimeout(gsiPoll,1000)}   // the game sends every 0.25 s
 
@@ -2225,7 +2231,7 @@ function tPath(lay,top,pts,col,ranks,level,first,pct,rot){const on=q=>!q[2]||!le
   const end=pts[pts.length-1];if(on(end)){const t=ranks.join("·")+(rot?" ↻":"")+(pct!=null?` · ${pct}% won`:""),w=7.4*t.length+12,y=place(top,end[0],end[1]-21,w,18),gg=el("g",{},top);
     el("rect",{x:end[0]-w/2,y:y-9,width:w,height:18,rx:9,style:`fill:${col};stroke:#0b0f14;stroke-width:1.5`},gg);
     el("text",{x:end[0],y:y+4,"text-anchor":"middle",class:"pbt"},gg).textContent=t;
-    if(first&&end[3]!=null)qLabel(top,end[0],y,w/2,clock(end[3]),"ptt",5)}   // when the way reaches the site
+    if(end[3]!=null)qLabel(top,end[0],y,w/2,`on site ${clock(end[3])}`,"ptt",first?5:4)}   // when the way is on the site (game clock)
   return segs.length}
 // a strong spot: a green shield with a tick, more opaque where more duels are won
 function strongMark(ov,s){const [x,y]=s.px;obstacle(ov,x,y,22,28);const g=el("g",{class:"strong",style:`opacity:${s.win>=75?1:s.win>=68?.85:.7}`},ov);
@@ -2271,7 +2277,7 @@ function liveRadar(box,p,map,level,g,o){
     if(W){const seen=new Map();W.rows.slice(0,3).forEach(r=>{if(!r.route)return;const k=r.route.zones.join(">");if(seen.has(k)){seen.get(k).push(r.rank);return}seen.set(k,[r.rank]);r._k=k});
       W.rows.slice(0,3).filter(r=>r._k).reverse().forEach(r=>tPath(Lrot,Ltop,r.route.pts,r.col,seen.get(r._k),level,r.rank===1,r.wr,r.rot));   // the play's chance this round (a route alone is biased: only the ones who got there alive count)
       if(seen.size&&W.rows.some(r=>r.rot))legend.push(`<span>${SW.tpath}↻ ranked ahead of a better %: that one lost this half or was played too often, they read you too</span>`);
-      if(seen.size)legend.push(`<span>${SW.tpath}your way from the spawn, % won = rounds won by its play in this situation (${esc(RT_EN[W.rt]||W.rt)}${W.eb&&W.eb.full>=.5?" vs their full buy":W.eb&&W.eb.eco>=.5?" vs their eco":""}, ${RUN_EN[W.run]})</span>`)}}
+      if(seen.size)legend.push(`<span>${SW.tpath}your way from the spawn, % won = rounds won by its play in this situation; "on site 1:17": on the site when the game clock shows 1:17; numpad 1-2-3 say the path in the team chat (${esc(RT_EN[W.rt]||W.rt)}${W.eb&&W.eb.full>=.5?" vs their full buy":W.eb&&W.eb.eco>=.5?" vs their eco":""}, ${RUN_EN[W.run]})</span>`)}}
   // T side: where the CTs stand when you get there, and the angles they kill from (! = a spot they kill a lot from for the
   // little time they spend there: the angle the Ts forget)
   // T, the first moments (buy time, then up to 1:10): CTs pushing past a neutral zone, for their buy this round: an
@@ -2768,6 +2774,17 @@ function ctPush(p,g){const M=(((p.advice.plan||{}).tside||{}).maps||{})[g.map],C
   const gates=Object.values(acc).map(o=>({...o,t:o.t/o.share,kill:Math.round(o.kill/o.share),share:o.share/ws})).filter(o=>o.share>=3).sort((a,b)=>b.share-a.share).slice(0,4);
   const top=Object.entries(W).sort((a,b)=>b[1]-a[1])[0][0];
   return {gates,ctx:top,label:PUSH_L[top]||""}}
+// ---------- numpad 1-2-3 in CS2 say path 1-2-3 in the team chat: the page sends its paths, the app writes them for
+// the keys (chatcalls.py). T side, buy time and the first 40 s; anything else: the keys only print a note ----------
+const CALL_SENT={k:null};
+function pathCalls(p,g){if(!D.local||!g||!g.map||g.round==null||g.practice)return;let paths=[];
+  if(g.side==="T"&&g.map_phase!=="warmup"&&(g.round_phase==="freezetime"||(g.round_phase==="live"&&(g.elapsed||0)<40))){
+    const W=winsRank(p,g),L=(((((p.advice.plan||{}).tside||{}).maps||{})[g.map]||{}).plays||{}).label||{};
+    if(W)paths=W.rows.slice(0,3).map(r=>{const z=((r.route||{}).zones||[]).filter(x=>!/spawn/i.test(x)).slice(0,4),pts=(r.route||{}).pts,end=pts&&pts[pts.length-1];
+      const lab=String(L[r.k]||r.k).replace(/ \/ .*$/,"").replace(/ through /," via ");
+      return {rank:r.rank,text:`${lab}${z.length?`: ${z.join(" > ")}`:""}${end&&end[3]!=null?` - on site ${clock(end[3])}`:""}`}})}
+  const key=JSON.stringify([g.map,g.round,g.side,paths.map(x=>x.text)]);if(CALL_SENT.k===key)return;CALL_SENT.k=key;
+  fetch("/api/coach/paths",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({paths})}).catch(()=>{})}
 
 // ---------- view: review (after the session, or the next day) ----------
 // what the In game page showed in your matches, checked against their demos (livecheck.py)
