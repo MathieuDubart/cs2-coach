@@ -622,7 +622,7 @@ def econ_table(df):
 
 
 SUMMARY = os.path.join(config.OUT, "population", "tside_summary.json")
-VERSION = 27   # bump when the summary changes shape: the cache is rebuilt
+VERSION = 28   # bump when the summary changes shape: the cache is rebuilt
 
 
 def _stamp():
@@ -721,6 +721,7 @@ def _tendencies(maps, df):
             res["maps"][mp]["ct_spots"] = _ct_spots(mp, dirs.get(mp, []))
             res["maps"][mp]["ct_push"] = _ct_push(mp, dirs.get(mp, []))
             res["maps"][mp]["play_timing"] = _play_timing(g)
+            res["maps"][mp]["util_war"] = _util_war(mp, g, dirs.get(mp, []))
             res["maps"][mp]["setplays"] = _setplays(mp, dirs.get(mp, []))
         except Exception as e:
             print(f"{mp}: play contexts / CT spots unavailable ({e})")
@@ -1132,6 +1133,84 @@ def _play_timing(g, bw=7.0, k=8.0, min_n=10.0):
                 c, v, ne = best
                 out.setdefault(play, {})[grp] = {"best": round(c, 1), "lo": round(max(0.0, c - 5), 1), "hi": round(c + 5, 1),
                                                  "win": round(100 * v), "mean": round(100 * base), "n": int(round(ne)), "curve": curve}
+    return out or None
+
+
+UTIL_DUR = {"molotov": 7.0, "smoke": 18.0}   # a molotov burns about 7 s, a smoke stays about 18 s
+
+
+def _util_war(mp, g, dirs):
+    """Around each site: the CTs' blocking utility on the way to it (their molotovs and smokes landing on that side of
+    the map), and what it does to the hits there. A hit while one is still burning or standing ("active"), after the
+    last one ended ("spent"), or with none thrown before ("kept"): the rounds won by the Ts, at equal numbers alive at
+    the hit (the map's rounds won by man difference taken out). For each usual one (type, where it lands): how often,
+    when it is thrown and when it ends, the Ts killed within 500 units of it in the next 8 s, its thrower alive 10 s
+    later, and the Ts' rounds won when a hit meets it active. Pistol rounds aside."""
+    import team
+    regions = (team.map_meta().get(mp) or {}).get("regions") or {}
+    reg = lambda z: "A" if z == "BombsiteA" else "B" if z == "BombsiteB" else regions.get(z)
+    rows = {(str(m), int(r)): x for m, r, x in zip(g.match, g["round"], g.itertuples()) if x.T_buy != "pistol"}
+    hits, util = [], []
+    for d in dirs:
+        mid = os.path.basename(d)
+        fg, fd = os.path.join(d, "grenades.parquet"), os.path.join(d, "duels.parquet")
+        if not os.path.exists(fg):
+            continue
+        G = pd.read_parquet(fg, columns=["round", "t", "type", "side", "thrower", "land_X", "land_Y", "land_px", "land_py", "land_level", "land_zone"])
+        G = G[(G.side == "CT") & G.type.isin(list(UTIL_DUR)) & (G.t <= 75)]
+        D = pd.read_parquet(fd, columns=["round", "t", "victim", "victim_side", "victim_X", "victim_Y"]) if os.path.exists(fd) else pd.DataFrame()
+        for (mid_r, x) in ((k, v) for k, v in rows.items() if k[0] == mid):
+            rnd = mid_r[1]
+            ct = G[G["round"] == rnd]
+            ct = ct.assign(region=ct.land_zone.map(reg), end=ct.t + ct.type.map(UTIL_DUR))
+            h = float(x.hit_t) if x.site in ("A", "B") and x.hit_t == x.hit_t else None
+            if h is not None:
+                on = ct[(ct.region == x.site) & (ct.t <= h)]
+                cat = "active" if ((on.end >= h)).any() else "spent" if len(on) else "kept"
+                hits.append({"site": x.site, "cat": cat, "won": bool(x.T_won),
+                             "d": float(np.clip(x.t_alive_hit - x.ct_alive_hit, -3, 3)) if x.t_alive_hit == x.t_alive_hit and x.ct_alive_hit == x.ct_alive_hit else np.nan})
+            dr = D[(D["round"] == rnd)] if len(D) else D
+            for u in ct.itertuples():
+                if u.region not in ("A", "B"):
+                    continue
+                near = after = 0
+                if len(dr):
+                    w = dr[(dr.victim_side == "T") & (dr.t >= u.t) & (dr.t <= u.t + 8)]
+                    near = int((np.hypot(w.victim_X - u.land_X, w.victim_Y - u.land_Y) < 500).sum())
+                    after = bool(((dr.victim == u.thrower) & (dr.t >= u.t) & (dr.t <= u.t + 10)).any())
+                util.append({"site": u.region, "type": u.type, "land": humanize(u.land_zone, mp) if isinstance(u.land_zone, str) else None,
+                             "t": float(u.t), "px": float(u.land_px), "py": float(u.land_py), "level": u.land_level, "near": near,
+                             "alive": not after, "key": (mid, rnd),
+                             "met": h is not None and x.site == u.region and u.t <= h <= u.t + UTIL_DUR[u.type], "won": bool(x.T_won)})
+    if not hits:
+        return None
+    H = pd.DataFrame(hits)
+    H = H[H.d.notna()]
+    adv = H.groupby("d").won.mean()
+    H["res"] = H.won - H.d.map(adv)
+    base = float(H.won.mean())
+    U = pd.DataFrame(util) if util else pd.DataFrame(columns=["site"])
+    n_rounds = len(rows)
+    out = {}
+    for site in ("A", "B"):
+        h = H[H.site == site]
+        if len(h) < 30:
+            continue
+        cats = {c: [int(len(x)), round(100 * (base + float(x.res.mean())))] for c, x in h.groupby("cat") if len(x) >= 10}
+        u = U[U.site == site] if len(U) else U
+        items = []
+        for (ty, la), x in (u.groupby(["type", "land"]) if len(u) else []):
+            rounds = x.key.nunique()
+            if rounds < 8:
+                continue
+            met = x[x.met]
+            items.append({"type": ty, "land": la, "share": round(100 * rounds / max(1, n_rounds)), "t": round(float(x.t.median()), 1),
+                          "end": round(float(x.t.median()) + UTIL_DUR[ty], 1), "near": round(float(x.near.mean()), 2),
+                          "alive": round(100 * float(x.alive.mean())), "px": [round(float(x.px.median())), round(float(x.py.median()))],
+                          "level": x.level.mode().iloc[0] if x.level.notna().any() else None,
+                          "met_n": int(len(met)), "met_t_won": round(100 * float(met.won.mean())) if len(met) >= 8 else None})
+        items.sort(key=lambda z: -z["share"])
+        out[site] = {"hits": cats, "n": int(len(h)), "util": items[:5]}
     return out or None
 
 

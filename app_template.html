@@ -542,6 +542,7 @@ table.lc{border-collapse:collapse;font-variant-numeric:tabular-nums;min-width:64
 .vsit small{font:600 13px var(--f-mono);color:var(--muted);letter-spacing:.04em}   /* "won" next to a win rate */
 .upd{font:600 12.5px var(--f-body);background:none;border:1px solid var(--line);color:var(--ink);border-radius:10px;padding:3px 10px;cursor:pointer;white-space:nowrap}.upd:hover{border-color:var(--ct);color:var(--ct)}.upd:disabled{opacity:.5;cursor:wait}
 .vcurve{display:block}.vct{font:600 11px var(--f-mono);fill:var(--muted)}.vcv{font:700 13px var(--f-mono);fill:var(--ink)}
+.vleg{display:flex;flex-wrap:wrap;gap:4px 10px;font:600 11px var(--f-mono);color:var(--muted)}.vleg i{display:inline-block;width:12px;height:5px;border-radius:2px;margin-right:4px;vertical-align:middle}
 </style>
 
 <div class="bar"><div class="bar-in">
@@ -2411,10 +2412,12 @@ function vTimeline(p,g){const TS=(p.advice.plan||{}).tside,M=TS&&TS.maps&&TS.map
 // window (its "on site" on the map), the white line is now. The same rounds as the window on the map
 function vPathCurve(p,g){const W=typeof winsRank==="function"?winsRank(p,g):null;if(!W)return "";
   const rows=W.rows.slice(0,3).filter(r=>r.timing&&r.timing.curve&&r.timing.curve.length>=3);if(!rows.length||rows[0].rank!==1)return "";
-  const Wd=320,H=86,L=RLEN(),all=rows.flatMap(r=>r.timing.curve.map(c=>c[1])),lo=Math.min(...all)-4,hi=Math.max(...all)+6;
+  const site1=(rows[0].k.match(/[AB]$/)||rows[0].k.match(/^[AB]/)||[])[0],UW=((((((p.advice.plan||{}).tside||{}).maps||{})[g.map]||{}).util_war||{})[site1])||null;
+  const ub=((UW&&UW.util)||[]).filter(u=>u.share>=15).slice(0,3);   // their usual blocking utility there: when it stands
+  const Wd=320,H=86+ub.length*7,L=RLEN(),all=rows.flatMap(r=>r.timing.curve.map(c=>c[1])),lo=Math.min(...all)-4,hi=Math.max(...all)+6;
   const X=c=>Math.round(Wd*c/L),Y=v=>Math.round(6+(H-20)*(1-(v-lo)/Math.max(1,hi-lo)));
   const line=r=>r.timing.curve.map(([c,v],i)=>`${i?"L":"M"}${X(c)} ${Y(v)}`).join("");
-  const r1=rows[0],c1=r1.timing.curve,t1=r1.timing,base=H-14,area=`${line(r1)}L${X(c1[c1.length-1][0])} ${base}L${X(c1[0][0])} ${base}Z`;
+  const r1=rows[0],c1=r1.timing.curve,t1=r1.timing,base=H-14-ub.length*7,area=`${line(r1)}L${X(c1[c1.length-1][0])} ${base}L${X(c1[0][0])} ${base}Z`;
   const now=g.round_phase==="live"?(g.elapsed||0):null,pk=c1.reduce((a,b)=>b[1]>a[1]?b:a);
   const ticks=[[25,"1:30"],[55,"1:00"],[85,"0:30"]].map(([c,t])=>`<line x1="${X(c)}" y1="${base}" x2="${X(c)}" y2="${base+4}" stroke="var(--muted)"/><text x="${X(c)}" y="${H-1}" text-anchor="middle" class="vct">${t}</text>`).join("");
   const svg=`<svg class="vcurve" viewBox="0 0 ${Wd} ${H}" width="100%" height="${H}" role="img" aria-label="Rounds won by the moment the play is on the site">
@@ -2423,8 +2426,17 @@ function vPathCurve(p,g){const W=typeof winsRank==="function"?winsRank(p,g):null
     <path d="${area}" fill="${r1.col}" fill-opacity=".22"/><path d="${line(r1)}" fill="none" stroke="${r1.col}" stroke-width="2.4" stroke-linejoin="round"/>
     ${rows.slice(1).map(r=>`<path d="${line(r)}" fill="none" stroke="${r.col}" stroke-width="1.6" stroke-dasharray="4 3" opacity=".85"/>`).join("")}
     <text x="${Math.min(Wd-14,Math.max(14,X(pk[0])))}" y="${Math.max(10,Y(pk[1])-4)}" text-anchor="middle" class="vcv">${pk[1]}%</text>
+    ${ub.map((u,i)=>`<rect x="${X(u.t)}" y="${base+2+i*7}" width="${Math.max(3,X(u.end)-X(u.t))}" height="5" rx="2" fill="${u.type==="molotov"?"var(--molotov)":"var(--smoke)"}" opacity=".9"><title>Their ${u.type} ${u.land}: ${u.share}% of rounds, ${clock(u.t)} to ${clock(u.end)}</title></rect>`).join("")}
     ${ticks}${now!=null?`<line x1="${X(now)}" y1="0" x2="${X(now)}" y2="${base}" stroke="#fff" stroke-width="1.6"/>`:""}</svg>`;
-  return vHead(`ON THE SITE AT · ROUNDS WON · PATH${rows.length>1?`S 1-${rows.length}`:" 1"}`)+svg}
+  const hz=(UW&&UW.hits)||{},act=hz.active,aft=hz.spent||hz.kept,into=act&&aft&&aft[1]-act[1]>=5?vRule("⚠",`into their utility ${site1}`,act[1],aft[1]):"";
+  return vHead(`ON THE SITE AT · ROUNDS WON · PATH${rows.length>1?`S 1-${rows.length}`:" 1"}`)+svg+(ub.length?`<div class="vleg">${ub.map(u=>`<span><i style="background:${u.type==="molotov"?"var(--molotov)":"var(--smoke)"}"></i>${u.type==="molotov"?"molly":"smoke"} ${esc(vShort(u.land||"?"))} ${clock(u.t)}-${clock(u.end)}</span>`).join("")}</div>`:"")+into}
+// CT: what to keep for their hit on the likely site: your rounds won when it meets their hit, and what thrown-early
+// utility gives
+function vHold(p,g,r){const M=(((p.advice.plan||{}).tside||{}).maps||{})[g.map]||{},site=r&&r.A!==r.B?(r.A>r.B?"A":"B"):null,UW=site&&(M.util_war||{})[site];if(!UW)return "";
+  const rows=(UW.util||[]).filter(u=>u.met_t_won!=null).sort((a,b)=>a.met_t_won-b.met_t_won).slice(0,2);
+  const sp=(UW.hits||{}).spent;if(!rows.length&&!sp)return "";
+  return vHead(`⏳ HOLD FOR THEIR HIT · ${site} · WON`)+vRows([...rows.map(u=>({l:`${u.type==="molotov"?"molly":"smoke"} ${vShort(u.land||"?")}`,v:100-u.met_t_won,c:"var(--good)"})),
+    ...(sp?[{l:"thrown early",v:100-sp[1],c:"var(--bad)",o:.7}]:[])])}
 function vCTdots(p,g){const TS=(p.advice.plan||{}).tside,M=TS&&TS.maps&&TS.maps[g.map],TP=(M&&M.tplan)||{},rt=advisedType(g);
   const su=(TP.setup||{})[rt==="pistol"?"pistol":rt]||(TP.setup||{}).all;if(!su||!su.top||!su.top.length)return "";const t=su.top[0];
   const dots=n=>"●".repeat(n)||"○";
@@ -2481,14 +2493,14 @@ function nowVisual(p,g,following){
   const TS=(p.advice.plan||{}).tside,r=ct?tsidePredict(TS,g.map,g,evFor(g)):null;
   if(ph==="freezetime"){out.push(ct?vSituation(p,g):"",vKey(p,g));
     {if(typeof antiEco==="function"&&antiEco(p,g))out.push(`<span class="vchip bad">! eco kill spots on the map: clear them, no close duel</span>`)}
-    if(ct&&r)out.push(vOdds(r),vRush(TS,g,r)||vEntries(TS,g,r));
+    if(ct&&r)out.push(vOdds(r),vRush(TS,g,r)||vEntries(TS,g,r),vHold(p,g,r));
     if(!ct){out.push(vPathCurve(p,g)||vTimeline(p,g),vPush(p,g),vTchips(p,g))}}   // the plays and the grenades are on the map
   else if(ph==="live"){const el=g.elapsed||0,planted=g.bomb==="planted";out.push(vCall(g));
     if(planted){const left=g.phase_left!=null?g.phase_left:Math.max(0,40-(g.since_plant||0)),as=typeof autoSite==="function"?autoSite(p,g):null;
       out.push(`<div class="vbig ${ct?"bad":"good"}"><b>💣 ${Math.ceil(left)}s</b><span>${ct?"retake together":"hold the bomb"}${as?` · ${as.site} site, ${as.p}% sure`:""}</span></div>`)}
     else if(ct){if(r){out.push(vOdds(r));
         const PLs=tsidePlays(TS,g.map,g,evFor(g),r),M=TS&&TS.maps&&TS.maps[g.map];
-        const rush=el<32?vRush(TS,g,r):"";out.push(rush||vFights(M,g,r));
+        const rush=el<32?vRush(TS,g,r):"";out.push(rush||vFights(M,g,r));if(el<60)out.push(vHold(p,g,r));
         (r.evid||[]).filter(x=>/spot/.test(x)).slice(0,2).forEach(ev=>out.push(`<span class="vchip ${/fight/.test(ev)?"bad":""}">● ${esc(ev)}</span>`))}}
     else{out.push(vPathCurve(p,g)||vTimeline(p,g),(el<45&&vPush(p,g))||vFights(TS&&TS.maps&&TS.maps[g.map],g,null));
       const left=g.phase_left!=null?g.phase_left:Math.max(0,RLEN()-el);
