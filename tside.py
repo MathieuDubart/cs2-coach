@@ -622,7 +622,7 @@ def econ_table(df):
 
 
 SUMMARY = os.path.join(config.OUT, "population", "tside_summary.json")
-VERSION = 26   # bump when the summary changes shape: the cache is rebuilt
+VERSION = 27   # bump when the summary changes shape: the cache is rebuilt
 
 
 def _stamp():
@@ -1096,33 +1096,42 @@ def _rot_paths(mp, g, dirs):
 
 
 def _play_timing(g, bw=7.0, k=8.0, min_n=10.0):
-    """Each play: when to be on the site to win the most rounds. Over the rounds of the base where the Ts took the
-    site with that play, the rounds won around each moment (every round weighted by how close its arrival is, 7 s),
-    pulled toward the play's average when few rounds are around; the best moment with at least 10 rounds' worth.
-    Pistol rounds apart (another tempo). -> {play: {"pistol"|"other": {best, lo, hi, win, mean, n}}}"""
-    x = g[g.hit_t.notna() & g.play.notna() & (g.play != "none")]
+    """Each play: when to be on the site to win the most rounds, at equal numbers. A fast arrival often comes with a
+    round where nobody died on the way (an easy round): the raw curve favours rushes. So the numbers alive at the hit
+    are taken out first (the map's rounds won by man difference at the hit, T alive minus CT alive); around each
+    moment (every round weighted by how close its arrival is, 7 s), what the rounds won beyond their numbers say, pulled
+    toward the play's average when few rounds are around; the best moment with at least 10 rounds' worth. Pistol rounds
+    apart (another tempo). -> {play: {"pistol"|"other": {best, lo, hi, win, mean, n, curve}}}"""
+    x = g[g.hit_t.notna() & g.play.notna() & (g.play != "none") & g.t_alive_hit.notna() & g.ct_alive_hit.notna()].copy()
+    if not len(x):
+        return None
+    x["d"] = (x.t_alive_hit - x.ct_alive_hit).clip(-3, 3)
     out = {}
-    for play, p in x.groupby("play"):
-        for grp, q in (("pistol", p[p.T_buy == "pistol"]), ("other", p[p.T_buy != "pistol"])):
+    for grp, xs in (("pistol", x[x.T_buy == "pistol"]), ("other", x[x.T_buy != "pistol"])):
+        ref = xs if len(xs) >= 60 else x
+        adv = ref.groupby("d").T_won.mean()
+        for play, q in xs.groupby("play"):
             if len(q) < 15:
                 continue
             t, y = q.hit_t.to_numpy(float), q.T_won.astype(float).to_numpy()
+            r = y - q.d.map(adv).fillna(float(ref.T_won.mean())).to_numpy(float)   # beyond what the numbers give
             m = float(y.mean())
+            base = m + float(r.sum()) / (len(r) + k)   # the play's level on the same scale (beyond the numbers)
             best, curve = None, []
             for c in np.arange(8, 106, 1.0):
                 w = np.exp(-0.5 * ((t - c) / bw) ** 2)
                 ne = float(w.sum())
                 if ne < min_n:
                     continue
-                v = (float((w * y).sum()) + m * k) / (ne + k)
+                v = m + float((w * r).sum()) / (ne + k)
                 if c % 5 == 0:
-                    curve.append([int(c), round(100 * v)])   # the whole curve (every 5 s): what the In game strip draws
+                    curve.append([int(c), round(100 * v)])   # the whole curve (every 5 s): what the In game panel draws
                 if c <= 100 and (best is None or v > best[1]):
                     best = (float(c), v, ne)
             if best:
                 c, v, ne = best
                 out.setdefault(play, {})[grp] = {"best": round(c, 1), "lo": round(max(0.0, c - 5), 1), "hi": round(c + 5, 1),
-                                                 "win": round(100 * v), "mean": round(100 * m), "n": int(round(ne)), "curve": curve}
+                                                 "win": round(100 * v), "mean": round(100 * base), "n": int(round(ne)), "curve": curve}
     return out or None
 
 
