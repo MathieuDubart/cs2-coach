@@ -279,7 +279,8 @@ def transcribe(rid):
     import math
     meta = json.load(open(os.path.join(DIR, rid + ".json"), encoding="utf-8"))
     from faster_whisper import WhisperModel
-    model = WhisperModel(MODEL, device="cpu", compute_type="int8", cpu_threads=min(8, os.cpu_count() or 4))
+    threads = int(os.environ.get("COACH_TX_THREADS") or min(8, os.cpu_count() or 4))   # fewer when it runs next to a match
+    model = WhisperModel(MODEL, device="cpu", compute_type="int8", cpu_threads=threads)
     path = os.path.join(DIR, meta["file"])
     W = {lang: _words(model, path, lang, meta.get("map")) for lang in ("fr", "en")}
     spans = sorted(_spans(W["fr"]) + _spans(W["en"]))
@@ -485,6 +486,8 @@ def _match_for(meta, sid):
     import cs2coach
     reg = cs2coach.registry()
     start, end = meta["start"], meta.get("end") or meta["start"] + 3600
+    first = min([e.get("round") for e in meta.get("rounds") or [] if e.get("round")] or [1])
+    back = 15 * 60 + max(0, first - 1) * 120   # a recording that starts mid-match (the server restarted, a reconnect): its match began earlier
     best = None
     for mid in cs2coach.player_matches(int(sid)):
         r = reg.get(mid) or {}
@@ -493,7 +496,7 @@ def _match_for(meta, sid):
         if not r.get("time") or (meta.get("map") and mp and mp != meta["map"]):
             continue
         t = dt.datetime.fromisoformat(r["time"]).timestamp()
-        if start - 15 * 60 <= t <= end:
+        if start - back <= t <= end:
             d = abs(t - start)
             if best is None or d < best[0]:
                 best = (d, mid)
