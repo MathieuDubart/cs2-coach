@@ -141,7 +141,13 @@ class Handler(BaseHTTPRequestHandler):
                 sc, err = (replay.scenarios(sid)[:40] if sid.isdigit() else []), None
             except Exception as e:
                 sc, err = [], str(e)
-            return self.send(200, {"status": replay.status(), "scenarios": sc, "results": replay.results(), "error": err})
+            try:
+                import train
+                prog, maps_ = train.summary(), (train.maps(sid) if sid.isdigit() else {})
+            except Exception as e:
+                prog, maps_, err = None, {}, err or str(e)
+            return self.send(200, {"status": replay.status(), "scenarios": sc, "results": replay.results(), "progress": prog,
+                                   "maps": maps_, "error": err})
         if u.path == "/api/team/suggest":
             import team
             sid = (q.get("sid") or [""])[0]
@@ -262,6 +268,17 @@ class Handler(BaseHTTPRequestHandler):
                         return self.send(400, {"error": "invalid situation"})
                     sid = str(body.get("sid") or config.settings().get("own_steamid") or "")
                     return self.send(200, replay.play(sid, mid, int(body.get("round")), kind, mode, int(body["diff"]) if body.get("diff") is not None else 2))
+                if act == "session":   # one Play: the whole training (server, session, the game sent to it)
+                    if config.in_match() and not replay.on_server():
+                        return self.send(409, {"error": "A match is running: training after it."})
+                    import train
+                    sid = str(body.get("sid") or config.settings().get("own_steamid") or "")
+                    minutes = max(5, min(90, int(body.get("minutes") or 20)))
+                    where = str(body.get("where") or "random")
+                    if not re.fullmatch(r"random|mix|(de|cs|ar)_\w+", where):
+                        return self.send(400, {"error": "invalid map"})
+                    diff = int(body["diff"]) if body.get("diff") is not None else 2
+                    return self.send(200, train.play(sid, minutes, where, diff))
                 if act == "stop":
                     return self.send(200, replay.stop())
                 if act == "cmd":   # the plugin's commands: again, next, previous, spec, difficulty

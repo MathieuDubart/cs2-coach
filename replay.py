@@ -115,7 +115,7 @@ def scenarios(sid, n=15):
 
 # ---------------------------------------------------------------- one scenario from the demo
 
-def build(sid, mid, rnd, kind="death"):
+def build(sid, mid, rnd, kind="death", t=None):
     from demoparser2 import DemoParser
     sid, mid, rnd = str(sid), str(mid), int(rnd)
     deep = os.path.join(config.OUT, "deep", mid)
@@ -125,9 +125,10 @@ def build(sid, mid, rnd, kind="death"):
     mp = json.load(open(os.path.join(deep, "meta.json"), encoding="utf-8"))["map"]
     t0, t_end = int(R.start_tick[rnd]), int(R.end_tick[rnd])
     Dr = D[D["round"] == rnd].sort_values("tick")
-    if kind == "clutch":
-        sc = next(s for s in scenarios(sid) if s["mid"] == mid and s["round"] == rnd and s["kind"] == "clutch")
-        key = int(Dr[Dr.t <= sc["t"] + 0.05].tick.iloc[-1])
+    if kind == "clutch":   # t: when the last teammate fell (from scenarios())
+        if t is None:
+            t = next(s for s in scenarios(sid, n=60) if s["mid"] == mid and s["round"] == rnd and s["kind"] == "clutch")["t"]
+        key = int(Dr[Dr.t <= t + 0.05].tick.iloc[-1])
         start, end = max(t0, key - 64), min(t_end, key + CLUTCH * 64)
     else:
         key = int(Dr[Dr.victim == sid].tick.iloc[0])
@@ -296,8 +297,10 @@ def status():
     s = _state()
     up = _pid_alive(s.get("pid"))
     h = heartbeat() if up else None
-    return {"installed": installed(), "running": up, "map": s.get("map") if up else None,
-            "humans": (h or {}).get("humans", 0), "scenario": (h or {}).get("scenario"), "state": (h or {}).get("state"),
+    h = h or {}
+    return {"installed": installed(), "running": up, "map": (h.get("map") or s.get("map")) if up else None,
+            "humans": h.get("humans", 0), "scenario": h.get("scenario"), "state": h.get("state"),
+            "session": {k: h.get(k) for k in ("session", "block", "drill", "points", "ok", "done", "streak", "left")} if h.get("session") else None,
             "connect": f"connect 127.0.0.1:{PORT}"}
 
 

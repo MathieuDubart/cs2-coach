@@ -35,6 +35,7 @@ public class Track
     [JsonPropertyName("path")] public float[] Path { get; set; } = Array.Empty<float>();
     [JsonPropertyName("death")] public int Death { get; set; } = -1;
     [JsonPropertyName("killer")] public string Killer { get; set; } = "";
+    [JsonPropertyName("hold")] public bool Hold { get; set; }   // stays on its spot (aim targets): only its aim is its own
     public int Frames => Path.Length / 5;
 }
 
@@ -63,7 +64,7 @@ public class Scenario
     [JsonPropertyName("nades")] public List<Nade> Nades { get; set; } = new();
 }
 
-public class CoachReplay : BasePlugin
+public partial class CoachReplay : BasePlugin
 {
     public override string ModuleName => "CoachReplay";
     public override string ModuleVersion => "1.0";
@@ -80,7 +81,7 @@ public class CoachReplay : BasePlugin
     bool awaitRestart;
     string? builtFor;   // the situation the bots on the server were made for
     int difficulty = 2;
-    double devSum; int devN;
+    double devSum; int devN;   // how far the bots drift from their path between two ticks (checked in spec mode)
     // CSmokeGrenadeProjectile::Create(origin, angles, velocity, angular impulse, thrower, item definition, team): a smoke made
     // any other way never pops. Found in this server's server.dll (unique); null after a game update that moved it: no smokes
     const string SmokeSig = "48 8B C4 48 89 58 ? 48 89 68 ? 48 89 70 ? 57 41 56 41 57 48 81 EC ? ? ? ? 48 8B B4 24 ? ? ? ? 4D 8B F8 4C 8B C2";
@@ -90,7 +91,7 @@ public class CoachReplay : BasePlugin
     MemoryFunctionWithReturn<nint, nint, nint, nint, nint, int, nint>? heCreate;
     // CMolotovProjectile::Create(origin, angles, velocity, angular impulse, thrower, item definition: 46 molotov, 48 incendiary)
     const string MolotovSig = "48 8B C4 48 89 58 ? 48 89 70 ? 48 89 78 ? 4C 89 40 ? 55 41 54 41 55 41 56 41 57 48 8D 6C 24 ? 48 81 EC ? ? ? ? 45 33 FF";
-    MemoryFunctionWithReturn<nint, nint, nint, nint, nint, int, nint>? molotovCreate;   // how far the bots drift from their path between two ticks (checked in spec mode)
+    MemoryFunctionWithReturn<nint, nint, nint, nint, nint, int, nint>? molotovCreate;
 
     public override void Load(bool hotReload)
     {
@@ -99,20 +100,29 @@ public class CoachReplay : BasePlugin
         try { heCreate = new(HeSig); } catch (Exception e) { heCreate = null; Logger.LogInformation("no HE: {m}", e.Message); }
         try { molotovCreate = new(MolotovSig); } catch (Exception e) { molotovCreate = null; Logger.LogInformation("no molotov: {m}", e.Message); }
         RegisterListener<Listeners.OnTick>(OnTick);
-        RegisterListener<Listeners.OnMapStart>(_ => { phase = cur != null ? "setup" : "idle"; AddTimer(4f, () => { Server.ExecuteCommand("sv_hibernate_when_empty 0"); if (cur != null) Setup(); }); });
+        RegisterListener<Listeners.OnMapStart>(_ =>
+        {
+            phase = cur != null || sess != null ? "setup" : "idle";
+            AddTimer(4f, () => { Server.ExecuteCommand("sv_hibernate_when_empty 0"); if (sess != null) SessionResume(); else if (cur != null) Setup(); });
+        });
         RegisterEventHandler<EventRoundStart>(OnRoundStart);
         RegisterEventHandler<EventPlayerDeath>(OnDeath);
         RegisterEventHandler<EventPlayerHurt>(OnHurt);
-        RegisterEventHandler<EventPlayerConnectFull>((e, _) => { if (cur != null && e.Userid is { IsBot: false }) AddTimer(2f, Setup); return HookResult.Continue; });
+        RegisterEventHandler<EventPlayerConnectFull>((e, _) =>
+        {
+            if (e.Userid is { IsBot: false }) { if (sess != null) AddTimer(3f, SessionResume); else if (cur != null) AddTimer(2f, Setup); }
+            return HookResult.Continue;
+        });
         RegisterListener<Listeners.OnEntityTakeDamagePre>(OnTakeDamage);
         RegisterEventHandler<EventSmokegrenadeDetonate>((e, _) => { Logger.LogInformation("smoke pops {x:F0} {y:F0}", e.X, e.Y); return HookResult.Continue; });
         RegisterEventHandler<EventFlashbangDetonate>((e, _) => { Logger.LogInformation("flash pops {x:F0} {y:F0}", e.X, e.Y); return HookResult.Continue; });
         RegisterEventHandler<EventHegrenadeDetonate>((e, _) => { Logger.LogInformation("he pops {x:F0} {y:F0}", e.X, e.Y); return HookResult.Continue; });
         RegisterEventHandler<EventInfernoStartburn>((e, _) => { Logger.LogInformation("fire {x:F0} {y:F0}", e.X, e.Y); return HookResult.Continue; });
         Server.ExecuteCommand("sv_hibernate_when_empty 0");
+        RegisterSession();
         AddCommand("css_replay", "play a scenario: css_replay <id> [actor|spec]", (p, c) => CmdReplay(p, c));
         AddCommand("css_r", "the same situation again", (p, c) => { if (cur != null) Setup(); });
-        AddCommand("css_n", "next situation of this map", (p, c) => Cycle(1));
+        AddCommand("css_n", "next situation of this map (in a session: skip the drill)", (p, c) => { if (sess != null) SkipDrill(); else Cycle(1); });
         AddCommand("css_p", "previous situation of this map", (p, c) => Cycle(-1));
         AddCommand("css_spec", "switch between playing your spot and watching", (p, c) => { mode = mode == "spec" ? "actor" : "spec"; if (cur != null) Setup(); });
         AddCommand("css_list", "situations of this map", (p, c) => { foreach (var s in List()) Say(p, s); });
@@ -126,7 +136,11 @@ public class CoachReplay : BasePlugin
             foreach (var b in Utilities.GetPlayers().Where(x => x is { IsValid: true }))
                 Logger.LogInformation("dbg {n} slot {s} team {t} alive {a} life {l} hp {h}", b.PlayerName, b.Slot, b.Team, b.PawnIsAlive, b.PlayerPawn.Value?.LifeState, b.PlayerPawn.Value?.Health);
         });
-        AddCommand("css_stop", "stop the replay", (p, c) => { cur = null; phase = "idle"; bots.Clear(); builtFor = null; Server.ExecuteCommand("bot_kick"); });
+        AddCommand("css_stop", "stop the replay (or the session)", (p, c) =>
+        {
+            if (sess != null) { EndSession(true); return; }
+            cur = null; phase = "idle"; bots.Clear(); builtFor = null; Server.ExecuteCommand("bot_kick");
+        });
     }
 
     void Say(CCSPlayerController? p, string s) { if (p == null) Logger.LogInformation("{s}", s); else p.PrintToChat($" \x04[coach]\x01 {s}"); }
@@ -291,10 +305,15 @@ public class CoachReplay : BasePlugin
                 Freeze(pawn, true);
             }
         kills = dmg = 0; devSum = 0; devN = 0;
+        SessionPlaced();
         phase = "countdown";
         countdownEnd = Server.TickCount + 3 * 64;
         var g = generation;
-        for (int s = 3; s >= 1; s--) { var n = s; AddTimer(3 - n, () => { if (g == generation) foreach (var h in Humans()) h.PrintToCenter($"{cur?.Title}   {n}"); }); }
+        for (int s = 3; s >= 1; s--)
+        {
+            var n = s;
+            AddTimer(3 - n, () => { if (g == generation && !SessionCount(n)) foreach (var h in Humans()) h.PrintToCenter($"{cur?.Title}   {n}"); });
+        }
     }
 
     void Go()
@@ -302,6 +321,7 @@ public class CoachReplay : BasePlugin
         phase = "live";
         t0 = Server.TickCount;
         nextNade = 0;
+        SessionGo();
         foreach (var h in Humans()) { var pw = h.PlayerPawn.Value; if (pw != null) Freeze(pw, false); h.PrintToCenter("GO"); }
     }
 
@@ -330,6 +350,7 @@ public class CoachReplay : BasePlugin
             var c = Utilities.GetPlayerFromSlot(slot);
             var pawn = c?.PlayerPawn.Value;
             if (c == null || pawn == null || !c.PawnIsAlive) { gone.Add(t.Sid); Logger.LogInformation("gone {n} at {f}", t.Name, (int)f); continue; }
+            if (t.Hold) { pawn.Teleport(Pos(t, 0), null, Vector3.Zero); continue; }   // an aim target: its spot, its own aim
             var i = (int)f;
             if (i >= t.Frames - 1)
             {
@@ -352,6 +373,8 @@ public class CoachReplay : BasePlugin
             pawn.Teleport(pos, ang, vel);
         }
         if (phase != "live") return;
+        SessionTick();
+        if (cur == null || phase != "live" || cur.Kind is "aim" or "nade") return;   // their end is the session's
         while (nextNade < cur.Nades.Count && cur.Nades[nextNade].F <= f) Throw(cur.Nades[nextNade++]);
         if (mode == "spec" && devN > 0 && (now - t0) % 320 == 0)
             Logger.LogInformation($"drift {devSum / devN:F1} u over {devN} samples");
@@ -418,6 +441,7 @@ public class CoachReplay : BasePlugin
         if (v != null && v.IsValid && bots.TryGetValue(v.Slot, out var t)) gone.Add(t.Sid);
         Logger.LogInformation("death {f}/{s}: {v} by {a} ({w})", (Server.TickCount - t0) / cur.Step, cur.Id, v?.PlayerName, e.Attacker?.PlayerName, e.Weapon);
         if (e.Attacker is { IsValid: true, IsBot: false } && v != null && v.IsBot) kills++;
+        SessionDeath(e, v);
         if (mode == "actor" && v is { IsValid: true, IsBot: false }) AddTimer(0.1f, () => Finish("dead"));
         return HookResult.Continue;
     }
@@ -449,6 +473,7 @@ public class CoachReplay : BasePlugin
         if (cur == null || phase != "live") return;
         phase = "done";
         var alive = (Server.TickCount - t0) / 64.0;
+        if (sess != null && drill != null) { SessionFinish(outcome, alive); return; }
         var line = JsonSerializer.Serialize(new Dictionary<string, object> {
             ["id"] = cur.Id, ["t"] = DateTimeOffset.UtcNow.ToUnixTimeSeconds(), ["outcome"] = outcome, ["mode"] = mode,
             ["kills"] = kills, ["dmg"] = dmg, ["alive_s"] = Math.Round(alive, 1), ["difficulty"] = difficulty,
@@ -466,6 +491,7 @@ public class CoachReplay : BasePlugin
         {
             var o = new Dictionary<string, object?> { ["t"] = DateTimeOffset.UtcNow.ToUnixTimeSeconds(), ["humans"] = Humans().Count(),
                 ["scenario"] = cur?.Id, ["state"] = phase, ["mode"] = mode, ["map"] = Server.MapName };
+            foreach (var (k, v) in SessionBeat()) o[k] = v;
             File.WriteAllText(System.IO.Path.Combine(Dir, "live.json"), JsonSerializer.Serialize(o));
         }
         catch (Exception) { }
