@@ -14,8 +14,10 @@ using CounterStrikeSharp.API;
 using CounterStrikeSharp.API.Core;
 using CounterStrikeSharp.API.Modules.Commands;
 using CounterStrikeSharp.API.Modules.Memory;
+using CounterStrikeSharp.API.Modules.Memory.DynamicFunctions;
 using CounterStrikeSharp.API.Modules.Utils;
 using Microsoft.Extensions.Logging;
+using CVector = CounterStrikeSharp.API.Modules.Utils.Vector;
 
 namespace CoachReplay;
 
@@ -36,6 +38,17 @@ public class Track
     public int Frames => Path.Length / 5;
 }
 
+public class Nade
+{
+    [JsonPropertyName("f")] public int F { get; set; }
+    [JsonPropertyName("type")] public string Type { get; set; } = "";
+    [JsonPropertyName("by")] public string By { get; set; } = "";
+    [JsonPropertyName("inc")] public bool Inc { get; set; }
+    [JsonPropertyName("life")] public int Life { get; set; }
+    [JsonPropertyName("p")] public float[] P { get; set; } = new float[3];
+    [JsonPropertyName("v")] public float[] V { get; set; } = new float[3];
+}
+
 public class Scenario
 {
     [JsonPropertyName("id")] public string Id { get; set; } = "";
@@ -47,6 +60,7 @@ public class Scenario
     [JsonPropertyName("key")] public int Key { get; set; }
     [JsonPropertyName("team")] public int Team { get; set; }
     [JsonPropertyName("players")] public List<Track> Players { get; set; } = new();
+    [JsonPropertyName("nades")] public List<Nade> Nades { get; set; } = new();
 }
 
 public class CoachReplay : BasePlugin
@@ -62,15 +76,28 @@ public class CoachReplay : BasePlugin
     readonly Dictionary<int, Track> bots = new();   // controller slot -> track
     readonly HashSet<string> gone = new();   // tracks dead here
     readonly HashSet<int> free = new();   // slots whose path is over: the bot plays on its own
-    int t0, countdownEnd, kills, dmg, generation, lastBeat;
+    int t0, countdownEnd, kills, dmg, generation, lastBeat, nextNade;
     bool awaitRestart;
     string? builtFor;   // the situation the bots on the server were made for
     int difficulty = 2;
-    double devSum; int devN;   // how far the bots drift from their path between two ticks (checked in spec mode)
+    double devSum; int devN;
+    // CSmokeGrenadeProjectile::Create(origin, angles, velocity, angular impulse, thrower, item definition, team): a smoke made
+    // any other way never pops. Found in this server's server.dll (unique); null after a game update that moved it: no smokes
+    const string SmokeSig = "48 8B C4 48 89 58 ? 48 89 68 ? 48 89 70 ? 57 41 56 41 57 48 81 EC ? ? ? ? 48 8B B4 24 ? ? ? ? 4D 8B F8 4C 8B C2";
+    MemoryFunctionWithReturn<nint, nint, nint, nint, nint, int, int, nint>? smokeCreate;
+    // CHEGrenadeProjectile::Create(origin, angles, velocity, angular impulse, thrower, item definition): sets its fuse and think
+    const string HeSig = "48 89 5C 24 ? 48 89 6C 24 ? 48 89 74 24 ? 57 48 83 EC 50 48 8B AC 24 ? ? ? ? 49 8B F8 4C 8B C2 0F 29 74 24 ? 48 8B D1 0F 29 7C 24";
+    MemoryFunctionWithReturn<nint, nint, nint, nint, nint, int, nint>? heCreate;
+    // CMolotovProjectile::Create(origin, angles, velocity, angular impulse, thrower, item definition: 46 molotov, 48 incendiary)
+    const string MolotovSig = "48 8B C4 48 89 58 ? 48 89 70 ? 48 89 78 ? 4C 89 40 ? 55 41 54 41 55 41 56 41 57 48 8D 6C 24 ? 48 81 EC ? ? ? ? 45 33 FF";
+    MemoryFunctionWithReturn<nint, nint, nint, nint, nint, int, nint>? molotovCreate;   // how far the bots drift from their path between two ticks (checked in spec mode)
 
     public override void Load(bool hotReload)
     {
         Directory.CreateDirectory(System.IO.Path.Combine(Dir, "scenarios"));
+        try { smokeCreate = new(SmokeSig); } catch (Exception e) { smokeCreate = null; Logger.LogInformation("no smokes: {m}", e.Message); }
+        try { heCreate = new(HeSig); } catch (Exception e) { heCreate = null; Logger.LogInformation("no HE: {m}", e.Message); }
+        try { molotovCreate = new(MolotovSig); } catch (Exception e) { molotovCreate = null; Logger.LogInformation("no molotov: {m}", e.Message); }
         RegisterListener<Listeners.OnTick>(OnTick);
         RegisterListener<Listeners.OnMapStart>(_ => { phase = cur != null ? "setup" : "idle"; AddTimer(4f, () => { Server.ExecuteCommand("sv_hibernate_when_empty 0"); if (cur != null) Setup(); }); });
         RegisterEventHandler<EventRoundStart>(OnRoundStart);
@@ -78,6 +105,10 @@ public class CoachReplay : BasePlugin
         RegisterEventHandler<EventPlayerHurt>(OnHurt);
         RegisterEventHandler<EventPlayerConnectFull>((e, _) => { if (cur != null && e.Userid is { IsBot: false }) AddTimer(2f, Setup); return HookResult.Continue; });
         RegisterListener<Listeners.OnEntityTakeDamagePre>(OnTakeDamage);
+        RegisterEventHandler<EventSmokegrenadeDetonate>((e, _) => { Logger.LogInformation("smoke pops {x:F0} {y:F0}", e.X, e.Y); return HookResult.Continue; });
+        RegisterEventHandler<EventFlashbangDetonate>((e, _) => { Logger.LogInformation("flash pops {x:F0} {y:F0}", e.X, e.Y); return HookResult.Continue; });
+        RegisterEventHandler<EventHegrenadeDetonate>((e, _) => { Logger.LogInformation("he pops {x:F0} {y:F0}", e.X, e.Y); return HookResult.Continue; });
+        RegisterEventHandler<EventInfernoStartburn>((e, _) => { Logger.LogInformation("fire {x:F0} {y:F0}", e.X, e.Y); return HookResult.Continue; });
         Server.ExecuteCommand("sv_hibernate_when_empty 0");
         AddCommand("css_replay", "play a scenario: css_replay <id> [actor|spec]", (p, c) => CmdReplay(p, c));
         AddCommand("css_r", "the same situation again", (p, c) => { if (cur != null) Setup(); });
@@ -88,6 +119,10 @@ public class CoachReplay : BasePlugin
         AddCommand("css_diff", "bot difficulty 0-3", (p, c) => { if (int.TryParse(c.GetArg(1), out var d)) difficulty = Math.Clamp(d, 0, 3); Say(p, $"difficulty {difficulty}"); if (cur != null) Setup(); });
         AddCommand("css_dbg", "state of the bots", (p, c) =>
         {
+            foreach (var cls in new[] { "smokegrenade_projectile", "hegrenade_projectile", "flashbang_projectile", "molotov_projectile" })
+                foreach (var e in Utilities.FindAllEntitiesByDesignerName<CBaseCSGrenadeProjectile>(cls))
+                    Logger.LogInformation("dbg {c} at {x:F0} {y:F0} {z:F0} vel {v:F0} det {d:F1} now {n:F1} think {t} live {l} smoke {s}", cls, e.AbsOrigin?.X, e.AbsOrigin?.Y, e.AbsOrigin?.Z,
+                        e.AbsVelocity?.Length(), e.DetonateTime, Server.CurrentTime, e.NextThinkTick, e.IsLive, cls.StartsWith("smoke") ? new CSmokeGrenadeProjectile(e.Handle).DidSmokeEffect : null);
             foreach (var b in Utilities.GetPlayers().Where(x => x is { IsValid: true }))
                 Logger.LogInformation("dbg {n} slot {s} team {t} alive {a} life {l} hp {h}", b.PlayerName, b.Slot, b.Team, b.PawnIsAlive, b.PlayerPawn.Value?.LifeState, b.PlayerPawn.Value?.Health);
         });
@@ -208,8 +243,10 @@ public class CoachReplay : BasePlugin
         var pawn = c.PlayerPawn.Value;
         if (pawn == null) return;
         c.RemoveWeapons();
-        foreach (var w in t.Weapons.Where(w => w != t.Active)) c.GiveNamedItem(w);
-        if (!string.IsNullOrEmpty(t.Active)) c.GiveNamedItem(t.Active);
+        // bots get no grenades: the demo's are thrown again by the plugin, their own AI would throw others
+        var nade = (string w) => c.IsBot && (w.Contains("grenade") || w.Contains("flashbang") || w.Contains("molotov") || w.Contains("decoy"));
+        foreach (var w in t.Weapons.Where(w => w != t.Active && !nade(w))) c.GiveNamedItem(w);
+        if (!string.IsNullOrEmpty(t.Active) && !nade(t.Active)) c.GiveNamedItem(t.Active);
         pawn.Health = Math.Max(1, t.Hp);
         Utilities.SetStateChanged(pawn, "CBaseEntity", "m_iHealth");
         pawn.ArmorValue = t.Armor;
@@ -264,6 +301,7 @@ public class CoachReplay : BasePlugin
     {
         phase = "live";
         t0 = Server.TickCount;
+        nextNade = 0;
         foreach (var h in Humans()) { var pw = h.PlayerPawn.Value; if (pw != null) Freeze(pw, false); h.PrintToCenter("GO"); }
     }
 
@@ -314,12 +352,63 @@ public class CoachReplay : BasePlugin
             pawn.Teleport(pos, ang, vel);
         }
         if (phase != "live") return;
+        while (nextNade < cur.Nades.Count && cur.Nades[nextNade].F <= f) Throw(cur.Nades[nextNade++]);
         if (mode == "spec" && devN > 0 && (now - t0) % 320 == 0)
             Logger.LogInformation($"drift {devSum / devN:F1} u over {devN} samples");
         var foes = bots.Where(b => b.Value.Team != cur.Team).ToList();
         if (mode == "actor" && foes.Count > 0 && foes.All(b => gone.Contains(b.Value.Sid))) { Finish("won"); return; }
         var endF = cur.Kind == "clutch" ? maxFrames + 64 * 10 / cur.Step : maxFrames + 64 * 2 / cur.Step;
         if (f >= endF) Finish(mode == "spec" ? "watched" : "survived");
+    }
+
+    // a grenade of the demo, thrown again from the same point at the same speed, if its thrower is alive here (yours: you
+    // throw it yourself)
+    void Throw(Nade n)
+    {
+        if (cur == null || gone.Contains(n.By) || (mode == "actor" && cur.Players.Any(t => t.Me && t.Sid == n.By))) return;
+        var slot = bots.Where(b => b.Value.Sid == n.By).Select(b => (int?)b.Key).FirstOrDefault();
+        var c = slot == null ? null : Utilities.GetPlayerFromSlot(slot.Value);
+        var pawn = c?.PlayerPawn.Value;
+        if (c == null || pawn == null || !c.PawnIsAlive) return;
+        var cls = n.Type switch { "smoke" => "smokegrenade_projectile", "flash" => "flashbang_projectile", "he" => "hegrenade_projectile",
+            "molotov" => "molotov_projectile", "decoy" => "decoy_projectile", _ => "" };
+        if (cls == "") return;
+        try
+        {
+            if (n.Type is "smoke" or "he" or "molotov")
+            {
+                var o = new CVector(n.P[0], n.P[1], n.P[2]);
+                var v = new CVector(n.V[0], n.V[1], n.V[2]);
+                var spin = new CVector(600, 0, 0);
+                if (n.Type == "smoke" && smokeCreate != null) smokeCreate.Invoke(o.Handle, new QAngle(0, 0, 0).Handle, v.Handle, spin.Handle, pawn.Handle, 45, c.TeamNum);
+                else if (n.Type == "he" && heCreate != null) heCreate.Invoke(o.Handle, new QAngle(0, 0, 0).Handle, v.Handle, spin.Handle, pawn.Handle, 44);
+                else if (n.Type == "molotov" && molotovCreate != null) molotovCreate.Invoke(o.Handle, new QAngle(0, 0, 0).Handle, v.Handle, spin.Handle, pawn.Handle, n.Inc ? 48 : 46);
+                else return;
+                Logger.LogInformation("nade {t} by {n} at {f}", n.Type, c.PlayerName, n.F);
+                return;
+            }
+            var e = Utilities.CreateEntityByName<CBaseCSGrenadeProjectile>(cls);
+            if (e == null) return;
+            if (n.Inc) new CMolotovProjectile(e.Handle).IsIncGrenade = true;
+            var pos = new Vector3(n.P[0], n.P[1], n.P[2]);
+            var vel = new Vector3(n.V[0], n.V[1], n.V[2]);
+            e.InitialPosition.X = pos.X; e.InitialPosition.Y = pos.Y; e.InitialPosition.Z = pos.Z;
+            e.InitialVelocity.X = vel.X; e.InitialVelocity.Y = vel.Y; e.InitialVelocity.Z = vel.Z;
+            e.Elasticity = 0.33f;
+            e.IsLive = false;
+            e.DmgRadius = 350f;
+            e.Damage = 99f;
+            e.TeamNum = c.TeamNum;
+            e.Thrower.Raw = c.PlayerPawn.Raw;
+            e.OriginalThrower.Raw = c.PlayerPawn.Raw;
+            e.OwnerEntity.Raw = c.PlayerPawn.Raw;
+            e.Teleport(pos, Vector3.Zero, vel);
+            e.DispatchSpawn();
+            e.AcceptInput("InitializeSpawnFromWorld");
+            e.AcceptInput("FireUser1", pawn, pawn);
+            Logger.LogInformation("nade {t} by {n} at {f}", n.Type, c.PlayerName, n.F);
+        }
+        catch (Exception ex) { Logger.LogInformation("nade {t}: {m}", n.Type, ex.Message); }
     }
 
     HookResult OnDeath(EventPlayerDeath e, GameEventInfo i)

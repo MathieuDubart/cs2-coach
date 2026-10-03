@@ -20,6 +20,14 @@ COPY_FILES = {os.path.normcase(os.path.join("game", "csgo", "gameinfo.gi"))}
 SKIP_FILES = {os.path.normcase(os.path.join("game", "csgo", "console.log"))}
 
 
+def current():
+    """The server copy has the game's version (an update replaces the game's files: the links then point to the old ones)."""
+    try:
+        return os.path.samefile(os.path.join(SRC, "game", "csgo", "steam.inf"), os.path.join(DST, "game", "csgo", "steam.inf"))
+    except OSError:
+        return False
+
+
 def main():
     linked = copied = 0
     for root, dirs, files in os.walk(SRC):
@@ -36,7 +44,17 @@ def main():
                 continue
             s, d = os.path.join(root, f), os.path.join(DST, rel, f)
             if os.path.exists(d):
-                continue
+                if copy_here or r in COPY_FILES:
+                    if r in COPY_FILES and os.path.getmtime(s) > os.path.getmtime(d) + 1:   # gameinfo.gi of an update: patched again below
+                        shutil.copy2(s, d)
+                        copied += 1
+                    continue
+                try:
+                    if os.path.samefile(s, d):
+                        continue
+                except OSError:
+                    pass
+                os.remove(d)   # replaced by a game update: link the new file
             if copy_here or r in COPY_FILES:
                 shutil.copy2(s, d)
                 copied += 1
@@ -44,8 +62,9 @@ def main():
                 os.link(s, d)
                 linked += 1
     csgo = os.path.join(DST, "game", "csgo")
-    for z in ("mmsource.zip", "css-runtime.zip"):
-        zipfile.ZipFile(os.path.join(HERE, z)).extractall(csgo)
+    for z, sub_dir in (("mmsource.zip", "metamod"), ("css-runtime.zip", "counterstrikesharp")):
+        if not os.path.isdir(os.path.join(csgo, "addons", sub_dir)):
+            zipfile.ZipFile(os.path.join(HERE, z)).extractall(csgo)
     gi = os.path.join(csgo, "gameinfo.gi")
     t = open(gi, encoding="utf-8").read()
     if "csgo/addons/metamod" not in t:

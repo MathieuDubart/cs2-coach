@@ -159,15 +159,47 @@ def build(sid, mid, rnd, kind="death"):
     me = next((q for q in players if q["me"]), None)
     if not me:
         raise ValueError("you are not alive at the start of this situation")
+    teams = {q["sid"]: q["team"] for q in players}
     zone = (Dr[Dr.victim == sid].victim_zone.iloc[0] if kind == "death" and len(Dr[Dr.victim == sid]) else "")
     sc = {"id": f"{mid}_r{rnd}_{kind[0]}", "map": mp, "match": mid, "round": rnd, "kind": kind, "rate": 64, "step": STEP,
           "start_tick": start, "key": (key - start) // STEP, "team": me["team"], "zone": zone,
           "title": f"{mp.replace('de_', '').replace('cs_', '').title()} R{rnd} · {'clutch' if kind == 'clutch' else 'death'}"
-                   f"{' · ' + zone if zone else ''}", "players": players}
+                   f"{' · ' + zone if zone else ''}", "players": players, "nades": _nades(p, start, end, teams)}
     os.makedirs(SCEN, exist_ok=True)
     f = os.path.join(SCEN, f"{sc['id']}.json")
     json.dump(sc, open(f, "w", encoding="utf-8"), ensure_ascii=False, separators=(",", ":"))
     return sc
+
+
+NADES = {"CSmokeGrenadeProjectile": "smoke", "CFlashbangProjectile": "flash", "CHEGrenadeProjectile": "he",
+         "CMolotovProjectile": "molotov", "CDecoyProjectile": "decoy"}
+
+
+def _nades(p, start, end, teams):
+    """The grenades thrown in the window: frame, type, thrower, first position and speed (the server flies them again
+    from there; a thrower dead in the replay throws nothing)."""
+    try:
+        g = p.parse_grenades()
+    except Exception:
+        return []
+    g = g[g.grenade_type.isin(list(NADES)) & g.x.notna() & (g.tick >= start) & (g.tick <= end)].sort_values("tick")
+    out = []
+    for (_, sid, typ), e in g.groupby(["grenade_entity_id", "steamid", "grenade_type"]):
+        t = e.tick.to_numpy()
+        cuts = [0] + [i for i in range(1, len(t)) if t[i] - t[i - 1] > 2] + [len(t)]   # an entity id is reused by later throws
+        for a, b in zip(cuts, cuts[1:]):
+            r = e.iloc[a:b]
+            if len(r) < 2 or int(r.tick.iloc[0]) <= start:   # already flying when the situation starts
+                continue
+            dt = (int(r.tick.iloc[1]) - int(r.tick.iloc[0])) / 64
+            v = [(float(r[c].iloc[1]) - float(r[c].iloc[0])) / dt for c in ("x", "y", "z")]
+            v[2] += 0.5 * 320 * dt   # gravity over that first step (0.4 x 800)
+            sid = str(sid)
+            out.append({"f": (int(r.tick.iloc[0]) - start) // STEP, "type": NADES[typ], "by": sid,
+                        "life": int(r.tick.iloc[-1]) - int(r.tick.iloc[0]),   # ticks until it pops (a smoke: until it fades)
+                        "inc": NADES[typ] == "molotov" and teams.get(sid) == 3,
+                        "p": [round(float(r[c].iloc[0]), 1) for c in ("x", "y", "z")], "v": [round(x, 1) for x in v]})
+    return sorted(out, key=lambda n: n["f"])
 
 
 # ---------------------------------------------------------------- the server
@@ -269,6 +301,15 @@ def status():
             "connect": f"connect 127.0.0.1:{PORT}"}
 
 
+def _update():
+    """After a CS2 update the server copy still links the old files (the game would refuse it): linked again first."""
+    import sys
+    sys.path.insert(0, os.path.join(config.HERE, "plugin"))
+    import make_server
+    if not make_server.current():
+        make_server.main()
+
+
 def start(mp):
     """The server on this map (started hidden, or its map changed); back when it answers."""
     if not installed():
@@ -281,6 +322,7 @@ def start(mp):
             _save_state(s)
             time.sleep(8)
         return status()
+    _update()
     args = [EXE, "-dedicated", "-usercon", "-ip", "127.0.0.1", "-port", str(PORT), "-condebug", "-nohltv",
             "+sv_lan", "1", "+rcon_password", _password(), "+game_type", "0", "+game_mode", "1", "+map", mp]
     si = subprocess.STARTUPINFO()   # its own console, hidden: without one the server logs a console error every frame
