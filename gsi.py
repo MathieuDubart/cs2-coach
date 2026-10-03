@@ -560,11 +560,26 @@ def update(payload):
             STATE.pop("mood", None)
             STATE.pop("focus", None)
         el = now - STATE["live_since"] if STATE.get("round_phase") == "live" and STATE.get("live_since") else 0
-        if STATE.get("map") and ((own and (st.get("money") or 0) > 16000) or el > 240):
+        if STATE.get("map") and ((own and (st.get("money") or 0) > 16000) or el > 240 or _training()):
             STATE["practice"] = True
         on = bool(STATE.get("map") and STATE.get("map_phase") != "gameover")
     _playing_flag(on, now)
     return True
+
+
+_TRAIN = {"t": 0.0, "on": False}
+
+
+def _training():
+    """You are on the coach's training server (its plugin's heartbeat): practice, whatever the game says."""
+    now = time.time()
+    if now - _TRAIN["t"] > 3:
+        try:
+            import replay
+            _TRAIN.update(t=now, on=replay.on_server())
+        except Exception:
+            _TRAIN.update(t=now, on=False)
+    return _TRAIN["on"]
 
 
 _FLAG = {"t": 0.0, "on": False}

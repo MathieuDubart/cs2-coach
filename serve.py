@@ -134,6 +134,14 @@ class Handler(BaseHTTPRequestHandler):
         if u.path == "/api/gsi/status":
             import gsi
             return self.send(200, gsi.status())
+        if u.path == "/api/train":   # the training server, your situations to play again, your tries
+            import replay
+            sid = (q.get("sid") or [""])[0] or str(config.settings().get("own_steamid") or "")
+            try:
+                sc, err = (replay.scenarios(sid)[:40] if sid.isdigit() else []), None
+            except Exception as e:
+                sc, err = [], str(e)
+            return self.send(200, {"status": replay.status(), "scenarios": sc, "results": replay.results(), "error": err})
         if u.path == "/api/team/suggest":
             import team
             sid = (q.get("sid") or [""])[0]
@@ -242,6 +250,29 @@ class Handler(BaseHTTPRequestHandler):
         if u.path == "/api/coach/paths":   # the page's paths this round: numpad 1-2-3 say them in the team chat
             import chatcalls
             return self.send(200 if chatcalls.write(body.get("paths"), body.get("extra")) else 400, {})
+        if u.path.startswith("/api/train/"):   # the training server (separate copy of the game, 127.0.0.1 only)
+            import replay
+            act = u.path.rsplit("/", 1)[-1]
+            try:
+                if act == "play":
+                    if config.in_match() and not replay.on_server():
+                        return self.send(409, {"error": "A match is running: training after it."})
+                    mid, kind, mode = str(body.get("mid") or ""), body.get("kind") or "death", body.get("mode") or "actor"
+                    if not mid.isdigit() or kind not in ("death", "clutch") or mode not in ("actor", "spec"):
+                        return self.send(400, {"error": "invalid situation"})
+                    sid = str(body.get("sid") or config.settings().get("own_steamid") or "")
+                    return self.send(200, replay.play(sid, mid, int(body.get("round")), kind, mode, int(body["diff"]) if body.get("diff") is not None else 2))
+                if act == "stop":
+                    return self.send(200, replay.stop())
+                if act == "cmd":   # the plugin's commands: again, next, previous, spec, difficulty
+                    c = str(body.get("cmd") or "")
+                    if not re.fullmatch(r"r|n|p|spec|stop|diff [0-3]", c):
+                        return self.send(400, {"error": "unknown command"})
+                    replay.rcon(f"css_{c}")
+                    return self.send(200, replay.status())
+            except (OSError, RuntimeError, ValueError, StopIteration) as e:
+                return self.send(400, {"error": str(e) or "training server error"})
+            return self.send(404, {"error": "not found"})
         if u.path == "/api/live/log":   # what the In game page shows, a few times per round: checked after the match
             import livecheck
             return self.send(200 if livecheck.log(body) else 400, {})
@@ -361,6 +392,8 @@ def voice_watch(every=15):
             import gsi
             import voice
             voice.watchdog(gsi.state())
+            import replay
+            replay.idle_check()   # the training server stops itself 20 min after you left it
             p = voice.JOB.get("proc")
             if p and p.poll() is not None and voice.JOB.get("id") not in done:
                 done.add(voice.JOB["id"])

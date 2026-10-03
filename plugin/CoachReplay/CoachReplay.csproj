@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- The coach's replay plugin for CounterStrikeSharp. Built against the server's own API (CssApi), deployed by
+       plugin/build.py into the server copy's plugins folder. -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <CssApi Condition="'$(CssApi)' == ''">E:\CS2Server\game\csgo\addons\counterstrikesharp\api\CounterStrikeSharp.API.dll</CssApi>
+    <CopyLocalLockFileAssemblies>false</CopyLocalLockFileAssemblies>
+    <GenerateDependencyFile>false</GenerateDependencyFile>
+  </PropertyGroup>
+  <ItemGroup>
+    <Reference Include="CounterStrikeSharp.API">
+      <HintPath>$(CssApi)</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Microsoft.Extensions.Logging.Abstractions">
+      <HintPath>$([System.IO.Path]::GetDirectoryName($(CssApi)))\Microsoft.Extensions.Logging.Abstractions.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+</Project>
