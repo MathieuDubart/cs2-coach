@@ -38,6 +38,7 @@ public class Track
     [JsonPropertyName("hold")] public bool Hold { get; set; }   // stays on its spot (aim targets): only its aim is its own
     [JsonPropertyName("places")] public List<JsonElement> Places { get; set; } = new();   // your route in the match: [frame, place]
     [JsonIgnore] public float Start { get; set; }   // the frame its path starts at (a defense's attacker: when it spawned)
+    [JsonPropertyName("at")] public string? At { get; set; }   // its place at the start
     public int Frames => Path.Length / 5;
 }
 
@@ -84,6 +85,7 @@ public partial class CoachReplay : BasePlugin
     readonly Dictionary<int, int> contact = new();   // ticks a scripted bot has seen you: then it plays on its own, like a player
     int t0, countdownEnd, kills, dmg, generation, lastBeat, nextNade;
     bool awaitRestart;
+    int emptyTries;   // a drill set up again because its bots did not come
     string? builtFor;   // the situation the bots on the server were made for
     int difficulty = 2;
     double devSum; int devN;   // how far the bots drift from their path between two ticks (checked in spec mode)
@@ -141,6 +143,12 @@ public partial class CoachReplay : BasePlugin
             foreach (var b in Utilities.GetPlayers().Where(x => x is { IsValid: true }))
                 Logger.LogInformation("dbg {n} slot {s} team {t} alive {a} life {l} hp {h}", b.PlayerName, b.Slot, b.Team, b.PawnIsAlive, b.PlayerPawn.Value?.LifeState, b.PlayerPawn.Value?.Health);
         });
+        AddCommand("css_dbgline", "draw a test line (3 segments) and count the beams", (p, c) =>
+        {
+            DrawLine(new List<float[]> { new[] { 0f, 0f, 0f }, new[] { 200f, 0f, 0f }, new[] { 200f, 200f, 0f }, new[] { 0f, 200f, 0f } });
+            Logger.LogInformation("dbgline: {n} beams drawn, {m} in the world", beams.Count, Utilities.FindAllEntitiesByDesignerName<CBeam>("beam").Count());
+            AddTimer(2f, () => { ClearLine(); Logger.LogInformation("dbgline: cleared, {m} in the world", Utilities.FindAllEntitiesByDesignerName<CBeam>("beam").Count()); });
+        });
         AddCommand("css_stop", "stop the replay (or the session)", (p, c) =>
         {
             if (sess != null) { EndSession(true); return; }
@@ -197,7 +205,8 @@ public partial class CoachReplay : BasePlugin
         if (mode == "actor" && !Humans().Any()) { phase = "waiting"; return; }   // starts when you join
         phase = "setup";
         // the same situation again: the same bots, only a clean round (fast retries)
-        var key = $"{cur.Id}|{mode}|{difficulty}";
+        var diff = drill?.Mode == "defend" ? Math.Max(0, difficulty - 1) : difficulty;   // a defense: three at a time, one level easier
+        var key = $"{cur.Id}|{mode}|{diff}";
         if (builtFor == key && bots.Count > 0 && bots.Keys.All(sl => Utilities.GetPlayerFromSlot(sl) is { IsValid: true, IsBot: true }))
         {
             Teams();
@@ -211,22 +220,66 @@ public partial class CoachReplay : BasePlugin
                      "mp_roundtime_defuse 60", "mp_roundtime_hostage 60", "mp_buytime 0", "mp_autoteambalance 0", "mp_limitteams 0",
                      "mp_friendlyfire 0", "mp_autokick 0", "mp_halftime 0", "mp_maxrounds 99", "mp_match_can_clinch 0",
                      "mp_give_player_c4 0", "mp_death_drop_gun 0", "mp_randomspawn 0", "bot_quota_mode normal",
-                     "bot_join_after_player 0", "bot_chatter off", "sv_hibernate_when_empty 0", $"bot_difficulty {difficulty}", "bot_kick" })
+                     "bot_join_after_player 0", "bot_chatter off", "sv_hibernate_when_empty 0", "sv_falldamage_scale 0",
+                     $"bot_difficulty {diff}", "bot_kick" })
             Server.ExecuteCommand(cmd);
         var want = cur.Players.Where(t => !t.Me || mode == "spec").ToList();
-        AddTimer(0.3f, () =>
-        {
-            if (g != generation) return;
-            foreach (var t in want) Server.ExecuteCommand(t.Team == 2 ? "bot_add_t" : "bot_add_ct");
-            Teams();
-        });
-        AddTimer(1.5f, () =>
+        AddBots(g, want, 0);
+    }
+
+    // a bot really in the game (a kicked one stays listed a moment, leaving)
+    static bool Here(CCSPlayerController p) => p is { IsValid: true, IsBot: true } && p.Connected == PlayerConnectedState.Connected;
+    static bool Coming(CCSPlayerController p) => p is { IsValid: true, IsBot: true }
+                                                 && p.Connected is PlayerConnectedState.Connected or PlayerConnectedState.Connecting or PlayerConnectedState.Reconnecting;
+    static bool Leaving(CCSPlayerController p) => p is { IsValid: true, IsBot: true } && p.Connected != PlayerConnectedState.Disconnected
+                                                  && p.Connected != PlayerConnectedState.NeverConnected;
+
+    // the old bots gone first: added while they leave, the team still looks full and the new ones are refused (03/10:
+    // a prefire with no bot, a clutch's enemy that was a leaving bot); then the new ones, every one in before the roles
+    void AddBots(int g, List<Track> want, int tries)
+    {
+        AddTimer(0.25f, () =>
         {
             if (g != generation || cur == null) return;
+            if (Utilities.GetPlayers().Any(Leaving) && tries < 16) { if (tries == 8) Server.ExecuteCommand("bot_kick"); AddBots(g, want, tries + 1); return; }
+            AddTimer(0.75f, () =>   // gone: the game still counts them a moment (04/10: 1 CT of 4 right after 10 CTs left)
+            {
+                if (g != generation || cur == null) return;
+                foreach (var t in want) Server.ExecuteCommand(t.Team == 2 ? "bot_add_t" : "bot_add_ct");
+                Teams();
+                WaitBots(g, want, 0);
+            });
+        });
+    }
+
+    void WaitBots(int g, List<Track> want, int tries)
+    {
+        AddTimer(0.3f, () =>
+        {
+            if (g != generation || cur == null) return;
+            var all = want.GroupBy(t => t.Team).All(k => Utilities.GetPlayers().Count(p => Here(p) && (int)p.Team == k.Key) >= k.Count());
+            if (!all && tries < 14)
+            {
+                if (tries % 4 == 3)   // still short: ask again for the missing ones (the ones on their way count)
+                    foreach (var k in want.GroupBy(t => t.Team))
+                    {
+                        var miss = k.Count() - Utilities.GetPlayers().Count(p => Coming(p) && (int)p.Team == k.Key);
+                        for (int i = 0; i < miss; i++) Server.ExecuteCommand(k.Key == 2 ? "bot_add_t" : "bot_add_ct");
+                    }
+                WaitBots(g, want, tries + 1);
+                return;
+            }
+            Roles(g, want);
+        });
+    }
+
+    void Roles(int g, List<Track> want)
+    {
+        {
             foreach (var team in new[] { 2, 3 })
             {
                 var tracks = want.Where(t => t.Team == team).ToList();
-                var bs = Utilities.GetPlayers().Where(p => p is { IsValid: true, IsBot: true } && (int)p.Team == team).ToList();
+                var bs = Utilities.GetPlayers().Where(p => Here(p) && (int)p.Team == team).ToList();
                 for (int i = 0; i < Math.Min(tracks.Count, bs.Count); i++)
                 {
                     bots[bs[i].Slot] = tracks[i];
@@ -236,9 +289,21 @@ public partial class CoachReplay : BasePlugin
                 if (bs.Count != tracks.Count) Logger.LogInformation($"team {team}: {bs.Count} bots for {tracks.Count} tracks");
                 foreach (var extra in bs.Skip(tracks.Count)) Server.ExecuteCommand($"kickid {extra.UserId}");   // a bot the game added on its own
             }
+            Server.ExecuteCommand($"bot_quota {bots.Count}");   // the game keeps that many: no bot added on its own
+            // a drill without its bots (or a situation without any enemy): once more from scratch, then skipped
+            var foes = want.Count(t => t.Team != cur!.Team);
+            if (want.Count > 0 && (bots.Count == 0 || (mode == "actor" && foes > 0 && !bots.Values.Any(t => t.Team != cur!.Team))))
+            {
+                Logger.LogInformation("no bots for {id} ({n} of {w})", cur!.Id, bots.Count, want.Count);
+                if (emptyTries++ < 1) { builtFor = null; Setup(); return; }
+                emptyTries = 0;
+                if (sess != null && drill != null) { phase = "live"; DrillDone(false, "skipped", 0, "the bots did not come"); }
+                return;
+            }
+            emptyTries = 0;
             awaitRestart = true;
             Server.ExecuteCommand("mp_restartgame 1");
-        });
+        }
     }
 
     void Teams()
@@ -246,7 +311,12 @@ public partial class CoachReplay : BasePlugin
         if (cur == null) return;
         var team = mode == "spec" ? CsTeam.Spectator : (CsTeam)cur.Team;
         foreach (var h in Humans())
-            if (h.Team != team) h.ChangeTeam(team);
+        {
+            if (h.Team == team) continue;
+            // from one side to the other: switch without dying (ChangeTeam kills you); from the menu: join
+            if (h.Team is CsTeam.Terrorist or CsTeam.CounterTerrorist && team is CsTeam.Terrorist or CsTeam.CounterTerrorist) h.SwitchTeam(team);
+            else h.ChangeTeam(team);
+        }
     }
 
     HookResult OnRoundStart(EventRoundStart e, GameEventInfo i)
@@ -283,6 +353,16 @@ public partial class CoachReplay : BasePlugin
         Utilities.SetStateChanged(pawn, "CBaseEntity", "m_MoveType");
     }
 
+    // a bot playing on its own: its grenades back (the AI throws them). A situation: the ones it had in the match; a
+    // defense's attacker: a flash and a molotov
+    void Arm(CCSPlayerController? c, Track t)
+    {
+        if (c == null || !c.IsValid || !c.PawnIsAlive) return;
+        var nades = t.Weapons.Where(w => w.Contains("grenade") || w.Contains("flashbang") || w.Contains("molotov")).ToList();
+        if (nades.Count == 0 && drill?.Mode == "defend") nades = new() { "weapon_flashbang", t.Team == 2 ? "weapon_molotov" : "weapon_incgrenade" };
+        foreach (var w in nades) c.GiveNamedItem(w);
+    }
+
     static Vector3 Pos(Track t, int i) => new(t.Path[i * 5], t.Path[i * 5 + 1], t.Path[i * 5 + 2]);
     static Vector3 Ang(Track t, int i) => new(t.Path[i * 5 + 4], t.Path[i * 5 + 3], 0);
 
@@ -313,17 +393,31 @@ public partial class CoachReplay : BasePlugin
         kills = dmg = 0; devSum = 0; devN = 0;
         SessionPlaced();
         phase = "countdown";
-        countdownEnd = Server.TickCount + 3 * 64;
+        var cd = cur.Kind is "death" or "clutch" ? 5 : 3;   // a situation: time to read it and get ready
+        countdownEnd = Server.TickCount + cd * 64;
         var g = generation;
-        for (int s = 3; s >= 1; s--)
+        for (int s = cd; s >= 1; s--)
         {
             var n = s;
-            AddTimer(3 - n, () => { if (g == generation && !SessionCount(n)) foreach (var h in Humans()) h.PrintToCenter($"{cur?.Title}   {n}"); });
+            AddTimer(cd - n, () => { if (g == generation && !SessionCount(n)) foreach (var h in Humans()) h.PrintToCenter($"{cur?.Title}   {n}"); });
         }
     }
 
     void Go()
     {
+        // a situation whose enemies are all dead already (a bot that left): not a win, set up again (once)
+        if (mode == "actor" && cur is { Kind: "death" or "clutch" })
+        {
+            var foes = bots.Where(b => b.Value.Team != cur.Team).Select(b => Utilities.GetPlayerFromSlot(b.Key)).ToList();
+            if (foes.Count > 0 && foes.All(c => c == null || !c.IsValid || !c.PawnIsAlive))
+            {
+                Logger.LogInformation("{id}: no enemy alive at the start, set up again", cur.Id);
+                if (emptyTries++ < 1) { builtFor = null; Setup(); return; }
+                emptyTries = 0;   // still none: skipped, never a win for nothing
+                if (sess != null && drill != null) { phase = "live"; DrillDone(false, "skipped", 0, "no enemy at the start"); return; }
+            }
+            emptyTries = 0;
+        }
         phase = "live";
         t0 = Server.TickCount;
         nextNade = 0;
@@ -341,6 +435,8 @@ public partial class CoachReplay : BasePlugin
     {
         var now = Server.TickCount;
         if (now - lastBeat >= 64 || now < lastBeat) { lastBeat = now; Beat(); }   // the tick count starts over with each map
+        if (now < hudSent) hudSent = 0;
+        HudTick();
         if (cur == null || (phase != "countdown" && phase != "live")) return;
         if (phase == "countdown" && now >= countdownEnd) Go();
         var f = phase == "live" ? (now - t0) / (float)cur.Step : 0f;
@@ -365,7 +461,7 @@ public partial class CoachReplay : BasePlugin
                 // window is over / you were the killer: the bot plays on from there
                 if (t.Death >= 0 && t.Killer != meSid && (t.Killer == "" || !cur.Players.Any(q => q.Sid == t.Killer) || Alive(t.Killer)))
                 { pawn.CommitSuicide(false, true); gone.Add(t.Sid); Logger.LogInformation("demo kill {n} at {f}", t.Name, (int)f); }
-                else { free.Add(slot); Logger.LogInformation("free {n} at {f} (death {d}, killer {k})", t.Name, (int)f, t.Death, t.Killer); }
+                else { free.Add(slot); if (phase == "live") Arm(c, t); Logger.LogInformation("free {n} at {f} (death {d}, killer {k})", t.Name, (int)f, t.Death, t.Killer); }
                 continue;
             }
             var a = Math.Clamp(ft - i, 0f, 1f);
@@ -373,9 +469,9 @@ public partial class CoachReplay : BasePlugin
             var pos = Vector3.Lerp(p0, p1, a);
             if (phase == "live" && mode == "spec" && pawn.AbsOrigin != null)
             { var o = pawn.AbsOrigin; devSum += Vector3.Distance(new Vector3(o.X, o.Y, o.Z), pos); devN++; }
-            if (seen != null && (seen[slot / 32] & (1u << (slot % 32))) != 0 && (contact[slot] = contact.GetValueOrDefault(slot) + 1) >= 8)
+            if (phase == "live" && seen != null && (seen[slot / 32] & (1u << (slot % 32))) != 0 && (contact[slot] = contact.GetValueOrDefault(slot) + 1) >= 8)
             {   // it has seen you for an eighth of a second: from now on it fights like a player, not on its recorded path
-                free.Add(slot); Logger.LogInformation("contact {n} at {f}", t.Name, (int)f); continue;
+                free.Add(slot); Arm(c, t); Logger.LogInformation("contact {n} at {f}", t.Name, (int)f); continue;
             }
             var y0 = t.Path[i * 5 + 3]; var dy = ((t.Path[i * 5 + 8] - y0 + 540f) % 360f) - 180f;
             Vector3? ang = new Vector3(t.Path[i * 5 + 4] + (t.Path[i * 5 + 9] - t.Path[i * 5 + 4]) * a, y0 + dy * a, 0);
@@ -462,7 +558,7 @@ public partial class CoachReplay : BasePlugin
         if (phase == "live" && e.Attacker is { IsValid: true, IsBot: false } && e.Userid is { IsBot: true } v)
         {
             dmg += e.DmgHealth;
-            if (bots.ContainsKey(v.Slot)) free.Add(v.Slot);   // hit: it reacts like a player
+            if (bots.TryGetValue(v.Slot, out var hit) && free.Add(v.Slot)) Arm(v, hit);   // hit: it reacts like a player
         }
         return HookResult.Continue;
     }
@@ -474,6 +570,9 @@ public partial class CoachReplay : BasePlugin
         try
         {
             var att = info.Attacker.Value;
+            var hurt = info.Inflictor.Value?.DesignerName == "trigger_hurt" || att?.DesignerName == "trigger_hurt";   // logged "by null (trigger_hurt)"
+            if (victim.DesignerName == "player" && hurt && new CCSPlayerPawn(victim.Handle).OriginalController.Value is { IsBot: false })
+                return HookResult.Handled;   // a map hurt zone (Boulder): no death by the map in training
             if (victim.DesignerName != "player" || att == null || att.DesignerName != "player") return HookResult.Continue;
             var vc = new CCSPlayerPawn(victim.Handle).OriginalController.Value;
             var ac = new CCSPlayerPawn(att.Handle).OriginalController.Value;

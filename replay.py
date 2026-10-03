@@ -17,6 +17,7 @@ import struct
 import subprocess
 import time
 
+import numpy as np
 import pandas as pd
 
 import config
@@ -134,6 +135,23 @@ def build(sid, mid, rnd, kind="death", t=None):
         key = int(Dr[Dr.victim == sid].tick.iloc[0])
         start, end = max(t0, key - BEFORE * 64), min(t_end, key + AFTER * 64)
     p = DemoParser(os.path.join(config.CACHE, f"{mid}.dem"))
+    if kind != "clutch":   # start when no enemy is close: the latest moment 5 to 20 s before, with all of them 1,100 u away
+        try:
+            early = max(t0 + 2 * 64, key - 20 * 64)
+            Q = p.parse_ticks(["X", "Y", "team_num", "is_alive"], ticks=list(range(early, key - 5 * 64 + 1, 32)))
+            Q["steamid"] = Q.steamid.astype(str)
+            mine = Q[Q.steamid == sid].set_index("tick")
+            myteam = int(mine.team_num.iloc[0]) if len(mine) else 0
+            for tk in sorted(Q.tick.unique(), reverse=True):
+                if tk not in mine.index:
+                    continue
+                me_ = mine.loc[tk]
+                en = Q[(Q.tick == tk) & (Q.team_num != myteam) & Q.team_num.isin([2, 3]) & Q.is_alive]
+                if not len(en) or float(np.hypot(en.X - me_.X, en.Y - me_.Y).min()) >= 1100:
+                    start = int(tk)
+                    break
+        except Exception as e:
+            print("start", mid, rnd, e, flush=True)
     ticks = list(range(start, end + 1, STEP))
     T = p.parse_ticks(["X", "Y", "Z", "yaw", "pitch", "is_alive", "team_num", "ducking", "last_place_name"], ticks=ticks)
     T["steamid"] = T.steamid.astype(str)
@@ -166,7 +184,9 @@ def build(sid, mid, rnd, kind="death", t=None):
             for i, nm, n in runs:
                 if nm and n >= 16 and (not places or places[-1][1] != nm):
                     places.append([i, nm])
-        players.append({"sid": s.steamid, "name": str(s["name"])[:31], "team": int(s.team_num), "me": s.steamid == sid, "places": places,
+        import nades
+        at = nades.humanize(k.last_place_name.fillna("").iloc[0], mp) if len(k) and "last_place_name" in k else None
+        players.append({"sid": s.steamid, "name": str(s["name"])[:31], "team": int(s.team_num), "me": s.steamid == sid, "places": places, "at": at,
                         "hp": int(s.health), "armor": int(s.armor_value), "helmet": bool(s.has_helmet),
                         "weapons": weapons, "active": _item(s.active_weapon_name), "path": path, "duck": duck,
                         "death": death, "killer": str(died.killer.iloc[0]) if len(died) else ""})

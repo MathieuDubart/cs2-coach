@@ -313,7 +313,7 @@ ENTRY_D = os.path.join(config.OUT, "train_entries")
 
 def entries(mp, demos=24):
     """Real hits on each site, from the base's demos: for every plant, the planter and the Ts entering with him, their
-    path in the 9 s before the plant (positions every 2 ticks), the ones that came from outside (700 u away or more)
+    path in the 14 s before the plant (positions every 2 ticks), the ones that came from outside (700 u away or more)
     and ended on the site. The attackers of a defense walk them (then fight on their own once they see you). Cached per
     map."""
     from demoparser2 import DemoParser
@@ -321,7 +321,9 @@ def entries(mp, demos=24):
     os.makedirs(ENTRY_D, exist_ok=True)
     cf = os.path.join(ENTRY_D, f"{mp}.json")
     try:
-        return json.load(open(cf, encoding="utf-8"))
+        c = json.load(open(cf, encoding="utf-8"))
+        if c.get("v") == 3:
+            return c
     except (OSError, ValueError):
         pass
     dirs = []
@@ -331,14 +333,14 @@ def entries(mp, demos=24):
                 dirs.append(d)
         except (OSError, ValueError):
             continue
-    out = {"A": [], "B": []}
+    out = {"v": 3, "A": [], "B": []}
     for d in dirs[:demos]:
         try:
             R = pd.read_parquet(os.path.join(config.OUT, "deep", d, "rounds.parquet"))
             R = R[R.plant_site.isin(["A", "B"]) & R.plant_tick.notna()]
             if not len(R):
                 continue
-            want = sorted({t for pt in R.plant_tick for t in range(int(pt) - 9 * 64, int(pt) + 1, 2)})
+            want = sorted({t for pt in R.plant_tick for t in range(int(pt) - 14 * 64, int(pt) + 1, 2)})
             T = DemoParser(os.path.join(config.CACHE, f"{d}.dem")).parse_ticks(
                 ["X", "Y", "Z", "yaw", "pitch", "is_alive", "team_num", "last_place_name"], ticks=want)
         except Exception as e:
@@ -346,24 +348,28 @@ def entries(mp, demos=24):
             continue
         for _, r in R.iterrows():
             pt, site = int(r.plant_tick), r.plant_site
-            w = T[(T.tick >= pt - 9 * 64) & (T.tick <= pt) & (T.team_num == 2)]
+            w = T[(T.tick >= pt - 14 * 64) & (T.tick <= pt) & (T.team_num == 2)]
             for sid_, g in w.groupby("steamid"):
                 g = g.sort_values("tick")
-                if len(g) < 100 or not bool(g.is_alive.iloc[-1]):
+                if len(g) < 200 or not bool(g.is_alive.iloc[-1]):
                     continue
                 P = g[["X", "Y", "Z"]].to_numpy(float)
                 dist = np.hypot(P[:, 0] - r.plant_X, P[:, 1] - r.plant_Y)
                 if dist[-1] > 450 or dist[0] < 700:
                     continue
                 k0 = int(np.argmax(dist <= 1500)) if (dist <= 1500).any() else 0   # from where it gets close
-                g = g.iloc[k0:]
-                if len(g) < 40:
+                if len(g) - k0 < 40:
                     continue
-                path = []
+                path, zones = [], []
                 for x, y, z, yw, pi in zip(g.X, g.Y, g.Z, g.yaw, g.pitch):
                     path += [round(float(x), 1), round(float(y), 1), round(float(z), 1), round(float(yw), 1), round(float(pi), 1)]
-                pl = g.last_place_name.fillna("").iloc[0]
-                out[site].append({"zone": nades.humanize(pl, mp) or "?", "path": path})
+                for pl in g.last_place_name.fillna(""):   # the places it crosses, in order
+                    nm = nades.humanize(pl, mp) if pl else None
+                    if nm and (not zones or zones[-1] != nm):
+                        zones.append(nm)
+                pl = g.last_place_name.fillna("").iloc[k0]
+                out[site].append({"zone": nades.humanize(pl, mp) or "?", "path": path, "k0": k0, "zones": zones,
+                                  "from": round(float(dist[0]))})
     json.dump(out, open(cf, "w", encoding="utf-8"), separators=(",", ":"))
     return out
 
@@ -378,21 +384,59 @@ def practice_drills(sid, mp):
         for e in S["entrances"]:   # the entrances right on the site, not two next to each other
             if e["dist"] < 1700 and all(math.dist(e["start"], p["start"]) > 900 for p in pick):
                 pick.append(e)
+        letter = z.replace("Bombsite", "")[:1]
+        hits = [t for t in (entries(mp).get(letter) or []) if t.get("from", 0) >= 1300 and len(t.get("zones") or []) >= 2
+                and not any("CT" in zn for zn in t["zones"])   # an attack, not a late rotation through the CTs' side
+                and replay_zone("Bombsite" + ("B" if letter == "A" else "A"), mp) not in t["zones"]]   # nor a drop from the other site (Nuke)
         for e in pick[:2]:
             frm = replay_zone(e["zone"], mp)
-            start = e["start"]
-            first = min(e["holds"], key=lambda h: math.dist(h["pos"], start))
+            # a real hit through that entrance, from far: its way is the route (start, places, the line drawn in the game)
+            way = sorted([t for t in hits if frm in (t.get("zones") or [])], key=lambda t: -t.get("from", 0))
+            hit = random.choice(way[:5]) if way else None   # one of the ones from furthest
+            if not hit:
+                continue
+            P = np.array(hit["path"], float).reshape(-1, 5)[:, :3] if hit else None
+            start = [round(float(v), 1) for v in P[0]] if hit else e["start"]
+            holds = [h for s_ in S["entrances"] for h in s_["holds"]]   # the angles along that way, the site's included,
+            holds = [h for h in holds if float(np.min(np.hypot(P[:, 0] - h["pos"][0], P[:, 1] - h["pos"][1]))) < 550
+                     and math.dist(h["pos"][:2], start[:2]) > 600]   # none right at your start
+            seen_, keep = [], []
+            for h in sorted(holds, key=lambda h: -h["n"]):
+                if all(math.dist(h["pos"], q) > 160 for q in seen_):
+                    seen_.append(h["pos"])
+                    keep.append(h)
+            keep = keep[:10]   # a team holds 10 bots at most (the server refused the 11th and 12th)
+            if len(keep) < 4:
+                continue
+            route = hit["zones"] if hit else [frm, site]
+            first = min(keep, key=lambda h: math.dist(h["pos"], start))
+            line = [[round(float(v), 1) for v in p] for p in P[::12]] if hit else []   # the way drawn on the ground
             out.append({"id": f"prefire:{mp}:{z}:{e['zone']}", "kind": "aim", "mode": "prefire", "map": mp,
-                        "title": f"PREFIRE {site} from {frm}", "team": 2,
-                        "tip": f"{len(e['holds'])} CTs on the angles they really hold, peeking at their real timings · they don't shoot · clear them all, fast",
-                        "me": {"pos": start, "ang": _angle(start, first["pos"])},
+                        "title": f"PREFIRE {site} via {frm}", "team": 2, "route": route, "line": line,
+                        "tip": f"follow the gold line: {' → '.join(route)} · {len(keep)} CTs on the angles they hold there, at their real timings · they don't shoot",
+                        "me": {"pos": start, "ang": _angle(start, line[1] if len(line) > 1 else first["pos"])},
                         "weapons": ["weapon_knife", RIFLE[2]], "bot_weapons": ["weapon_knife", RIFLE[3]],
-                        "bots": [{"pos": h["pos"], "ang": h["ang"], "zone": site, "at": at} for h, at in zip(e["holds"], _timings(e["holds"]))],
-                        "seconds": 75, "weight": 2 + min(1.0, e["n"] / 400)})
+                        "bots": [{"pos": h["pos"], "ang": h["ang"], "zone": site, "at": at} for h, at in zip(keep, _timings(keep))],
+                        "seconds": 90, "weight": 2 + min(1.0, e["n"] / 400)})
         spawns = [{"pos": p, "ang": _angle(p, S["defend"]), "zone": replay_zone(e["zone"], mp)} for e in S["entrances"] for p in e["spawns"]]
         letter = z.replace("Bombsite", "")[:1]
         tracks = (entries(mp).get(letter) or []) if letter in ("A", "B") else []
-        tracks = random.sample(tracks, min(16, len(tracks)))   # real hits on this site: they walk them, then fight
+        # real hits on this site, from their last point 1,500 u from your spot (time to see them come): they walk
+        # them, then fight
+        def _far(t, spot=S["defend"]):
+            P_ = np.array(t["path"], float).reshape(-1, 5)
+            d_ = np.hypot(P_[:, 0] - spot[0], P_[:, 1] - spot[1])
+            close = np.nonzero(d_ < 1500)[0]
+            k = int(close[0]) - 1 if len(close) and close[0] > 0 else 0
+            return {"zone": t["zone"], "path": t["path"][5 * max(0, k):]}
+
+        def _d0(t, spot=S["defend"]):
+            return math.dist(t["path"][:2], spot[:2])
+        tracks = [t for t in tracks if not any("CT" in zn for zn in t.get("zones") or [])]   # attacks, not rotations
+        far = [t for t in tracks if _d0(t) >= 1500]
+        if len(far) < 6:
+            far = [t for t in tracks if _d0(t) >= 1100]
+        tracks = [_far(t) for t in random.sample(far, min(16, len(far)))]   # only the ones that come from far
         if len(spawns) >= 2:
             froms = ", ".join(dict.fromkeys(replay_zone(e["zone"], mp) for e in S["entrances"]))
             out.append({"id": f"defend:{mp}:{z}", "kind": "aim", "mode": "defend", "map": mp, "title": f"DEFEND {site}",

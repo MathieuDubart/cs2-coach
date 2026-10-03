@@ -45,6 +45,8 @@ public class Drill
     [JsonPropertyName("seconds")] public int Seconds { get; set; } = 75;
     [JsonPropertyName("alive")] public int Alive { get; set; } = 3;
     [JsonPropertyName("tracks")] public List<EntryTrack> Tracks { get; set; } = new();   // defend: real hits on the site
+    [JsonPropertyName("route")] public List<string> Route { get; set; } = new();   // prefire: the places of the way
+    [JsonPropertyName("line")] public List<float[]> Line { get; set; } = new();   // prefire: the way, drawn on the ground
 }
 
 public class EntryTrack
@@ -103,7 +105,40 @@ public partial class CoachReplay
 
     static string MapName(string m) { var n = m.Replace("de_", "").Replace("cs_", ""); return n.Length > 0 ? char.ToUpper(n[0]) + n[1..] : m; }
 
-    void Html(string html, int secs = 3) { foreach (var h in Humans()) h.PrintToCenterHtml(html, secs); }
+    // the screen: the drill's line stays all the time (sent again every 0.4 s), an event shows above it for a few seconds
+    string hudMain = "", hudFlash = "";
+    DateTime hudFlashUntil;
+    int hudSent;
+    void Html(string html, int secs = 3) { hudFlash = html; hudFlashUntil = DateTime.UtcNow.AddSeconds(secs); SendHud(); }
+    void SetMain(string html) { if (html == hudMain) return; hudMain = html; SendHud(); }
+    void SendHud()
+    {
+        hudSent = Server.TickCount;
+        var fl = DateTime.UtcNow < hudFlashUntil ? hudFlash : "";
+        var h = fl != "" && hudMain != "" ? $"{fl}<br>{hudMain}" : fl + hudMain;
+        if (h == "") return;
+        foreach (var p in Humans()) p.PrintToCenterHtml(h, 1);
+    }
+    void HudTick() { if ((sess != null || hudFlash != "") && Server.TickCount - hudSent >= 26) SendHud(); }
+
+    // prefire: the way, a gold line on the ground
+    readonly List<CBeam> beams = new();
+    void DrawLine(List<float[]> pts)
+    {
+        ClearLine();
+        for (int i = 0; i + 1 < pts.Count; i++)
+        {
+            var b = Utilities.CreateEntityByName<CBeam>("beam");
+            if (b == null) return;
+            b.Render = System.Drawing.Color.FromArgb(255, 255, 196, 64);
+            b.Width = 2.5f;
+            b.Teleport(new Vector3(pts[i][0], pts[i][1], pts[i][2] + 6), Vector3.Zero, Vector3.Zero);
+            b.EndPos.X = pts[i + 1][0]; b.EndPos.Y = pts[i + 1][1]; b.EndPos.Z = pts[i + 1][2] + 6;
+            b.DispatchSpawn();
+            beams.Add(b);
+        }
+    }
+    void ClearLine() { foreach (var b in beams) if (b.IsValid) b.Remove(); beams.Clear(); }
 
     void CmdSession(CCSPlayerController? p, CommandInfo c)
     {
@@ -204,7 +239,8 @@ public partial class CoachReplay
         };
         var again = tries > 0 ? " · AGAIN" : "";
         introHtml = $"<font color='{KindColor[d.Kind]}'>{KindName[d.Kind]}{again}</font> · {Left()} · ⭐ {points}<br><font class='fontSize-l'>{d.Title}</font><br>{how}";
-        Html(introHtml, 5);
+        hudFlash = "";
+        SetMain(introHtml);
         All($"\x10{KindName[d.Kind]}{again}\x01 {d.Title} — {how}");
     }
 
@@ -242,6 +278,14 @@ public partial class CoachReplay
         var route = me == null ? "" : string.Join(" → ", me.Places.Select(p => p[1].GetString()).Where(x => !string.IsNullOrEmpty(x)));
         var lines = new List<string> { $"goal: {(string.IsNullOrEmpty(cur?.Goal) ? "survive" : cur!.Goal)}" };
         if (route != "") lines.Add($"your route: {route}");
+        var mine = cur?.Players.FirstOrDefault(p => p.Me);
+        string Where(IEnumerable<Track> ts) => string.Join(", ", ts.GroupBy(p => p.At ?? "?").Select(g => g.Count() > 1 ? $"{g.Key} ×{g.Count()}" : g.Key));
+        if (mine != null && cur != null)
+        {
+            var al = cur.Players.Where(p => !p.Me && p.Team == mine.Team).ToList();
+            var en = cur.Players.Where(p => p.Team != mine.Team).ToList();
+            lines.Add($"allies: {(al.Count > 0 ? Where(al) : "none")} · enemies: {Where(en)}");
+        }
         if (!string.IsNullOrEmpty(cur?.Danger)) lines.Add($"⚠ {cur!.Danger}");
         return string.Join("<br>", lines);
     }
@@ -261,6 +305,7 @@ public partial class CoachReplay
     void SessionPlaced()
     {
         if (sess == null || cur == null) return;
+        if (drill?.Mode == "prefire" && drill.Line.Count > 1) DrawLine(drill.Line);
         if (cur.Kind == "aim" && drill?.Mode is "prefire" or "defend")
         {
             aimOrder.Clear();
@@ -297,7 +342,7 @@ public partial class CoachReplay
     bool SessionCount(int n)
     {
         if (sess == null || drill == null) return false;
-        Html($"{introHtml}<br><font class='fontSize-xl'>{n}</font>", 1);
+        SetMain($"{introHtml}<br><font class='fontSize-xl'>{n}</font>");
         return true;
     }
 
@@ -329,24 +374,25 @@ public partial class CoachReplay
                 c.PlayerPawn.Value?.Teleport(Pos(t, 0), Ang(t, 0), Vector3.Zero);
                 gone.Remove(t.Sid);
             }
-            if (Server.TickCount - lastHud >= 3 * 64)
             {
-                lastHud = Server.TickCount;
                 var left = (int)(drill.Seconds - el);
-                Html(drill.Mode == "prefire"
-                    ? $"<font color='#ff8a3d'>PREFIRE</font> · {aimOrder.Count - frags} left · {left} s"
-                    : $"<font color='#ff8a3d'>DEFEND</font> · {left} s · ⚔ {frags} · ☠ {deaths}", 2);
+                SetMain(drill.Mode == "prefire"
+                    ? $"<font color='#ff8a3d'>{drill.Title}</font> · {aimOrder.Count - frags} left · {left} s<br><font class='fontSize-s'>{string.Join(" → ", drill.Route)} · follow the gold line</font>"
+                    : $"<font color='#ff8a3d'>{drill.Title}</font> · {left} s · ⚔ {frags} · ☠ {deaths}");
             }
             return;
         }
-        if (cur.Kind is "death" or "clutch" && Server.TickCount - lastHud >= 3 * 64)   // the next place of your route in the match
+        if (cur.Kind is "death" or "clutch")   // the drill's line and the next place of your route in the match
         {
-            lastHud = Server.TickCount;
             var me = cur.Players.FirstOrDefault(p => p.Me);
             var fr = (Server.TickCount - t0) / (float)cur.Step;
             var next = me?.Places.Select(p => (at: p[0].GetInt32(), nm: p[1].GetString())).Where(p => p.at > fr + 8).Select(p => p.nm).FirstOrDefault();
-            if (next != null) Html($"<font color='#e0a030'>→ {next}</font> <font class='fontSize-s'>(your route in the match)</font>", 2);
+            SetMain($"<font color='#e0a030'>{drill?.Title}</font>{(next != null ? $"<br>→ {next} <font class='fontSize-s'>(your route in the match)</font>" : "")}");
         }
+        if (cur.Kind == "aim" && string.IsNullOrEmpty(drill?.Mode))
+            SetMain($"<font color='#ff8a3d'>{drill?.Title}</font> · target {Math.Max(1, aimNext)}/{aimOrder.Count}");
+        if (cur.Kind == "nade" && drill != null)
+            SetMain($"<font color='#5ab4ff'>{drill.Title}</font> · throw {Math.Min(3, attempts + 1)}/3<br><font class='fontSize-s'>{(drill.Level < 2 ? $"{drill.How} · {drill.Click}" : "find the aim and the throw")}</font>");
         // a target not found in 12 s goes away (missed), the next one comes
         if (cur.Kind == "aim" && aimSpawn > 0 && Server.TickCount - aimSpawn > 12 * 64)
         {
@@ -524,14 +570,14 @@ public partial class CoachReplay
         string detail;
         if (cur.Kind == "aim" && drill?.Mode == "prefire")
         {
-            ok = outcome == "cleared";
+            ok = outcome == "cleared" || (aimOrder.Count >= 3 && frags >= aimOrder.Count - 1 && outcome != "dead");   // all, or all but one
             var el = (Server.TickCount - t0) / 64.0;
             pts = frags * 30 + aimHs * 15 + (ok ? 100 + (int)Math.Max(0, (drill.Seconds - el) * 4) : 0);
             detail = $"{frags}/{aimOrder.Count}{(ok ? $" in {el:F1} s" : "")} · {aimHs} HS";
         }
         else if (cur.Kind == "aim" && drill?.Mode == "defend")
         {
-            ok = frags >= 6 && frags >= 2 * deaths;
+            ok = frags >= 8 && frags >= deaths;   // 03/10: 15 frags for 11 deaths never counted
             pts = Math.Max(0, frags * 40 + aimHs * 15 - deaths * 50 - plants * 60);
             detail = $"{frags} frags · {deaths} death(s) · {aimHs} HS{(plants > 0 ? $" · {plants} planted" : "")}";
         }
@@ -556,6 +602,7 @@ public partial class CoachReplay
     {
         if (sess == null || drill == null) return;
         phase = "done";
+        ClearLine();
         if (ok) { streak++; okN++; } else streak = 0;
         var mult = ok ? 1 + 0.1 * Math.Min(5, streak - 1) : 1.0;
         pts = (int)Math.Round(pts * mult);
@@ -591,6 +638,8 @@ public partial class CoachReplay
             ["early"] = early, ["t"] = DateTimeOffset.UtcNow.ToUnixTimeSeconds() });
         Html($"<font color='#e0a030'>🏁 SESSION DONE</font><br><font class='fontSize-l'>{points} pts</font><br>{okN}/{doneN} drills ✔", 8);
         All($"Session done: {points} pts · {okN}/{doneN} drills ✔ — your progress is in the app.");
+        ClearLine();
+        SetMain("");
         sess = null; drill = null; cur = null; phase = "idle"; bots.Clear(); builtFor = null; sessGen++;
         Server.ExecuteCommand("bot_kick");
     }
