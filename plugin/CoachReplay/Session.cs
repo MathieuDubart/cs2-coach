@@ -591,8 +591,9 @@ public partial class CoachReplay
         }
         else
         {
-            ok = outcome is "won" or "survived";
-            pts = (outcome == "won" ? 300 : outcome == "survived" ? 200 : 0) + 25 * kills;
+            outcome = SitOutcome(outcome);   // a kill or a trade is needed (04/10)
+            ok = outcome is "won" or "survived" or "traded" or "kill";
+            pts = (outcome == "won" ? 300 : outcome == "survived" ? 200 : outcome is "traded" or "kill" ? 120 : 0) + 25 * kills;
             detail = $"{kills} kill(s) · {dmg} dmg · {alive:F1} s";
         }
         DrillDone(ok, outcome, pts, detail);
@@ -611,8 +612,9 @@ public partial class CoachReplay
         Write(new Dictionary<string, object> { ["session"] = sess.Id, ["drill"] = drill.Id, ["kind"] = drill.Kind, ["map"] = drill.Map, ["ok"] = ok,
             ["outcome"] = outcome, ["points"] = pts, ["detail"] = detail, ["try"] = tries + 1, ["level"] = drill.Level, ["t"] = DateTimeOffset.UtcNow.ToUnixTimeSeconds() });
         var st = streak >= 2 ? $" · 🔥 x{mult:F1}" : "";
-        Html(ok ? $"<font color='#5ad15a'>✔ {outcome.ToUpper()}</font> +{pts}{st}<br>{detail}<br>⭐ {points}"
-                : $"<font color='#ff5a5a'>✘ {outcome.ToUpper()}</font><br>{detail}<br>⭐ {points}", 3);
+        var shown = outcome switch { "kill" => "KILL, THEN DEAD", "passive" => "NO KILL", _ => outcome.ToUpper() };
+        Html(ok ? $"<font color='#5ad15a'>✔ {shown}</font> +{pts}{st}<br>{detail}<br>⭐ {points}"
+                : $"<font color='#ff5a5a'>✘ {shown}</font><br>{detail}<br>⭐ {points}", 3);
         All($"{(ok ? "\x04✔" : "\x02✘")} {drill.Title}\x01 · {outcome} · {detail} · +{pts} (total {points}){st}");
         tries++;
         var again = !ok && outcome != "skipped" && tries < 2 && DateTime.UtcNow < blockEnd;   // a miss: once more right away

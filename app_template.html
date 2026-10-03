@@ -3343,7 +3343,10 @@ function factsBlock(PL){const F=PL.facts;if(!F||!F.matches)return "";const fy=F.
       <td class="n">${x.unseen+x.wallbang_unseen}</td><td class="n">${x.thrusmoke}</td><td class="n">${x.fast==null?"—":x.fast+"%"}</td>
       <td>${x.vac||x.game?`<span class="pill ${x.ban_after?"weak":""}">${x.vac?`VAC ${x.vac}`:""}${x.vac&&x.game?" · ":""}${x.game?`game ${x.game}`:""} · ${x.ban_after?"since this match":`${x.ban_days} days ago`}</span>`:'<span class="note">none</span>'}</td></tr>`).join("")}</tbody></table></div>
    <p class="note">Indicators from the demo, not proof: the lobby's usual share of odd kills is high (smokes, prefires). A ban "since this match" says more than anything else. Report in Overwatch rather than during the game.${F.bans_checked?"":" Steam bans not checked: no API key."}</p>`:`<p class="note">No enemy stands out in these matches${F.bans_checked?", and none of them is banned":""}.</p>`}`}
-function renderReview(){const p=P(),v=$("#v-review"),PL=p.advice.plan||{},R=PL.review,X=PL.experiments||{};
+// the review as plan.py builds it; a plan written in the "pro review" format (quick_brief, map_briefs, deep_dive) keeps it
+// whole under raw (04/10: a plan written by a server still running that format crashed this page)
+const reviewOf=PL=>{const R=PL.review;return R&&!R.session&&R.raw&&R.raw.session?R.raw:R&&R.session?R:null};
+function renderReview(){const p=P(),v=$("#v-review"),PL=p.advice.plan||{},R=reviewOf(PL),X=PL.experiments||{};
   const head=`<div class="head"><div style="display:grid;gap:4px"><span class="eyebrow">${esc(p.name)}${R?` · ${esc(R.label)}, compared with your previous ${R.n_before} matches`:""}</span><h2>Review</h2></div>
     ${R?`<div class="record"><span>${R.session.wins}<small>wins</small></span><span>${R.session.losses}<small>losses</small></span></div>`:""}</div>`;
   if(!R){v.innerHTML=head+`<div class="empty">The review compares your latest matches with the previous ones: it takes at least 3 matches analyzed with their demo.${p.light?" This profile has no demo yet.":""}</div>

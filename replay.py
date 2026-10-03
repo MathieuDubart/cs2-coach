@@ -205,7 +205,7 @@ def build(sid, mid, rnd, kind="death", t=None):
           "start_tick": start, "key": (key - start) // STEP, "team": me["team"], "zone": zone,
           "title": f"{mp.replace('de_', '').replace('cs_', '').title()} R{rnd} · {'clutch' if kind == 'clutch' else 'death'}"
                    f"{' · ' + zone if zone else ''}", "players": players, "nades": _nades(p, start, end, teams),
-          "danger": danger, "goal": "win the round" if kind == "clutch" else "survive, trade, or win the duel"}
+          "danger": danger, "goal": "win the round (a kill at least)" if kind == "clutch" else "a kill, or get traded (no kill: no point)"}
     os.makedirs(SCEN, exist_ok=True)
     f = os.path.join(SCEN, f"{sc['id']}.json")
     json.dump(sc, open(f, "w", encoding="utf-8"), ensure_ascii=False, separators=(",", ":"))
@@ -444,8 +444,8 @@ def results():
             e["watched"] += 1
             continue
         e["tries"] += 1
-        e["won"] += r.get("outcome") == "won"
-        e["survived"] += r.get("outcome") == "survived"
+        e["won"] += r.get("outcome") in ("won", "traded", "kill")   # a kill or a trade: a success (04/10)
+        e["survived"] += r.get("outcome") == "survived" and (r.get("kills") or 0) >= 1
         e["kills"] += r.get("kills") or 0
         e["last"] = r.get("outcome")
     return out

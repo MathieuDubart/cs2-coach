@@ -86,6 +86,8 @@ public partial class CoachReplay : BasePlugin
     int t0, countdownEnd, kills, dmg, generation, lastBeat, nextNade;
     bool awaitRestart;
     int emptyTries;   // a drill set up again because its bots did not come
+    bool humanDead, traded;   // a situation: you died, and your killer died within 3 s
+    int tradeKiller = -1, tradeUntil;
     string? builtFor;   // the situation the bots on the server were made for
     int difficulty = 2;
     double devSum; int devN;   // how far the bots drift from their path between two ticks (checked in spec mode)
@@ -391,6 +393,7 @@ public partial class CoachReplay : BasePlugin
                 Freeze(pawn, true);
             }
         kills = dmg = 0; devSum = 0; devN = 0;
+        humanDead = traded = false; tradeKiller = -1;
         SessionPlaced();
         phase = "countdown";
         var cd = cur.Kind is "death" or "clutch" ? 5 : 3;   // a situation: time to read it and get ready
@@ -485,6 +488,12 @@ public partial class CoachReplay : BasePlugin
         while (nextNade < cur.Nades.Count && cur.Nades[nextNade].F <= f) Throw(cur.Nades[nextNade++]);
         if (mode == "spec" && devN > 0 && (now - t0) % 320 == 0)
             Logger.LogInformation($"drift {devSum / devN:F1} u over {devN} samples");
+        if (humanDead)   // you died: traded or not, the drill ends (the bots keep moving meanwhile)
+        {
+            if (traded) Finish("traded");
+            else if (now > tradeUntil) Finish("dead");
+            return;
+        }
         var foes = bots.Where(b => b.Value.Team != cur.Team).ToList();
         if (mode == "actor" && foes.Count > 0 && foes.All(b => gone.Contains(b.Value.Sid))) { Finish("won"); return; }
         var endF = cur.Kind == "clutch" ? maxFrames + 64 * 10 / cur.Step : maxFrames + 64 * 2 / cur.Step;
@@ -548,8 +557,19 @@ public partial class CoachReplay : BasePlugin
         if (v != null && v.IsValid && bots.TryGetValue(v.Slot, out var t)) gone.Add(t.Sid);
         Logger.LogInformation("death {f}/{s}: {v} by {a} ({w})", (Server.TickCount - t0) / cur.Step, cur.Id, v?.PlayerName, e.Attacker?.PlayerName, e.Weapon);
         if (e.Attacker is { IsValid: true, IsBot: false } && v != null && v.IsBot) kills++;
+        if (humanDead && v != null && v.IsValid && v.Slot == tradeKiller && Server.TickCount <= tradeUntil) traded = true;   // your killer died right after: traded
         if (SessionDeath(e, v)) return HookResult.Continue;   // a defense: you come back
-        if (mode == "actor" && v is { IsValid: true, IsBot: false }) AddTimer(0.1f, () => Finish("dead"));
+        if (mode == "actor" && v is { IsValid: true, IsBot: false })
+        {
+            // a situation: 3 s to see if a teammate trades you (your killer dead), unless nobody is left to
+            var mates = bots.Any(b => b.Value.Team == cur.Team && !gone.Contains(b.Value.Sid));
+            if (cur.Kind is "death" or "clutch" && mates && e.Attacker is { IsValid: true, IsBot: true } k)
+            {
+                humanDead = true; tradeKiller = k.Slot; tradeUntil = Server.TickCount + 3 * 64;
+                return HookResult.Continue;
+            }
+            AddTimer(0.1f, () => Finish("dead"));
+        }
         return HookResult.Continue;
     }
 
@@ -576,7 +596,9 @@ public partial class CoachReplay : BasePlugin
             if (victim.DesignerName != "player" || att == null || att.DesignerName != "player") return HookResult.Continue;
             var vc = new CCSPlayerPawn(victim.Handle).OriginalController.Value;
             var ac = new CCSPlayerPawn(att.Handle).OriginalController.Value;
-            if (vc is { IsBot: true } && ac is { IsBot: true } && vc.Slot != ac.Slot) return HookResult.Handled;   // a demo death is the bot on itself
+            // a bot on its recorded path dies only as recorded (a demo death is the bot on itself); one playing on its own
+            // (it saw you) can be shot by anyone: your teammates can trade you
+            if (vc is { IsBot: true } && ac is { IsBot: true } && vc.Slot != ac.Slot && !free.Contains(vc.Slot)) return HookResult.Handled;
             if (drill?.Mode == "prefire" && vc is { IsBot: false } && ac is { IsBot: true }) return HookResult.Handled;   // prefire: they don't shoot
         }
         catch (Exception) { }
@@ -589,16 +611,27 @@ public partial class CoachReplay : BasePlugin
         phase = "done";
         var alive = (Server.TickCount - t0) / 64.0;
         if (sess != null && drill != null) { SessionFinish(outcome, alive); return; }
+        if (mode == "actor") outcome = SitOutcome(outcome);
         var line = JsonSerializer.Serialize(new Dictionary<string, object> {
             ["id"] = cur.Id, ["t"] = DateTimeOffset.UtcNow.ToUnixTimeSeconds(), ["outcome"] = outcome, ["mode"] = mode,
             ["kills"] = kills, ["dmg"] = dmg, ["alive_s"] = Math.Round(alive, 1), ["difficulty"] = difficulty,
             ["drift"] = devN > 0 ? Math.Round(devSum / devN, 1) : -1 });
         try { File.AppendAllText(System.IO.Path.Combine(Dir, "results.jsonl"), line + "\n"); } catch (Exception e) { Logger.LogInformation($"{e.Message}"); }
-        var msg = outcome switch { "won" => "\x04WON\x01", "survived" => "\x04SURVIVED\x01", "dead" => "\x02DEAD\x01", _ => outcome };
+        var msg = outcome switch { "won" => "\x04WON\x01", "survived" => "\x04SURVIVED\x01", "traded" => "\x04TRADED\x01",
+            "kill" => "\x04KILL, THEN DEAD\x01", "passive" => "\x02NO KILL\x01", "dead" => "\x02DEAD\x01", _ => outcome };
         All($"{msg} · {kills} kill(s) · {dmg} dmg · {alive:F1} s — again in 3 s (!n next · !p previous · !spec · !stop)");
         var g = generation;
         AddTimer(3f, () => { if (g == generation && phase == "done" && cur != null) Setup(); });
     }
+
+    // a situation's outcome: a kill or a trade is needed. won / survived with no kill of yours: passive; dead after a
+    // kill: kill (one for one); traded and dead stay
+    string SitOutcome(string o) => o switch
+    {
+        "won" or "survived" => kills >= 1 ? o : "passive",
+        "dead" => kills >= 1 ? "kill" : "dead",
+        _ => o,
+    };
 
     void Beat()
     {
