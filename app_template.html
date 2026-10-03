@@ -598,6 +598,12 @@ table.lc{border-collapse:collapse;font-variant-numeric:tabular-nums;min-width:64
 .vstuff i{font:700 13px var(--f-mono);color:var(--c);font-style:normal}
 .vstuff small{font:500 12px var(--f-body);color:var(--muted)}
 .vchip.warn{border-color:var(--warn,#e0a030);color:var(--warn,#e0a030)}
+
+/* the In game panel's fixed slots: what stays never moves */
+.vslot{display:block}
+.vslot-in{display:grid;gap:6px}
+.vslot.wait{display:flex;align-items:center;justify-content:center;border:1px dashed color-mix(in srgb,var(--muted) 35%,transparent);border-radius:var(--radius);box-sizing:border-box}
+.vslot.wait>span{font:600 11px var(--f-mono);color:color-mix(in srgb,var(--muted) 60%,transparent);letter-spacing:.06em;text-transform:uppercase}
 </style>
 
 <div class="bar"><div class="bar-in">
@@ -2158,6 +2164,7 @@ function renderIngame(){
    ${tabs(v,"Map guide",TABS,tab)}
    <div class="tabpanel" role="tabpanel">${body}</div>`;
   copyBtn(v);
+  if(typeof slotMeasure==="function")slotMeasure($("#now",v));   // the panel's slots keep their room
   const fbt=$("#igfull",v);if(fbt)fbt.onclick=()=>{store("igfull",!full);renderIngame()};
   const fsb=$("#fsbtn",v);if(fsb)fsb.onclick=async()=>{try{if(document.fullscreenElement)await document.exitFullscreen();else await document.documentElement.requestFullscreen()}catch(e){}renderIngame()};
   const sbt=$("#sidebtn",v);if(sbt)sbt.onclick=()=>{store("igside",store("igside")===false);renderIngame()};
@@ -2840,38 +2847,58 @@ function infoOn(){try{return localStorage.getItem("coach_info")!=="off"}catch(e)
 function coachInfo(g){if(!g||g.practice||!voiceOn()||!infoOn())return;const a=deadAgo(g);if(a==null||a<3||a>6||calledSince(g,a))return;const key=[g.map,g.round,"info"].join("|");   // 3 s after: the time to take your death in
   if(VOICE.info===key||(navigator.userActivation&&!navigator.userActivation.hasBeenActive))return;if(coachSay("L'info !"))VOICE.info=key}
 const expOn=(p,t)=>(((((p||{}).advice||{}).plan||{}).experiments||{}).experiments||[]).some(e=>e.status==="active"&&e.template===t);
+// the panel's slots, top to bottom. One slot per kind of info: the ones that never show together share it (before the
+// plant your site, after it the retake; T plant timer / bomb down / CT rotation), the ones that can show together have
+// their own (a call understood and "l'info")
+const SLOTS=["call","info","alert","reset","key","focus","read","play","hold","book","peek","early","eco","evid","tchips"];
+// the height each slot reached in this phase (buy time, live, end), for this map and side: kept the whole half, so after
+// a round nothing moves any more
+const SLOTH={key:"",h:{}};
+const SLOT_EMPTY={call:"🎙 call",info:"📣 info",alert:"💣 bomb · rotation"};   // a reserved slot waiting: a faint frame
+function slotted(g,P){const k=`${g.map}|${g.side}|${g.round_phase}`;if(SLOTH.key!==k){SLOTH.key=k;SLOTH.h={}}
+  // live: the alerts keep their room from the start of the round (a call when the mic listens, l'info while alive)
+  const R=g.round_phase==="live"?{alert:68,info:68,call:g.mic?40:0}:{};
+  return SLOTS.map(s=>{const html=(P[s]||[]).filter(Boolean).join(""),mh=Math.max(SLOTH.h[s]||0,R[s]||0);
+    if(!html&&!mh)return "";
+    return `<div class="vslot${html?"":" wait"}" data-slot="${s}" style="min-height:${mh}px">${html?`<div class="vslot-in">${html}</div>`:SLOT_EMPTY[s]?`<span>${SLOT_EMPTY[s]}</span>`:""}</div>`}).join("")}
+// after the page is drawn: each slot's height in this phase (its room for the next draws)
+function slotMeasure(root){(root?root.querySelectorAll(".vslot:not(.wait)"):[]).forEach(el=>{const s=el.dataset.slot,h=el.firstElementChild?el.firstElementChild.offsetHeight:0;
+  if(h>(SLOTH.h[s]||0))SLOTH.h[s]=h})}
 function nowVisual(p,g,following){
   if(!following)return nowPanel(p,g,following,{noBuy:true});
   if(g.practice)return `<div class="vz"><div class="vsit"><span>PRACTICE</span></div></div>`;
   if(g.map_phase==="warmup"&&typeof briefVisual==="function")return briefVisual(p,g);   // the map loads: the 60-second brief
-  const ph=g.round_phase,ct=g.side==="CT",out=[];
+  const ph=g.round_phase,ct=g.side==="CT",P={},put=(s,...h)=>{(P[s]=P[s]||[]).push(...h)};
   const TS=(p.advice.plan||{}).tside,r=ct?tsidePredict(TS,g.map,g,evFor(g)):null;
-  if(ph==="freezetime"){out.push(vReset(p,g),vKey(p,g));
-    if(voiceOn()&&navigator.userActivation&&!navigator.userActivation.hasBeenActive)out.push(`<span class="vchip">🔊 click this page once: the coach's voice</span>`);
-    {if(typeof antiEco==="function"&&antiEco(p,g))out.push(`<span class="vchip bad">! eco kill spots on the map: clear them, no close duel</span>`)}
-    if(ct)out.push(vMySite(p,g));
-    out.push(vPeekTimes(g,null));
-    if(ct&&r)out.push(vOdds(r),vRush(TS,g,r)||vEntries(TS,g,r),vCTline(p,g,r)||vHold(p,g,r),vBook(p,g,r));
-    const HM=isHostage(g.map);if(HM)out.push(ct?(vFocus(p,g)||vHostRoutes(p,g,false)):vHostRoutes(p,g,true));
-    if(!ct&&!HM){out.push(vFocus(p,g)||vPathCurve(p,g)||vTimeline(p,g),vBook(p,g,null),vEarlyMatch(g),vPush(p,g),vPushAns(p,g,false),vTchips(p,g))}}   // the plays and the grenades are on the map
-  else if(ph==="live"){const el=g.elapsed||0,planted=g.bomb==="planted";out.push(vCall(g),vInfo(g));
+  if(ph==="freezetime"){put("reset",vReset(p,g));put("key",vKey(p,g));
+    if(voiceOn()&&navigator.userActivation&&!navigator.userActivation.hasBeenActive)put("call",`<span class="vchip">🔊 click this page once: the coach's voice</span>`);
+    if(typeof antiEco==="function"&&antiEco(p,g))put("eco",`<span class="vchip bad">! eco kill spots on the map: clear them, no close duel</span>`);
+    if(ct)put("focus",vMySite(p,g));
+    put("peek",vPeekTimes(g,null));
+    if(ct&&r){put("read",vOdds(r));put("play",vRush(TS,g,r)||vEntries(TS,g,r));put("hold",vCTline(p,g,r)||vHold(p,g,r));put("book",vBook(p,g,r))}
+    const HM=isHostage(g.map);if(HM)put("focus",ct?(vFocus(p,g)||vHostRoutes(p,g,false)):vHostRoutes(p,g,true));
+    if(!ct&&!HM){put("focus",vFocus(p,g)||vPathCurve(p,g)||vTimeline(p,g));put("book",vBook(p,g,null));put("early",vEarlyMatch(g));
+      put("play",vPush(p,g));put("hold",vPushAns(p,g,false));put("tchips",vTchips(p,g))}}   // the plays and the grenades are on the map
+  else if(ph==="live"){const el=g.elapsed||0,planted=g.bomb==="planted";put("call",vCall(g));put("info",vInfo(g));
     if(planted){const left=g.phase_left!=null?g.phase_left:Math.max(0,40-(g.since_plant||0)),as=typeof autoSite==="function"?autoSite(p,g):null;
-      out.push(`<div class="vbig ${ct?"bad":"good"}"><b>💣 ${Math.ceil(left)}s</b><span>${ct?"retake together":"hold the bomb"}${as?` · ${as.site} site, ${as.said?"you said it":`${as.p}% sure`}`:" · numpad 7 A / 9 B"}</span></div>`);
-      if(as&&(as.said||as.p>=70))out.push(ct?vRetake(p,g,as.site):vPostPlant(p,g,as.site))}
-    else if(isHostage(g.map))out.push(ct?(vFocus(p,g)||(el<45?vHostRoutes(p,g,false):"")):(el<45?vHostRoutes(p,g,true):""));
-    else if(ct){out.push(vMySite(p,g),vPeekTimes(g,el));if(r){out.push(vOdds(r));
-        const PLs=tsidePlays(TS,g.map,g,evFor(g),r),M=TS&&TS.maps&&TS.maps[g.map];
-        const rush=el<32?vRush(TS,g,r):"";out.push(rush||vFights(M,g,r));
+      put("alert",`<div class="vbig ${ct?"bad":"good"}"><b>💣 ${Math.ceil(left)}s</b><span>${ct?"retake together":"hold the bomb"}${as?` · ${as.site} site, ${as.said?"you said it":`${as.p}% sure`}`:" · numpad 7 A / 9 B"}</span></div>`);
+      if(as&&(as.said||as.p>=70))put("focus",ct?vRetake(p,g,as.site):vPostPlant(p,g,as.site))}
+    else if(isHostage(g.map))put("focus",ct?(vFocus(p,g)||(el<45?vHostRoutes(p,g,false):"")):(el<45?vHostRoutes(p,g,true):""));
+    else if(ct){put("focus",vMySite(p,g));put("peek",vPeekTimes(g,el));if(r){put("read",vOdds(r));
+        const M=TS&&TS.maps&&TS.maps[g.map];
+        put("play",(el<32?vRush(TS,g,r):"")||vFights(M,g,r));
         if(el>=15&&el<=80&&Math.max(r.A,r.B)>=70&&typeof rotationFor==="function"){const X=r.A>r.B?"A":"B",o=X==="A"?"B":"A",R=rotationFor(M,X,`${o} Site`,M.geo),rt=R&&R.routes&&R.routes[0];
-          const me=(((g.hist||{}).marks||{})[g.round]||{}).me_site;   // where you said you are this round
-          if(rt&&me!==X)out.push(`<div class="vbig warn"><b>${o} → ${X}</b><span>${me===o?`you're ${o}: rotate now`:`if you hold ${o}: rotate`} · ${rt.travel!=null?`${Math.round(rt.travel)} s · `:""}${rt.died}% die on the way</span></div>`)}   // the hit leans hard to one siteif(el<75)out.push(vCTline(p,g,r)||(el<60?vHold(p,g,r):""));
-        (r.evid||[]).filter(x=>/spot/.test(x)).slice(0,2).forEach(ev=>out.push(`<span class="vchip ${/fight/.test(ev)?"bad":""}">● ${esc(ev)}</span>`))}}
-    else{out.push(vOpen(g),vPeekTimes(g,el),vFocus(p,g)||vPathCurve(p,g)||vTimeline(p,g),(el<45&&vPush(p,g))||vFights(TS&&TS.maps&&TS.maps[g.map],g,null),el<50?vPushAns(p,g,true):"");
+          const me=mySite(g);   // where you said you are this round (numpad 7 / 9, or said)
+          if(rt&&me!==X)put("alert",`<div class="vbig warn"><b>${o} → ${X}</b><span>${me===o?`you're ${o}: rotate now`:`if you hold ${o}: rotate`} · ${rt.travel!=null?`${Math.round(rt.travel)} s · `:""}${rt.died}% die on the way</span></div>`)}   // the hit leans hard to one site
+        if(el<75)put("hold",vCTline(p,g,r)||(el<60?vHold(p,g,r):""));
+        (r.evid||[]).filter(x=>/spot/.test(x)).slice(0,2).forEach(ev=>put("evid",`<span class="vchip ${/fight/.test(ev)?"bad":""}">● ${esc(ev)}</span>`))}}
+    else{put("read",vOpen(g));put("peek",vPeekTimes(g,el));put("focus",vFocus(p,g)||vPathCurve(p,g)||vTimeline(p,g));
+      put("play",(el<45&&vPush(p,g))||vFights(TS&&TS.maps&&TS.maps[g.map],g,null));put("hold",el<50?vPushAns(p,g,true):"");
       const left=g.phase_left!=null?g.phase_left:Math.max(0,RLEN()-el);
-      if(left<=45)out.push(`<div class="vbig bad"><b>PLANT ${Math.floor(left/60)}:${String(Math.floor(left%60)).padStart(2,"0")}</b><span>${left>20?"commit now":"plant or save"}</span></div>`);
-      else out.push(vTchips(p,g))}}
-  else if(ph==="over"){out.push(`<div class="vsit"><span>ROUND ${g.round}</span>${g.win_team?`<b class="${g.win_team===g.side?"good":"bad"}">${g.win_team===g.side?"WON":"LOST"}</b>`:""}</div>`)}
-  const html=out.filter(Boolean).join("");
+      if(left<=45)put("alert",`<div class="vbig bad"><b>PLANT ${Math.floor(left/60)}:${String(Math.floor(left%60)).padStart(2,"0")}</b><span>${left>20?"commit now":"plant or save"}</span></div>`);
+      else put("tchips",vTchips(p,g))}}
+  else if(ph==="over")put("call",`<div class="vsit"><span>ROUND ${g.round}</span>${g.win_team?`<b class="${g.win_team===g.side?"good":"bad"}">${g.win_team===g.side?"WON":"LOST"}</b>`:""}</div>`);
+  const html=slotted(g,P);
   return `<div class="vz">${html||`<div class="vsit"><span>ROUND ${g.round||""}</span></div>`}</div>`}
 // the buy notification of the full-screen view: one compact card, no paragraph, never scrolls
 // the grenades to buy, for the two economies. CT: molly and smoke first (a hit that meets one still burning or
