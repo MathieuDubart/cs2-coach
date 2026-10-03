@@ -229,6 +229,7 @@ public partial class CoachReplay : BasePlugin
                     Utilities.SetStateChanged(bs[i], "CBasePlayerController", "m_iszPlayerName");
                 }
                 if (bs.Count != tracks.Count) Logger.LogInformation($"team {team}: {bs.Count} bots for {tracks.Count} tracks");
+                foreach (var extra in bs.Skip(tracks.Count)) Server.ExecuteCommand($"kickid {extra.UserId}");   // a bot the game added on its own
             }
             awaitRestart = true;
             Server.ExecuteCommand("mp_restartgame 1");

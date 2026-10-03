@@ -165,37 +165,45 @@ def aim_drills(sid, mp):
     for (side, zone), g in R.groupby(["side", "zone"]):
         if len(g) < 3 or not isinstance(zone, str) or zone in ("?", ""):
             continue
+        # your most frequent spot in the zone, and only the duels you took from there: their enemies were in sight
         P = np.array(g.me.tolist())
-        med = np.median(P, axis=0)
-        mine = P[np.argmin(((P - med) ** 2).sum(1))]   # a real spot of yours, the closest to the middle
-        enemies, seen = [], []
-        E = list(zip(g.en, g.en_zone))
-        random.shuffle(E)
-        for e, ez in E:   # distinct spots (150 u apart), 5 at most
-            if all(math.dist(e, s) > 150 for s in seen) and math.dist(e, mine) > 120:
-                seen.append(e)
-                enemies.append({"pos": [round(v, 1) for v in e], "zone": ez})
-            if len(enemies) >= 5:
+        near = None
+        for rad in (220, 350):
+            d2 = np.sqrt(((P[:, None, :2] - P[None, :, :2]) ** 2).sum(-1))
+            close = (d2 <= rad) & (np.abs(P[:, None, 2] - P[None, :, 2]) < 100)
+            k = int(np.argmax(close.sum(1) * 10 + g.died.to_numpy()))
+            near = g[close[k]]
+            mine = P[k]
+            enemies, seen = [], []
+            E = list(zip(near.en, near.en_zone))
+            random.shuffle(E)
+            for e, ez in E:   # distinct spots (150 u apart), not too far, 5 at most
+                if all(math.dist(e, s_) > 150 for s_ in seen) and 150 < math.dist(e, mine) < 1800:
+                    seen.append(e)
+                    enemies.append({"pos": [round(v, 1) for v in e], "zone": replay_zone(ez, mp)})
+                if len(enemies) >= 5:
+                    break
+            if len(enemies) >= 2:
                 break
         if len(enemies) < 2:
             continue
         team = 2 if side == "T" else 3
         w = g.weapon.dropna()
         wp = PRIMARY.get(w.mode().iloc[0]) if len(w) else None
-        cen = np.mean([e["pos"] for e in enemies], axis=0)
-        out.append({"id": f"aim:{mp}:{side}:{zone}", "kind": "aim", "map": mp, "title": f"{replay_zone(zone)} ({side})",
-                    "tip": f"{len(enemies)} enemies, one by one, where yours were · you died here {int(g.died.sum())}×",
-                    "team": team, "me": {"pos": [round(float(v), 1) for v in mine], "ang": _angle(mine, cen)},
+        died = int(near.died.sum())
+        out.append({"id": f"aim:{mp}:{side}:{zone}", "kind": "aim", "map": mp, "title": f"{replay_zone(zone, mp)} ({side})",
+                    "tip": f"{len(enemies)} enemies, one by one, where they were when you fought here" + (f" · you died here {died}×" if died else ""),
+                    "team": team, "me": {"pos": [round(float(v), 1) for v in mine], "ang": _angle(mine, enemies[0]["pos"])},
                     "weapons": ["weapon_knife", f"weapon_{wp}" if wp else RIFLE[team]],
                     "bot_weapons": ["weapon_knife", RIFLE[5 - team]],
-                    "bots": [{"pos": e["pos"], "ang": _angle(e["pos"], mine)} for e in enemies],
-                    "weight": 1 + 2 * int(g.died.sum()) + len(g)})
+                    "bots": [{"pos": e["pos"], "ang": _angle(e["pos"], mine), "zone": e["zone"]} for e in enemies],
+                    "weight": 1 + 2 * died + len(near)})
     return out
 
 
-def replay_zone(z):
-    import re
-    return re.sub(r"(?<=[a-z])(?=[A-Z])", " ", str(z))
+def replay_zone(z, mp=None):
+    import nades
+    return nades.humanize(z, mp) or str(z)
 
 
 def _world(mp, px, py):
@@ -240,7 +248,7 @@ def nade_drills(sid, mp):
 
 def situation_drills(sid, mp, all_sc=None):
     return [{"id": s["id"], "kind": "situation", "map": s["map"], "title": f"R{s['round']} · " + (
-                f"1v{s['vs']} clutch" if s["kind"] == "clutch" else "death") + (f" · {replay_zone(s['zone'])}" if s.get("zone") else ""),
+                f"1v{s['vs']} clutch" if s["kind"] == "clutch" else "death") + (f" · {replay_zone(s['zone'], mp)}" if s.get("zone") else ""),
              "tip": (f"you died to {s['by']} ({s.get('weapon')})" if s.get("by") else "you lost it") +
                     ("" if s["kind"] == "clutch" else (" · first death" if s.get("opening") else "") + ("" if s.get("traded") else " · not traded")),
              "mid": s["mid"], "round": s["round"], "sk": s["kind"], "t": s["t"], "weight": s["score"]}
@@ -330,13 +338,62 @@ def summary():
             "items": len(stars)}
 
 
+def _game_running():
+    """The game runs (the training server is a cs2.exe too: the one started with -dedicated)."""
+    import subprocess
+    ps = "Get-CimInstance Win32_Process -Filter \"name='cs2.exe'\" | ForEach-Object { $_.CommandLine }"
+    r = subprocess.run(["powershell", "-NoProfile", "-Command", ps], capture_output=True, text=True, creationflags=replay.NO_WINDOW)
+    return any(ln.strip() and "-dedicated" not in ln for ln in r.stdout.splitlines())
+
+
+def _console():
+    import chatcalls
+    f = chatcalls.console_file()
+    return f if f and os.path.exists(f) else None
+
+
+def _menu_since(start_size):
+    """The game's main menu is up since the launch (its console log is written again at each launch)."""
+    f = _console()
+    if not f:
+        return False
+    size = os.path.getsize(f)
+    with open(f, "rb") as fh:
+        fh.seek(0 if size < start_size else start_size)
+        return b"-> CSGO_GAME_UI_STATE_MAINMENU" in fh.read()
+
+
+def _connect():
+    """The game sent to the server. A connect given while CS2 starts is lost (it runs before the menu is ready): a
+    closed game is started first, the connect waits for its menu; tried twice."""
+    url = f"steam://connect/127.0.0.1:{replay.PORT}"
+    if not _game_running():
+        f = _console()
+        start = os.path.getsize(f) if f else 0
+        os.startfile("steam://run/730")
+        for _ in range(180):
+            time.sleep(1)
+            if _menu_since(start):
+                break
+        time.sleep(4)   # the menu settles
+    for _ in range(2):
+        os.startfile(url)
+        for _ in range(45):
+            time.sleep(1)
+            h = replay.heartbeat()
+            if h and h.get("humans"):
+                return True
+    return False
+
+
 def play(sid, minutes=20, where="random", difficulty=2):
     """One Play: the session built, the server on its first map, the plugin told, and the game sent to the server
-    (Steam starts CS2 if it is closed). You only follow what the game shows."""
+    (started first if it is closed). You only follow what the game shows."""
+    import threading
     sess = build(sid, minutes, where, difficulty)
     replay.start(sess["blocks"][0]["map"])
     replay.rcon(f"css_session {sess['id']}")
-    os.startfile(f"steam://connect/127.0.0.1:{replay.PORT}")
+    threading.Thread(target=_connect, daemon=True).start()
     return {"session": {k: sess[k] for k in ("id", "minutes", "maps")},
             "blocks": [{"map": b["map"], "kind": b["kind"], "seconds": b["seconds"], "n": len(b["drills"])} for b in sess["blocks"]],
             **replay.status()}

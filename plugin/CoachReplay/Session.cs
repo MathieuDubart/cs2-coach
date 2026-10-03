@@ -18,6 +18,7 @@ public class Spot
 {
     [JsonPropertyName("pos")] public float[] Pos { get; set; } = new float[3];
     [JsonPropertyName("ang")] public float[] Ang { get; set; } = new float[2];   // pitch, yaw
+    [JsonPropertyName("zone")] public string? Zone { get; set; }
 }
 
 public class Drill
@@ -203,7 +204,7 @@ public partial class CoachReplay
         for (int k = 0; k < d.Bots.Count; k++)
         {
             var b = d.Bots[k];
-            s.Players.Add(new Track { Sid = $"target{k}", Name = $"Target {k + 1}", Team = 5 - d.Team, Hp = 100, Armor = 100, Helmet = true,
+            s.Players.Add(new Track { Sid = $"target{k}", Name = b.Zone ?? $"Target {k + 1}", Team = 5 - d.Team, Hp = 100, Armor = 100, Helmet = true,
                 Weapons = d.BotWeapons, Active = d.BotWeapons.LastOrDefault(), Path = new[] { b.Pos[0], b.Pos[1], b.Pos[2], b.Ang[1], b.Ang[0] }, Hold = true });
         }
         return s;
@@ -230,6 +231,15 @@ public partial class CoachReplay
             aimOrder.AddRange(bots.Keys.OrderBy(_ => Rng.Next()));
             for (int k = 1; k < aimOrder.Count; k++) Utilities.GetPlayerFromSlot(aimOrder[k])?.PlayerPawn.Value?.CommitSuicide(false, true);
             aimNext = 1;
+            // you start turned to the first target
+            if (aimOrder.Count > 0 && bots.TryGetValue(aimOrder[0], out var first))
+            {
+                var me = cur.Players.First(p => p.Me);
+                var d = Pos(first, 0) - Pos(me, 0);
+                var yaw = MathF.Atan2(d.Y, d.X) * 180 / MathF.PI;
+                var pitch = -MathF.Atan2(d.Z, MathF.Sqrt(d.X * d.X + d.Y * d.Y)) * 180 / MathF.PI;
+                foreach (var h in Humans()) h.PlayerPawn.Value?.Teleport(Pos(me, 0), new Vector3(pitch, yaw, 0), Vector3.Zero);
+            }
         }
         if (cur.Kind == "nade") { nadeWait = true; attemptEnd = DateTime.UtcNow.AddSeconds(30); }   // a throw during the countdown counts
     }
@@ -246,24 +256,34 @@ public partial class CoachReplay
     {
         if (sess == null || cur == null) return;
         aimSpawn = Server.TickCount;
+        if (cur.Kind == "aim") AimCard();
     }
 
     void SessionTick()
     {
         if (sess == null || cur == null || phase != "live") return;
-        if (cur.Kind == "aim" && Server.TickCount - t0 > 45 * 64) Finish("timeout");
+        // a target not found in 12 s goes away (missed), the next one comes
+        if (cur.Kind == "aim" && aimSpawn > 0 && Server.TickCount - aimSpawn > 12 * 64)
+        {
+            aimSpawn = 0;
+            var slot = aimOrder.ElementAtOrDefault(aimNext - 1);
+            Html("<font color='#ff5a5a'>MISSED</font> · next one", 1);
+            Utilities.GetPlayerFromSlot(slot)?.PlayerPawn.Value?.CommitSuicide(false, true);
+        }
+        if (cur.Kind == "aim" && Server.TickCount - t0 > 120 * 64) Finish("timeout");
         if (cur.Kind == "nade" && nadeWait && DateTime.UtcNow > attemptEnd) NadeResult(double.NaN);
     }
 
     void SessionDeath(EventPlayerDeath e, CCSPlayerController? v)
     {
         if (sess == null || cur?.Kind != "aim" || v == null || !v.IsBot) return;
-        if (e.Attacker is { IsValid: true, IsBot: false })
+        if (e.Attacker is { IsValid: true, IsBot: false } && aimSpawn > 0)
         {
             reacts.Add((Server.TickCount - aimSpawn) / 64.0);
             if (e.Headshot) aimHs++;
             Html($"<font color='#ff8a3d'>HIT</font> {reacts[^1]:F2} s{(e.Headshot ? " · HS" : "")} · {reacts.Count}/{aimOrder.Count}", 1);
         }
+        aimSpawn = 0;
         if (aimNext < aimOrder.Count)
         {
             var slot = aimOrder[aimNext++];
@@ -278,9 +298,18 @@ public partial class CoachReplay
                 c.PlayerPawn.Value?.Teleport(Pos(t, 0), Ang(t, 0), Vector3.Zero);
                 gone.Remove(t.Sid);
                 aimSpawn = Server.TickCount;
+                AimCard();
             });
         }
-        else AddTimer(0.4f, () => Finish("won"));
+        else AddTimer(0.4f, () => Finish(reacts.Count == aimOrder.Count ? "cleared" : "done"));
+    }
+
+    // which target, where to look
+    void AimCard()
+    {
+        var slot = aimOrder.ElementAtOrDefault(aimNext - 1);
+        var where = bots.TryGetValue(slot, out var t) ? t.Name : "";
+        Html($"<font color='#ff8a3d'>TARGET {aimNext}/{aimOrder.Count}</font> → <font class='fontSize-l'>{where}</font>", 2);
     }
 
     void NadeHit(CCSPlayerController? u, float x, float y)
@@ -339,7 +368,8 @@ public partial class CoachReplay
         string detail;
         if (cur.Kind == "aim")
         {
-            ok = outcome == "won";
+            var n = Math.Max(1, aimOrder.Count);
+            ok = outcome != "dead" && (reacts.Count == n || (n >= 3 && reacts.Count >= n - 1));
             foreach (var r in reacts) pts += 50 + (int)Math.Max(0, 50 * (1.2 - r) / 1.2);
             pts += aimHs * 20 + (ok ? 100 : 0);
             detail = reacts.Count > 0 ? $"{reacts.Count}/{aimOrder.Count} · {reacts.Average():F2} s avg · {aimHs} HS" : "no kill";
