@@ -495,14 +495,16 @@ def _console():
 
 
 def _menu_since(start_size):
-    """The game's main menu is up since the launch (its console log is written again at each launch)."""
+    """The game's main menu is up since the launch, its background map loaded (its console log is written again at
+    each launch): a connect given before that is cut while the map loads (LOOPSHUTDOWN, seen on 03/10)."""
     f = _console()
     if not f:
         return False
     size = os.path.getsize(f)
     with open(f, "rb") as fh:
         fh.seek(0 if size < start_size else start_size)
-        return b"-> CSGO_GAME_UI_STATE_MAINMENU" in fh.read()
+        t = fh.read()
+    return b"-> CSGO_GAME_UI_STATE_MAINMENU" in t and b"Connected to 'loopback" in t
 
 
 def _connect():
@@ -517,14 +519,17 @@ def _connect():
             time.sleep(1)
             if _menu_since(start):
                 break
-        time.sleep(4)   # the menu settles
+        time.sleep(8)   # the menu settles
     for _ in range(2):
         os.startfile(url)
         for _ in range(45):
             time.sleep(1)
             h = replay.heartbeat()
             if h and h.get("humans"):
-                return True
+                time.sleep(10)   # still there 10 s later: in game (a connect cut while loading drops you before)
+                h = replay.heartbeat()
+                if h and h.get("humans"):
+                    return True
     return False
 
 
