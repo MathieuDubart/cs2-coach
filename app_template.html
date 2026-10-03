@@ -1252,6 +1252,7 @@ async function renderSettings(){
   <article class="card"><h3>The coach's voice at the buy time</h3>
    <p>When you're frustrated (a word or a shout after your death, "coach, énervé"), after two rounds lost dead without a kill, or when you don't understand ("qu'est-ce qu'on fait", "coach, perdu"): a few seconds of voice during the buy time, once per round. Calm, then one thing to do this round, or a simple plan.</p>
    <div class="row"><label style="display:flex;gap:8px;align-items:center;font-size:14px"><input type="checkbox" id="c-voice" ${voiceOn()?"checked":""}> Speak at the buy time</label><button type="button" id="c-voice-test">Hear it</button></div>
+   <div class="row"><label style="display:flex;gap:8px;align-items:center;font-size:14px"><input type="checkbox" id="c-info" ${infoOn()?"checked":""}> Say "l'info !" when I die (your rounds with a call before your death are won far more often)</label></div>
    <p class="note">A French voice of Windows (Julie, Paul or Hortense), on this PC: nothing is sent anywhere. The browser only lets a page speak after one click on it: click the In game page once when you open it.</p></article>
   <article class="card form"><h3>Your calls (microphone) ${ok(vs&&vs.settings&&vs.settings.auto)}</h3>
    <p>During your matches, the app records <b>your microphone</b>, transcribes your calls on this PC and lines them up with the rounds: info given before dying, "where + how many", grenades called, talking during a teammate's clutch, frustration. The result shows up in the Review.</p>
@@ -1304,6 +1305,7 @@ async function renderSettings(){
   const va=$("#v-auto",v);if(va)va.onchange=()=>vcall("/api/voice/settings",{auto:va.checked});
   const vl=$("#v-live",v);if(vl)vl.onchange=()=>vcall("/api/voice/settings",{live:vl.checked});
   const cvo=$("#c-voice",v);if(cvo)cvo.onchange=()=>{try{localStorage.setItem("coach_voice",cvo.checked?"on":"off")}catch(e){}};
+  const cin=$("#c-info",v);if(cin)cin.onchange=()=>{try{localStorage.setItem("coach_info",cin.checked?"on":"off")}catch(e){}};
   const cvt=$("#c-voice-test",v);if(cvt)cvt.onclick=()=>{if(!coachSay("Respire. Le round d'avant est fini. Ce round, joue le trade, à côté d'un coéquipier."))cvt.textContent="No French voice of Windows found"};
   const vd=$("#v-dev",v);if(vd){fetch("/api/voice/devices").then(r=>r.json()).then(list=>{if(!Array.isArray(list))return;const cur=(vs.settings||{}).device||"";
     vd.innerHTML=`<option value="">${vs.cs2_device?`The same as CS2 (${esc(vs.cs2_device)})`:"Windows default microphone"}</option>`+list.map(d=>`<option value="${esc(d.name)}" ${d.name===cur?"selected":""}>${esc(d.name)}${d.cs2?" (used by CS2)":d.default?" (Windows default)":""}</option>`).join("")}).catch(()=>{});
@@ -1879,6 +1881,7 @@ async function gsiPoll(){clearTimeout(gsiTimer);if(!D.local||S.view!=="ingame")r
     if(gsiLast&&S.player&&D.players[S.player]&&typeof liveLog==="function")liveLog(D.players[S.player],gsiLast);   // checked after the match
     if(gsiLast&&S.player===D.own&&D.players[S.player]&&typeof pathCalls==="function")pathCalls(D.players[S.player],gsiLast);   // numpad 1-2-3
     if(gsiLast&&S.player===D.own&&D.players[S.player]&&typeof coachVoice==="function")coachVoice(D.players[S.player],gsiLast);   // the coach's voice at the buy time
+    if(gsiLast&&S.player===D.own&&typeof coachInfo==="function")coachInfo(gsiLast);   // "l'info !" when you die
     if(sig(gsiLast)+(gsiLast&&gsiLast.mic)!==before&&S.view==="ingame"&&S.player&&D.players[S.player])renderIngame()}catch(e){}
   gsiTimer=setTimeout(gsiPoll,1000)}   // the game sends every 0.25 s
 
@@ -2384,7 +2387,7 @@ function liveRadar(box,p,map,level,g,o){
     o.nadesOut&&o.nadesOut(NN);
     if(NN.length)legend.push(`<span>${SW.nade}grenade worth throwing ${live?"now":"this round"}: from the white dot to its icon (cloud smoke, flame molotov, burst flash, HE)</span>`)}
   if(att&&on("nades")&&o.following&&typeof vNadePicks==="function"){const NP=vNadePicks(p,g).filter(x=>x.x);
-    NP.forEach(n=>drawNade({...n.x,type:n.type},`${nadeName(n.type,"T")} → ${vShort(n.x.to||"?")}`+(/jump|run/i.test(n.x.how||"")?` · ${String(n.x.how).match(/jump|run/i)[0].toLowerCase()}`:"")+({site:` · site ${FN||1}`,way:` · path ${FN||1}`}[n.x.way]||""),`${nadeName(n.type,"T")} ${n.x.from} → ${n.x.to}${n.x.how?`. ${n.x.how}`:""}`));
+    NP.forEach(n=>drawNade({...n.x,type:n.type},`${nadeName(n.type,"T")} → ${vShort(n.x.to||"?")}${n.x.pop?" · pop":""}`+(/jump|run/i.test(n.x.how||"")?` · ${String(n.x.how).match(/jump|run/i)[0].toLowerCase()}`:"")+({site:` · site ${FN||1}`,way:` · path ${FN||1}`}[n.x.way]||""),`${nadeName(n.type,"T")} ${n.x.from} → ${n.x.to}${n.x.how?`. ${n.x.how}`:""}`));
     NP.filter(n=>n.alt&&n.alt.to_px&&n.alt.from_px&&here({px:n.alt.to_px,level:n.alt.land_level||n.alt.level})).forEach(n=>{const a=n.alt,gg=el("g",{style:"opacity:.45"},Lnades);   // the other good throw, faint
       nadeArc(gg,a.from_px[0],a.from_px[1],a.to_px[0],a.to_px[1],n.type);tip(el("circle",{cx:a.to_px[0],cy:a.to_px[1],r:9,style:`fill:var(--${n.type});fill-opacity:.6;stroke:#0b0f14`},gg),`Other ${nadeName(n.type,"T")}: ${a.from} → ${a.to}`)});
     if(NP.length)legend.push(`<span>${SW.nade}your grenades for this moment: from the white dot to its icon</span>`)}
@@ -2433,7 +2436,8 @@ function vNadePicks(p,g){const N=(p.advice.plan||{}).nades,E=N&&((N.maps||{})[g.
     if(oth&&Math.hypot(x.to_px[0]-oth[0],x.to_px[1]-oth[1])<160&&lvOK(lv,othG.level))return "off";
     return near(x.from_px,60,x.level)?"from":null};
   const bonus={site:.06,way:.04,from:.02,off:-.06};
-  const eff0=eff,effW=x=>eff0(x)+(bonus[way(x)]||0),tag=x=>x&&Object.assign({},x,{way:way(x)});
+  const eff0=eff,effW=x=>eff0(x)+(bonus[way(x)]||0)+(x.pop?.03:0),   // a pop flash: you peek behind it yourself
+tag=x=>x&&Object.assign({},x,{way:way(x)});
   const FX=focusN(g),noOff=l=>l.filter(x=>FX?["site","way","from"].includes(way(x)):way(x)!=="off");   // a throw toward the other site only helps a fake: never shown; with a focus, only the throws of that path
   const picks=t=>{if(w==="post")return (E.types[t].post||[]).slice(0,2);
     if(el==null||!w){const L0=noOff((E.types[t].picks||[]).slice().sort((a,b)=>effW(b)-effW(a)));
@@ -2444,7 +2448,7 @@ function vNadePicks(p,g){const N=(p.advice.plan||{}).nades,E=N&&((N.maps||{})[g.
   return Object.entries(g.nades||{}).filter(([t,v])=>v>0&&E.types[t]).map(([t,v])=>{const ps=picks(t);return {type:t,n:v,x:ps[0]||null,alt:ps[1]||null,el:g.round_phase==="live"?el:null}})}
 function vNades(list){if(!list.length)return "";
   const when=(x,el)=>x.t_med!=null&&el!=null&&x.t_med>el+3?clock(x.t_med):x.t_med!=null&&el==null?clock(x.t_med):"now";
-  return `<div class="vnades">${list.map(o=>`<span class="vnade${o.x?(o.now?" now":""):" keep"}" style="--c:${NADE_C[o.type]||"#ccc"}"><i>${vLetter[o.type]||"?"}</i>${o.x?`${vShort(o.x.to||o.x.land)}<small>${when(o.x,o.el)}</small>${o.alt?`<em>${vShort(o.alt.to||o.alt.land)} ${when(o.alt,o.el)}</em>`:""}`:"<small>keep</small>"}</span>`).join("")}</div>`}
+  return `<div class="vnades">${list.map(o=>`<span class="vnade${o.x?(o.now?" now":""):" keep"}" style="--c:${NADE_C[o.type]||"#ccc"}"><i>${vLetter[o.type]||"?"}</i>${o.x?`${vShort(o.x.to||o.x.land)}${o.x.pop?" ↯":""}<small>${when(o.x,o.el)}</small>${o.alt?`<em>${vShort(o.alt.to||o.alt.land)} ${when(o.alt,o.el)}</em>`:""}`:"<small>keep</small>"}</span>`).join("")}</div>`}
 // a rule as icons and two numbers: what your side wins when you do it / when you don't
 const vRule=(icon,label,bad,good)=>`<div class="vrule"><i>${icon}</i><span>${label}</span><b class="bad">${bad}%</b><em>→</em><b class="good">${good}%</b></div>`;
 // T side: the round as a strip from 1:55 to 0:00, each tempo window colored by how often the Ts win with it here;
@@ -2675,6 +2679,13 @@ function bookFor(p,g,r){const B=((p.advice.plan||{}).lineups||{})[g.map];if(!B||
   return L.length?{book:B,list:L.sort((a,b)=>sites.indexOf(a.site)-sites.indexOf(b.site)||pri.indexOf(a.type)-pri.indexOf(b.type)).slice(0,2)}:null}
 function vBook(p,g,r){const F=bookFor(p,g,r);if(!F)return "";
   return vHead(`📖 LINEUPS · ${esc(F.book.author)}`)+`<div class="vbook">${F.list.map(x=>`<a href="${esc(x.link)}" target="_blank" rel="noopener" title="${esc([x.position,x.aim].filter(Boolean).join(" · "))}"><img src="${esc(x.img_aim||x.img_position||"")}" alt="" loading="lazy"><span><b style="color:${NADE_C[x.type]||"#ccc"}">${vLetter[x.type]||"?"}</b> ${esc(x.title.replace(/\s*(smoke|flash|molly)$/i,""))}${x.throw?` <em>${esc(x.throw.toLowerCase())}</em>`:""}</span><small>${esc(x.position||"")}</small></a>`).join("")}</div>`}
+// you just died: the info, now (where, how many, how hurt). Your rounds with a call before your death are won far
+// more often; a few seconds of a big reminder, and the voice once per round (setting "Say 'info' when I die")
+function deadAgo(g){const R=(((g.hist||{}).rounds||{})[g.round])||{};return g.round_phase==="live"&&R.dead!=null?(g.elapsed||0)-R.dead:null}
+function vInfo(g){const a=deadAgo(g);return a!=null&&a>=0&&a<=6?`<div class="vbig warn"><b>📣 INFO</b><span>where · how many · how hurt</span></div>`:""}
+function infoOn(){try{return localStorage.getItem("coach_info")!=="off"}catch(e){return true}}
+function coachInfo(g){if(!g||g.practice||!voiceOn()||!infoOn())return;const a=deadAgo(g);if(a==null||a<0||a>3)return;const key=[g.map,g.round,"info"].join("|");
+  if(VOICE.info===key||(navigator.userActivation&&!navigator.userActivation.hasBeenActive))return;if(coachSay("L'info !"))VOICE.info=key}
 const expOn=(p,t)=>(((((p||{}).advice||{}).plan||{}).experiments||{}).experiments||[]).some(e=>e.status==="active"&&e.template===t);
 function nowVisual(p,g,following){
   if(!following)return nowPanel(p,g,following,{noBuy:true});
@@ -2688,7 +2699,7 @@ function nowVisual(p,g,following){
     if(ct&&r)out.push(vOdds(r),vRush(TS,g,r)||vEntries(TS,g,r),vCTline(p,g,r)||vHold(p,g,r),vBook(p,g,r));
     const HM=isHostage(g.map);if(HM)out.push(ct?(vFocus(p,g)||vHostRoutes(p,g,false)):vHostRoutes(p,g,true));
     if(!ct&&!HM){out.push(vFocus(p,g)||vPathCurve(p,g)||vTimeline(p,g),vBook(p,g,null),vEarlyMatch(g),vPush(p,g),vPushAns(p,g,false),vTchips(p,g))}}   // the plays and the grenades are on the map
-  else if(ph==="live"){const el=g.elapsed||0,planted=g.bomb==="planted";out.push(vCall(g));
+  else if(ph==="live"){const el=g.elapsed||0,planted=g.bomb==="planted";out.push(vCall(g),vInfo(g));
     if(planted){const left=g.phase_left!=null?g.phase_left:Math.max(0,40-(g.since_plant||0)),as=typeof autoSite==="function"?autoSite(p,g):null;
       out.push(`<div class="vbig ${ct?"bad":"good"}"><b>💣 ${Math.ceil(left)}s</b><span>${ct?"retake together":"hold the bomb"}${as?` · ${as.site} site, ${as.p}% sure`:""}</span></div>`)}
     else if(isHostage(g.map))out.push(ct?(vFocus(p,g)||(el<45?vHostRoutes(p,g,false):"")):(el<45?vHostRoutes(p,g,true):""));

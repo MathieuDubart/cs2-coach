@@ -12,6 +12,7 @@ import json
 import os
 import sys
 
+import numpy as np
 import pandas as pd
 
 import config
@@ -29,7 +30,7 @@ WINDOW_FR = {"debut": "start of the round (1:55 to 1:35)", "prise": "info gather
              "fin": "end of the round (after 0:45)", "post": {"T": "after the plant", "CT": "retake"}}
 COLS = ["map", "match", "round", "t", "type", "thrower", "side", "zone", "land_zone", "X", "Y", "Z", "pitch", "yaw", "px", "py",
         "level", "land_px", "land_py", "land_level", "jump", "speed", "crouch", "walk", "click", "flight_s", "damage",
-        "enemies_blind", "mates_blind", "kills_after", "post", "won", "buy"]
+        "enemies_blind", "mates_blind", "kills_after", "post", "won", "buy", "self_kill"]
 
 
 def humanize(z, mp=None):
@@ -62,7 +63,9 @@ def load_all(rebuild=False):
     if not rebuild and os.path.exists(OUT) and os.path.exists(meta_f):
         try:
             if json.load(open(meta_f, encoding="utf-8")).get("stamp") == stamp:
-                return pd.read_parquet(OUT)
+                cached = pd.read_parquet(OUT)
+                if "self_kill" in cached:   # older files: built again once
+                    return cached
         except ValueError:
             pass
     rows = []
@@ -86,6 +89,18 @@ def load_all(rebuild=False):
             continue
         R = R.set_index("round")
         plant = R["plant_t"] if "plant_t" in R else pd.Series(dtype=float)
+        # a pop flash: the thrower himself kills a blinded enemy in the 3 s after it pops
+        fd = os.path.join(d, "duels.parquet")
+        sk = [0] * len(g)
+        if os.path.exists(fd) and "land_tick" in g:
+            D = pd.read_parquet(fd, columns=["tick", "killer", "victim_flashed"])
+            D = D[D.victim_flashed.fillna(False).astype(bool)]
+            byk = {k: np.sort(x.tick.to_numpy()) for k, x in D.groupby("killer")}
+            for i, (typ, thr, lt) in enumerate(zip(g.type, g.thrower, g.land_tick)):
+                if typ == "flash" and lt == lt and thr in byk:
+                    a = byk[thr]
+                    sk[i] = int(np.searchsorted(a, lt + 3 * 64, side="right") - np.searchsorted(a, lt, side="right"))
+        g = g.assign(self_kill=sk)
         g = g.assign(map=mp, match=mid,
                      post=[bool(pd.notna(plant.get(r)) and t > plant.get(r)) for r, t in zip(g["round"], g.t)],
                      won=[R.winner.get(r) == s for r, s in zip(g["round"], g.side)],
@@ -148,6 +163,7 @@ def groups(df, side_rounds):
             prior = _eff(t, typ)
             if typ == "flash":
                 prior_k = float((t.kills_after.fillna(0) >= 1).mean())
+                prior_s = float((t.self_kill.fillna(0) >= 1).mean()) if "self_kill" in t else 0.0
             full = t[t.buy == "full"]
             base_win = float(g[g.buy == "full"].drop_duplicates(["match", "round"]).won.mean()) if typ == "smoke" and len(full) else None
             lst = []
@@ -161,6 +177,7 @@ def groups(df, side_rounds):
                     e["blind"] = round(100 * (blind + prior * 10) / (n + 10))
                     e["kill"] = round(100 * (float((c.kills_after.fillna(0) >= 1).sum()) + prior_k * 10) / (n + 10))
                     e["team"] = round(100 * float((c.mates_blind.fillna(0) >= 1).mean()))
+                    e["self"] = round(100 * (float((c.self_kill.fillna(0) >= 1).sum()) + prior_s * 10) / (n + 10)) if "self_kill" in c else None   # pop flash
                     score = e["blind"] / 100 + 0.5 * e["kill"] / 100 - 0.5 * e["team"] / 100
                 elif typ in ("he", "molotov"):
                     e["dmg"] = round((float(c.damage.fillna(0).sum()) + prior * 10) / (n + 10))
@@ -208,6 +225,8 @@ def groups(df, side_rounds):
                             "setpos": f"setpos {b.X:.1f} {b.Y:.1f} {b.Z:.1f}; setang {b.pitch:.2f} {b.yaw:.2f} 0"})
             lst.sort(key=lambda x: -x["score"])
             res[typ] = {"prior": None if prior is None else (round(100 * prior) if typ == "flash" else round(prior)), "groups": lst}
+            if typ == "flash":
+                res[typ]["self_prior"] = round(100 * prior_s, 1)   # the map's pop flashes: the thrower's own kill after it
         out.setdefault(mp, {})[side] = {"rounds": int(rounds), "types": res}
     return out
 
@@ -302,7 +321,7 @@ def _role(typ, x):
 
 
 SLIM = ("from", "to", "from_px", "to_px", "level", "land_level", "timer", "t_med", "how", "click", "setpos", "n", "per100",
-        "blind", "kill", "team", "dmg", "hit", "win", "base_win", "usual", "best")
+        "blind", "kill", "team", "dmg", "hit", "win", "base_win", "usual", "best", "self")
 
 
 def lane_picks(M, lanes_mp, zones):
@@ -343,6 +362,14 @@ def for_player(sid, maps, cross=None, stats=None, lanes=None):
             for typ, T in M["types"].items():
                 gs = T["groups"]
                 pick = [dict(x) for x in gs if x["from_key"] in zones][:3] if zones else []
+                if typ == "flash":   # a pop flash from your zones (you peek behind it yourself: your flashes rarely serve a teammate)
+                    sp = T.get("self_prior") or 0
+                    pops = sorted([x for x in gs if (not zones or x["from_key"] in zones) and (x.get("self") or 0) >= max(5, 2 * sp) and x["n"] >= 10],
+                                  key=lambda x: -(x.get("self") or 0))
+                    if pops and all(p_["from_key"] != pops[0]["from_key"] or p_["to_key"] != pops[0]["to_key"] for p_ in pick):
+                        pick.append(dict(pops[0]))
+                    for p_ in pick:
+                        p_["pop"] = (p_.get("self") or 0) >= max(5, 2 * sp)
                 other = False
                 if not pick:  # nothing thrown from your zones: the best of the side
                     pick, other = [dict(x) for x in gs[:2]], True
