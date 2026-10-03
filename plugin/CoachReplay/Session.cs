@@ -44,6 +44,13 @@ public class Drill
     [JsonPropertyName("mode")] public string Mode { get; set; } = "";   // aim: prefire, defend, or "" (your duel spots)
     [JsonPropertyName("seconds")] public int Seconds { get; set; } = 75;
     [JsonPropertyName("alive")] public int Alive { get; set; } = 3;
+    [JsonPropertyName("tracks")] public List<EntryTrack> Tracks { get; set; } = new();   // defend: real hits on the site
+}
+
+public class EntryTrack
+{
+    [JsonPropertyName("zone")] public string Zone { get; set; } = "";
+    [JsonPropertyName("path")] public float[] Path { get; set; } = Array.Empty<float>();
 }
 
 public class Block
@@ -209,12 +216,13 @@ public partial class CoachReplay
             Active = d.Weapons.LastOrDefault(), Path = new[] { me.Pos[0], me.Pos[1], me.Pos[2], me.Ang[1], me.Ang[0] } });
         if (d.Mode == "defend")   // a few attackers at a time, played by the game's AI (they carry the bomb: they come to the site)
         {
-            for (int k = 0; k < Math.Min(d.Alive, d.Bots.Count); k++)
+            for (int k = 0; k < Math.Min(d.Alive, Math.Max(d.Bots.Count, d.Tracks.Count)); k++)
             {
-                var b = d.Bots[Rng.Next(d.Bots.Count)];
-                s.Players.Add(new Track { Sid = $"att{k}", Name = b.Zone ?? $"Attacker {k + 1}", Team = 5 - d.Team, Hp = 100, Armor = 100, Helmet = true,
+                var tr = d.Tracks.Count > 0 ? d.Tracks[Rng.Next(d.Tracks.Count)] : null;
+                var b = d.Bots.Count > 0 ? d.Bots[Rng.Next(d.Bots.Count)] : new Spot();
+                s.Players.Add(new Track { Sid = $"att{k}", Name = tr?.Zone ?? b.Zone ?? $"Attacker {k + 1}", Team = 5 - d.Team, Hp = 100, Armor = 100, Helmet = true,
                     Weapons = d.BotWeapons, Active = d.BotWeapons.FirstOrDefault(w => w.Contains("ak47") || w.Contains("m4")) ?? d.BotWeapons.LastOrDefault(),
-                    Path = new[] { b.Pos[0], b.Pos[1], b.Pos[2], b.Ang[1], b.Ang[0] } });
+                    Path = tr?.Path ?? new[] { b.Pos[0], b.Pos[1], b.Pos[2], b.Ang[1], b.Ang[0] } });
             }
             return s;
         }
@@ -386,14 +394,29 @@ public partial class CoachReplay
                 if (g != generation || phase != "live" || cur == null || drill == null || !bots.TryGetValue(slot, out var t)) return;
                 var c = Utilities.GetPlayerFromSlot(slot);
                 if (c == null || !c.IsValid) return;
-                var me = Pos(cur.Players.First(p => p.Me), 0);
-                var far = drill.Bots.Where(b => Vector3.Distance(new Vector3(b.Pos[0], b.Pos[1], b.Pos[2]), me) > 600).ToList();
-                if (far.Count == 0) far = drill.Bots;
-                var sp = far[Rng.Next(far.Count)];
                 c.Respawn();
                 Loadout(c, t);
-                c.PlayerPawn.Value?.Teleport(new Vector3(sp.Pos[0], sp.Pos[1], sp.Pos[2]), new Vector3(sp.Ang[0], sp.Ang[1], 0), Vector3.Zero);
-                if (sp.Zone != null) { c.PlayerName = sp.Zone; Utilities.SetStateChanged(c, "CBasePlayerController", "m_iszPlayerName"); }
+                string? zone;
+                if (drill.Tracks.Count > 0)   // another real hit on the site, walked from now; it fights once it sees you
+                {
+                    var tr = drill.Tracks[Rng.Next(drill.Tracks.Count)];
+                    t.Path = tr.Path;
+                    t.Start = (Server.TickCount - t0) / (float)cur.Step;
+                    zone = tr.Zone;
+                    free.Remove(slot);
+                    contact.Remove(slot);
+                    c.PlayerPawn.Value?.Teleport(Pos(t, 0), Ang(t, 0), Vector3.Zero);
+                }
+                else
+                {
+                    var me = Pos(cur.Players.First(p => p.Me), 0);
+                    var far = drill.Bots.Where(b => Vector3.Distance(new Vector3(b.Pos[0], b.Pos[1], b.Pos[2]), me) > 600).ToList();
+                    if (far.Count == 0) far = drill.Bots;
+                    var sp = far[Rng.Next(far.Count)];
+                    zone = sp.Zone;
+                    c.PlayerPawn.Value?.Teleport(new Vector3(sp.Pos[0], sp.Pos[1], sp.Pos[2]), new Vector3(sp.Ang[0], sp.Ang[1], 0), Vector3.Zero);
+                }
+                if (zone != null) { c.PlayerName = zone; Utilities.SetStateChanged(c, "CBasePlayerController", "m_iszPlayerName"); }
                 gone.Remove(t.Sid);
             });
             return false;
@@ -457,8 +480,9 @@ public partial class CoachReplay
     {
         if (drill == null) return;
         attempts++;
-        var air = drill.Type is "flash" or "he";
-        var q = double.IsNaN(dist) ? "NO THROW" : dist <= (air ? 120 : 80) ? "PERFECT" : dist <= (air ? 260 : 180) ? "GOOD" : "MISS";
+        // a flash or an HE pops in the air, a molotov's fire spreads: wider than a smoke
+        var (ok1, ok2) = drill.Type switch { "flash" or "he" => (120, 260), "molotov" => (120, 240), _ => (80, 180) };
+        var q = double.IsNaN(dist) ? "NO THROW" : dist <= ok1 ? "PERFECT" : dist <= ok2 ? "GOOD" : "MISS";
         var away = double.IsNaN(dist) ? "" : $"{dist:F0} u from the spot";
         if (q is "PERFECT" or "GOOD")
         {

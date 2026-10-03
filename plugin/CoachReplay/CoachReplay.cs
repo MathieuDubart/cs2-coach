@@ -37,6 +37,7 @@ public class Track
     [JsonPropertyName("killer")] public string Killer { get; set; } = "";
     [JsonPropertyName("hold")] public bool Hold { get; set; }   // stays on its spot (aim targets): only its aim is its own
     [JsonPropertyName("places")] public List<JsonElement> Places { get; set; } = new();   // your route in the match: [frame, place]
+    [JsonIgnore] public float Start { get; set; }   // the frame its path starts at (a defense's attacker: when it spawned)
     public int Frames => Path.Length / 5;
 }
 
@@ -356,7 +357,8 @@ public partial class CoachReplay : BasePlugin
             var pawn = c?.PlayerPawn.Value;
             if (c == null || pawn == null || !c.PawnIsAlive) { gone.Add(t.Sid); Logger.LogInformation("gone {n} at {f}", t.Name, (int)f); continue; }
             if (t.Hold) { pawn.Teleport(Pos(t, 0), null, Vector3.Zero); continue; }   // an aim target: its spot, its own aim
-            var i = (int)f;
+            var ft = f - t.Start;
+            var i = Math.Max(0, (int)ft);
             if (i >= t.Frames - 1)
             {
                 // the end of its recorded path: a death in the demo (by a player still alive here, or the world), or the
@@ -366,7 +368,7 @@ public partial class CoachReplay : BasePlugin
                 else { free.Add(slot); Logger.LogInformation("free {n} at {f} (death {d}, killer {k})", t.Name, (int)f, t.Death, t.Killer); }
                 continue;
             }
-            var a = f - i;
+            var a = Math.Clamp(ft - i, 0f, 1f);
             var p0 = Pos(t, i); var p1 = Pos(t, i + 1);
             var pos = Vector3.Lerp(p0, p1, a);
             if (phase == "live" && mode == "spec" && pawn.AbsOrigin != null)
