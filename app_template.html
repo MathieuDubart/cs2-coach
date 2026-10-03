@@ -640,6 +640,8 @@ table.lc{border-collapse:collapse;font-variant-numeric:tabular-nums;min-width:64
 
 <script>
 const D=__DATA__;
+// the local app's addresses (/player/…, /match/…) are not at its root: its files (index.json, players/…) are read from there
+if(D.local){const f0=window.fetch.bind(window);window.fetch=(u,o)=>f0(typeof u==="string"&&!/^(\/|[a-z]+:)/i.test(u)?"/"+u:u,o)}
 const $=(s,r=document)=>r.querySelector(s), $$=(s,r=document)=>[...r.querySelectorAll(s)];
 const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 const MAPN=m=>{const n=m.replace(/^(de|cs|ar)_/,"");return n.charAt(0).toUpperCase()+n.slice(1)};
@@ -877,7 +879,7 @@ function renderAnalysis(){
     ${extrasBlock(p)}
     ${ms.length?`<h3>Match by match</h3><div class="tbl"><table>${TREND_HEAD}<tbody>${trendRows(ms,-1)}</tbody></table></div>`:""}
     ${leetBlock(p)}`;
-  $$("tr.click",v).forEach(r=>{r.onclick=()=>{S.match=+r.dataset.i;go("matches")};r.onkeydown=e=>{if(e.key==="Enter")r.click()}});
+  $$("tr.click",v).forEach(r=>{r.onclick=()=>{S.match=+r.dataset.i;S.mpin=true;go("matches")};r.onkeydown=e=>{if(e.key==="Enter")r.click()}});
   copyBtn(v);
   fillFollow(p);
 }
@@ -906,7 +908,7 @@ function storyBlock(m){const side={};m.per_round.forEach(r=>side[r.round]=r.side
    <div class="tbl"><table class="story"><thead><tr><th>Round</th><th>The Ts</th><th>Who died where</th><th>Won by</th></tr></thead><tbody>
    ${rows.map(s=>`<tr><td><b>${s.r}</b><br><span class="note">you ${side[s.r]}</span></td><td class="wrap">${att(s)}</td><td class="wrap feed">${feed(s)}</td><td>${s.tw?"Ts":"CTs"}</td></tr>`).join("")}</tbody></table></div>`}
 function renderMatches(){
-  const p=P(),v=$("#v-matches"),ms=p.matches;if(S.match>=ms.length)S.match=0;
+  const p=P(),v=$("#v-matches"),ms=p.matches;if(S.match>=ms.length){S.match=0;S.mpin=false}
   const m=ms[S.match];
   if(!m){v.innerHTML=p.advice.leetify?`<div class="empty">No analyzed demo for this player. Here are their recent matches according to Leetify.</div>${leetBlock(p)}`:`<div class="empty">No analyzed match yet.</div>`;return}
   const s=m.sum,md=m.map_data;const st={layer:"control",level:md.levels[0].key,side:"all"};
@@ -926,7 +928,7 @@ function renderMatches(){
       ${levelBtns(md,st.level)}
       <svg class="radar" viewBox="${(D.viewboxes[m.map]||[0,0,1024,1024]).join(" ")}" role="img" aria-label="Radar"><image x="0" y="0" width="1024" height="1024"></image><g></g></svg><div class="caption"></div></div>
     <div style="display:grid;gap:10px;min-width:0"><h3>Zones of the match</h3><div class="tbl"><table><thead><tr><th>Zone</th><th class="n">Duels</th><th class="n">K/D T</th><th class="n">K/D CT</th><th class="n">You</th></tr></thead><tbody id="mzt"></tbody></table></div></div></div>`;
-  $$("tr.click",v).forEach(r=>{r.onclick=()=>{S.match=+r.dataset.i;renderMatches();$("#mhead").scrollIntoView({behavior:"smooth"})};r.onkeydown=e=>{if(e.key==="Enter")r.click()}});
+  $$("tr.click",v).forEach(r=>{r.onclick=()=>{S.match=+r.dataset.i;S.mpin=true;syncUrl();renderMatches();$("#mhead").scrollIntoView({behavior:"smooth"})};r.onkeydown=e=>{if(e.key==="Enter")r.click()}});
   const rb=$("#reanalyze",v);if(rb)rb.onclick=async()=>{rb.disabled=true;rb.textContent="Re-analysis running…";
     jobFrom=S.view;try{const r=await fetch("/api/reanalyze",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({sid:p.steamid,mid:m.id})});const j=await r.json();
       if(!r.ok){jobPanel(`<b>${esc(j.error||"Error")}</b>${j.query?` (${esc(j.query)})`:""}`,"err");rb.disabled=false;rb.textContent="Re-analyze this match";if(r.status===409)poll();return}
@@ -3381,7 +3383,7 @@ function renderReview(){const p=P(),v=$("#v-review"),PL=p.advice.plan||{},R=revi
    <p class="note" id="xmsg" role="status"></p>
    <div class="linkrow"><a href="#analysis">Full analysis</a><a href="#midround">Mid-round</a><a href="#progress">Progress and tracking</a><a href="#matches">Every match</a><a href="#maps">Maps and grenades</a><a href="#routine">Routine</a></div>`;
   wireExp(v,X,p);
-  $$("tr[data-mid]",v).forEach(r=>{r.onclick=()=>{const i=p.matches.findIndex(x=>x.id===r.dataset.mid);S.match=i<0?0:i;go("matches")};r.onkeydown=e=>{if(e.key==="Enter")r.click()}});
+  $$("tr[data-mid]",v).forEach(r=>{r.onclick=()=>{const i=p.matches.findIndex(x=>x.id===r.dataset.mid);S.match=i<0?0:i;S.mpin=i>=0;go("matches")};r.onkeydown=e=>{if(e.key==="Enter")r.click()}});
 }
 
 // ---------- data loading (profiles and radars are separate files) ----------
@@ -3467,8 +3469,8 @@ let polling=null,partialShown=null,jobFrom=null;
 const mayGo=()=>jobFrom!==null&&S.view===jobFrom;
 const openBtn=(sid,name,view)=>`<div class="btns"><button type="button" data-open="${sid}" data-view="${view}">Open ${esc(name||"the profile")}</button></div>`;
 function bindOpen(){$$("[data-open]",$("#job")).forEach(b=>b.onclick=async()=>{delete D.players[b.dataset.open];await setPlayer(b.dataset.open,true);go(b.dataset.view)})}
-async function startAnalysis(q){
-  jobFrom=S.view;
+async function startAnalysis(q,after){
+  jobFrom=S.view;afterJob=after||null;   // after: what to open once done (the match of a /match/ address)
   $("#qbtn").disabled=true;
   try{const r=await fetch("/api/analyze?q="+encodeURIComponent(q));const j=await r.json();
     if(!r.ok){jobPanel(`<b>${esc(j.error||"Error")}</b>${j.query?` (${esc(j.query)})`:""}`,"err");$("#qbtn").disabled=false;if(r.status===409)poll();return}
@@ -3479,16 +3481,17 @@ function poll(){clearTimeout(polling);polling=setTimeout(async()=>{
   if(j.running){
     if(j.partial&&partialShown!==j.partial&&mayGo()){partialShown=j.partial;try{D.index=await (await fetch(`index.json?t=${Date.now()}`)).json();playerOptions();delete D.players[j.partial];await setPlayer(j.partial,true);go(j.partial===D.own?"ingame":"analysis");jobFrom=S.view}catch(e){}}
     jobPanel(`<div class="row"><b><span class="spin" aria-hidden="true"></span>${partialShown?"First preview shown. Full demo analysis running…":j.view==="matches"?"Analyzing the match again…":/^Steam sync/.test(j.query||"")?"Updating your matches…":`Analyzing ${esc(j.query)}…`}</b><span class="note">The profile completes itself at the end (from a few seconds to a few minutes).</span></div><pre>${logs||"Starting…"}</pre>`);poll();return}
-  $("#qbtn").disabled=false;const go_=mayGo();jobFrom=null;
+  $("#qbtn").disabled=false;const go_=mayGo(),aj=afterJob;jobFrom=null;afterJob=null;
   if(j.error){updFrom=null;const ub=$("#updbtn");if(ub)ub.disabled=false;jobPanel(`<b>${esc(j.error)}</b><pre>${logs}</pre>`,"err");return}
   if(j.players&&j.players.length){D.index=await (await fetch(`index.json?t=${Date.now()}`)).json();playerOptions();
     const nm=((j.query||"").match(/CSGO(-[\w]{5}){5}/g)||[]).length,ps=[...j.players].sort((a,b)=>(b.steamid===D.own)-(a.steamid===D.own)),
       btn=p=>`<button type="button" data-mp="${p.steamid}">${esc(p.name)}</button>`;
     jobPanel(`<b>${j.players.length} players analyzed${nm>1?` in these ${nm} matches`:" in this match"}.</b><div class="btns">${ps.slice(0,10).map(btn).join("")}</div>
       ${ps.length>10?`<details><summary style="cursor:pointer" class="note">The other ${ps.length-10} players</summary><div class="btns">${ps.slice(10).map(btn).join("")}</div></details>`:""}<pre>${logs}</pre>`,"ok");
-    $$("[data-mp]",$("#job")).forEach(b=>b.onclick=()=>{delete D.players[b.dataset.mp];setPlayer(b.dataset.mp,true).then(()=>go("analysis"))});return}
+    $$("[data-mp]",$("#job")).forEach(b=>b.onclick=()=>{delete D.players[b.dataset.mp];setPlayer(b.dataset.mp,true).then(()=>go("analysis"))});
+    if(aj&&go_)aj();return}
   if(j.steamid&&j.view==="matches"){try{D.index=await (await fetch(`index.json?t=${Date.now()}`)).json();playerOptions();delete D.players[j.steamid];   // a re-analysis: back on that match
-      if(go_){await setPlayer(j.steamid,true);const i=P().matches.findIndex(x=>x.id===j.match);S.match=i<0?0:i;go("matches")}
+      if(go_){await setPlayer(j.steamid,true);const i=P().matches.findIndex(x=>x.id===j.match);S.match=i<0?0:i;S.mpin=i>=0;go("matches")}
       jobPanel(`<b>The match is analyzed again.</b> Profile, plan and in-game sheet updated.${go_?"":openBtn(j.steamid,null,"matches")}<pre>${logs}</pre>`,"ok");bindOpen()}
     catch(e){jobPanel(`<b>The match could not be shown.</b><pre>${logs}</pre>`,"err")}return}
   if(j.steamid){try{D.index=await (await fetch(`index.json?t=${Date.now()}`)).json();playerOptions();delete D.players[j.steamid];
@@ -3514,9 +3517,56 @@ $("#search").addEventListener("submit",async e=>{e.preventDefault();const q=$("#
 
 // ---------- routing ----------
 const RENDER={ingame:renderIngame,review:renderReview,analysis:renderAnalysis,routine:renderRoutine,midround:renderMidround,progress:renderProgress,team:renderTeam,matches:renderMatches,maps:renderMaps,players:renderPlayers,pros:renderPros,settings:renderSettings};
-function go(view){view=ALIAS[view]||view;if(location.hash!=="#"+view)history.replaceState(null,"",location.pathname+location.search+"#"+view);show(view)}
-function show(view){view=ALIAS[view]||view;if(!RENDER[view])view="ingame";if(view!=="ingame")document.body.classList.remove("igfull");if(location.hash.slice(1)!==view)history.replaceState(null,"",location.pathname+location.search+"#"+view);
+// The local app has addresses like csrep's: /player/<steamid> (their first view: In game for you, Analysis for the others),
+// /player/<steamid>/<view>, /match/<share code, or match id when it has none>[?as=<steamid>: seen as someone else than
+// you], /team, /players, /pros, /settings; old links (/#review) still open. The published page (one file) keeps #view.
+const GLOBAL=["team","players","pros","settings"],homeView=sid=>sid&&sid===D.own?"ingame":"analysis";
+let navAt=0,navQuiet=0,afterJob=null,CODES={};   // CODES: match id -> share code
+function pathNow(){const v=S.view;if(GLOBAL.includes(v))return "/"+v;if(!S.player)return "/";
+  const m=v==="matches"&&S.mpin&&P()?P().matches[S.match]:null;
+  return m?`/match/${CODES[m.id]||m.id}${S.player!==D.own?"?as="+S.player:""}`:`/player/${S.player}${v===homeView(S.player)?"":"/"+v}`}
+// the address of what is on screen: a new history entry for each move of yours (back works), the same entry for the
+// steps of one move (a profile loading, then its view) and when the address itself led here
+function syncUrl(){
+  if(!D.local){if(location.hash.slice(1)!==S.view)history.replaceState(null,"",location.pathname+location.search+"#"+S.view);return}
+  let u=pathNow();
+  if(navQuiet){const k=[...new URLSearchParams(location.search)].filter(([n])=>n!=="as"&&n!=="q");if(k.length)u+=(u.includes("?")?"&":"?")+new URLSearchParams(k)}   // ?steam=… (back from Steam) stays for its page
+  if(location.pathname+location.search+location.hash===u)return;
+  const now=Date.now();if(navQuiet||now-navAt<500)history.replaceState(null,"",u);else{history.pushState(null,"",u);navAt=now}}
+function defPlayer(){const sp=store("player");return sp&&IDX()[sp]?sp:(D.own&&IDX()[D.own]?D.own:(D.local&&D.own?null:(D.default||(D.index[0]||{}).steamid||null)))}
+// the address -> what to show
+async function route(){
+  const path=location.pathname.replace(/\/+$/,"")||"/",as=new URLSearchParams(location.search).get("as");
+  const h=ALIAS[location.hash.slice(1)]||location.hash.slice(1),hv=RENDER[h]?h:null;   // an old link (/#review), or a #view link opened in a new tab
+  let m;
+  if((m=path.match(/^\/match\/([A-Za-z0-9-]+)$/)))return openMatch(m[1],as);
+  if((m=path.match(/^\/player\/(\d{17})(?:\/([a-z]+))?$/))){const sid=m[1],v=ALIAS[m[2]]||m[2];
+    if(!IDX()[sid])return notYet(`This player (SteamID ${sid}) isn't analyzed yet.`,sid);
+    S.view=hv||(RENDER[v]&&!GLOBAL.includes(v)?v:homeView(sid));return setPlayer(sid)}
+  m=path.match(/^\/([a-z]+)$/);const g=m&&(ALIAS[m[1]]||m[1]),p=defPlayer();
+  S.view=hv||(GLOBAL.includes(g)?g:homeView(p));return setPlayer(p)}
+// /match/<id or share code>: that match, seen as the player of the address (?as=), else you, else an analyzed player in it
+async function openMatch(code,as){
+  let j=null;try{const r=await fetch("/api/match?code="+encodeURIComponent(code));if(r.ok)j=await r.json()}catch(e){}
+  if(!j)return notYet(`No match at this address: a share code (CSGO-…) or a match id goes after /match/.`);
+  if(j.code)CODES[j.id]=j.code;
+  for(const sid of [...new Set([as,D.own,...j.players])].filter(x=>x&&IDX()[x]&&(x===as||j.players.includes(x)))){
+    S.view="matches";await setPlayer(sid);const i=((P()||{}).matches||[]).findIndex(x=>x.id===j.id);
+    if(i>=0){S.match=i;S.mpin=true;show("matches");return}}
+  const what=esc([j.map?MAPN(j.map):null,j.time?fmtDate(j.time):null].filter(Boolean).join(" · ")||"match "+j.id);
+  if(j.code)return notYet(j.analyzed?`No analyzed profile shows this match yet (${what}).`:`This match (${what}) isn't analyzed yet.`,j.code,()=>openMatch(j.id,as));
+  notYet(`This match (${what}) isn't analyzed: paste its share code (CSGO-…) in the search, or open /match/ with it.`)}
+// an address of a player or match the app doesn't show yet: said, and one click analyzes it
+function notYet(msg,q,after){
+  if(!S.player){const d=defPlayer();if(d){S.player=d;loadPlayer(d).catch(()=>{})}}   // the menus keep working
+  if(!RENDER[S.view]||GLOBAL.includes(S.view))S.view=homeView(S.player);
+  const v=$("#v-"+S.view);$$("main>.view").forEach(x=>x.hidden=x!==v);navUpdate(S.view);
+  v.innerHTML=`<div class="empty">${msg}${q&&D.local?`<div class="btns" style="justify-content:center;margin-top:12px"><button type="button" id="nyet">Analyze it</button></div>`:""}</div>`;
+  const b=$("#nyet",v);if(b)b.onclick=()=>{b.disabled=true;partialShown=null;startAnalysis(q,after)}}
+function go(view){view=ALIAS[view]||view;if(!D.local&&location.hash!=="#"+view)history.replaceState(null,"",location.pathname+location.search+"#"+view);show(view)}
+function show(view){view=ALIAS[view]||view;if(!RENDER[view])view="ingame";if(view!=="ingame")document.body.classList.remove("igfull");
   S.view=view;$$("main>.view").forEach(x=>x.hidden=x.id!=="v-"+view);
+  if(!D.local||GLOBAL.includes(view)||!S.player||D.players[S.player])syncUrl();   // a profile still loading: its address once it is in
   navUpdate(view);if(view!=="ingame")clearTimeout(gsiTimer);
   if(view==="players"){renderPlayers();return}
   if(view==="pros"){renderPros();window.scrollTo(0,0);return}
@@ -3526,11 +3576,13 @@ function show(view){view=ALIAS[view]||view;if(!RENDER[view])view="ingame";if(vie
   if(!D.players[S.player]){$("#v-"+view).innerHTML=`<div class="empty"><span class="spin" aria-hidden="true"></span>Loading the profile…</div>`;return}
   RENDER[view]();navUpdate(view);window.scrollTo(0,0);
   if(view==="ingame"&&D.local){if(!gsiStatus)fetch("/api/gsi/status").then(r=>r.json()).then(j=>{gsiStatus=j;if(S.view==="ingame"&&D.players[S.player])renderIngame()}).catch(()=>{});gsiPoll()}}
-async function setPlayer(id,force){S.player=id;store("player",id);S.match=0;if(!id){show(S.view);return}
+async function setPlayer(id,force){S.player=id;store("player",id);S.match=0;S.mpin=false;if(!id){show(S.view);return}
   if(!D.players[id]||force){show(S.view);try{await loadPlayer(id,force)}catch(e){$("#v-"+S.view).innerHTML=`<div class="empty">Couldn't load this profile (${esc(e.message)}).</div>`;return}}
   show(S.view)}
 S.map=HOST(store("map"))?null:store("map");S.side=store("side")||"T";
-window.addEventListener("hashchange",()=>show(location.hash.slice(1)));
+// a #view link: that view, at its address (the same history entry); back and forward: what their address says
+window.addEventListener("hashchange",()=>{const h=location.hash.slice(1),v=ALIAS[h]||h;if(!D.local)return show(h);if(!RENDER[v])return;navQuiet++;try{show(v)}finally{navQuiet--}});
+window.addEventListener("popstate",()=>{const h=location.hash.slice(1);if(!D.local||RENDER[ALIAS[h]||h])return;navQuiet++;route().finally(()=>navQuiet--)});
 S.view=ALIAS[location.hash.slice(1)]||location.hash.slice(1)||"ingame";if(!RENDER[S.view])S.view="ingame";
 if(store("focus"))document.body.classList.add("focus");
 // Update: your new matches fetched and analyzed (the same as the automatic sync, now)
@@ -3539,8 +3591,9 @@ let updFrom=null;
   ub.onclick=async()=>{ub.disabled=true;updFrom=S.view;jobFrom=S.view;
     try{await api("/api/steam/sync",{sid:D.own});poll()}
     catch(e){if(/already running/i.test(e.message||""))poll();else{ub.disabled=false;updFrom=null;jobPanel(`<b>${esc(e.message||"Update impossible")}</b>`,"err")}}}}}
-const sp=store("player");
-setPlayer(sp&&IDX()[sp]?sp:(D.own&&IDX()[D.own]?D.own:(D.local&&D.own?null:(D.default||(D.index[0]||{}).steamid||null))));
+if(D.local){navQuiet++;route().finally(()=>navQuiet--);
+  fetch("/api/codes").then(r=>r.json()).then(c=>{CODES={...c,...CODES};if(S.view==="matches"&&S.mpin){navQuiet++;try{syncUrl()}finally{navQuiet--}}}).catch(()=>{})}
+else setPlayer(defPlayer());
 if(D.local){
   const q0=new URLSearchParams(location.search).get("q");
   if(q0){history.replaceState(null,"",location.pathname+location.hash);$("#q").value=q0;$("#search").requestSubmit()}

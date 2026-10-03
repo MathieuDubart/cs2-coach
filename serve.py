@@ -65,6 +65,36 @@ def publish_partial(sid):
         JOB["partial"] = sid
 
 
+# the app's addresses (like csrep's): the page is served there, and reads them
+APP_PAGES = re.compile(r"/(?:player/\d{17}(?:/[a-z]+)?|match/[A-Za-z0-9-]{1,40}|team|players|pros|settings)/?")
+
+
+def match_info(code):
+    """/match/<match id or share code>: its id, share code, map, time, whether its demo is analyzed, and the analyzed
+    players who played it (you first, full profiles before light ones)."""
+    import matchlist
+    if re.fullmatch(cs2coach.SHARECODE_RE, code):
+        try:
+            mid, sc = str(matchlist.decode_sharecode(code)[0]), code
+        except (ValueError, OverflowError):   # the shape of a share code, not one
+            return None
+    elif code.isdigit():
+        mid, sc = code, None
+    else:
+        return None
+    e = cs2coach.registry().get(mid) or {}
+    d = os.path.join(config.DEEP, mid)
+    ids = [str(76561197960265728 + int(a)) for a in e.get("accounts") or [] if a]
+    if not ids and os.path.isfile(os.path.join(d, "samples.parquet")):
+        import pandas as pd
+        ids = [str(int(x)) for x in pd.read_parquet(os.path.join(d, "samples.parquet"), columns=["steamid"]).steamid.unique() if x]
+    idx = {x["steamid"]: x for x in load_index()}
+    own = str(config.settings().get("own_steamid") or "")
+    ps = sorted((x for x in dict.fromkeys(ids) if x in idx), key=lambda x: (x != own, bool(idx[x].get("light"))))
+    return {"id": mid, "code": sc or e.get("sharecode"), "map": (config.read_json(os.path.join(d, "meta.json"), {}) or {}).get("map"),
+            "time": e.get("time"), "analyzed": os.path.isdir(d), "players": ps}
+
+
 def load_index():
     return config.read_json(os.path.join(build_app.SITE, "index.json"), [])
 
@@ -102,7 +132,7 @@ class Handler(BaseHTTPRequestHandler):
         q = parse_qs(u.query)
         if self.foreign(write=u.path == "/api/analyze"):   # the only GET that starts something
             return self.send(403, {"error": "request from another site refused"})
-        if u.path in ("/", "/index.html"):
+        if u.path in ("/", "/index.html") or APP_PAGES.fullmatch(u.path):
             # standards mode (the claude.ai host adds this wrapper itself when publishing)
             head = '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head><body style="margin:0">'
             return self.send(200, head + build_app.shell_html(load_index(), local=True) + "</body></html>", "text/html; charset=utf-8")
@@ -157,6 +187,11 @@ class Handler(BaseHTTPRequestHandler):
             if f.startswith(os.path.normpath(build_app.SITE) + os.sep) and os.path.isfile(f):
                 return self.send(200, config._retry(lambda: open(f, "rb").read(), f))
             return self.send(404, {"error": "not found"})
+        if u.path == "/api/match":   # an address /match/<match id or share code>
+            m = match_info((q.get("code") or [""])[0].strip())
+            return self.send(200, m) if m else self.send(404, {"error": "not a match id or share code"})
+        if u.path == "/api/codes":   # the share code of each match (the addresses /match/<share code>)
+            return self.send(200, {k: e["sharecode"] for k, e in cs2coach.registry().items() if e.get("sharecode")})
         if u.path == "/api/ping":
             return self.send(200, {"ok": True})
         if u.path == "/api/analyze":
@@ -184,7 +219,7 @@ class Handler(BaseHTTPRequestHandler):
             params = {k: v[0] for k, v in q.items()}
             sid = steamlink.verify(params, f"http://127.0.0.1:{PORT}/api/steam/callback")
             if not sid:
-                return self.redirect("/?steam=refused#settings")
+                return self.redirect("/settings?steam=refused")
             name = None
             try:
                 if steamlink.api_key():
@@ -195,7 +230,7 @@ class Handler(BaseHTTPRequestHandler):
                 own, own_name = config.logged_in_account()
                 name = own_name if own and int(own) == sid else (config.settings().get("players", {}).get(str(sid)) or {}).get("name")
             steamlink.save_login(sid, name)
-            return self.redirect("/?steam=ok#settings")
+            return self.redirect("/settings?steam=ok")
         return self.send(404, {"error": "not found"})
 
     def redirect(self, url):
