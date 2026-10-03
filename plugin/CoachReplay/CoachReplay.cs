@@ -36,6 +36,7 @@ public class Track
     [JsonPropertyName("death")] public int Death { get; set; } = -1;
     [JsonPropertyName("killer")] public string Killer { get; set; } = "";
     [JsonPropertyName("hold")] public bool Hold { get; set; }   // stays on its spot (aim targets): only its aim is its own
+    [JsonPropertyName("places")] public List<JsonElement> Places { get; set; } = new();   // your route in the match: [frame, place]
     public int Frames => Path.Length / 5;
 }
 
@@ -62,6 +63,8 @@ public class Scenario
     [JsonPropertyName("team")] public int Team { get; set; }
     [JsonPropertyName("players")] public List<Track> Players { get; set; } = new();
     [JsonPropertyName("nades")] public List<Nade> Nades { get; set; } = new();
+    [JsonPropertyName("danger")] public string Danger { get; set; } = "";
+    [JsonPropertyName("goal")] public string Goal { get; set; } = "";
 }
 
 public partial class CoachReplay : BasePlugin
@@ -77,6 +80,7 @@ public partial class CoachReplay : BasePlugin
     readonly Dictionary<int, Track> bots = new();   // controller slot -> track
     readonly HashSet<string> gone = new();   // tracks dead here
     readonly HashSet<int> free = new();   // slots whose path is over: the bot plays on its own
+    readonly Dictionary<int, int> contact = new();   // ticks a scripted bot has seen you: then it plays on its own, like a player
     int t0, countdownEnd, kills, dmg, generation, lastBeat, nextNade;
     bool awaitRestart;
     string? builtFor;   // the situation the bots on the server were made for
@@ -188,7 +192,7 @@ public partial class CoachReplay : BasePlugin
     {
         if (cur == null) return;
         var g = ++generation;
-        gone.Clear(); free.Clear();
+        gone.Clear(); free.Clear(); contact.Clear();
         if (mode == "actor" && !Humans().Any()) { phase = "waiting"; return; }   // starts when you join
         phase = "setup";
         // the same situation again: the same bots, only a clean round (fast retries)
@@ -367,6 +371,10 @@ public partial class CoachReplay : BasePlugin
             var pos = Vector3.Lerp(p0, p1, a);
             if (phase == "live" && mode == "spec" && pawn.AbsOrigin != null)
             { var o = pawn.AbsOrigin; devSum += Vector3.Distance(new Vector3(o.X, o.Y, o.Z), pos); devN++; }
+            if (seen != null && (seen[slot / 32] & (1u << (slot % 32))) != 0 && (contact[slot] = contact.GetValueOrDefault(slot) + 1) >= 8)
+            {   // it has seen you for an eighth of a second: from now on it fights like a player, not on its recorded path
+                free.Add(slot); Logger.LogInformation("contact {n} at {f}", t.Name, (int)f); continue;
+            }
             var y0 = t.Path[i * 5 + 3]; var dy = ((t.Path[i * 5 + 8] - y0 + 540f) % 360f) - 180f;
             Vector3? ang = new Vector3(t.Path[i * 5 + 4] + (t.Path[i * 5 + 9] - t.Path[i * 5 + 4]) * a, y0 + dy * a, 0);
             if (seen != null && (seen[slot / 32] & (1u << (slot % 32))) != 0) ang = null;   // it sees you: its own aim
@@ -442,14 +450,18 @@ public partial class CoachReplay : BasePlugin
         if (v != null && v.IsValid && bots.TryGetValue(v.Slot, out var t)) gone.Add(t.Sid);
         Logger.LogInformation("death {f}/{s}: {v} by {a} ({w})", (Server.TickCount - t0) / cur.Step, cur.Id, v?.PlayerName, e.Attacker?.PlayerName, e.Weapon);
         if (e.Attacker is { IsValid: true, IsBot: false } && v != null && v.IsBot) kills++;
-        SessionDeath(e, v);
+        if (SessionDeath(e, v)) return HookResult.Continue;   // a defense: you come back
         if (mode == "actor" && v is { IsValid: true, IsBot: false }) AddTimer(0.1f, () => Finish("dead"));
         return HookResult.Continue;
     }
 
     HookResult OnHurt(EventPlayerHurt e, GameEventInfo i)
     {
-        if (phase == "live" && e.Attacker is { IsValid: true, IsBot: false } && e.Userid is { IsBot: true }) dmg += e.DmgHealth;
+        if (phase == "live" && e.Attacker is { IsValid: true, IsBot: false } && e.Userid is { IsBot: true } v)
+        {
+            dmg += e.DmgHealth;
+            if (bots.ContainsKey(v.Slot)) free.Add(v.Slot);   // hit: it reacts like a player
+        }
         return HookResult.Continue;
     }
 
@@ -464,6 +476,7 @@ public partial class CoachReplay : BasePlugin
             var vc = new CCSPlayerPawn(victim.Handle).OriginalController.Value;
             var ac = new CCSPlayerPawn(att.Handle).OriginalController.Value;
             if (vc is { IsBot: true } && ac is { IsBot: true } && vc.Slot != ac.Slot) return HookResult.Handled;   // a demo death is the bot on itself
+            if (drill?.Mode == "prefire" && vc is { IsBot: false } && ac is { IsBot: true }) return HookResult.Handled;   // prefire: they don't shoot
         }
         catch (Exception) { }
         return HookResult.Continue;

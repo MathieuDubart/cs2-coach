@@ -23,9 +23,10 @@ import config
 import replay
 
 STATE_F = os.path.join(config.OUT, "train_progress.json")
+SITES_F = os.path.join(config.OUT, "train_sites.json")
 SESS = os.path.join(replay.COACH, "sessions")
 SPLIT = {"aim": 0.25, "nade": 0.25, "situation": 0.5}   # share of the time of each block
-EST = {"aim": 45, "nade": 40, "situation": 45}   # seconds a drill takes, about (with a retry): how many to prepare
+EST = {"aim": 85, "nade": 40, "situation": 45}   # seconds a drill takes, about (with a retry): how many to prepare
 RIFLE = {2: "weapon_ak47", 3: "weapon_m4a1"}
 PRIMARY = {"AK-47": "ak47", "M4A4": "m4a1", "M4A1-S": "m4a1_silencer", "AWP": "awp", "Galil AR": "galilar",
            "FAMAS": "famas", "SG 553": "sg556", "AUG": "aug", "SSG 08": "ssg08", "MP9": "mp9", "MAC-10": "mac10"}
@@ -201,6 +202,125 @@ def aim_drills(sid, mp):
     return out
 
 
+# ---------------------------------------------------------------- aim like on practice servers
+
+def _cells(P, cell=110):
+    """Positions grouped by cells of 110 u (and height): (count, median position) the busiest first."""
+    if not len(P):
+        return []
+    P = np.asarray(P, float)
+    key = np.stack([np.floor(P[:, 0] / cell), np.floor(P[:, 1] / cell), np.floor(P[:, 2] / 90)], 1)
+    _, inv, cnt = np.unique(key, axis=0, return_inverse=True, return_counts=True)
+    out = [(int(cnt[k]), np.median(P[inv.ravel() == k], axis=0)) for k in range(len(cnt))]
+    return sorted(out, key=lambda x: -x[0])
+
+
+def _spread(cands, n, gap=160, keep=lambda p: True):
+    out = []
+    for c, p in cands:
+        if keep(p) and all(math.dist(p, q) > gap for _, q in out):
+            out.append((c, p))
+        if len(out) >= n:
+            break
+    return out
+
+
+def site_data(mp):
+    """From every demo of the map (the whole base, not only yours): for each bomb site, the spots CTs hold it from (the
+    duels of the first 75 s of a round, CT within 1500 u of the site) and where the Ts come from (entrance zones, with
+    their spots). Cached per map, rebuilt when the base grows."""
+    try:
+        cache = json.load(open(SITES_F, encoding="utf-8"))
+    except (OSError, ValueError):
+        cache = {}
+    dirs = []
+    for d in sorted(os.listdir(os.path.join(config.OUT, "deep"))):
+        try:
+            if json.load(open(os.path.join(config.OUT, "deep", d, "meta.json"), encoding="utf-8")).get("map") == mp:
+                dirs.append(d)
+        except (OSError, ValueError):
+            continue
+    if mp in cache and cache[mp].get("n") == len(dirs):
+        return cache[mp]
+    rows = []
+    for d in dirs:
+        try:
+            D = pd.read_parquet(os.path.join(config.OUT, "deep", d, "duels.parquet"))
+        except Exception:
+            continue
+        for _, r in D[D.t <= 75].iterrows():
+            if {r.killer_side, r.victim_side} != {"T", "CT"}:
+                continue
+            ct = "killer" if r.killer_side == "CT" else "victim"
+            tt = "victim" if ct == "killer" else "killer"
+            rows.append({"ct": (r[f"{ct}_X"], r[f"{ct}_Y"], r[f"{ct}_Z"]), "ct_zone": r[f"{ct}_zone"],
+                         "t": (r[f"{tt}_X"], r[f"{tt}_Y"], r[f"{tt}_Z"]), "t_zone": r[f"{tt}_zone"]})
+    R = pd.DataFrame(rows)
+    sites = {}
+    if len(R):
+        for z in sorted({z for z in R.ct_zone.dropna().unique() if "Bombsite" in str(z)}):
+            S = R[R.ct_zone == z]
+            if len(S) < 25:
+                continue
+            cen = np.median(np.array(S.ct.tolist(), float), axis=0)
+            near = R[[math.dist(c, cen) < 1500 for c in R.ct]]
+            ents = []
+            for tz, g in near.groupby("t_zone"):   # where the Ts were when they fought the site's CTs
+                if not isinstance(tz, str) or tz == z or len(g) < 12:
+                    continue
+                T = np.array(g.t.tolist(), float)
+                dist = float(np.median([math.dist(p, cen) for p in T]))
+                if dist < 500:
+                    continue
+                holds = _spread(_cells(np.array(g.ct.tolist(), float)), 12)   # the CT spots facing that entrance
+                spawn = _spread(_cells(T), 3, gap=200, keep=lambda p: math.dist(p, cen) > 700)
+                if len(holds) < 4 or not spawn:
+                    continue
+                tcen = np.median(T, axis=0)
+                ents.append({"zone": tz, "n": int(len(g)), "dist": round(dist),
+                             "start": [round(float(v), 1) for v in _spread(_cells(T), 1)[0][1]],
+                             "holds": [{"pos": [round(float(v), 1) for v in p], "ang": _angle(p, tcen), "n": c} for c, p in holds],
+                             "spawns": [[round(float(v), 1) for v in p] for _, p in spawn]})
+            ents.sort(key=lambda e: -e["n"])
+            spot = _spread(_cells(np.array(S.ct.tolist(), float)), 1)[0][1]   # the CTs' favourite spot on the site
+            sites[z] = {"center": [round(float(v), 1) for v in cen], "defend": [round(float(v), 1) for v in spot], "entrances": ents[:4]}
+    cache[mp] = {"n": len(dirs), "sites": sites}
+    json.dump(cache, open(SITES_F, "w", encoding="utf-8"))
+    return cache[mp]
+
+
+def practice_drills(sid, mp):
+    """Prefire (you T from an entrance, bots on every angle the CTs really hold, they don't shoot: clear them fast) and
+    defense (you CT on the site, attackers keep coming from the real entrances for 90 s: as many frags as you can)."""
+    out = []
+    for z, S in (site_data(mp).get("sites") or {}).items():
+        site = replay_zone(z, mp)
+        pick = []
+        for e in S["entrances"]:   # the entrances right on the site, not two next to each other
+            if e["dist"] < 1700 and all(math.dist(e["start"], p["start"]) > 900 for p in pick):
+                pick.append(e)
+        for e in pick[:2]:
+            frm = replay_zone(e["zone"], mp)
+            start = e["start"]
+            first = min(e["holds"], key=lambda h: math.dist(h["pos"], start))
+            out.append({"id": f"prefire:{mp}:{z}:{e['zone']}", "kind": "aim", "mode": "prefire", "map": mp,
+                        "title": f"PREFIRE {site} from {frm}", "team": 2,
+                        "tip": f"{len(e['holds'])} CTs on the angles they really hold · they don't shoot · clear them all, fast",
+                        "me": {"pos": start, "ang": _angle(start, first["pos"])},
+                        "weapons": ["weapon_knife", RIFLE[2]], "bot_weapons": ["weapon_knife", RIFLE[3]],
+                        "bots": [{"pos": h["pos"], "ang": h["ang"], "zone": site} for h in e["holds"]],
+                        "seconds": 75, "weight": 2 + min(1.0, e["n"] / 400)})
+        spawns = [{"pos": p, "ang": _angle(p, S["defend"]), "zone": replay_zone(e["zone"], mp)} for e in S["entrances"] for p in e["spawns"]]
+        if len(spawns) >= 2:
+            froms = ", ".join(dict.fromkeys(replay_zone(e["zone"], mp) for e in S["entrances"]))
+            out.append({"id": f"defend:{mp}:{z}", "kind": "aim", "mode": "defend", "map": mp, "title": f"DEFEND {site}",
+                        "team": 3, "tip": f"90 s · they come from {froms} · frag as many as you can · you respawn",
+                        "me": {"pos": S["defend"], "ang": _angle(S["defend"], spawns[0]["pos"])},
+                        "weapons": ["weapon_knife", RIFLE[3]], "bot_weapons": ["weapon_knife", RIFLE[2], "weapon_c4"],
+                        "bots": spawns, "seconds": 90, "alive": 3, "weight": 4})
+    return out
+
+
 def replay_zone(z, mp=None):
     import nades
     return nades.humanize(z, mp) or str(z)
@@ -280,13 +400,16 @@ def build(sid, minutes=20, where="random", difficulty=2):
     all_sc = replay.scenarios(sid, n=40)
     blocks, todo = [], []
     for mp in chosen:
-        for kind, fn in (("aim", aim_drills), ("nade", nade_drills), ("situation", lambda s_, m_: situation_drills(s_, m_, all_sc))):
+        aim = lambda s_, m_: practice_drills(s_, m_) or aim_drills(s_, m_)   # hostage maps: your duel spots
+        for kind, fn in (("aim", aim), ("nade", nade_drills), ("situation", lambda s_, m_: situation_drills(s_, m_, all_sc))):
             secs = per_map * SPLIT[kind]
             cands = fn(sid, mp)
             if not cands:
                 continue
             n = max(1, int(secs / EST[kind]) + 1)
             picked = _pick(cands, n, p["items"], nsess, weight=lambda c: c.get("weight", 1.0))
+            if kind == "aim":   # a warm-up first: the prefires, then the defenses
+                picked.sort(key=lambda c: {"prefire": 0, "defend": 1}.get(c.get("mode"), 2))
             drills = []
             for d in picked:
                 if kind == "nade":   # guided, then the spot and how, then the spot only

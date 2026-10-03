@@ -135,7 +135,7 @@ def build(sid, mid, rnd, kind="death", t=None):
         start, end = max(t0, key - BEFORE * 64), min(t_end, key + AFTER * 64)
     p = DemoParser(os.path.join(config.CACHE, f"{mid}.dem"))
     ticks = list(range(start, end + 1, STEP))
-    T = p.parse_ticks(["X", "Y", "Z", "yaw", "pitch", "is_alive", "team_num", "ducking"], ticks=ticks)
+    T = p.parse_ticks(["X", "Y", "Z", "yaw", "pitch", "is_alive", "team_num", "ducking", "last_place_name"], ticks=ticks)
     T["steamid"] = T.steamid.astype(str)
     S = p.parse_ticks(["team_num", "inventory", "active_weapon_name", "health", "armor_value", "has_helmet", "is_alive"], ticks=[start])
     S["steamid"] = S.steamid.astype(str)
@@ -153,7 +153,20 @@ def build(sid, mid, rnd, kind="death", t=None):
         duck = [int(i) for i, v in enumerate(k.ducking.fillna(False)) if v]
         died = Dr[(Dr.victim == s.steamid) & (Dr.tick >= start) & (Dr.tick <= end)]
         weapons = [w for w in (_item(i) for i in (s.inventory or [])) if w]
-        players.append({"sid": s.steamid, "name": str(s["name"])[:31], "team": int(s.team_num), "me": s.steamid == sid,
+        places = []   # your route in the match: where you went, when (the screen shows the next one)
+        if s.steamid == sid and "last_place_name" in k:
+            import nades
+            names = [nades.humanize(pl, mp) if pl else None for pl in k.last_place_name.fillna("")]
+            runs = []   # (first frame, name, frames): a place crossed in less than half a second is left out
+            for i, nm in enumerate(names):
+                if runs and runs[-1][1] == nm:
+                    runs[-1][2] += 1
+                else:
+                    runs.append([i, nm, 1])
+            for i, nm, n in runs:
+                if nm and n >= 16 and (not places or places[-1][1] != nm):
+                    places.append([i, nm])
+        players.append({"sid": s.steamid, "name": str(s["name"])[:31], "team": int(s.team_num), "me": s.steamid == sid, "places": places,
                         "hp": int(s.health), "armor": int(s.armor_value), "helmet": bool(s.has_helmet),
                         "weapons": weapons, "active": _item(s.active_weapon_name), "path": path, "duck": duck,
                         "death": death, "killer": str(died.killer.iloc[0]) if len(died) else ""})
@@ -162,10 +175,17 @@ def build(sid, mid, rnd, kind="death", t=None):
         raise ValueError("you are not alive at the start of this situation")
     teams = {q["sid"]: q["team"] for q in players}
     zone = (Dr[Dr.victim == sid].victim_zone.iloc[0] if kind == "death" and len(Dr[Dr.victim == sid]) else "")
+    import nades
+    md = Dr[Dr.victim == sid]
+    danger = ""
+    if kind == "death" and len(md):   # who got you, from where, with what
+        k0 = md.iloc[0]
+        danger = f"{k0.killer_name} got you from {nades.humanize(k0.killer_zone, mp) or '?'} ({k0.weapon})"
     sc = {"id": f"{mid}_r{rnd}_{kind[0]}", "map": mp, "match": mid, "round": rnd, "kind": kind, "rate": 64, "step": STEP,
           "start_tick": start, "key": (key - start) // STEP, "team": me["team"], "zone": zone,
           "title": f"{mp.replace('de_', '').replace('cs_', '').title()} R{rnd} · {'clutch' if kind == 'clutch' else 'death'}"
-                   f"{' · ' + zone if zone else ''}", "players": players, "nades": _nades(p, start, end, teams)}
+                   f"{' · ' + zone if zone else ''}", "players": players, "nades": _nades(p, start, end, teams),
+          "danger": danger, "goal": "win the round" if kind == "clutch" else "survive, trade, or win the duel"}
     os.makedirs(SCEN, exist_ok=True)
     f = os.path.join(SCEN, f"{sc['id']}.json")
     json.dump(sc, open(f, "w", encoding="utf-8"), ensure_ascii=False, separators=(",", ":"))

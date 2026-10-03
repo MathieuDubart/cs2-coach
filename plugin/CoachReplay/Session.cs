@@ -40,6 +40,9 @@ public class Drill
     [JsonPropertyName("target")] public float[]? Target { get; set; }
     [JsonPropertyName("level")] public int Level { get; set; }
     [JsonPropertyName("scenario")] public string? Scenario { get; set; }
+    [JsonPropertyName("mode")] public string Mode { get; set; } = "";   // aim: prefire, defend, or "" (your duel spots)
+    [JsonPropertyName("seconds")] public int Seconds { get; set; } = 75;
+    [JsonPropertyName("alive")] public int Alive { get; set; } = 3;
 }
 
 public class Block
@@ -69,7 +72,7 @@ public partial class CoachReplay
     // aim: the targets come one by one
     readonly List<int> aimOrder = new();
     readonly List<double> reacts = new();
-    int aimNext, aimSpawn, aimHs;
+    int aimNext, aimSpawn, aimHs, frags, deaths, plants, lastHud;
     // stuff: three throws
     int attempts;
     bool nadeWait;
@@ -86,6 +89,7 @@ public partial class CoachReplay
         RegisterEventHandler<EventFlashbangDetonate>((e, _) => { NadeHit(e.Userid, e.X, e.Y); return HookResult.Continue; });
         RegisterEventHandler<EventHegrenadeDetonate>((e, _) => { NadeHit(e.Userid, e.X, e.Y); return HookResult.Continue; });
         RegisterEventHandler<EventMolotovDetonate>((e, _) => { NadeHit(e.Userid, e.X, e.Y); return HookResult.Continue; });
+        RegisterEventHandler<EventBombPlanted>((e, _) => { BombPlanted(); return HookResult.Continue; });
     }
 
     static string MapName(string m) { var n = m.Replace("de_", "").Replace("cs_", ""); return n.Length > 0 ? char.ToUpper(n[0]) + n[1..] : m; }
@@ -174,7 +178,7 @@ public partial class CoachReplay
         if (s == null) { Logger.LogInformation("drill {id}: nothing to play", d.Id); NextDrill(); return; }
         cur = s;
         mode = "actor";
-        aimOrder.Clear(); reacts.Clear(); aimHs = 0; aimNext = 0; attempts = 0; nadeWait = false;
+        aimOrder.Clear(); reacts.Clear(); aimHs = 0; aimNext = 0; attempts = 0; nadeWait = false; frags = deaths = plants = 0;
         Intro(d);
         Setup();
     }
@@ -183,7 +187,7 @@ public partial class CoachReplay
 
     void Intro(Drill d)
     {
-        var how = d.Kind != "nade" ? d.Tip : d.Level switch
+        var how = d.Kind == "situation" && cur != null ? SituationText() : d.Kind != "nade" ? d.Tip : d.Level switch
         {
             0 => $"{d.How} · {d.Click} — your aim is set: just throw",
             1 => $"{d.How} · {d.Click} — find the aim",
@@ -201,6 +205,17 @@ public partial class CoachReplay
         var me = d.Me ?? new Spot();
         s.Players.Add(new Track { Sid = "me", Name = "you", Team = d.Team, Me = true, Hp = 100, Armor = 100, Helmet = true, Weapons = d.Weapons,
             Active = d.Weapons.LastOrDefault(), Path = new[] { me.Pos[0], me.Pos[1], me.Pos[2], me.Ang[1], me.Ang[0] } });
+        if (d.Mode == "defend")   // a few attackers at a time, played by the game's AI (they carry the bomb: they come to the site)
+        {
+            for (int k = 0; k < Math.Min(d.Alive, d.Bots.Count); k++)
+            {
+                var b = d.Bots[Rng.Next(d.Bots.Count)];
+                s.Players.Add(new Track { Sid = $"att{k}", Name = b.Zone ?? $"Attacker {k + 1}", Team = 5 - d.Team, Hp = 100, Armor = 100, Helmet = true,
+                    Weapons = d.BotWeapons, Active = d.BotWeapons.FirstOrDefault(w => w.Contains("ak47") || w.Contains("m4")) ?? d.BotWeapons.LastOrDefault(),
+                    Path = new[] { b.Pos[0], b.Pos[1], b.Pos[2], b.Ang[1], b.Ang[0] } });
+            }
+            return s;
+        }
         for (int k = 0; k < d.Bots.Count; k++)
         {
             var b = d.Bots[k];
@@ -208,6 +223,17 @@ public partial class CoachReplay
                 Weapons = d.BotWeapons, Active = d.BotWeapons.LastOrDefault(), Path = new[] { b.Pos[0], b.Pos[1], b.Pos[2], b.Ang[1], b.Ang[0] }, Hold = true });
         }
         return s;
+    }
+
+    // a situation: what to do, your route in the match, who got you and from where
+    string SituationText()
+    {
+        var me = cur?.Players.FirstOrDefault(p => p.Me);
+        var route = me == null ? "" : string.Join(" → ", me.Places.Select(p => p[1].GetString()).Where(x => !string.IsNullOrEmpty(x)));
+        var lines = new List<string> { $"goal: {(string.IsNullOrEmpty(cur?.Goal) ? "survive" : cur!.Goal)}" };
+        if (route != "") lines.Add($"your route: {route}");
+        if (!string.IsNullOrEmpty(cur?.Danger)) lines.Add($"⚠ {cur!.Danger}");
+        return string.Join("<br>", lines);
     }
 
     Scenario NadeScenario(Drill d)
@@ -225,7 +251,12 @@ public partial class CoachReplay
     void SessionPlaced()
     {
         if (sess == null || cur == null) return;
-        if (cur.Kind == "aim")
+        if (cur.Kind == "aim" && drill?.Mode is "prefire" or "defend")
+        {
+            aimOrder.Clear();
+            aimOrder.AddRange(bots.Keys);
+        }
+        else if (cur.Kind == "aim")
         {
             aimOrder.Clear();
             aimOrder.AddRange(bots.Keys.OrderBy(_ => Rng.Next()));
@@ -256,12 +287,37 @@ public partial class CoachReplay
     {
         if (sess == null || cur == null) return;
         aimSpawn = Server.TickCount;
-        if (cur.Kind == "aim") AimCard();
+        lastHud = Server.TickCount;
+        if (cur.Kind == "aim" && string.IsNullOrEmpty(drill?.Mode)) AimCard();
+        if (drill?.Mode == "prefire") Html($"<font color='#ff8a3d'>GO</font> · clear {aimOrder.Count} · {drill.Seconds} s", 2);
+        if (drill?.Mode == "defend") Html($"<font color='#ff8a3d'>HOLD</font> · {drill.Seconds} s · they are coming", 2);
     }
 
     void SessionTick()
     {
         if (sess == null || cur == null || phase != "live") return;
+        var el = (Server.TickCount - t0) / 64f;
+        if (drill?.Mode is "prefire" or "defend")
+        {
+            if (el >= drill.Seconds) { Finish(drill.Mode == "prefire" ? "timeout" : "done"); return; }
+            if (Server.TickCount - lastHud >= 3 * 64)
+            {
+                lastHud = Server.TickCount;
+                var left = (int)(drill.Seconds - el);
+                Html(drill.Mode == "prefire"
+                    ? $"<font color='#ff8a3d'>PREFIRE</font> · {aimOrder.Count - frags} left · {left} s"
+                    : $"<font color='#ff8a3d'>DEFEND</font> · {left} s · ⚔ {frags} · ☠ {deaths}", 2);
+            }
+            return;
+        }
+        if (cur.Kind is "death" or "clutch" && Server.TickCount - lastHud >= 3 * 64)   // the next place of your route in the match
+        {
+            lastHud = Server.TickCount;
+            var me = cur.Players.FirstOrDefault(p => p.Me);
+            var fr = (Server.TickCount - t0) / (float)cur.Step;
+            var next = me?.Places.Select(p => (at: p[0].GetInt32(), nm: p[1].GetString())).Where(p => p.at > fr + 8).Select(p => p.nm).FirstOrDefault();
+            if (next != null) Html($"<font color='#e0a030'>→ {next}</font> <font class='fontSize-s'>(your route in the match)</font>", 2);
+        }
         // a target not found in 12 s goes away (missed), the next one comes
         if (cur.Kind == "aim" && aimSpawn > 0 && Server.TickCount - aimSpawn > 12 * 64)
         {
@@ -274,9 +330,53 @@ public partial class CoachReplay
         if (cur.Kind == "nade" && nadeWait && DateTime.UtcNow > attemptEnd) NadeResult(double.NaN);
     }
 
-    void SessionDeath(EventPlayerDeath e, CCSPlayerController? v)
+    // true: handled here (a defense: you come back instead of the drill ending)
+    bool SessionDeath(EventPlayerDeath e, CCSPlayerController? v)
     {
-        if (sess == null || cur?.Kind != "aim" || v == null || !v.IsBot) return;
+        if (sess == null || cur?.Kind != "aim" || drill == null || v == null) return false;
+        if (drill.Mode == "prefire")
+        {
+            if (!v.IsBot) return false;
+            if (e.Attacker is { IsValid: true, IsBot: false }) { frags++; if (e.Headshot) aimHs++; }
+            var left = bots.Count(b => !gone.Contains(b.Value.Sid) && b.Key != v.Slot);
+            if (left == 0) AddTimer(0.3f, () => Finish("cleared"));
+            else Html($"<font color='#ff8a3d'>{left} left</font>{(e.Headshot ? " · HS" : "")}", 1);
+            return false;
+        }
+        if (drill.Mode == "defend")
+        {
+            var g = generation;
+            if (!v.IsBot)   // you: back on the spot in 1.5 s
+            {
+                deaths++;
+                AddTimer(1.5f, () =>
+                {
+                    if (g != generation || phase != "live" || cur == null) return;
+                    var me = cur.Players.First(p => p.Me);
+                    foreach (var h in Humans()) { h.Respawn(); Loadout(h, me); h.PlayerPawn.Value?.Teleport(Pos(me, 0), Ang(me, 0), Vector3.Zero); }
+                });
+                return true;
+            }
+            if (e.Attacker is { IsValid: true, IsBot: false }) { frags++; if (e.Headshot) aimHs++; }
+            var slot = v.Slot;
+            AddTimer(1f + (float)Rng.NextDouble() * 1.5f, () =>   // another one comes, from a real entrance not right next to you
+            {
+                if (g != generation || phase != "live" || cur == null || drill == null || !bots.TryGetValue(slot, out var t)) return;
+                var c = Utilities.GetPlayerFromSlot(slot);
+                if (c == null || !c.IsValid) return;
+                var me = Pos(cur.Players.First(p => p.Me), 0);
+                var far = drill.Bots.Where(b => Vector3.Distance(new Vector3(b.Pos[0], b.Pos[1], b.Pos[2]), me) > 600).ToList();
+                if (far.Count == 0) far = drill.Bots;
+                var sp = far[Rng.Next(far.Count)];
+                c.Respawn();
+                Loadout(c, t);
+                c.PlayerPawn.Value?.Teleport(new Vector3(sp.Pos[0], sp.Pos[1], sp.Pos[2]), new Vector3(sp.Ang[0], sp.Ang[1], 0), Vector3.Zero);
+                if (sp.Zone != null) { c.PlayerName = sp.Zone; Utilities.SetStateChanged(c, "CBasePlayerController", "m_iszPlayerName"); }
+                gone.Remove(t.Sid);
+            });
+            return false;
+        }
+        if (!v.IsBot) return false;
         if (e.Attacker is { IsValid: true, IsBot: false } && aimSpawn > 0)
         {
             reacts.Add((Server.TickCount - aimSpawn) / 64.0);
@@ -302,6 +402,16 @@ public partial class CoachReplay
             });
         }
         else AddTimer(0.4f, () => Finish(reacts.Count == aimOrder.Count ? "cleared" : "done"));
+        return false;
+    }
+
+    // a defense: a bomb planted is taken away (and costs points)
+    void BombPlanted()
+    {
+        if (sess == null || drill?.Mode != "defend" || phase != "live") return;
+        plants++;
+        Html("<font color='#ff5a5a'>PLANTED</font> · −60", 2);
+        AddTimer(0.2f, () => { foreach (var c4 in Utilities.FindAllEntitiesByDesignerName<CPlantedC4>("planted_c4")) c4.Remove(); });
     }
 
     // which target, where to look
@@ -366,7 +476,20 @@ public partial class CoachReplay
         bool ok;
         int pts = 0;
         string detail;
-        if (cur.Kind == "aim")
+        if (cur.Kind == "aim" && drill?.Mode == "prefire")
+        {
+            ok = outcome == "cleared";
+            var el = (Server.TickCount - t0) / 64.0;
+            pts = frags * 30 + aimHs * 15 + (ok ? 100 + (int)Math.Max(0, (drill.Seconds - el) * 4) : 0);
+            detail = $"{frags}/{aimOrder.Count}{(ok ? $" in {el:F1} s" : "")} · {aimHs} HS";
+        }
+        else if (cur.Kind == "aim" && drill?.Mode == "defend")
+        {
+            ok = frags >= 6 && frags >= 2 * deaths;
+            pts = Math.Max(0, frags * 40 + aimHs * 15 - deaths * 50 - plants * 60);
+            detail = $"{frags} frags · {deaths} death(s) · {aimHs} HS{(plants > 0 ? $" · {plants} planted" : "")}";
+        }
+        else if (cur.Kind == "aim")
         {
             var n = Math.Max(1, aimOrder.Count);
             ok = outcome != "dead" && (reacts.Count == n || (n >= 3 && reacts.Count >= n - 1));
