@@ -227,6 +227,8 @@ def set_mark(rnd, fields):
             clean[k] = v if v in ("frustration", "doubt", "suspicion", "positive") else None
         elif k == "me_site":   # where you said you are ("je suis en B")
             clean[k] = v if v in ("A", "B") else None
+        elif k == "seen_t":   # the zones you called with their time in the round: this match's peek timings
+            clean[k] = [[str(z)[:30], num(e)] for z, e in v if z and num(e) is not None][:12] if isinstance(v, list) else None
         elif k == "early":   # the zones called in the first 40 s of the round (the other team's habits this match)
             clean[k] = [str(z)[:30] for z in v][:6] if isinstance(v, list) else None
         elif k in ("heat", "mood_word"):
@@ -264,6 +266,10 @@ def voice_call(p, t_wall=None):
         if p.get("site"):
             set_mark(rnd, {"me_site": p["site"]})
         return True
+    if p.get("zone") and el is not None and not p.get("clear"):   # every call of a zone with its time: the peek timings
+        st = list(mk.get("seen_t") or [])
+        if not any(z == p["zone"] and abs((e or 0) - el) < 4 for z, e in st):
+            set_mark(rnd, {"seen_t": st + [[p["zone"], el]]})
     if p.get("zone") and el is not None and el <= 40 and not p.get("clear"):   # an early contact: kept on the round for this match's habits
         early = list(mk.get("early") or [])
         if p["zone"] not in early:
@@ -308,6 +314,24 @@ def set_focus(n):
             rnd += 1
         STATE["focus"] = {"n": int(n), "round": rnd, "t": time.time()}
     return True
+
+
+def set_site_key(site):
+    """Numpad 7 (A) or 9 (B). Bomb down: the site it went down on (both sides). Else on CT: the site you play this round
+    (a key pressed after the round ended counts for the next one). On T before the plant: nothing."""
+    if site not in ("A", "B"):
+        return False
+    with LOCK:
+        rnd, side, ph, bomb = STATE.get("round"), STATE.get("side"), STATE.get("round_phase"), STATE.get("bomb")
+    if not rnd:
+        return False
+    if ph == "over":
+        rnd, bomb = rnd + 1, None
+    if bomb == "planted":
+        return set_mark(rnd, {"bomb_site": site})
+    if side == "CT":
+        return set_mark(rnd, {"me_site": site})
+    return False
 
 
 def voice_mood(mo, t_wall=None):

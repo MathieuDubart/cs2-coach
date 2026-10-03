@@ -17,6 +17,7 @@ import gsi
 KEYS = {1: "KP_1", 2: "KP_2", 3: "KP_3"}   # numpad 1, 2, 3: CS2's names (the physical key, num lock on or off); KP_END etc. were CS:GO's
 FOCUS_OFF = "KP_MINUS"   # numpad minus: drop the focus on a path
 EXTRA = {"eco": "KP_DEL", "sit": "KP_0"}   # numpad ".": the economy plan; numpad 0: the situation, recent and global
+SITE_KEYS = {"A": "KP_7", "B": "KP_9"}   # numpad 7 / 9: A / B (CT: the site you play; once planted, both sides: the bomb's site)
 BINDS = "coach_binds.cfg"
 _LAST = {}
 WHEEL = {"A": 'playerchatwheel CW.GoA "#Chatwheel_aplan"', "B": 'playerchatwheel CW.GoB "#Chatwheel_bplan"'}   # the chat wheel's Go A / Go B
@@ -34,7 +35,8 @@ def binds_text():
     lines += [f'bind "{k}" "exec coach_path{i}"' for i, k in KEYS.items()]
     lines += [f'bind "{FOCUS_OFF}" "exec coach_focus0"']
     lines += [f'bind "{k}" "exec coach_{name}"' for name, k in EXTRA.items()]
-    lines += ['echo "Coach CS2: numpad 1-2-3 say the paths in the team chat"']
+    lines += [f'bind "{k}" "exec coach_site{site}"' for site, k in SITE_KEYS.items()]
+    lines += ['echo "Coach CS2: numpad 1-2-3 say the paths in the team chat, 7 / 9 tell the coach A / B"']
     return "\n".join(lines) + "\n"
 
 
@@ -50,6 +52,7 @@ def write(paths, extra=None):
     ff = os.path.join(d, "coach_focus0.cfg")
     if not os.path.exists(ff):
         open(ff, "w", encoding="utf-8").write('echo "Coach CS2: focus off"\n')
+    _site_files(d)
     by, site = {}, {}
     for p in paths or []:
         try:
@@ -75,6 +78,13 @@ def write(paths, extra=None):
     return True
 
 
+def _site_files(d):
+    for site in SITE_KEYS:   # only a line in the console: the app reads it (CT: your site; planted: the bomb's site)
+        sf = os.path.join(d, f"coach_site{site}.cfg")
+        if not os.path.exists(sf):
+            open(sf, "w", encoding="utf-8").write(f'echo "Coach CS2: {site}"\n')
+
+
 def bound():
     """True when numpad 1 runs coach_path1 in your CS2 key settings (the binds were set once)."""
     try:
@@ -82,6 +92,17 @@ def bound():
         own = config.logged_in_account()[0]
         f = os.path.join(config.steam_path(), "userdata", str(int(own) - 76561197960265728), "730", "local", "cfg", "cs2_user_keys_0_slot0.vcfg")
         return "exec coach_path1" in open(f, encoding="utf-8", errors="replace").read()
+    except Exception:
+        return False
+
+
+def bound_site():
+    """True when numpad 7 runs coach_siteA in your CS2 key settings (exec coach_binds once more after this update)."""
+    try:
+        import config
+        own = config.logged_in_account()[0]
+        f = os.path.join(config.steam_path(), "userdata", str(int(own) - 76561197960265728), "730", "local", "cfg", "cs2_user_keys_0_slot0.vcfg")
+        return "exec coach_siteA" in open(f, encoding="utf-8", errors="replace").read()
     except Exception:
         return False
 
@@ -101,7 +122,7 @@ def console_file():
     return os.path.join(os.path.dirname(d), "console.log") if d else None
 
 
-KEY_RE = re.compile(r"execing coach_(?:path([123])|focus0)\b")
+KEY_RE = re.compile(r"execing coach_(?:path([123])|focus0|site([AB]))\b")
 
 
 def watch():
@@ -125,7 +146,9 @@ def watch():
                 pos = size
                 for line in chunk.decode("utf-8", "replace").splitlines():
                     m = KEY_RE.search(line)
-                    if m:
+                    if m and m.group(2):
+                        gsi.set_site_key(m.group(2))
+                    elif m:
                         gsi.set_focus(int(m.group(1)) if m.group(1) else 0)
         except Exception:
             pass
@@ -134,9 +157,12 @@ def watch():
 
 def status():
     d = gsi.cfg_dir()
-    if d and not os.path.exists(os.path.join(d, BINDS)):
+    if d and (not os.path.exists(os.path.join(d, BINDS)) or open(os.path.join(d, BINDS), encoding="utf-8").read() != binds_text()):
         open(os.path.join(d, BINDS), "w", encoding="utf-8").write(binds_text())
+    if d:
+        _site_files(d)
     cf = console_file()
     fresh = bool(cf and os.path.exists(cf) and time.time() - os.path.getmtime(cf) < 2 * 86400)
     return {"cfg": bool(d), "binds_file": bool(d and os.path.exists(os.path.join(d, BINDS))), "bound": bound(), "focus_bound": bound_focus(),
+            "site_bound": bound_site(),
             "console": fresh}

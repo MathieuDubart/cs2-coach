@@ -320,6 +320,8 @@ def _role(typ, x):
     return "block" if typ in ("smoke", "molotov") else "damage"
 
 
+POOL = ("from", "to", "from_key", "to_key", "from_px", "to_px", "level", "land_level", "timer", "t_med", "how", "click", "n",
+        "per100", "blind", "kill", "dmg", "win", "base_win", "usual", "best", "post")
 SLIM = ("from", "to", "from_px", "to_px", "level", "land_level", "timer", "t_med", "how", "click", "setpos", "n", "per100",
         "blind", "kill", "team", "dmg", "hit", "win", "base_win", "usual", "best", "self")
 
@@ -404,6 +406,16 @@ def for_player(sid, maps, cross=None, stats=None, lanes=None):
                               "to": best["to"], "from": best["from"]})
             order.sort(key=lambda o: -o["value"])
             entry["order"] = order
+            # every lineup of the base on this side (not only from your zones): the page picks the ones of the path or
+            # the site you choose (numpad 1-2-3 on T, 7 / 9 on CT)
+            pool = []
+            for typ, T in M["types"].items():
+                for x in T["groups"]:
+                    if typ == "flash" and (x.get("blind") or 0) < 25:
+                        continue
+                    pool.append({**{k: x[k] for k in POOL if k in x}, "type": typ, "score": x["score"]})
+            pool.sort(key=lambda x: -x["score"])
+            entry["pool"] = pool[:48]
             entry["none"] = single.get("none")
             entry["mine"] = {t: int((own.type == t).sum()) for t in TYPES}
             if side == "CT" and lanes and lanes.get(mp):   # the grenades that close each entrance of the Ts

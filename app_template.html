@@ -558,6 +558,46 @@ table.lc{border-collapse:collapse;font-variant-numeric:tabular-nums;min-width:64
 .book{display:grid;grid-template-columns:repeat(auto-fill,minmax(420px,1fr));gap:12px}.book article{border:1px solid var(--line);border-radius:var(--radius);padding:10px;display:grid;gap:6px}
 .book h4{margin:0;font:700 15px var(--f-body)}.book h4 em{font:600 11px var(--f-mono);font-style:normal;color:var(--muted)}
 .book .shots{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:6px}.book img{width:100%;border-radius:4px;border:1px solid var(--line)}.book p{margin:0;font-size:13px}
+
+/* training: situations played again on the local server */
+.train{display:grid;gap:10px}
+.tstat{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:8px 12px;border:1px solid var(--line);border-radius:var(--radius)}
+.tstat>b{font:700 18px var(--f-display);color:var(--muted)}
+.tstat.on>b{color:var(--good,#3ba55d)}
+.tstat code{font:600 13px var(--f-mono);padding:2px 6px;border-radius:4px;background:color-mix(in srgb,var(--muted) 15%,transparent)}
+.tlist{display:grid;gap:6px}
+.tsit{display:grid;grid-template-columns:110px 150px 1fr auto auto auto;gap:10px;align-items:center;padding:6px 10px;border:1px solid var(--line);border-radius:var(--radius)}
+.tsit.cur{border-color:var(--accent,#e0a030)}
+.tsit .tk{font:600 12px var(--f-mono);color:var(--bad,#d9534f)}
+.tsit .tk.clutch{color:var(--accent,#e0a030)}
+.tsit .tz{font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tres{font:600 12px var(--f-mono);color:var(--muted)}
+.tres.ok{color:var(--good,#3ba55d)}
+@media (max-width:760px){.tsit{grid-template-columns:1fr auto;}.tsit .tz{grid-column:1/-1}}
+
+/* the training session: one Play */
+.tplay{display:grid;gap:10px;padding:14px;border:1px solid var(--line);border-radius:var(--radius);background:color-mix(in srgb,var(--accent,#e0a030) 5%,transparent)}
+.tlvl{display:flex;align-items:center;gap:10px;flex-wrap:wrap;font:600 13px var(--f-mono)}
+.tlvl>b{font:700 22px var(--f-display);color:var(--accent,#e0a030)}
+.tbar{flex:0 1 220px;height:8px;border-radius:4px;background:color-mix(in srgb,var(--muted) 25%,transparent);overflow:hidden}
+.tbar>i{display:block;height:100%;background:var(--accent,#e0a030)}
+.tdue{color:var(--bad,#d9534f)}
+.trow{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.tk2{width:24px;text-align:center}
+.tbig{font:700 20px var(--f-display);padding:10px 34px;border-radius:var(--radius);background:var(--accent,#e0a030);color:#111;border:0;cursor:pointer}
+.tbig:disabled{opacity:.5}
+.tlive{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:8px 12px;border-radius:var(--radius);background:color-mix(in srgb,var(--good,#3ba55d) 14%,transparent);font:600 14px var(--f-body)}
+.tlive>b{color:var(--good,#3ba55d)}
+.tcarte>summary{cursor:pointer;font-weight:600;margin:6px 0}
+.tcarte{display:grid;gap:8px}
+.trow button[aria-pressed="false"]{background:color-mix(in srgb,var(--bg) 85%,transparent);color:var(--ink)}
+
+/* the stuff of the path you pressed: every lineup that serves it */
+.vstuff{display:grid;gap:4px}
+.vstuff>span{display:flex;align-items:baseline;gap:6px;padding:3px 8px;border-left:4px solid var(--c);background:color-mix(in srgb,var(--c) 10%,transparent);border-radius:4px;font:600 14px var(--f-body)}
+.vstuff i{font:700 13px var(--f-mono);color:var(--c);font-style:normal}
+.vstuff small{font:500 12px var(--f-body);color:var(--muted)}
+.vchip.warn{border-color:var(--warn,#e0a030);color:var(--warn,#e0a030)}
 </style>
 
 <div class="bar"><div class="bar-in">
@@ -1207,6 +1247,7 @@ function renderProgress(){
    </div>
    ${T?`<h3>Today's warm-up · ${T.total_min} min</h3><ol class="warm">${T.warmup.map(w=>`<li><b>${w.min} min · ${esc(w.map)}</b><span>${esc(w.text)}</span><span class="note">Why: ${esc(w.why)}</span>${srcLinks(w.src,true)}</li>`).join("")}</ol>
     <div class="tech">${T.week.map(w=>`<div><b>${esc(w.title)}</b>${esc(w.text)}</div>`).join("")}</div>`:""}
+   ${D.local&&p.steamid===D.own?`<h3>Training</h3><div id="trainbox" class="train"><span class="note">Loading…</span></div>`:""}
    ${X?`<h3>Experiments</h3><p class="note">You start a test and play normally: the coach compares your next matches with your previous 15 and gives a verdict once there is enough data (difference significant at 90%).${D.local?"":" Starting or ending an experiment happens in the local app."}</p>
     ${act.length?`<span class="lbl4" style="color:var(--muted)">Running</span><div class="exps">${act.map(expCard).join("")}</div>`:""}
     ${X.suggested.length?`<span class="lbl4" style="color:var(--muted)">Suggested for you</span><div class="exps">${X.suggested.map(suggestCard).join("")}</div>`:""}
@@ -1216,7 +1257,65 @@ function renderProgress(){
    ${buysBlock(PL.buys)}
    ${K.length?`<h3>Tracking your indicators</h3><p class="note">Match by match. In color: the trend of your last 3 matches against the previous ones.</p><div class="kpis">${K.map(kpiCard).join("")}</div>`:""}`;
   wireExp(v,X,p);
+  const tb=$("#trainbox",v);if(tb)trainLoad(tb,p.steamid);
 }
+// ---------- training: your situations played again on the local server (bots on the recorded paths) ----------
+const TRAIN={map:null,timer:null};
+const DIFF=["Easy","Normal","Hard","Expert"];
+function trainDiff(){try{return +(localStorage.getItem("coach_diff")??2)}catch(e){return 2}}
+function tPref(k,d){try{return localStorage.getItem("coach_t"+k)??d}catch(e){return d}}
+function tSet(k,v){try{localStorage.setItem("coach_t"+k,v)}catch(e){}}
+const BLOCK={aim:"🎯 Aim",nade:"💨 Stuff",situation:"🔁 Situations"};
+async function trainLoad(box,sid){clearTimeout(TRAIN.timer);
+  let d;try{d=await (await fetch("/api/train?sid="+sid)).json()}catch(e){box.innerHTML=`<span class="note">The local server doesn't answer.</span>`;return}
+  if(!box.isConnected)return;
+  const st=d.status||{},R=d.results||{},sc=d.scenarios||[],P=d.progress||{level:1,xp:0,from:0,to:300,due:{}},M=d.maps||{},ss=st.session;
+  if(!st.installed){box.innerHTML=`<span class="note">Training server not installed (plugin/make_server.py, then plugin/build.py).</span>`;return}
+  const mins=+tPref("min","20"),where=tPref("where","random"),df=trainDiff(),due=P.due||{},nd=Object.values(due).reduce((a,b)=>a+b,0);
+  const pct=Math.max(0,Math.min(100,100*(P.xp-P.from)/Math.max(1,P.to-P.from)));
+  const mapsTop=Object.keys(M).slice(0,8);
+  const chip=(k,v,lab,on)=>`<button type="button" data-t${k}="${v}" aria-pressed="${on}">${lab}</button>`;
+  // the session running: what the server says (block, drill, points)
+  const live=ss&&st.running?`<div class="tlive"><b>●</b><span>${BLOCK[ss.block]||"Session"} · ${esc(ss.drill||"…")}</span><span>⭐ ${ss.points||0} · ${ss.ok||0}/${ss.done||0} ✔${ss.streak>=2?` · 🔥${ss.streak}`:""}</span><span>${ss.left?`${Math.floor(ss.left/60)}:${String(ss.left%60).padStart(2,"0")}`:""}</span>${st.humans?"":`<span class="note">waiting for you on the server</span>`}</div>`:"";
+  const maps=[...new Set(sc.map(s=>s.map))];if(TRAIN.map&&!maps.includes(TRAIN.map))TRAIN.map=null;
+  const list=sc.filter(s=>!TRAIN.map||s.map===TRAIN.map).slice(0,12);
+  const lab=s=>s.kind==="clutch"?`1v${s.vs} clutch`:`death${s.opening?" · 1st":""}${s.traded?"":" · no trade"}`;
+  const res=s=>{const r=R[s.id];return r&&r.tries?`<span class="tres ${r.won+r.survived?"ok":""}">${r.tries}× · ${r.won+r.survived} ✓</span>`:r&&r.watched?`<span class="tres">👁 ${r.watched}</span>`:`<span class="tres">new</span>`};
+  box.innerHTML=`<div class="tplay">
+     <div class="tlvl"><b>LVL ${P.level}</b><div class="tbar"><i style="width:${pct}%"></i></div><span>${P.xp} / ${P.to} XP</span>${nd?`<span class="tdue">🔁 ${nd} to redo</span>`:""}${P.mastered?`<span>⭐ ${P.mastered} mastered</span>`:""}</div>
+     ${live}
+     <div class="trow"><span class="tk2">⏱</span>${[10,20,30,45].map(m=>chip("min",m,m+" min",m===mins)).join("")}</div>
+     <div class="trow"><span class="tk2">🗺</span>${chip("where","random","🎲 Random",where==="random")}${chip("where","mix","🔀 Mix",where==="mix")}${mapsTop.map(m=>chip("where",m,MAPN(m),where===m)).join("")}</div>
+     <div class="trow"><span class="tk2">🤖</span>${DIFF.map((n,i)=>`<button type="button" data-tdiff="${i}" aria-pressed="${i===df}">${n}</button>`).join("")}</div>
+     <div class="trow"><button type="button" class="tbig" data-tgo>${ss&&st.running?"↻ NEW SESSION":"▶ PLAY"}</button>${st.running?`<button type="button" data-tstop>Stop server</button>`:""}<span class="note" id="tmsg" role="status">${BLOCK.aim} → ${BLOCK.nade} → ${BLOCK.situation}</span></div>
+   </div>
+   <details class="tcarte"><summary>Situations one by one (${sc.length})</summary>
+   ${maps.length>1?`<div class="btns" role="group" aria-label="Map"><button type="button" data-tmap="" aria-pressed="${!TRAIN.map}">All</button>${maps.map(m=>`<button type="button" data-tmap="${m}" aria-pressed="${TRAIN.map===m}">${MAPN(m)}</button>`).join("")}</div>`:""}
+   <div class="tlist">${list.map((s,i)=>`<div class="tsit ${st.scenario===s.id?"cur":""}"><b>${MAPN(s.map)} R${s.round}</b>
+     <span class="tk ${s.kind}">${lab(s)}</span><span class="tz">${esc(s.zone||"")}${s.mine?` · ${esc(s.mine)}`:""}${s.by?` <span class="note">vs ${esc(s.by)} (${esc(s.weapon||"")})</span>`:""}</span>${res(s)}
+     <button type="button" data-tplay="${i}" data-mode="actor">▶ Play</button><button type="button" data-tplay="${i}" data-mode="spec">👁 Watch</button></div>`).join("")||`<span class="note">No situation yet: the demos of your matches are needed.</span>`}</div>
+   <p class="note">In game: <b>!r</b> again · <b>!n</b> next · <b>!p</b> previous · <b>!spec</b> watch / play · <b>!stop</b></p></details>`;
+  if(TRAIN.open)$(".tcarte",box).open=true;
+  $(".tcarte",box).ontoggle=e=>TRAIN.open=e.target.open;
+  const msg=$("#tmsg",box);
+  $$("[data-tmin]",box).forEach(b=>b.onclick=()=>{tSet("min",b.dataset.tmin);trainLoad(box,sid)});
+  $$("[data-twhere]",box).forEach(b=>b.onclick=()=>{tSet("where",b.dataset.twhere);trainLoad(box,sid)});
+  $$("[data-tmap]",box).forEach(b=>b.onclick=()=>{TRAIN.map=b.dataset.tmap||null;trainLoad(box,sid)});
+  $$("[data-tdiff]",box).forEach(b=>b.onclick=()=>{try{localStorage.setItem("coach_diff",b.dataset.tdiff)}catch(e){}trainLoad(box,sid)});
+  const sp=$("[data-tstop]",box);if(sp)sp.onclick=async()=>{sp.disabled=true;try{await api("/api/train/stop",{})}catch(e){msg.textContent="Failed: "+e.message}trainLoad(box,sid)};
+  const go=$("[data-tgo]",box);if(go)go.onclick=async()=>{go.disabled=true;msg.textContent=st.running?"Preparing the session…":"Preparing the session and starting the server (about 15 s)…";
+    try{const r=await api("/api/train/session",{sid,minutes:mins,where,diff:df});
+      msg.innerHTML=`${r.blocks.map(b=>`${BLOCK[b.kind]} ${Math.round(b.seconds/60)}′`).join(" → ")} · ${r.session.maps.map(MAPN).join(", ")} — CS2 joins the server: follow the screen.`;
+      setTimeout(()=>trainLoad(box,sid),4000)}
+    catch(e){msg.textContent="Failed: "+e.message;go.disabled=false}};
+  $$("[data-tplay]",box).forEach(b=>b.onclick=async()=>{const s=list[+b.dataset.tplay];$$("[data-tplay]",box).forEach(x=>x.disabled=true);
+    msg.textContent=st.running?"Loading the situation…":"Starting the training server (about 10 s)…";
+    try{const r=await api("/api/train/play",{sid,mid:s.mid,round:s.round,kind:s.kind,mode:b.dataset.mode,diff:df});
+      msg.innerHTML=r.humans?`${esc(r.scenario.title)}: starting on the server.`:`Ready. In the CS2 console: <code>connect 127.0.0.1</code> (copied).`;
+      if(!r.humans)try{navigator.clipboard.writeText("connect 127.0.0.1")}catch(e){}
+      setTimeout(()=>trainLoad(box,sid),2500)}
+    catch(e){msg.textContent="Failed: "+e.message;$$("[data-tplay]",box).forEach(x=>x.disabled=false)}});
+  if(st.running)TRAIN.timer=setTimeout(()=>{if(box.isConnected&&S.view==="progress")trainLoad(box,sid)},4000)}
 function wireExp(v,X,p){const msg=$("#xmsg",v);
   $$("[data-xstart]",v).forEach(b=>b.onclick=async()=>{const s=X.suggested[+b.dataset.xstart];b.disabled=true;
     try{await api("/api/experiment",{sid:p.steamid,action:"start",template:s.template,params:s.params});await reloadPlayer()}catch(e){if(msg)msg.textContent="Failed: "+e.message;b.disabled=false}});
@@ -1247,6 +1346,8 @@ async function renderSettings(){
    <p>When you attack (T, or CT on a hostage map), numpad <b>1</b>, <b>2</b> or <b>3</b> says path 1, 2 or 3 of the In game page in the team chat, with its way and when it is on the site, and the page focuses on it (the last key pressed wins): only that path on the map, your grenades for it and the zones to check. Numpad <b>minus</b> drops the focus. The app rewrites the text every round; you press the key.</p>
    ${cc&&!cc.console?`<p class="note">The focus needs CS2's console log (game/csgo/console.log, written when CS2 starts with <code>-condebug</code> in its launch options): not found or old.</p>`:""}
    ${cc&&cc.bound&&!cc.focus_bound?`<p>Numpad minus is new: run <code>exec coach_binds</code> once more in CS2's console.</p>`:""}
+   <p>Numpad <b>7</b> = A, <b>9</b> = B: on CT, the site you play this round (the page shows its stuff and holds); once the bomb is down, on both sides, the site it went down on (T: post-plant holds and stuff; CT: the retake, the spots to check).</p>
+   ${cc&&cc.bound&&!cc.site_bound?`<p>Numpad 7 / 9 are new: run <code>exec coach_binds</code> once more in CS2's console.</p>`:""}
    ${cc&&cc.bound?`<p class="note">The keys are set.</p>`:`<p>One time only, in CS2's console: <code>exec coach_binds</code> (the keys then stay in your CS2 settings).</p>`}
    <p class="note">Numpad 1, 2, 3 were free in your CS2 keys. The In game page must be open during the match (it gives the paths). When the path ends on a site, the key also gives CS2's own "Go A" / "Go B" of the chat wheel (the order bots follow). A file only says that line and that order, never another command.</p></article>
   <article class="card"><h3>The coach's voice at the buy time</h3>
@@ -2310,7 +2411,7 @@ function liveRadar(box,p,map,level,g,o){
     if(mine.length||others.length)legend.push(`<span>${SW.star}your multi-kills (2+ kills from that spot in a round)</span>${others.length?`<span>${SW.wstar}other players' multi-kills on your spots</span>`:""}`)}
   // key rounds (pistol, eco or force against a full buy): the spots that pay for your weapon, a plant that wins more
   if(on("key")&&o.following&&g&&!planted&&(g.round_phase==="freezetime"||(live&&(g.elapsed||0)<45))&&typeof keyRadar==="function"){keyRadar(p,g,map,level,Lstrong,Ltop,legend,here);antiEcoRadar(p,g,map,level,Ltop,legend,here)}
-  if(on("post")&&!ct&&planted&&site&&typeof postplantRadar==="function")postplantRadar(p,g,map,level,Ltop,legend,here,site);
+  if(on("post")&&planted&&site&&typeof postplantRadar==="function")postplantRadar(p,g,map,level,Ltop,legend,here,site,ct);
   // T side, before the hit: the way from the spawn of the plays that win most (numbered like the side panel's lines)
   const FN=o.following&&g?focusN(g):0;   // the path you pressed: the only one drawn
   if(att&&on("paths")&&o.following&&g&&!planted&&(g.round_phase==="freezetime"||(live&&(g.elapsed||0)<45))){const W0=HMAP?hostageRank(p,g):winsRank(p,g),W=W0&&FN&&W0.rows.some(r=>r.rank===FN)?{...W0,rows:W0.rows.filter(r=>r.rank===FN)}:W0;
@@ -2418,7 +2519,11 @@ const vLetter={smoke:"S",flash:"F",molotov:"M",he:"H"};
 // the grenades you hold, each with the throw that fits this moment (same choice as the text panel), or none
 function vNadePicks(p,g){const N=(p.advice.plan||{}).nades,E=N&&((N.maps||{})[g.map]||{})[g.side];if(!E)return [];
   const w=g.bomb==="planted"?"post":g.elapsed==null?null:g.elapsed<20?"debut":g.elapsed<40?"prise":g.elapsed<70?"action":"fin",el=g.elapsed;
-  const all=t=>[...(E.types[t].picks||[]),...(E.types[t].post||[])].filter((x,i,a)=>a.indexOf(x)===i);
+  const MS=g.side==="CT"?mySite(g):null,GS=((((p.advice.plan||{}).tside||{}).maps||{})[g.map]||{}).geo,MSg=MS&&GS&&GS.sites?GS.sites[MS]:null;
+  const atMine=x=>MSg&&x.to_px&&Math.hypot(x.to_px[0]-MSg.px[0],x.to_px[1]-MSg.px[1])<300&&(!x.land_level||!MSg.level||x.land_level===MSg.level);
+  // a path pressed (T) or the site you play (CT): every lineup of the base for it, not only your usual zones'
+  const src=t=>{const P=(E.pool||[]).filter(x=>x.type===t);if(focusN(g)&&P.length)return P;if(MSg&&P.length){const m=P.filter(atMine);if(m.length)return m}return E.types[t].picks||[]};
+  const all=t=>[...src(t),...(E.types[t].post||[])].filter((x,i,a)=>a.indexOf(x)===i);
   // what a throw brings: rounds won when it's thrown vs the map's average (shrunk on few throws), else its own score
   const eff=x=>x.win!=null&&x.base_win!=null?((x.win*(x.n||0)+x.base_win*10)/((x.n||0)+10)-x.base_win)/100:(x.score||0)/4;
   // T side: the throws that serve your way (path 1 of the radar) come first, the ones landing on the other site last
@@ -2440,7 +2545,7 @@ function vNadePicks(p,g){const N=(p.advice.plan||{}).nades,E=N&&((N.maps||{})[g.
 tag=x=>x&&Object.assign({},x,{way:way(x)});
   const FX=focusN(g),noOff=l=>l.filter(x=>FX?["site","way","from"].includes(way(x)):way(x)!=="off");   // a throw toward the other site only helps a fake: never shown; with a focus, only the throws of that path
   const picks=t=>{if(w==="post")return (E.types[t].post||[]).slice(0,2);
-    if(el==null||!w){const L0=noOff((E.types[t].picks||[]).slice().sort((a,b)=>effW(b)-effW(a)));
+    if(el==null||!w){const L0=noOff(src(t).slice().sort((a,b)=>effW(b)-effW(a)));
       const rushL=RF&&/^rush/.test(RF.k)?L0.filter(x=>x.t_med!=null&&x.t_med<=28):[];   // a rush: the throws made in its first seconds
       return (rushL.length?rushL:L0).slice(0,2).map(tag)}   // buy time: the best ones of the round, for your way
     const fit=x=>x.best===w||x.usual===w||(x.t_med!=null&&x.t_med>=el-8&&x.t_med<=el+25);
@@ -2661,9 +2766,18 @@ function vFocus(p,g){const n=focusN(g);if(!n)return "";const H=isHostage(g.map),
   let head,when;
   if(H){head=`Hostages via ${r.route.zones.slice(-2).join(" > ")}`;when=`there ~${clock(r.t_end)}`}
   else{const ps=pathShort(p,g,r),pts=(r.route||{}).pts,end=pts&&pts[pts.length-1];head=`${ps.head}${ps.via?` via ${ps.via}`:""}`;when=onSite(r.timing,end)}
-  const nd=vNades(vNadePicks(p,g)),chk=focusChecks(p,g,r);
+  const nd=vNades(vNadePicks(p,g)),chk=focusChecks(p,g,r),ps=vPathStuff(p,g,r);
   return `<div class="vfocus" style="--c:${r.col}"><b>${n}</b><div><span>${esc(head)}</span><small>${esc(when||"")}${r.wr!=null?` · ${Math.round(r.wr)}% won`:""}</small></div><em title="numpad minus drops the focus">− off</em></div>
-    ${nd}${chk.length?`<div class="vchips">${chk.map(z=>`<span class="vchip ${z.d?"bad":""}">${z.d?"⚠":"👁"} ${vShort(z.zone)}</span>`).join("")}</div>`:""}`}
+    ${nd}${ps}${chk.length?`<div class="vchips">${chk.map(z=>`<span class="vchip ${z.d?"bad":""}">${z.d?"⚠":"👁"} ${vShort(z.zone)}</span>`).join("")}</div>`:""}`}
+// the path you pressed: every lineup of the base that lands on its site or along it, the best first (6 at most)
+function vPathStuff(p,g,r){const E=((((p.advice.plan||{}).nades||{}).maps||{})[g.map]||{})[g.side],P=(E&&E.pool)||[];const pts=r&&r.route&&r.route.pts;if(!P.length||!pts)return "";
+  const GEO=((((p.advice.plan||{}).tside||{}).maps||{})[g.map]||{}).geo,sk=(r.k.match(/[AB]$/)||r.k.match(/^[AB]/)||[])[0],S=GEO&&GEO.sites&&sk?GEO.sites[sk]:null,end=pts[pts.length-1];
+  const lvOK=(a,b)=>!a||!b||a===b,near=(a,d,lv)=>a&&pts.some(q=>Math.hypot(q[0]-a[0],q[1]-a[1])<d&&lvOK(lv,q[2]));
+  const fit=x=>{if(!x.to_px||x.post>=50)return 0;const lv=x.land_level||x.level;
+    if((S&&Math.hypot(x.to_px[0]-S.px[0],x.to_px[1]-S.px[1])<190&&lvOK(lv,S.level))||(end&&Math.hypot(x.to_px[0]-end[0],x.to_px[1]-end[1])<170&&lvOK(lv,end[2])))return 2;
+    return near(x.to_px,60,lv)&&near(x.from_px,140,x.level)?1:0};
+  const L=P.map(x=>({x,f:fit(x)})).filter(o=>o.f).sort((a,b)=>b.f-a.f||b.x.score-a.x.score).slice(0,6).map(o=>o.x);if(!L.length)return "";
+  return `<div class="vstuff">${L.map(x=>`<span style="--c:${NADE_C[x.type]||"#ccc"}"><i>${vLetter[x.type]||"?"}</i>${vShort(x.to)}<small>${esc(x.from||"")} · ${esc(x.how||"")}${x.timer?` · ${x.timer}`:""}</small></span>`).join("")}</div>`}
 // hostage maps: the CTs' ways (attack: rounds won; defense: share of the CT walks, where they come from)
 function vHostRoutes(p,g,def){const W=hostageRank(p,g);if(!W)return "";
   return vHead(def?"THEY COME FROM · OF CT WALKS":"YOUR WAYS · ROUNDS WON")+vRows(W.rows.map((r,i)=>({l:`${r.rank} · ${vShort(r.route.zones.slice(-2).join(" > "))} · ${clock(r.t_end)}`,v:def?r.share:r.wr,c:r.col,o:[1,.8,.65][i]})))}
@@ -2682,9 +2796,48 @@ function vBook(p,g,r){const F=bookFor(p,g,r);if(!F)return "";
 // you just died: the info, now (where, how many, how hurt). Your rounds with a call before your death are won far
 // more often; a few seconds of a big reminder, and the voice once per round (setting "Say 'info' when I die")
 function deadAgo(g){const R=(((g.hist||{}).rounds||{})[g.round])||{};return g.round_phase==="live"&&R.dead!=null?(g.elapsed||0)-R.dead:null}
-function vInfo(g){const a=deadAgo(g);return a!=null&&a>=0&&a<=6?`<div class="vbig warn"><b>📣 INFO</b><span>where · how many · how hurt</span></div>`:""}
+function calledSince(g,a){const c=g&&g.call;return !!(c&&c.round===g.round&&c.t>=Date.now()/1000-a-.5)}   // you gave an info after your death
+// CT: numpad 7 (A) / 9 (B): the site you play this round
+const mySite=g=>{const s=(((g.hist||{}).marks||{})[g.round]||{}).me_site;return s==="A"||s==="B"?s:null};
+function vMySite(p,g){const s=mySite(g);if(!s)return "";const E=(((p.advice.plan||{}).nades||{}).maps||{})[g.map],C=E&&E.CT,L=(C&&C.lanes)||{};
+  const TS=(p.advice.plan||{}).tside,M=((TS||{}).maps||{})[g.map]||{},GS=(M.geo||{}).sites||{},S=GS[s];
+  // the stuff of the site, entrance by entrance (the grenades that close each entrance of the Ts)
+  const st=[];Object.entries(L).filter(([k])=>k[0]===s).forEach(([k,o])=>["smoke","molotov","flash","he"].forEach(t=>{const x=o[t];if(x&&st.length<5&&!st.some(y=>y.to===x.to&&y.type===t))st.push({...x,type:t})}));
+  const holds=(((M.ct_spots||{}).early||{}).hold||[]).filter(h=>S&&Math.hypot(h.px[0]-S.px[0],h.px[1]-S.px[1])<260&&(!h.level||!S.level||h.level===S.level)).slice(0,3);
+  return `<div class="vfocus" style="--c:#5ab4ff"><b>${s}</b><div><span>You hold ${s}</span><small>numpad 7 A · 9 B</small></div></div>
+   ${st.length?`<div class="vchips">${st.map(x=>`<span class="vchip" style="border-color:${NADE_C[x.type]||"#ccc"}">${vLetter[x.type]||"?"} ${vShort(x.to)} <small>${esc(x.from||"")}${x.timer?` · ${x.timer}`:""}</small></span>`).join("")}</div>`:""}
+   ${holds.length?`<div class="vchips">${holds.map(h=>`<span class="vchip">🛡 ${vShort(h.zone)}</span>`).join("")}</div>`:""}`}
+// the post-plant / retake grenades of a side that land on that site (the base's: every lineup thrown after a plant)
+function postStuff(p,g,side,site){const E=((((p.advice.plan||{}).nades||{}).maps||{})[g.map]||{})[side],S=(((((p.advice.plan||{}).tside||{}).maps||{})[g.map]||{}).geo||{}).sites||{},c=S[site];
+  if(!E||!c)return [];const at=x=>x.to_px&&Math.hypot(x.to_px[0]-c.px[0],x.to_px[1]-c.px[1])<230&&(!x.land_level||!c.level||x.land_level===c.level);
+  const L=[];Object.entries(E.types||{}).forEach(([t,v])=>(v.post||[]).forEach(x=>L.push({...x,type:t})));(E.pool||[]).filter(x=>(x.post||0)>=30).forEach(x=>L.push(x));
+  return L.filter(at).filter((x,i,a)=>a.findIndex(y=>y.type===x.type&&y.to===x.to&&y.from===x.from)===i).sort((a,b)=>(b.score||0)-(a.score||0)).slice(0,3)}
+// T after the plant on a site you gave (numpad 7 / 9, or said): where to hold, the post-plant stuff
+function vPostPlant(p,g,site){const PP=((((((p.advice.plan||{}).tside||{}).maps||{})[g.map])||{}).postplant||{})[site];
+  const post=postStuff(p,g,"T",site);
+  const hs=((PP||{}).holds||[]).slice(0,3);if(!hs.length&&!post.length)return "";
+  return `${vHead(`POST-PLANT ${site} · ROUNDS WON FROM THERE`)}${vRows(hs.map((h,i)=>({l:`${vShort(h.zone||"Hold")}${i?"":" ★"} · ${h.n}×`,v:h.win,c:"var(--good)",o:[1,.8,.65][i]})))}
+   ${post.length?`<div class="vchips">${post.map(x=>`<span class="vchip" style="border-color:${NADE_C[x.type]||"#ccc"}">${vLetter[x.type]||"?"} ${vShort(x.to)} <small>${esc(x.from||"")}</small></span>`).join("")}</div>`:""}`}
+// CT after the plant: the retake. The spots to check (where Ts hold after a plant there), the way from your site, the stuff
+function vRetake(p,g,site){const TS=(p.advice.plan||{}).tside,M=((TS||{}).maps||{})[g.map]||{},PP=((M.postplant||{})[site]||{}).holds||[];
+  const me=mySite(g),o=site==="A"?"B":"A",R=me&&me!==site&&typeof rotationFor==="function"?rotationFor(M,site,`${o} Site`,M.geo):null,rt=R&&R.routes&&R.routes[0];
+  const post=postStuff(p,g,"CT",site);
+  const zs=[...new Set(PP.slice(0,4).map(h=>h.zone).filter(Boolean))];
+  return `<div class="vbig warn"><b>RETAKE ${site}</b><span>${rt?`from ${o}: ${rt.travel!=null?`${Math.round(rt.travel)} s · `:""}${rt.died}% die on the way · `:""}together, with utility</span></div>
+   ${zs.length?`<div class="vchips">${zs.map(z=>`<span class="vchip bad">⚠ check ${vShort(z)}</span>`).join("")}</div>`:""}
+   ${post.length?`<div class="vchips">${post.map(x=>`<span class="vchip" style="border-color:${NADE_C[x.type]||"#ccc"}">${vLetter[x.type]||"?"} ${vShort(x.to)} <small>${esc(x.from||"")}</small></span>`).join("")}</div>`:""}`}
+// this match's peek timings: the zones you called at the same moment (±8 s) in two rounds or more of this half and side;
+// el: now (live: only the ones still to come), null at the buy time
+function vPeekTimes(g,el){const H=g.hist||{},Mk=H.marks||{},R=H.rounds||{},hs=halfStart(g.round||1),by={};
+  for(let r=hs;r<(g.round||0);r++){if((R[r]||{}).side&&(R[r]||{}).side!==g.side)continue;((Mk[r]||{}).seen_t||[]).forEach(([z,e])=>{if(e!=null)(by[z]=by[z]||[]).push(e)})}
+  const out=[];Object.entries(by).forEach(([z,ts])=>{ts.sort((a,b)=>a-b);let best=null;
+    ts.forEach(t=>{const near=ts.filter(u=>Math.abs(u-t)<=8);if(near.length>=2&&(!best||near.length>best.n))best={n:near.length,t:near[Math.floor(near.length/2)]}});
+    if(best&&(el==null||best.t>el-3))out.push({z,...best})});
+  if(!out.length)return "";out.sort((a,b)=>a.t-b.t);
+  return `<div class="vchips">${out.slice(0,3).map(o=>`<span class="vchip warn">⏱ ${vShort(o.z)} ~${clock(o.t)} ×${o.n}</span>`).join("")}</div>`}
+function vInfo(g){const a=deadAgo(g);return a!=null&&a>=2.5&&a<=9&&!calledSince(g,a)?`<div class="vbig warn"><b>📣 INFO</b><span>where · how many · how hurt</span></div>`:""}
 function infoOn(){try{return localStorage.getItem("coach_info")!=="off"}catch(e){return true}}
-function coachInfo(g){if(!g||g.practice||!voiceOn()||!infoOn())return;const a=deadAgo(g);if(a==null||a<0||a>3)return;const key=[g.map,g.round,"info"].join("|");
+function coachInfo(g){if(!g||g.practice||!voiceOn()||!infoOn())return;const a=deadAgo(g);if(a==null||a<3||a>6||calledSince(g,a))return;const key=[g.map,g.round,"info"].join("|");   // 3 s after: the time to take your death in
   if(VOICE.info===key||(navigator.userActivation&&!navigator.userActivation.hasBeenActive))return;if(coachSay("L'info !"))VOICE.info=key}
 const expOn=(p,t)=>(((((p||{}).advice||{}).plan||{}).experiments||{}).experiments||[]).some(e=>e.status==="active"&&e.template===t);
 function nowVisual(p,g,following){
@@ -2696,21 +2849,24 @@ function nowVisual(p,g,following){
   if(ph==="freezetime"){out.push(vReset(p,g),vKey(p,g));
     if(voiceOn()&&navigator.userActivation&&!navigator.userActivation.hasBeenActive)out.push(`<span class="vchip">🔊 click this page once: the coach's voice</span>`);
     {if(typeof antiEco==="function"&&antiEco(p,g))out.push(`<span class="vchip bad">! eco kill spots on the map: clear them, no close duel</span>`)}
+    if(ct)out.push(vMySite(p,g));
+    out.push(vPeekTimes(g,null));
     if(ct&&r)out.push(vOdds(r),vRush(TS,g,r)||vEntries(TS,g,r),vCTline(p,g,r)||vHold(p,g,r),vBook(p,g,r));
     const HM=isHostage(g.map);if(HM)out.push(ct?(vFocus(p,g)||vHostRoutes(p,g,false)):vHostRoutes(p,g,true));
     if(!ct&&!HM){out.push(vFocus(p,g)||vPathCurve(p,g)||vTimeline(p,g),vBook(p,g,null),vEarlyMatch(g),vPush(p,g),vPushAns(p,g,false),vTchips(p,g))}}   // the plays and the grenades are on the map
   else if(ph==="live"){const el=g.elapsed||0,planted=g.bomb==="planted";out.push(vCall(g),vInfo(g));
     if(planted){const left=g.phase_left!=null?g.phase_left:Math.max(0,40-(g.since_plant||0)),as=typeof autoSite==="function"?autoSite(p,g):null;
-      out.push(`<div class="vbig ${ct?"bad":"good"}"><b>💣 ${Math.ceil(left)}s</b><span>${ct?"retake together":"hold the bomb"}${as?` · ${as.site} site, ${as.p}% sure`:""}</span></div>`)}
+      out.push(`<div class="vbig ${ct?"bad":"good"}"><b>💣 ${Math.ceil(left)}s</b><span>${ct?"retake together":"hold the bomb"}${as?` · ${as.site} site, ${as.said?"you said it":`${as.p}% sure`}`:" · numpad 7 A / 9 B"}</span></div>`);
+      if(as&&(as.said||as.p>=70))out.push(ct?vRetake(p,g,as.site):vPostPlant(p,g,as.site))}
     else if(isHostage(g.map))out.push(ct?(vFocus(p,g)||(el<45?vHostRoutes(p,g,false):"")):(el<45?vHostRoutes(p,g,true):""));
-    else if(ct){if(r){out.push(vOdds(r));
+    else if(ct){out.push(vMySite(p,g),vPeekTimes(g,el));if(r){out.push(vOdds(r));
         const PLs=tsidePlays(TS,g.map,g,evFor(g),r),M=TS&&TS.maps&&TS.maps[g.map];
         const rush=el<32?vRush(TS,g,r):"";out.push(rush||vFights(M,g,r));
         if(el>=15&&el<=80&&Math.max(r.A,r.B)>=70&&typeof rotationFor==="function"){const X=r.A>r.B?"A":"B",o=X==="A"?"B":"A",R=rotationFor(M,X,`${o} Site`,M.geo),rt=R&&R.routes&&R.routes[0];
           const me=(((g.hist||{}).marks||{})[g.round]||{}).me_site;   // where you said you are this round
           if(rt&&me!==X)out.push(`<div class="vbig warn"><b>${o} → ${X}</b><span>${me===o?`you're ${o}: rotate now`:`if you hold ${o}: rotate`} · ${rt.travel!=null?`${Math.round(rt.travel)} s · `:""}${rt.died}% die on the way</span></div>`)}   // the hit leans hard to one siteif(el<75)out.push(vCTline(p,g,r)||(el<60?vHold(p,g,r):""));
         (r.evid||[]).filter(x=>/spot/.test(x)).slice(0,2).forEach(ev=>out.push(`<span class="vchip ${/fight/.test(ev)?"bad":""}">● ${esc(ev)}</span>`))}}
-    else{out.push(vOpen(g),vFocus(p,g)||vPathCurve(p,g)||vTimeline(p,g),(el<45&&vPush(p,g))||vFights(TS&&TS.maps&&TS.maps[g.map],g,null),el<50?vPushAns(p,g,true):"");
+    else{out.push(vOpen(g),vPeekTimes(g,el),vFocus(p,g)||vPathCurve(p,g)||vTimeline(p,g),(el<45&&vPush(p,g))||vFights(TS&&TS.maps&&TS.maps[g.map],g,null),el<50?vPushAns(p,g,true):"");
       const left=g.phase_left!=null?g.phase_left:Math.max(0,RLEN()-el);
       if(left<=45)out.push(`<div class="vbig bad"><b>PLANT ${Math.floor(left/60)}:${String(Math.floor(left%60)).padStart(2,"0")}</b><span>${left>20?"commit now":"plant or save"}</span></div>`);
       else out.push(vTchips(p,g))}}
@@ -2949,13 +3105,13 @@ function autoSite(p,g){if(!g||g.bomb!=="planted")return null;const TS=(p.advice.
   const lik=s=>{const q=(PL[s]||{}).t_q;if(!q||tp==null)return 1;const sd=Math.max(6,(q[2]-q[0])/1.35);return Math.exp(-((tp-q[1])**2)/(2*sd*sd))/sd};
   const a=pr.A*lik("A"),b=pr.B*lik("B"),pa=a/((a+b)||1),pc=calPlant(pa);return {site:pc>=.5?"A":"B",p:Math.round(100*Math.max(pc,1-pc)),p0:Math.round(100*Math.max(pa,1-pa)),tp}}
 // T after the plant: where the Ts hold in the rounds they win (each T's spot 3 to 30 s after the plant)
-function postplantRadar(p,g,map,level,top,legend,here,site){const PP=((((((p.advice.plan||{}).tside||{}).maps||{})[map])||{}).postplant||{})[site];if(!PP)return;
-  const hs=(PP.holds||[]).filter(here).slice(0,3);
+function postplantRadar(p,g,map,level,top,legend,here,site,ct){const PP=((((((p.advice.plan||{}).tside||{}).maps||{})[map])||{}).postplant||{})[site];if(!PP)return;
+  const hs=(PP.holds||[]).filter(here).slice(0,ct?4:3),c=ct?"var(--bad)":"var(--good)";   // CT: the same spots, to check on the retake
   hs.forEach((h,i)=>{const [x,y]=h.px,gg=el("g",{style:i?"opacity:.75":""},top);
-    obstacle(top,x,y,24,24);el("circle",{cx:x,cy:y,r:11,style:"fill:var(--good);fill-opacity:.25;stroke:var(--good);stroke-width:2.6"},gg);
-    qLabel(top,x,y,12,i?"hold":"★ hold","kwt",3);
-    tip(gg,`${h.zone||"Hold"} after the plant on ${site}: ${h.win}% of rounds won from here (${h.n} times), ${PP.base}% on average`)});
-  if(hs.length)legend.push(`<span>${SW.spot}after the plant: where the Ts hold in the rounds they win</span>`)}
+    obstacle(top,x,y,24,24);el("circle",{cx:x,cy:y,r:11,style:`fill:${c};fill-opacity:.25;stroke:${c};stroke-width:2.6`},gg);
+    qLabel(top,x,y,12,ct?"check":i?"hold":"★ hold","kwt",3);
+    tip(gg,ct?`${h.zone||"Spot"}: Ts hold here after a plant on ${site} (${h.n} times): check it on the retake`:`${h.zone||"Hold"} after the plant on ${site}: ${h.win}% of rounds won from here (${h.n} times), ${PP.base}% on average`)});
+  if(hs.length)legend.push(ct?`<span>${SW.spot}retake: where the Ts hold after a plant there (check them)</span>`:`<span>${SW.spot}after the plant: where the Ts hold in the rounds they win</span>`)}
 // anti-eco (your full buy against their eco): the spots their ecos kill from, read from their side of the key rounds
 const antiEco=(p,g)=>{if(!g||g.round==null||g.round===halfStart(g.round))return false;const eb=enemyBuy(p,g)||{};return (eb.eco||0)>=.6&&advisedType(g)!=="eco"};   // your buy against their eco
 function antiEcoRadar(p,g,map,level,top,legend,here){if(!antiEco(p,g))return;

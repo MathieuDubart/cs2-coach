@@ -225,6 +225,12 @@ def _spread(cands, n, gap=160, keep=lambda p: True):
     return out
 
 
+def _hold_t(CP, tm, p):
+    """When the CTs fight from that spot (median time in the round): the peek timing."""
+    near = np.hypot(CP[:, 0] - p[0], CP[:, 1] - p[1]) < 110
+    return round(float(np.median(tm[near] if near.any() else tm)), 1)
+
+
 def site_data(mp):
     """From every demo of the map (the whole base, not only yours): for each bomb site, the spots CTs hold it from (the
     duels of the first 75 s of a round, CT within 1500 u of the site) and where the Ts come from (entrance zones, with
@@ -240,7 +246,7 @@ def site_data(mp):
                 dirs.append(d)
         except (OSError, ValueError):
             continue
-    if mp in cache and cache[mp].get("n") == len(dirs):
+    if mp in cache and cache[mp].get("n") == len(dirs) and cache[mp].get("v") == 2:
         return cache[mp]
     rows = []
     for d in dirs:
@@ -253,7 +259,7 @@ def site_data(mp):
                 continue
             ct = "killer" if r.killer_side == "CT" else "victim"
             tt = "victim" if ct == "killer" else "killer"
-            rows.append({"ct": (r[f"{ct}_X"], r[f"{ct}_Y"], r[f"{ct}_Z"]), "ct_zone": r[f"{ct}_zone"],
+            rows.append({"time": float(r.t), "ct": (r[f"{ct}_X"], r[f"{ct}_Y"], r[f"{ct}_Z"]), "ct_zone": r[f"{ct}_zone"],
                          "t": (r[f"{tt}_X"], r[f"{tt}_Y"], r[f"{tt}_Z"]), "t_zone": r[f"{tt}_zone"]})
     R = pd.DataFrame(rows)
     sites = {}
@@ -272,21 +278,34 @@ def site_data(mp):
                 dist = float(np.median([math.dist(p, cen) for p in T]))
                 if dist < 500:
                     continue
-                holds = _spread(_cells(np.array(g.ct.tolist(), float)), 12)   # the CT spots facing that entrance
+                CP = np.array(g.ct.tolist(), float)
+                holds = _spread(_cells(CP), 12)   # the CT spots facing that entrance
+                tm = g.time.to_numpy()
                 spawn = _spread(_cells(T), 3, gap=200, keep=lambda p: math.dist(p, cen) > 700)
                 if len(holds) < 4 or not spawn:
                     continue
                 tcen = np.median(T, axis=0)
                 ents.append({"zone": tz, "n": int(len(g)), "dist": round(dist),
                              "start": [round(float(v), 1) for v in _spread(_cells(T), 1)[0][1]],
-                             "holds": [{"pos": [round(float(v), 1) for v in p], "ang": _angle(p, tcen), "n": c} for c, p in holds],
+                             "holds": [{"pos": [round(float(v), 1) for v in p], "ang": _angle(p, tcen), "n": c, "t": _hold_t(CP, tm, p)}
+                                       for c, p in holds],
                              "spawns": [[round(float(v), 1) for v in p] for _, p in spawn]})
             ents.sort(key=lambda e: -e["n"])
             spot = _spread(_cells(np.array(S.ct.tolist(), float)), 1)[0][1]   # the CTs' favourite spot on the site
             sites[z] = {"center": [round(float(v), 1) for v in cen], "defend": [round(float(v), 1) for v in spot], "entrances": ents[:4]}
-    cache[mp] = {"n": len(dirs), "sites": sites}
+    cache[mp] = {"n": len(dirs), "v": 2, "sites": sites}
     json.dump(cache, open(SITES_F, "w", encoding="utf-8"))
     return cache[mp]
+
+
+def _timings(holds):
+    """When each angle peeks, from the real timings (the earliest at once, the others after it, compressed by half,
+    within 30 s): the bots show up like the players do, at recurring moments."""
+    ts = [h.get("t") for h in holds]
+    if not ts or any(t is None for t in ts):
+        return [0.0] * len(holds)
+    t0 = min(ts)
+    return [round(min(30.0, (t - t0) * 0.5), 1) for t in ts]
 
 
 def practice_drills(sid, mp):
@@ -305,10 +324,10 @@ def practice_drills(sid, mp):
             first = min(e["holds"], key=lambda h: math.dist(h["pos"], start))
             out.append({"id": f"prefire:{mp}:{z}:{e['zone']}", "kind": "aim", "mode": "prefire", "map": mp,
                         "title": f"PREFIRE {site} from {frm}", "team": 2,
-                        "tip": f"{len(e['holds'])} CTs on the angles they really hold · they don't shoot · clear them all, fast",
+                        "tip": f"{len(e['holds'])} CTs on the angles they really hold, peeking at their real timings · they don't shoot · clear them all, fast",
                         "me": {"pos": start, "ang": _angle(start, first["pos"])},
                         "weapons": ["weapon_knife", RIFLE[2]], "bot_weapons": ["weapon_knife", RIFLE[3]],
-                        "bots": [{"pos": h["pos"], "ang": h["ang"], "zone": site} for h in e["holds"]],
+                        "bots": [{"pos": h["pos"], "ang": h["ang"], "zone": site, "at": at} for h, at in zip(e["holds"], _timings(e["holds"]))],
                         "seconds": 75, "weight": 2 + min(1.0, e["n"] / 400)})
         spawns = [{"pos": p, "ang": _angle(p, S["defend"]), "zone": replay_zone(e["zone"], mp)} for e in S["entrances"] for p in e["spawns"]]
         if len(spawns) >= 2:

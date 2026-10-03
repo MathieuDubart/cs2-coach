@@ -19,6 +19,7 @@ public class Spot
     [JsonPropertyName("pos")] public float[] Pos { get; set; } = new float[3];
     [JsonPropertyName("ang")] public float[] Ang { get; set; } = new float[2];   // pitch, yaw
     [JsonPropertyName("zone")] public string? Zone { get; set; }
+    [JsonPropertyName("at")] public float At { get; set; }   // prefire: when it peeks (s after the start)
 }
 
 public class Drill
@@ -73,6 +74,7 @@ public partial class CoachReplay
     readonly List<int> aimOrder = new();
     readonly List<double> reacts = new();
     int aimNext, aimSpawn, aimHs, frags, deaths, plants, lastHud;
+    readonly Dictionary<int, float> peekAt = new();   // prefire: the bots still hidden, and when they peek
     // stuff: three throws
     int attempts;
     bool nadeWait;
@@ -255,6 +257,14 @@ public partial class CoachReplay
         {
             aimOrder.Clear();
             aimOrder.AddRange(bots.Keys);
+            peekAt.Clear();
+            if (drill.Mode == "prefire")   // the ones that peek later wait, hidden, for their timing
+                foreach (var (slot, t) in bots)
+                {
+                    var k = int.TryParse(t.Sid.Replace("target", ""), out var i) ? i : -1;
+                    var at = k >= 0 && k < drill.Bots.Count ? drill.Bots[k].At : 0f;
+                    if (at > 0.3f) { peekAt[slot] = at; Utilities.GetPlayerFromSlot(slot)?.PlayerPawn.Value?.CommitSuicide(false, true); }
+                }
         }
         else if (cur.Kind == "aim")
         {
@@ -300,6 +310,17 @@ public partial class CoachReplay
         if (drill?.Mode is "prefire" or "defend")
         {
             if (el >= drill.Seconds) { Finish(drill.Mode == "prefire" ? "timeout" : "done"); return; }
+            foreach (var slot in peekAt.Where(kv => kv.Value <= el).Select(kv => kv.Key).ToList())
+            {   // its timing: it peeks
+                peekAt.Remove(slot);
+                if (!bots.TryGetValue(slot, out var t)) continue;
+                var c = Utilities.GetPlayerFromSlot(slot);
+                if (c == null || !c.IsValid) continue;
+                c.Respawn();
+                Loadout(c, t);
+                c.PlayerPawn.Value?.Teleport(Pos(t, 0), Ang(t, 0), Vector3.Zero);
+                gone.Remove(t.Sid);
+            }
             if (Server.TickCount - lastHud >= 3 * 64)
             {
                 lastHud = Server.TickCount;
@@ -338,7 +359,8 @@ public partial class CoachReplay
         {
             if (!v.IsBot) return false;
             if (e.Attacker is { IsValid: true, IsBot: false }) { frags++; if (e.Headshot) aimHs++; }
-            var left = bots.Count(b => !gone.Contains(b.Value.Sid) && b.Key != v.Slot);
+            if (peekAt.ContainsKey(v.Slot)) return false;   // a hidden one going to wait for its timing
+            var left = bots.Count(b => !gone.Contains(b.Value.Sid) && b.Key != v.Slot) + peekAt.Count;
             if (left == 0) AddTimer(0.3f, () => Finish("cleared"));
             else Html($"<font color='#ff8a3d'>{left} left</font>{(e.Headshot ? " · HS" : "")}", 1);
             return false;
