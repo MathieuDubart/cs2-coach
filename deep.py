@@ -29,11 +29,14 @@ IN_ATTACK, IN_JUMP, IN_DUCK, IN_ATTACK2 = 1, 2, 4, 2048
 NADE_COLS = ['tick', 'round', 't', 'type', 'thrower', 'thrower_name', 'side', 'X', 'Y', 'Z', 'pitch', 'yaw', 'px', 'py', 'level', 'zone', 'jump', 'speed', 'crouch', 'walk', 'click', 'land_X', 'land_Y', 'land_Z', 'land_px', 'land_py', 'land_level', 'land_zone', 'flight_s', 'land_tick', 'damage', 'enemies_blind', 'mates_blind', 'blind_total_s', 'kills_after']
 
 
-def read_nades(path):
-    """A demo's grenades; a match where nobody threw any (stopped after its first round) has an empty table with no
-    columns (the analyses failed on it, 04/10): it gets its columns."""
-    g = pd.read_parquet(path)
-    return g if len(g.columns) else pd.DataFrame(columns=NADE_COLS)
+def read_nades(path, columns=None):
+    """A demo's grenades (only `columns`); a match where nobody threw any (stopped after its first round) has an
+    empty table with no columns (the analyses failed on it, 04/10; Mirage's T side lost its key-round spots to it on
+    05/10): it gets its columns."""
+    import pyarrow.parquet as pq
+    if not pq.read_schema(path).names:
+        return pd.DataFrame(columns=columns or NADE_COLS)
+    return pd.read_parquet(path, columns=columns)
 
 
 def sid(x):

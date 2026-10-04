@@ -14,6 +14,7 @@ import pandas as pd
 
 import config
 import midround
+from deep import read_nades   # a match with no grenade has an empty table without columns
 
 OUT = os.path.join(config.OUT, "population", "tside")
 ZONES = os.path.join(config.OUT, "population", "tside_zones.json")   # which zones lead to which site, per map
@@ -1209,7 +1210,7 @@ def _util_war(mp, g, dirs):
         fg, fd = os.path.join(d, "grenades.parquet"), os.path.join(d, "duels.parquet")
         if not os.path.exists(fg):
             continue
-        G = pd.read_parquet(fg, columns=["round", "t", "type", "side", "thrower", "land_X", "land_Y", "land_px", "land_py", "land_level", "land_zone"])
+        G = read_nades(fg, columns=["round", "t", "type", "side", "thrower", "land_X", "land_Y", "land_px", "land_py", "land_level", "land_zone"])
         G = G[(G.side == "CT") & G.type.isin(list(UTIL_DUR)) & (G.t <= 75)]
         D = pd.read_parquet(fd, columns=["round", "t", "victim", "victim_side", "victim_X", "victim_Y"]) if os.path.exists(fd) else pd.DataFrame()
         for (mid_r, x) in ((k, v) for k, v in rows.items() if k[0] == mid):
@@ -1288,7 +1289,7 @@ def _t_timeline(mp, g, dirs):
         fg = os.path.join(d, "grenades.parquet")
         if not os.path.exists(fg):
             continue
-        G = pd.read_parquet(fg, columns=["round", "t", "type", "side", "land_zone"])
+        G = read_nades(fg, columns=["round", "t", "type", "side", "land_zone"])
         G = G[(G.side == "T") & (G.t <= 80)]
         for u in G.itertuples():
             x = rows.get((mid, int(u.round)))
