@@ -1,6 +1,9 @@
 """Extract coaching stats for one player from a CS2 demo.
 
 Usage: python analyze.py <demo.dem> [steamid64] > stats.json
+analyze() reads the demo in steps: the rounds' bounds (_bounds), the money snapshots (_snapshots), the events
+(_events), then each round (kills, opening, trades, KAST, clutch, money, grenades), then the aim (_aim), the
+grenades over the match (_utility), the economy flags and the death timing, and the pro insights (pro_analyst).
 """
 import json
 import pro_analyst
@@ -72,15 +75,8 @@ def view_error_deg(ex, ey, ez, pitch, yaw, tx, ty, tz):
     return total, pitch - need_pitch  # >0 = aiming too low
 
 
-def analyze(path, me):
-    p = DemoParser(path)
-    header = p.parse_header()
-    players = p.parse_player_info()
-    players["steamid"] = players["steamid"].map(sid)
-    if me not in set(players["steamid"]):
-        return {"error": "player_not_in_demo", "map": header.get("map_name")}
-    names = dict(zip(players.steamid, players.name))
-
+def _bounds(p):
+    """The rounds: [freeze end, next freeze end), with their start, buy end and end; the match's last tick."""
     freeze = p.parse_event("round_freeze_end")["tick"].tolist()
     buyend = p.parse_event("buytime_ended")["tick"].tolist() if "buytime_ended" in p.list_game_events() else []
     poststart = p.parse_event("round_poststart")["tick"].tolist()
@@ -95,13 +91,21 @@ def analyze(path, me):
         be = min([t for t in buyend if ft <= t < nxt], default=ft + 20 * TICKRATE)
         end = min([t for t in ends if ft < t <= nxt], default=nxt - 1)
         rounds.append({"n": i + 1, "start": start, "freeze_end": ft, "buy_end": be, "end": end, "next": nxt})
+    return rounds, last_tick
 
+
+def _round_of(rounds):
+    """tick -> its round's number (None outside the rounds)."""
     def round_of(tick):
         for r in rounds:
             if r["start"] <= tick < r["next"]:
                 return r["n"]
         return None
+    return round_of
 
+
+def _snapshots(p, rounds, last_tick):
+    """Money, equipment, inventory, score and life of everyone at the key ticks of each round: at(tick, steamid, col)."""
     # ---------- snapshots at key ticks ----------
     snap_ticks = sorted({r["start"] + 1 for r in rounds} | {r["freeze_end"] for r in rounds}
                         | {r["buy_end"] for r in rounds} | {r["end"] for r in rounds}
@@ -121,7 +125,11 @@ def analyze(path, me):
         if isinstance(v, float) and math.isnan(v):
             return None
         return v
+    return at
 
+
+def _events(p, me, round_of):
+    """The demo's events: deaths, damage (the real damage: not more than the health left), your shots, flashes."""
     # ---------- events ----------
     deaths = p.parse_event("player_death", player=["X", "Y", "last_place_name"], other=["total_rounds_played"])
     for c in ("attacker_steamid", "user_steamid", "assister_steamid"):
@@ -154,6 +162,21 @@ def analyze(path, me):
         blind[c] = blind[c].map(sid)
     if len(blind):
         blind["round"] = blind["tick"].map(round_of)
+    return deaths, hurt, myfires, blind
+
+
+def analyze(path, me):
+    p = DemoParser(path)
+    header = p.parse_header()
+    players = p.parse_player_info()
+    players["steamid"] = players["steamid"].map(sid)
+    if me not in set(players["steamid"]):
+        return {"error": "player_not_in_demo", "map": header.get("map_name")}
+    names = dict(zip(players.steamid, players.name))
+    rounds, last_tick = _bounds(p)
+    round_of = _round_of(rounds)
+    at = _snapshots(p, rounds, last_tick)
+    deaths, hurt, myfires, blind = _events(p, me, round_of)
 
     # team per round (for me and everyone)
     def team_of(steamid, r):
@@ -250,38 +273,13 @@ def analyze(path, me):
         if k or a or survived or traded:
             kast_rounds += 1
 
-        # clutch: I am last alive on my team
-        alive_mates = set(mates)
-        alive_foes = set(foes)
-        clutch = None
-        for _, ev in rd.iterrows():
-            alive_mates.discard(ev.user_steamid)
-            alive_foes.discard(ev.user_steamid)
-            if clutch is None and alive_mates == {me} and alive_foes:
-                clutch = {"round": r["n"], "vs": len(alive_foes)}
+        clutch = _clutch(rd, mates, foes, me, r["n"])
         if clutch:
             clutch["won"] = won
             clutches.append(clutch)
 
-        # economy
-        ft = r["freeze_end"]
-        equip = at(ft, me, "current_equip_value")
-        left = at(ft, me, "balance")
-        carried = at(ft, me, "round_start_equip_value") or 0
-        start_money = (left + equip - carried) if left is not None and equip is not None else None
-        inv = at(ft, me, "inventory") or []
-        team_equip = [at(ft, m, "current_equip_value") or 0 for m in mates]
-        team_money_start = []
-        for m in mates:
-            l, e, c = at(ft, m, "balance"), at(ft, m, "current_equip_value"), at(ft, m, "round_start_equip_value")
-            if l is not None and e is not None:
-                team_money_start.append(l + e - (c or 0))
-        foe_equip = [at(ft, f, "current_equip_value") or 0 for f in foes]
-
-        def buy_type(v):
-            if v is None:
-                return None
-            return "eco" if v < 1500 else ("force/half" if v < 3700 else "full")
+        equip, left, start_money, inv, team_equip, team_money_start, foe_equip = _money(at, r["freeze_end"], me, mates, foes)
+        buy_type = _buy_type
 
         # utility
         nades_bought = [x for x in inv if x in GRENADE_INV]
@@ -321,7 +319,77 @@ def analyze(path, me):
         totals.update({"kills": k, "deaths": d, "assists": a, "damage": dmg})
 
     n_rounds = len(per_round)
+    by_weapon, hs_pct, spray, bursts, crosshair = _aim(p, me, myfires, hurt, deaths)
+    util = _utility(me, myfires, blind, deaths, per_round)
+    eco_flags = _economy_flags(per_round)
+    timing = _death_timing(death_list)
 
+    return {
+        "demo": path.split("\\")[-1],
+        "map": header.get("map_name"),
+        "server": header.get("server_name"),
+        "player": {"steamid": str(me), "name": names.get(me)},
+        "rounds": n_rounds, "final_score": score,
+        "result": "win" if score["me"] > score["them"] else ("loss" if score["me"] < score["them"] else "draw"),
+        "rounds_per_side": dict(my_side_rounds),
+        "overview": {
+            **totals, "adr": round(totals["damage"] / max(n_rounds, 1), 1),
+            "kd": round(totals["kills"] / max(totals["deaths"], 1), 2),
+            "hs_kill_pct": hs_pct, "kast_pct": round(100 * kast_rounds / max(n_rounds, 1), 1),
+            "opening_duels": opening, "multikills": dict(multikills),
+            "trades": trades, "clutches": clutches,
+            "rounds_won_on_side": {s: sum(1 for r in per_round if r["side"] == s and r["won"]) for s in ("T", "CT")},
+        },
+        "aim": {"by_weapon": by_weapon, "spray_rifles": spray, "burst_lengths": dict(bursts), "crosshair_placement": crosshair},
+        "utility": util,
+        "economy_flags": eco_flags,
+        "death_timing": timing,
+        "deaths": death_list,
+        "per_round": per_round,
+        "pro_insights": pro_analyst.pro_insights(me, per_round, deaths, hurt, blind, foes_of, TICKRATE),
+    }
+
+
+def _clutch(rd, mates, foes, me, n):
+    """A clutch: the moment you are the last one alive on your team with enemies left (the round's deaths in order)."""
+    alive_mates = set(mates)
+    alive_foes = set(foes)
+    clutch = None
+    for _, ev in rd.iterrows():
+        alive_mates.discard(ev.user_steamid)
+        alive_foes.discard(ev.user_steamid)
+        if clutch is None and alive_mates == {me} and alive_foes:
+            clutch = {"round": n, "vs": len(alive_foes)}
+    return clutch
+
+
+def _money(at, ft, me, mates, foes):
+    """At the freeze end: your equipment, money left, money at the start (approx), inventory; your team's and the
+    enemies' equipment, your team's money at the start."""
+    equip = at(ft, me, "current_equip_value")
+    left = at(ft, me, "balance")
+    carried = at(ft, me, "round_start_equip_value") or 0
+    start_money = (left + equip - carried) if left is not None and equip is not None else None
+    inv = at(ft, me, "inventory") or []
+    team_equip = [at(ft, m, "current_equip_value") or 0 for m in mates]
+    team_money_start = []
+    for m in mates:
+        l, e, c = at(ft, m, "balance"), at(ft, m, "current_equip_value"), at(ft, m, "round_start_equip_value")
+        if l is not None and e is not None:
+            team_money_start.append(l + e - (c or 0))
+    foe_equip = [at(ft, f, "current_equip_value") or 0 for f in foes]
+    return equip, left, start_money, inv, team_equip, team_money_start, foe_equip
+
+
+def _buy_type(v):
+    if v is None:
+        return None
+    return "eco" if v < 1500 else ("force/half" if v < 3700 else "full")
+
+
+def _aim(p, me, myfires, hurt, deaths):
+    """Per weapon (accuracy, kills, shots while moving), headshots, the spray by bullet index, the bursts' lengths and
+    the crosshair placement before your first shot of each fight."""
     # ---------- aim ----------
     myfires["wn"] = myfires.weapon.map(norm_weapon)
     by_weapon = {}
@@ -408,10 +476,13 @@ def analyze(path, me):
             "median_vertical_error_deg": round(float(np.median(vert)), 1),
             "note": "angle between view direction and enemy head ~125ms before first shot; vertical >0 = aimed below head",
         }
+    return by_weapon, hs_pct, spray, bursts, crosshair
 
+
+def _utility(me, myfires, blind, deaths, per_round):
+    """Your grenades over the match: thrown, flashes on enemies and teammates, flash assists, damage, unused at death."""
     # ---------- utility totals ----------
     my_blinds = blind[blind.attacker_steamid == me]
-    team_by_player = {s: None for s in players.steamid}
     util = {
         "flashes_thrown": int((myfires.weapon == "weapon_flashbang").sum()),
         "smokes_thrown": int((myfires.weapon == "weapon_smokegrenade").sum()),
@@ -424,7 +495,11 @@ def analyze(path, me):
         "grenades_unused_at_death": sum(len(r["grenades_unused_at_death"]) for r in per_round),
         "self_flashed_1s+": int(((my_blinds.user_steamid == me) & (my_blinds.blind_duration > 1.0)).sum()),
     }
+    return util
 
+
+def _economy_flags(per_round):
+    """The rounds where your buy differs from your team's, or you kept $3,000 on a full buy."""
     # ---------- economy flags ----------
     eco_flags = []
     for r in per_round:
@@ -435,7 +510,11 @@ def analyze(path, me):
         if r["money_left_after_buy"] and r["money_left_after_buy"] >= 3000 and r["my_buy"] == "full":
             eco_flags.append({"round": r["round"], "issue": "big_unspent_money_on_full_buy",
                               "left": r["money_left_after_buy"]})
+    return eco_flags
 
+
+def _death_timing(death_list):
+    """When you die in the round, and the untraded deaths with 3 teammates or more alive."""
     # ---------- death timing ----------
     dts = [d["time_s"] for d in death_list]
     timing = {
@@ -444,31 +523,7 @@ def analyze(path, me):
         "deaths_after_60s": sum(t > 60 for t in dts),
         "deaths_with_3plus_mates_alive_untraded": sum(1 for d in death_list if not d["traded"] and d["mates_alive_before"] >= 3),
     }
-
-    return {
-        "demo": path.split("\\")[-1],
-        "map": header.get("map_name"),
-        "server": header.get("server_name"),
-        "player": {"steamid": str(me), "name": names.get(me)},
-        "rounds": n_rounds, "final_score": score,
-        "result": "win" if score["me"] > score["them"] else ("loss" if score["me"] < score["them"] else "draw"),
-        "rounds_per_side": dict(my_side_rounds),
-        "overview": {
-            **totals, "adr": round(totals["damage"] / max(n_rounds, 1), 1),
-            "kd": round(totals["kills"] / max(totals["deaths"], 1), 2),
-            "hs_kill_pct": hs_pct, "kast_pct": round(100 * kast_rounds / max(n_rounds, 1), 1),
-            "opening_duels": opening, "multikills": dict(multikills),
-            "trades": trades, "clutches": clutches,
-            "rounds_won_on_side": {s: sum(1 for r in per_round if r["side"] == s and r["won"]) for s in ("T", "CT")},
-        },
-        "aim": {"by_weapon": by_weapon, "spray_rifles": spray, "burst_lengths": dict(bursts), "crosshair_placement": crosshair},
-        "utility": util,
-        "economy_flags": eco_flags,
-        "death_timing": timing,
-        "deaths": death_list,
-        "per_round": per_round,
-        "pro_insights": pro_analyst.pro_insights(me, per_round, deaths, hurt, blind, foes_of, TICKRATE),
-    }
+    return timing
 
 
 if __name__ == "__main__":
