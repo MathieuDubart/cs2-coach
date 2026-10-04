@@ -7,8 +7,13 @@ every other analyzed player (their analysis against the base, plan and pages).
 At the lowest priority (Windows' background mode: processor, disk and memory); it waits while a map is loaded in CS2,
 a recording or a transcription runs, the app analyzes, the base loop is on a match, or the PC is short of memory. Its
 progress in out/refresh.json; out/refresh_ctl.json {"stop": true} stops it between two steps.
-Usage: python refresh_all.py [--mine] [--now] (--mine: the base's references, your profile and your team's only;
---now: also during a match, as asked on 04/10: only the memory, an analysis of the app and the base loop stop it)."""
+Usage: python refresh_all.py [--mine] [--now] [--resume] [--since=EPOCH] [--workers=N]
+  --mine     the base's references, your profile and your team's only
+  --now      also during a match or a transcription (asked on 04/10, playing): only the memory, an analysis of the app
+             and the base loop stop it; in Windows' background mode while a map is loaded, at full speed otherwise
+  --resume   the base's references are kept (a run that stopped in its profiles goes on)
+  --since    the profiles whose page was written after this moment are kept
+  --workers  N profiles at once, each in its own process (05/10: 281 profiles took 2 min each, one by one)"""
 import glob
 import json
 import os
@@ -23,6 +28,16 @@ CTL = os.path.join(config.OUT, "refresh_ctl.json")
 PORT = int(os.environ.get("COACH_PORT", 8765))
 ST = {}
 NOW = "--now" in sys.argv
+IDS = os.path.join(config.OUT, "refresh_ids.json")   # the profiles the workers share out
+
+
+def arg(name, default=None):
+    return next((a.split("=", 1)[1] for a in sys.argv if a.startswith(f"--{name}=")), default)
+
+
+PART = arg("part")   # "i/N": a worker of a run with --workers, its progress in out/refresh_part<i>.json
+if PART:
+    STATE = os.path.join(config.OUT, f"refresh_part{PART.split('/')[0]}.json")
 MIN_FREE = 1.5 * 2 ** 30   # bytes of free memory under which it waits (CS2 froze at 21:32 on 04/10 with 3 GB left)
 
 
@@ -52,6 +67,7 @@ def busy():
     except Exception:
         pass
     s = grow._api("/api/gsi/state") or {}
+    config.background(bool(s.get("map")))   # a match: the game first (processor, disk and memory)
     if s.get("map") and not NOW:
         return "a map is loaded in CS2"
     j = grow._api("/api/job")
@@ -161,8 +177,73 @@ def profiles(mine_only=False):
     return first + rest
 
 
+def rebuild(sid, name):
+    """One profile against the base as it is now: its analysis (light profiles: nothing to redo), plan and page.
+    -> its index entry."""
+    import build_app
+    import cs2coach
+    t = time.time()
+    try:
+        cs2coach.rebuild_advice(sid)
+        cs2coach.attach_plan(sid)
+        e = build_app.write_player(sid)
+        log(f"{name}: {round(time.time() - t)} s")
+        return e
+    except Exception as e:
+        ST["errors"] = (ST.get("errors") or [])[-4:] + [f"{name}: {type(e).__name__}: {str(e)[:160]}"]
+        log(f"{name}: failed ({e})")
+        traceback.print_exc()
+        return None
+
+
+def _names():
+    import build_app
+    return {e["steamid"]: e for e in config.read_json(os.path.join(build_app.SITE, "index.json"), []) or [] if isinstance(e, dict) and e.get("steamid")}
+
+
+def worker():
+    """A share of the profiles (--part=i/N); its entries for the index go to its state file, the main run writes it."""
+    i, n = (int(x) for x in PART.split("/"))
+    ids = (config.read_json(IDS, []) or [])[i::n]
+    config.low_priority()
+    index = _names()
+    ST.clear()
+    save(pid=os.getpid(), running=True, total=len(ids), done=0, current=None, paused=None, errors=[], entries={})
+    try:
+        for k, sid in enumerate(ids):
+            if not wait():
+                break
+            name = (index.get(sid) or {}).get("name") or sid
+            save(current=name)
+            e = rebuild(sid, name)
+            if e:
+                ST["entries"][sid] = e
+            save(done=k + 1)
+    finally:
+        save(running=False, current=None, paused=None)
+
+
+def _gather(n, index):
+    """The workers' progress into the run's state, their profiles into the index."""
+    import build_app
+    parts = [config.read_json(os.path.join(config.OUT, f"refresh_part{i}.json"), {}) or {} for i in range(n)]
+    new = {sid: e for p in parts for sid, e in (p.get("entries") or {}).items() if e and index.get(sid) != e}
+    if new:
+        index.update(new)
+        config.write_json(os.path.join(build_app.SITE, "index.json"), list(index.values()))
+    logs = sorted(x for p in parts for x in (p.get("log") or []))
+    paused = {p.get("paused") for p in parts if p.get("running")}
+    save(profiles_done=sum(p.get("done") or 0 for p in parts), current=", ".join(p["current"] for p in parts if p.get("current")) or None,
+         errors=[x for p in parts for x in (p.get("errors") or [])][-5:], log=logs[-12:],
+         paused=paused.pop() if len(paused) == 1 and None not in paused else None)
+
+
 def main():
+    if PART:
+        return worker()
     mine_only = "--mine" in sys.argv
+    workers = max(1, int(arg("workers", 1)))
+    since = float(arg("since", 0) or 0)
     config.low_priority()
     cur = config.read_json(STATE, {}) or {}
     if cur.get("running") and cur.get("pid") and cur["pid"] != os.getpid():
@@ -174,13 +255,15 @@ def main():
         except Exception:
             pass
     config.write_json(CTL, {"stop": False})
-    steps = base_steps()
+    steps = [] if "--resume" in sys.argv else base_steps()
     ids = profiles(mine_only)
+    if since:   # pages written since then are already built on the base as it is
+        import build_app
+        page = lambda sid: os.path.join(build_app.SITE, "players", f"{sid}.json")
+        ids = [sid for sid in ids if not (os.path.exists(page(sid)) and os.path.getmtime(page(sid)) > since)]
     ST.clear()
     save(pid=os.getpid(), running=True, started=time.time(), mine_only=mine_only, phase="base", steps_total=len(steps), steps_done=0,
-         profiles_total=len(ids), profiles_done=0, current=None, paused=None, errors=[], finished=None)
-    import build_app
-    import cs2coach
+         profiles_total=len(ids), profiles_done=0, current=None, paused=None, errors=[], finished=None, workers=workers)
     try:
         for i, (label, fn) in enumerate(steps):
             if not wait():
@@ -196,26 +279,31 @@ def main():
                 traceback.print_exc()
             save(steps_done=i + 1)
         save(phase="profiles")
-        index = {e["steamid"]: e for e in config.read_json(os.path.join(build_app.SITE, "index.json"), []) or [] if isinstance(e, dict) and e.get("steamid")}
-        for k, sid in enumerate(ids):
-            if not wait():
-                break
-            name = (index.get(sid) or {}).get("name") or sid
-            save(current=name)
-            t = time.time()
-            try:
-                cs2coach.rebuild_advice(sid)   # the analysis against the base as it is now (light profiles: nothing to redo)
-                cs2coach.attach_plan(sid)
-                e = build_app.write_player(sid)
+        index = _names()
+        if workers > 1 and len(ids) > 1 and not stopped():
+            import subprocess
+            config.write_json(IDS, ids)
+            for i in range(workers):
+                config.write_json(os.path.join(config.OUT, f"refresh_part{i}.json"), {})
+            flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+            procs = [subprocess.Popen([sys.executable, os.path.abspath(__file__), f"--part={i}/{workers}"] + (["--now"] if NOW else []),
+                                      cwd=config.HERE, creationflags=flags) for i in range(workers)]
+            while any(p.poll() is None for p in procs):
+                time.sleep(10)
+                _gather(workers, index)
+            _gather(workers, index)
+        else:
+            import build_app
+            for k, sid in enumerate(ids):
+                if not wait():
+                    break
+                name = (index.get(sid) or {}).get("name") or sid
+                save(current=name)
+                e = rebuild(sid, name)
                 if e:
                     index[sid] = e
                     config.write_json(os.path.join(build_app.SITE, "index.json"), list(index.values()))
-                log(f"{name}: {round(time.time() - t)} s")
-            except Exception as e:
-                ST["errors"] = (ST.get("errors") or [])[-4:] + [f"{name}: {type(e).__name__}: {str(e)[:160]}"]
-                log(f"{name}: failed ({e})")
-                traceback.print_exc()
-            save(profiles_done=k + 1)
+                save(profiles_done=k + 1)
     finally:
         save(running=False, current=None, paused=None, finished=time.time(), stopped=stopped())
 
@@ -225,9 +313,4 @@ if __name__ == "__main__":
         sys.stdout = sys.stderr = open(os.path.join(config.OUT, "refresh.log"), "a", encoding="utf-8", buffering=1)
     else:
         sys.stdout.reconfigure(encoding="utf-8")
-    try:   # Windows' background mode: lower processor, disk and memory priority, the game keeps its own
-        import ctypes
-        ctypes.windll.kernel32.SetPriorityClass(ctypes.windll.kernel32.GetCurrentProcess(), 0x00100000)
-    except Exception:
-        pass
     main()

@@ -177,6 +177,26 @@ def wait_for_match_end(log=None, what="analysis"):
     return True
 
 
+_BG = {"on": None}
+
+
+def background(on):
+    """Windows' background mode for this process (lower processor, disk and memory priority: the game keeps its own)
+    while on; back to its priority class when off. Changed only when it changes."""
+    if _BG["on"] == on or os.name != "nt":
+        return
+    try:
+        import ctypes
+        from ctypes import wintypes
+        k = ctypes.windll.kernel32
+        k.GetCurrentProcess.restype = wintypes.HANDLE
+        k.SetPriorityClass.argtypes = [wintypes.HANDLE, wintypes.DWORD]
+        k.SetPriorityClass(k.GetCurrentProcess(), 0x00100000 if on else 0x00200000)   # PROCESS_MODE_BACKGROUND_BEGIN / END
+        _BG["on"] = on
+    except Exception:
+        pass
+
+
 def low_priority():
     """This process only gets the CPU the game doesn't use (worker processes of the analyses)."""
     try:
