@@ -24,6 +24,18 @@ NADE_NAME = {"weapon_smokegrenade": "smoke", "weapon_flashbang": "flash", "weapo
 IN_ATTACK, IN_JUMP, IN_DUCK, IN_ATTACK2 = 1, 2, 4, 2048
 
 
+
+# a grenades table's columns (read_nades gives them to an empty one)
+NADE_COLS = ['tick', 'round', 't', 'type', 'thrower', 'thrower_name', 'side', 'X', 'Y', 'Z', 'pitch', 'yaw', 'px', 'py', 'level', 'zone', 'jump', 'speed', 'crouch', 'walk', 'click', 'land_X', 'land_Y', 'land_Z', 'land_px', 'land_py', 'land_level', 'land_zone', 'flight_s', 'land_tick', 'damage', 'enemies_blind', 'mates_blind', 'blind_total_s', 'kills_after']
+
+
+def read_nades(path):
+    """A demo's grenades; a match where nobody threw any (stopped after its first round) has an empty table with no
+    columns (the analyses failed on it, 04/10): it gets its columns."""
+    g = pd.read_parquet(path)
+    return g if len(g.columns) else pd.DataFrame(columns=NADE_COLS)
+
+
 def sid(x):
     try:
         return int(x)
@@ -233,6 +245,8 @@ def extract(path, out):
             dd = (coords[:, 0] - x) ** 2 + (coords[:, 1] - y) ** 2 + ((coords[:, 2] - z) * 2) ** 2
             return pl[dd.argmin(), 3]
         nades["land_zone"] = [near_zone(x, y, z) for x, y, z in zip(nades.land_X, nades.land_Y, nades.land_Z)]
+    if not len(nades.columns):   # nobody threw a grenade (a match stopped after a round): the table keeps its columns
+        nades = pd.DataFrame(columns=NADE_COLS)
     nades.to_parquet(os.path.join(out, "grenades.parquet"))
 
     meta = {"map": map_name, "rounds": len(rounds),

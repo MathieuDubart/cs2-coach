@@ -40,7 +40,7 @@ def wclass(w):
 def extract(mid, deep_dir=None, out_dir=None):
     d = os.path.join(deep_dir or config.DEEP, mid)
     duels = pd.read_parquet(os.path.join(d, "duels.parquet"))
-    nades = pd.read_parquet(os.path.join(d, "grenades.parquet"))
+    nades = __import__("deep").read_nades(os.path.join(d, "grenades.parquet"))
     sm = pd.read_parquet(os.path.join(d, "samples.parquet"))
     import json
     meta = json.load(open(os.path.join(d, "meta.json"), encoding="utf-8"))

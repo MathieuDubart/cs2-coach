@@ -191,7 +191,7 @@ def extract(mid):
     dem = os.path.join(config.CACHE, f"{mid}.dem")
     ddir = os.path.join(config.DEEP, mid)
     duels = pd.read_parquet(os.path.join(ddir, "duels.parquet"))
-    nades = pd.read_parquet(os.path.join(ddir, "grenades.parquet"))
+    nades = __import__("deep").read_nades(os.path.join(ddir, "grenades.parquet"))
     samples = pd.read_parquet(os.path.join(ddir, "samples.parquet"), columns=["steamid", "name", "side", "round"])
     p = DemoParser(dem)
     hdr = p.parse_header()
