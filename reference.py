@@ -33,6 +33,8 @@ METRICS = {
 POOLED = {
     "clutch_win_pct": ("clutch_won", "clutch_n", 4, "1v2+ clutches won", True, "%"),
     "clutch_multi_pct": ("clutch_multi", "clutch_n", 4, "1v2+ clutches where 2+ enemies see you at once", False, "%"),
+    "flash_used_pct": ("flash_used", "flash_blind", 8, "enemies you flash that your team hits while blind", True, "%"),
+    "untraded_pct": ("untraded_n", "dead_n", 15, "deaths without impact (not traded, no damage of yours)", False, "%"),
 }
 
 

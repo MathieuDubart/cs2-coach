@@ -1,7 +1,8 @@
 """Per-player metrics for EVERY player of a demo (reference population).
 
 Usage: python population.py            # all cached demos with a deep extraction
-       python population.py --clutch   # the 1v2+ clutches of the matches computed before they were measured
+       python population.py --reads    # the analyst's reads (clutches, flashes used, untraded deaths) of the
+                                       # matches computed before they were measured
 Writes out/population/<match_id>.parquet (one row per player of the match).
 """
 import math
@@ -28,6 +29,10 @@ SKILL = ["", "Silver I", "Silver II", "Silver III", "Silver IV", "Silver Elite",
 OUT = os.path.join(config.OUT, "population")
 SEEN_S = 1   # an enemy who saw you in the second before a hit counts as seeing you
 CLUTCH_COLS = {"clutch_n": 0, "clutch_won": 0, "clutch_multi": 0, "clutch_rounds": "", "clutch_multi_rounds": ""}
+READ_COLS = {**CLUTCH_COLS, "flash_blind": 0, "flash_used": 0, "dead_n": 0, "untraded_n": 0}
+BLIND_S = 1.5     # a flash that blinds an enemy longer than this is a real flash
+TRADE_S = 5       # a teammate kills your killer this soon: traded
+IMPACT_S = 3      # your damage this long before your death: not a death without impact
 
 
 def sid(x):
@@ -95,19 +100,78 @@ def _clutches(p, hurt, deaths, samples, rounds):
     return out
 
 
-def _clutch_cols(mid, p, hurt, deaths, samples):
-    """_clutches for a match of the base (its rounds from the detailed extraction), {} without them."""
+def _flashes_trades(p, hurt, deaths, samples, rounds):
+    """Every player's flashes that their team uses (enemies blinded over 1.5 s, and the ones the team hits while
+    blind) and deaths without impact (no trade within 5 s, no damage of theirs in the 3 s before): the same reads as
+    pro_analyst, for the whole base."""
+    sides = {int(n): dict(zip(g.steamid.astype("int64"), g.side))
+             for n, g in samples.drop_duplicates(["round", "steamid"]).groupby("round")}
+    starts = rounds.sort_values("start_tick")
+    st_t, st_n = starts.start_tick.to_numpy(), starts["round"].to_numpy()
+
+    def round_of(t):
+        i = int(np.searchsorted(st_t, t, side="right")) - 1
+        return int(st_n[i]) if i >= 0 else None
+
+    out = {}
+
+    def add(s, k, v=1):
+        o = out.setdefault(s, {"flash_blind": 0, "flash_used": 0, "dead_n": 0, "untraded_n": 0})
+        o[k] += v
+    try:
+        blind = p.parse_event("player_blind")
+    except Exception:
+        blind = pd.DataFrame()
+    if len(blind):
+        for c in ("attacker_steamid", "user_steamid"):
+            blind[c] = blind[c].map(sid)
+        for a, u, t, dur in zip(blind.attacker_steamid, blind.user_steamid, blind.tick, blind.blind_duration):
+            if not dur or dur <= BLIND_S:
+                continue
+            sd = sides.get(round_of(t), {})
+            sa, su = sd.get(a), sd.get(u)
+            if not sa or not su or sa == su:
+                continue
+            add(a, "flash_blind")
+            team = [s for s, x in sd.items() if x == sa]
+            hit = hurt[(hurt.user_steamid == u) & (hurt.tick >= t) & (hurt.tick <= t + dur * TICK) & hurt.attacker_steamid.isin(team)]
+            if len(hit):
+                add(a, "flash_used")
+    for v, k, t in zip(deaths.user_steamid, deaths.attacker_steamid, deaths.tick):
+        sd = sides.get(round_of(t), {})
+        sv, sk = sd.get(v), sd.get(k)
+        if not sv or not sk or sv == sk:
+            continue
+        add(v, "dead_n")
+        mates = [s for s, x in sd.items() if x == sv]
+        traded = ((deaths.user_steamid == k) & (deaths.tick > t) & (deaths.tick <= t + TRADE_S * TICK)
+                  & deaths.attacker_steamid.isin(mates)).any()
+        foes = [s for s, x in sd.items() if x == sk]
+        impact = ((hurt.attacker_steamid == v) & (hurt.tick <= t) & (hurt.tick >= t - IMPACT_S * TICK)
+                  & hurt.user_steamid.isin(foes)).any()
+        if not traded and not impact:
+            add(v, "untraded_n")
+    return out
+
+
+def _read_cols(mid, p, hurt, deaths, samples):
+    """The analyst's reads of every player of a match of the base (its rounds from the detailed extraction): the 1v2+
+    clutches, the flashes used, the deaths without impact. {} without the rounds."""
     f = os.path.join(config.DEEP, mid, "rounds.parquet")
     if not os.path.exists(f):
         return {}
-    return _clutches(p, hurt, deaths, samples, pd.read_parquet(f))
+    rounds = pd.read_parquet(f)
+    out = _clutches(p, hurt, deaths, samples, rounds)
+    for s, o in _flashes_trades(p, hurt, deaths, samples, rounds).items():
+        out.setdefault(s, {}).update(o)
+    return out
 
 
-def add_clutch(mid):
-    """The clutch columns for a match of the base computed before they existed: True when added."""
+def add_reads(mid):
+    """The analyst's reads for a match of the base computed before they existed: True when added."""
     f = os.path.join(OUT, f"{mid}.parquet")
     df = pd.read_parquet(f)
-    if "clutch_n" in df.columns:
+    if "untraded_n" in df.columns:
         return False
     p = DemoParser(os.path.join(config.CACHE, f"{mid}.dem"))
     hurt = p.parse_event("player_hurt")
@@ -116,8 +180,8 @@ def add_clutch(mid):
         for c in ("attacker_steamid", "user_steamid"):
             d[c] = d[c].map(sid)
     samples = pd.read_parquet(os.path.join(config.DEEP, mid, "samples.parquet"), columns=["steamid", "side", "round"])
-    cl = _clutch_cols(mid, p, hurt, deaths, samples)
-    for k, v in CLUTCH_COLS.items():
+    cl = _read_cols(mid, p, hurt, deaths, samples)
+    for k, v in READ_COLS.items():
         df[k] = [cl.get(int(x), {}).get(k, v) for x in df.steamid]
     df.to_parquet(f)
     return True
@@ -165,7 +229,7 @@ def extract(mid):
     for c in ("attacker_steamid", "user_steamid", "assister_steamid"):
         deaths[c] = deaths[c].map(sid)
     enemy_hurt = hurt[hurt.attacker_steamid != hurt.user_steamid]
-    clutch = _clutch_cols(mid, p, hurt, deaths, samples)
+    reads = _read_cols(mid, p, hurt, deaths, samples)
 
     # grenades still in inventory at death
     dticks = sorted({max(int(t) - 2, 0) for t in deaths.tick})
@@ -294,7 +358,7 @@ def extract(mid):
             "lowhp_win": low, "n_lowhp": n_low, "far_win": far, "n_far": n_far, "close_win": close, "n_close": n_close,
             "flash_duels": int(pov.oppfl.fillna(False).astype(bool).sum()), "duels": int(len(pov)),
             "xhair": float(np.median(xs)) if len(xs) >= 5 else None, "n_xhair": len(xs),
-            **sh, **{k: clutch.get(int(s), {}).get(k, v) for k, v in CLUTCH_COLS.items()},
+            **sh, **{k: reads.get(int(s), {}).get(k, v) for k, v in READ_COLS.items()},
         })
     df = pd.DataFrame(rows)
     os.makedirs(OUT, exist_ok=True)
@@ -325,11 +389,11 @@ def load():
 
 if __name__ == "__main__":
     sys.stdout.reconfigure(encoding="utf-8")
-    if "--clutch" in sys.argv:
+    if "--reads" in sys.argv:
         for f in sorted(os.listdir(OUT)):
             if f.endswith(".parquet") and os.path.exists(os.path.join(config.CACHE, f[:-8] + ".dem")):
                 try:
-                    print(f[:-8], "added" if add_clutch(f[:-8]) else "already", flush=True)
+                    print(f[:-8], "added" if add_reads(f[:-8]) else "already", flush=True)
                 except Exception as e:
                     print(f[:-8], "ERROR", e, flush=True)
         sys.exit()

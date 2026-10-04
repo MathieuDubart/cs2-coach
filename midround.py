@@ -1,7 +1,8 @@
 """Mid-round movement and decisions, for every player of every demo (and pro demos):
 rotations (reaction to a site hit, travel time, route, deaths on the way), anchoring, lurking, post-plant,
 retakes, man-advantage thrown, saves in lost rounds, noise near enemies; pulled by a fake (CT: set up on the site
-that gets hit and gone from it when the Ts arrive), with its rounds per match (fake_rounds) for the match page.
+that gets hit and gone from it when the Ts arrive) and the re-peek after a kill (dead within 8 s of your first kill
+of the round), with their rounds per match (fake_rounds, repeek_rounds) for the match page.
 
 Needs deep.py's samples/duels (+ rounds.py's rounds/loadout/steps for matchmaking demos).
 Writes out/population/midround/<match>.parquet (one row per player) and .../routes/<match>.parquet (one row per rotation).
@@ -29,6 +30,7 @@ BOMB_TIME = 40.0
 ZW = 1.5             # height weight in distances (stacked sites: Nuke, Vertigo)
 SETUP_T = 25.0       # a CT's setup: where he stands 25 s into the round (8 s before the hit at most)
 PULLED = 600         # left the site by that much when the Ts hit it: pulled away
+REPEEK_S = 8.0       # dead this soon after your first kill of the round: the advantage given back
 
 
 def _meta(ddir):
@@ -174,6 +176,18 @@ def analyze(ddir, pro=False):
             add(s, "adv_rounds")
             if winner and players.get(s) == winner:
                 add(s, "adv_won")
+
+        # ---------- after your first kill: dead within 8 s (the advantage given back) ----------
+        if len(kd):
+            ek = kd[kd.killer_side != kd.victim_side]
+            first_kill = ek.drop_duplicates("killer").set_index("killer").t.to_dict()
+            for k_, tk in first_kill.items():
+                k_ = int(k_)
+                add(k_, "kill_rounds")
+                td = death_t.get(k_)
+                if td is not None and 0 < td - float(tk) <= REPEEK_S:
+                    add(k_, "repeek")
+                    note(k_, "repeek_rounds", rnd)
 
         # ---------- isolated early deaths ----------
         for _, k in kd.iterrows():
@@ -340,7 +354,8 @@ def analyze(ddir, pro=False):
         for s, n in clr.items():
             add(int(s), "clutch_rounds", float(n))
     for a in acc.values():
-        a["fake_rounds"] = ",".join(str(r) for r in a.get("fake_rounds", []))
+        for k in ("fake_rounds", "repeek_rounds"):
+            a[k] = ",".join(str(r) for r in a.get(k, []))
     rows = pd.DataFrame(list(acc.values()))
     rows["match"] = os.path.basename(os.path.normpath(ddir))
     rows["pro"] = pro
@@ -427,6 +442,7 @@ BENCH = {
     "steps_alone": ("steps_alone", "rounds", 30, "audible steps when alone as T, per 24 rounds", False, "", 24),
     "steps_clutch": ("steps_clutch", "clutch_rounds", 3, "audible steps per clutch", False, "", 1),
     "fake_pulled": ("fake_pulled", "fake_n", 5, "hits on your site after you had left it (pulled by a fake)", False, "%", 100),
+    "repeek": ("repeek", "kill_rounds", 8, "rounds with a kill where you die within 8 s of it", False, "%", 100),
 }
 
 
