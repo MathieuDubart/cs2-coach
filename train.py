@@ -246,7 +246,8 @@ def site_data(mp):
                 dirs.append(d)
         except (OSError, ValueError):
             continue
-    if mp in cache and cache[mp].get("n") == len(dirs) and cache[mp].get("v") == 3:
+    # computed again when the map has a quarter more matches (the base grows by itself: not at every Play)
+    if mp in cache and cache[mp].get("v") == 3 and cache[mp].get("n", 0) >= 0.8 * len(dirs):
         return cache[mp]
     rows = []
     for d in dirs:

@@ -1332,6 +1332,17 @@ function wireExp(v,X,p){const msg=$("#xmsg",v);
 
 // ---------- view: settings ----------
 let steamForget=false;
+// the base grows by itself (grow.py): your matches' players, their recent matchmaking games (Leetify), the players of
+// those, until the target; paused while you play
+function growCard(g){
+  if(!g)return "";
+  const n=g.n||0,t=g.target||5000,pct=Math.min(100,Math.round(n/t*100)),ok=(g.counts||{}).ok||0;
+  return `<article class="card"><h3>The base: ${n} matches ${g.on?`<span class="pill strong">${g.alive?"growing":"starting"}</span>`:`<span class="pill">stopped</span>`}</h3>
+   <p>The players of your matches, their recent matchmaking games (from Leetify, for the players who use it, 5 each at most), then the players of those matches, and so on until the target: more duels, grenades and real hits to compare you with and to train on.</p>
+   <div style="height:8px;background:var(--line);border-radius:4px;overflow:hidden;margin:6px 0"><div style="width:${pct}%;height:100%;background:var(--ct)"></div></div>
+   <p class="note">${esc(g.status||"not started")}${g.on||ok?` · ${ok} new match(es) · ${g.codes} waiting · ${g.looked} player(s) looked up`:""} · ${g.free_gb} GB free on the disk</p>
+   <p class="note">One match from Valve every 30 s at most, through your Steam session (Steam may show you in game a few seconds). It pauses while CS2 is open, during an analysis, a recording or a transcription, at the lowest priority otherwise. The demos stay (the practice part uses them); it stops at the target or when the disk has 150 GB left.</p>
+   <div class="btns" style="align-items:center">${g.on?"":`<label class="note">Target <input id="gr-n" type="number" min="100" max="20000" step="100" value="${t}" style="width:90px;font:14px var(--f-body);background:var(--bg);color:var(--ink);border:1px solid var(--line);border-radius:3px;padding:4px 6px"> matches</label>`}<button type="button" id="gr-go"${g.on?"":` class="primary"`}>${g.on?"Stop":"Grow the base"}</button></div></article>`}
 async function renderSettings(){
   const v=$("#v-settings");
   const head=`<div class="head"><div style="display:grid;gap:4px"><span class="eyebrow">Everything stays on this PC</span><h2>Settings</h2></div></div>`;
@@ -1341,6 +1352,7 @@ async function renderSettings(){
   let gs=null;try{gs=await (await fetch("/api/gsi/status")).json()}catch(e){}
   let vs=null;try{vs=await (await fetch("/api/voice/status")).json()}catch(e){}
   let cc=null;try{cc=await (await fetch("/api/coach/status")).json()}catch(e){}
+  let gr=null;try{gr=await (await fetch("/api/grow")).json()}catch(e){}
   const flag=new URLSearchParams(location.search).get("steam");
   const ok=b=>b?`<span class="pill strong">done</span>`:`<span class="pill">to do</span>`;
   const pt=st.playtime,L=st.links||{};
@@ -1408,7 +1420,7 @@ async function renderSettings(){
     <li><b>Your group</b>: your Steam friends on your team are recognized as your group, even after a single match together.</li>
     <li><b>Your experience</b>: your playtime sets the priorities of the Progress tab.</li></ul>
    <p class="note">Your codes stay in <code>out/settings.json</code> on this PC: this file is not versioned and the codes only go to Steam's official API. You can remove everything at any time.</p>
-   <div class="btns"><button type="button" id="st-forget">${steamForget?"Confirm: remove the sign-in and the codes":"Disconnect everything"}</button></div></article>`;
+   <div class="btns"><button type="button" id="st-forget">${steamForget?"Confirm: remove the sign-in and the codes":"Disconnect everything"}</button></div></article>${growCard(gr)}`;
   const msg=$("#st-msg",v),sid=st.steamid;
   const vmsg=$("#v-msg",v),vcall=async(path,body)=>{try{await api(path,Object.assign({sid},body||{}));renderSettings()}catch(e){if(vmsg)vmsg.textContent=e.message}};
   const va=$("#v-auto",v);if(va)va.onchange=()=>vcall("/api/voice/settings",{auto:va.checked});
@@ -1431,6 +1443,7 @@ async function renderSettings(){
     catch(e){msg.textContent=e.message;b.disabled=false}};
   $("#st-sync",v).onclick=async()=>{msg.textContent="";try{await api("/api/steam/sync",{sid});poll()}catch(e){msg.textContent=e.message}};
   const au=$("#st-auto",v);if(au)au.onchange=async()=>{try{await api("/api/steam/options",{sid,auto_sync:au.checked})}catch(e){msg.textContent=e.message}};
+  const grb=$("#gr-go",v);if(grb)grb.onclick=async()=>{grb.disabled=true;try{await api(gr.on?"/api/grow/stop":"/api/grow/start",{target:+($("#gr-n",v)||{}).value||gr.target})}catch(e){}renderSettings()};
   $("#st-forget",v).onclick=async()=>{if(!steamForget){steamForget=true;renderSettings();return}steamForget=false;
     try{await api("/api/steam/forget",{sid});renderSettings()}catch(e){msg.textContent=e.message}};
 }
