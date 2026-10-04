@@ -93,60 +93,162 @@ def _map_name(mp):
     return str(mp).split("_")[-1].capitalize()
 
 
-def pro_summary(sid, sts):
-    """The pro insights summed over the session's matches: only what stands out (with enough cases to say it)."""
-    import nades
-    rp = rpo = ut = uto = fl = flo = n = 0
+# ---------- the analyst's reads (04/10) ----------
+# read -> (where its base reference is: "mid" = the mid-round benchmarks, "ref" = the base benchmarks, its metric
+# there, the fewest cases to say anything, higher is better)
+READ_REF = {"repeek": ("mid", "repeek", 8, False), "untraded": ("ref", "untraded_pct", 8, False),
+            "flash": ("ref", "flash_used_pct", 6, True), "fake": ("mid", "fake_pulled", 4, False),
+            "clutch": ("ref", "clutch_multi_pct", 4, False)}
+READ_GAP = 5   # percent points from the base median: less says nothing
+_ROWS = {}
+
+
+def _rows(path):
+    """A base file (population or mid-round: one row per player of a match) by player, read once while unchanged."""
+    try:
+        mt = os.path.getmtime(path)
+    except OSError:
+        return None
+    hit = _ROWS.get(path)
+    if hit and hit[0] == mt:
+        return hit[1]
+    try:
+        df = pd.read_parquet(path)
+        df.index = df.steamid.astype(str)
+    except Exception:
+        df = None
+    if len(_ROWS) > 4000:
+        _ROWS.clear()
+    _ROWS[path] = (mt, df)
+    return df
+
+
+def _rl(x):
+    return [int(r) for r in str(x or "").split(",") if r.strip().isdigit()]
+
+
+def _cnt(r, k):
+    v = _num(r.get(k)) if r is not None else None
+    return int(v) if v is not None else None
+
+
+def match_reads(sid, mid, st):
+    """What an analyst points at in one match for one player, each read with the rounds behind it: re-peek after a
+    kill, deaths without impact, flashes your team uses and the death spots (the match's analysis), pulled by a fake
+    and the 1v2+ clutches (the base's numbers of that match). None without any."""
+    import config
+    out = {}
+    pi = st.get("pro_insights")
+    if isinstance(pi, dict) and pi.get("v") == 2:
+        for k in ("repeek", "untraded", "flash"):
+            if isinstance(pi.get(k), dict) and pi[k].get("of"):
+                out[k] = {"value": int(pi[k]["value"]), "of": int(pi[k]["of"]), "rounds": list(pi[k].get("rounds") or [])}
+        if pi.get("spots"):   # by name, as players call them; a bombsite is where a CT anchor dies: the role, not a habit
+            import nades
+            sp = Counter()
+            for k, v in pi["spots"].items():
+                if not str(k).startswith("Bombsite"):
+                    sp[nades.humanize(k, st.get("map")) or str(k)] += int(v)
+            out["spots"] = dict(sp.most_common())
+    sid = str(sid)
+    mr = _rows(os.path.join(config.OUT, "population", "midround", f"{mid}.parquet"))
+    r = mr.loc[sid] if mr is not None and sid in mr.index else None
+    if r is not None and not isinstance(r, pd.Series):
+        r = r.iloc[0]
+    if r is not None:
+        n = _cnt(r, "fake_n")
+        if n:
+            out["fake"] = {"value": _cnt(r, "fake_pulled") or 0, "of": n, "rounds": _rl(r.get("fake_rounds"))}
+        n = _cnt(r, "kill_rounds")
+        if n and "repeek" not in out:
+            out["repeek"] = {"value": _cnt(r, "repeek") or 0, "of": n, "rounds": _rl(r.get("repeek_rounds"))}
+    po = _rows(os.path.join(config.OUT, "population", f"{mid}.parquet"))
+    r = po.loc[sid] if po is not None and sid in po.index else None
+    if r is not None and not isinstance(r, pd.Series):
+        r = r.iloc[0]
+    if r is not None:
+        n = _cnt(r, "clutch_n")
+        if n:
+            out["clutch"] = {"value": _cnt(r, "clutch_multi") or 0, "of": n, "won": _cnt(r, "clutch_won") or 0,
+                             "rounds": _rl(r.get("clutch_multi_rounds")), "all": _rl(r.get("clutch_rounds"))}
+        n = _cnt(r, "dead_n")
+        if n and "untraded" not in out:
+            out["untraded"] = {"value": _cnt(r, "untraded_n") or 0, "of": n, "rounds": []}
+        n = _cnt(r, "flash_blind")
+        if n and "flash" not in out:
+            out["flash"] = {"value": _cnt(r, "flash_used") or 0, "of": n, "rounds": []}
+    return out or None
+
+
+def _ref(kind, metric, mb, bench):
+    """The base's (and the pros') reference of a read: from the mid-round benchmarks or the base benchmarks."""
+    src = (mb if kind == "mid" else bench) or {}
+    m = (src.get("metrics") or {}).get(metric)
+    if not m:
+        return None
+    return {"median": m.get("median"), "good": m.get("good"), "pro": m.get("pro"), "higher_rank": m.get("higher_rank_median"),
+            "you_all": m.get("you"), "percentile": m.get("percentile"), "n": m.get("n")}
+
+
+def reads(sid, sts, mb=None, bench=None, where_max=6, catch_up=True):
+    """The reads summed over a set of matches (a session, or all of them), each against the base (median, higher
+    ranks, pros when the pro demos tell) with a verdict, and the matches and rounds where it happened. catch_up: the
+    matches analyzed before the reads get theirs from their demo (a few seconds each; the session only)."""
+    tot, where, n = {}, {}, 0
     spots, deaths_on = Counter(), Counter()
     for st in sts:
-        pi = _insights_of(sid, st)
-        if not pi:
+        mid = str((st.get("match") or {}).get("match_id") or "")
+        if mid and catch_up:
+            _insights_of(sid, st)
+        r = match_reads(sid, mid, st) if mid else None
+        if not r:
             continue
         n += 1
-        rp += pi["repeek"]["value"]
-        rpo += pi["repeek"]["of"]
-        ut += pi["untraded"]["value"]
-        uto += pi["untraded"]["of"]
-        fl += pi["flash"]["value"]
-        flo += pi["flash"]["of"]
-        for k, c in (pi.get("spots") or {}).items():
-            spots[(st["map"], k)] += c
-            deaths_on[st["map"]] += c
-    out = []
-    if rpo >= 8:
-        pct = 100 * rp / rpo
-        sev = "high" if pct >= 30 else "medium" if pct >= 20 else "positive" if pct <= 10 else None
-        if sev:
-            out.append({"id": "repeek", "severity": sev, "value": rp, "of": rpo, "pct": round(pct),
-                        "title": "Dead soon after your first kill" if sev != "positive" else "You keep the advantage after a kill",
-                        "detail": f"In {rp} of the {rpo} rounds where you got a kill, you died within 8 s." +
-                                  (" After a kill the numbers are on your side: fall back to a spot a teammate can trade from instead of peeking again."
-                                   if sev != "positive" else " After a kill you fall back instead of peeking again: keep doing it.")})
-    if uto >= 8:
-        pct = 100 * ut / uto
-        sev = "high" if pct >= 50 else "medium" if pct >= 35 else "positive" if pct <= 20 else None
-        if sev:
-            out.append({"id": "untraded", "severity": sev, "value": ut, "of": uto, "pct": round(pct),
-                        "title": "Deaths without impact" if sev != "positive" else "Your deaths are rarely for nothing",
-                        "detail": f"{ut} of your {uto} deaths: nobody traded you within 5 s and you hadn't hit anyone in the 3 s before." +
-                                  (" Take the duel closer to a teammate, or with utility." if sev != "positive" else "")})
-    if flo >= 6:
-        pct = 100 * fl / flo
-        sev = "medium" if pct <= 20 else "positive" if pct >= 50 else None
-        if sev:
-            out.append({"id": "flash", "severity": sev, "value": fl, "of": flo, "pct": round(pct),
-                        "title": "Flashes your team doesn't use" if sev == "medium" else "Flashes that pay off",
-                        "detail": f"Your flashes blinded {flo} enemies for over 1.5 s; your team hit {fl} of them while they were blind." +
-                                  (" Call it before throwing, or flash for your own peek." if sev == "medium" else "")})
-    for (mp, place), c in spots.most_common(5):   # a bombsite is where a CT anchor dies: the role, not a habit
-        if c >= 4 and c >= 0.3 * deaths_on[mp] and not str(place).startswith("Bombsite"):
-            nm = nades.humanize(place, mp) or place
-            out.append({"id": "spot", "severity": "medium", "value": c, "of": deaths_on[mp], "map": mp, "place": nm,
-                        "title": f"You keep dying at {nm} ({_map_name(mp)})",
-                        "detail": f"{c} of your {deaths_on[mp]} deaths on {_map_name(mp)} this session: the enemies can expect you there. Change the angle or the timing."})
-    order = {"high": 0, "medium": 1, "positive": 2}
-    out.sort(key=lambda x: order[x["severity"]])
-    return {"matches": n, "items": out}
+        for k in READ_REF:
+            x = r.get(k)
+            if not x:
+                continue
+            t = tot.setdefault(k, {"value": 0, "of": 0})
+            t["value"] += x["value"]
+            t["of"] += x["of"]
+            if k == "clutch":
+                t["won"] = t.get("won", 0) + x.get("won", 0)
+            if x.get("rounds"):
+                where.setdefault(k, []).append({"id": mid, "map": st["map"], "time": (st.get("match") or {}).get("time"),
+                                                "rounds": x["rounds"]})
+        for place, c in (r.get("spots") or {}).items():
+            spots[(st["map"], place)] += c
+        deaths_on[st["map"]] += (r.get("untraded") or {}).get("of") or 0   # all your deaths on that map
+    items = []
+    for k, (kind, metric, mn, hib) in READ_REF.items():
+        t = tot.get(k)
+        if not t or not t["of"]:
+            continue
+        pct = 100 * t["value"] / t["of"]
+        ref = _ref(kind, metric, mb, bench)
+        sev = None
+        if t["of"] >= mn and ref and ref.get("median") is not None:
+            worse = (ref["median"] - pct) if hib else (pct - ref["median"])
+            good = ref.get("good")
+            if worse >= READ_GAP:
+                sev = "high" if worse >= 3 * READ_GAP else "medium"
+            elif good is not None and ((pct >= good) if hib else (pct <= good)):
+                sev = "positive"
+        ws = sorted(where.get(k, []), key=lambda w: str(w.get("time") or ""), reverse=True)[:where_max]
+        items.append({"id": k, "value": t["value"], "of": t["of"], "pct": round(pct), "won": t.get("won"),
+                      "enough": t["of"] >= mn, "severity": sev, "ref": ref, "where": ws})
+    for (mp, place), c in spots.most_common(5):   # bombsites are left out per match (the anchor's role), and the
+        if c >= 4 and c >= 0.3 * deaths_on[mp] and not str(mp).startswith("cs_"):   # hostage maps (the fight is at the hostages)
+            items.append({"id": "spot", "severity": "medium", "value": c, "of": deaths_on[mp], "map": mp,
+                          "place": place, "enough": True})
+    order = {"high": 0, "medium": 1, None: 2, "positive": 3}
+    items.sort(key=lambda x: order.get(x["severity"], 2))
+    return {"matches": n, "items": items}
+
+
+def pro_summary(sid, sts, mb=None, bench=None):
+    """The reads of the session's matches, against the base (what the review's deep dive shows)."""
+    return reads(sid, sts, mb, bench)
 
 
 def map_briefs(recent, by_id, adv):
@@ -191,7 +293,7 @@ def _mean_sd(xs):
     return m, (None if sd is None or math.isnan(sd) else float(sd)), len(xs)
 
 
-def build(sid, stats, mid_rows, ctx, exps, adv):
+def build(sid, stats, mid_rows, ctx, exps, adv, mb=None):
     """-> the review, or None without at least 3 dated matches with a demo."""
     rows, by_id = [], {}
     for st in stats:
@@ -310,7 +412,7 @@ def build(sid, stats, mid_rows, ctx, exps, adv):
     trend = [{"id": r["id"], "time": r["time"].isoformat(timespec="minutes"), "map": r["map"], "result": r["result"],
               "rating": round(r["rating"], 2), "recent": r in recent} for r in before + recent]
     try:
-        pro = pro_summary(sid, [by_id[r["id"]] for r in recent if r["id"] in by_id])
+        pro = pro_summary(sid, [by_id[r["id"]] for r in recent if r["id"] in by_id], mb, (adv or {}).get("bench"))
     except Exception as e:   # a bonus: never the review's end
         pro = {"matches": 0, "items": [], "error": str(e)[:200]}
     return {"label": label, "since": recent[0]["time"].isoformat(timespec="minutes"),

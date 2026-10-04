@@ -30,6 +30,11 @@ SRC = {
     "boosteria_audio": ("Boosteria, guide audio (2026)", "https://boosteria.org/guides/cs2-audio-awareness-guide-2026-sound-cues-win-rounds"),
     "smg": ("CS.MONEY, playing the MP9", "https://cs.money/blog/games/weapons-guide-mp9/"),
     "leetify_glossary": ("Leetify, statistics glossary", "https://leetify.com/blog/leetify-stats-glossary/"),
+    "clutch_prosettings": ("ProSettings, 10 clutch tips: create as many 1v1s as you can (2025)", "https://prosettings.net/blog/cs2-clutch-tips/"),
+    "refrag_clutch": ("Refrag, 5 ways to improve your clutch play", "https://refrag.gg/blog/5-ways-to-improve-your-clutch-play-in-cs2"),
+    "refrag_repeek": ("Refrag, AWP tips: re-peeking the same angle", "https://refrag.gg/blog/cs2-awp-tips"),
+    "scope_trade": ("scope.gg, trade kills and spacing", "https://blog.scope.gg/trade-kills-en/"),
+    "bo3_popflash": ("bo3.gg, pop flash setups: the flash timed with the peek", "https://bo3.gg/news/cs2-pop-flash-setups-strategies-for-self-blind-executes"),
     # patch notes and state of the game
     "rush_hour": ("Dust2.us, September 22, 2026 update (Rush Hour)", "https://www.dust2.us/news/78121/breaking-cs2-september-22nd-update-brings-silent-reloads-new-gamemode-changes-to-premier-in-rush-hour-patch"),
     "reload_update": ("CS2 Central, magazine-based reloads (March 2026)", "https://cs2central.gg/blog/cs2-reload-update-explained/"),
@@ -194,6 +199,30 @@ PHASES = [
 ]
 
 # ---------- mid-round playbook ----------
+# the pro analyst's reads (each match, the review, Full analysis): what is measured, the fix, the sources (04/10)
+READS = [
+    {"id": "repeek", "title": "Re-peek after a kill", "what": "rounds with a kill where you die within 8 s of it",
+     "fix": "After a kill the numbers are on your side: fall back to a spot a teammate can trade from, or come back from another angle.",
+     "src": ["scope_adv", "refrag_repeek"]},
+    {"id": "untraded", "title": "Deaths without impact", "what": "deaths not traded within 5 s, with no damage of yours in the 3 s before",
+     "fix": "Take your duels where a teammate can trade you (one step behind or beside you), or after utility.",
+     "src": ["scope_trade", "positioning"]},
+    {"id": "flash", "title": "Flashes your team uses", "what": "enemies you blind over 1.5 s that your team hits while they are blind",
+     "fix": "Call it before throwing (\"flashing B\") so a teammate swings as it pops, or flash for your own peek.",
+     "src": ["bo3_popflash"], "higher_better": True},
+    {"id": "fake", "title": "Pulled by a fake", "what": "hits on your site after you had left it for the other side",
+     "fix": "One noise or one grenade on the other site is how a fake works: wait for a second piece of info (a body, the bomb, 3 players) before leaving, or only go halfway.",
+     "src": ["boosteria_ct", "cs2hype_rot", "t_fund"]},
+    {"id": "clutch", "title": "Several enemies at once in clutches", "what": "1v2+ clutches where 2 enemies or more see you as you are hit",
+     "fix": "Make it a series of 1v1s: play an angle only one enemy can see, let them split, take them one by one.",
+     "src": ["clutch_prosettings", "refrag_clutch"]},
+]
+
+
+def reads_meta():
+    return {r["id"]: {**{k: v for k, v in r.items() if k != "src"}, "src": src(*r["src"])} for r in READS}
+
+
 PLAYBOOK = [
     # CT
     {"side": "CT", "if": "A single noise, a single smoke or a molotov on the other site", "then": "Don't rotate. Lean toward the connector ('leaning A') and wait for real info.",

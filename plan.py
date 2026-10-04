@@ -82,7 +82,12 @@ def level(adv, sid=None):
 
 # what a mid-round habit costs in rounds: a player lost on a rotation or an advantage thrown away costs the round,
 # an audible step rarely does (used to order the weak points, most costly first)
-MID_WEIGHT = {"rot_died": 3, "adv_conv": 3, "adv_throw": 3, "isolated": 2, "rt_solo": 2, "t_late": 2, "pp_surv": 2,
+MID_FIX.update({
+    "fake_pulled": "One noise or one grenade on the other site is how a fake works: wait for a second piece of info (a body, the bomb, 3 players) before leaving your site, or only go halfway.",
+    "repeek": "After a kill the numbers are on your side: fall back to a spot a teammate can trade from instead of peeking again for the second kill.",
+})
+MID_TAGS.update({"fake_pulled": ["rotation"], "repeek": ["advantage"]})
+MID_WEIGHT = {"fake_pulled": 2, "repeek": 2, "rot_died": 3, "adv_conv": 3, "adv_throw": 3, "isolated": 2, "rt_solo": 2, "t_late": 2, "pp_surv": 2,
               "anchor_hold": 2, "rot_react": 1, "anchor_kpr": 1, "pp_kpr": 1, "steps_alone": 1, "steps_clutch": 1}
 MID_MIN_GAP = {"%": 5.0, "": 1.0}   # smaller gaps with the base median say nothing (percent points, or per 24 rounds)
 
@@ -585,9 +590,14 @@ def build(steamid, adv, cross=None, deep=None, light=False):
         plan["facts"] = matchfacts.summary(sid)
     except Exception as e:
         _miss(plan, "match facts", e)
+    try:   # the analyst's reads over all your matches, against the base and the pros (Full analysis)
+        import review
+        plan["reads"] = {"meta": K.reads_meta(), "all": review.reads(sid, stats, mb, adv.get("bench"), catch_up=False)}
+    except Exception as e:
+        _miss(plan, "analyst reads", e)
     try:
         import review
-        plan["review"] = review.build(sid, stats, mid_rows, ctx, plan["experiments"], adv)
+        plan["review"] = review.build(sid, stats, mid_rows, ctx, plan["experiments"], adv, mb)
     except Exception as e:  # the review is a bonus: never block the plan
         plan["review"] = None
         _miss(plan, "session review", e)

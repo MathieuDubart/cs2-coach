@@ -35,6 +35,16 @@ def _story(mid):
         return None
 
 
+def _reads(sid, mid, st):
+    """The analyst's reads of the match (re-peek, deaths without impact, flashes used, pulled by a fake, clutches)."""
+    try:
+        import review
+        return review.match_reads(sid, mid, st)
+    except Exception as e:
+        print(f"[{mid}] reads: {e}")
+        return None
+
+
 def player_data(sid):
     pdir = config.player_dir(sid)
     adv = jload(os.path.join(pdir, "advice.json"))
@@ -61,6 +71,7 @@ def player_data(sid):
                         | {"openings": [k for k in mp["all_kills"] if k["opening"]]},
             "notes": manual or adv["match_notes"].get(mid), "notes_manual": bool(manual),
             "story": _story(mid),
+            "reads": _reads(sid, mid, st),
         })
     matches.sort(key=lambda m: m["time"] or "", reverse=True)
     if names:
