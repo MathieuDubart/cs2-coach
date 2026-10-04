@@ -31,8 +31,9 @@ METRICS = {
 # rare events, pooled over each player's matches (a rate per match would be 0 or 100 %):
 # metric -> (numerator, denominator, minimum denominator, label, higher_is_better, unit)
 POOLED = {
-    "clutch_win_pct": ("clutch_won", "clutch_n", 4, "1v2+ clutches won", True, "%"),
-    "clutch_multi_pct": ("clutch_multi", "clutch_n", 4, "1v2+ clutches where 2+ enemies see you at once", False, "%"),
+    # clutches are rare: with 4 a player, most of the base had 0 and the median said 0 % (04/10); 12 at least
+    "clutch_win_pct": ("clutch_won", "clutch_n", 12, "1v2+ clutches won", True, "%"),
+    "clutch_multi_pct": ("clutch_multi", "clutch_n", 12, "1v2+ clutches where 2+ enemies see you at once", False, "%"),
     "flash_used_pct": ("flash_used", "flash_blind", 8, "enemies you flash that your team hits while blind", True, "%"),
     "untraded_pct": ("untraded_n", "dead_n", 15, "deaths without impact (not traded, no damage of yours)", False, "%"),
 }

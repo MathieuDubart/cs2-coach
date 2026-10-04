@@ -147,9 +147,11 @@ def _eff(x, typ):
 
 
 def _how(b):
+    """How a throw was made, from the thrower at the release: in the air (the jumpthrow), moving (running over 150 u/s,
+    walking under it or with the walk key), crouching; else standing still."""
     how = []
     if b.jump:
-        how.append("jump")
+        how.append("jumpthrow")
     if b.speed > 150:
         how.append("running")
     elif b.walk or 20 < b.speed <= 150:
@@ -217,8 +219,10 @@ def groups(df, side_rounds):
                     ok = {k: v for k, v in wins.items() if v["n"] >= 5 and "eff" in v}
                     if ok:
                         best = max(ok, key=lambda k: ok[k]["eff"])
-                # the usual way to throw it: most common standing spot among throws easy to repeat
-                rep = c.assign(cell=list(zip((c.px // 20).astype(int), (c.py // 20).astype(int))), repro=(c.speed < 20) | c.jump)
+                # the usual way to throw it: most common spot among throws you can repeat from a spot (standing, crouching or
+                # a jumpthrow without moving): a running throw's release point is not where you start running (04/10:
+                # "you say running jump: it goes way too far")
+                rep = c.assign(cell=list(zip((c.px // 20).astype(int), (c.py // 20).astype(int))), repro=c.speed < 20)
                 pool = rep[rep.repro] if rep.repro.any() else rep
                 cell = pool.cell.value_counts().index[0]
                 cand = pool[pool.cell == cell]

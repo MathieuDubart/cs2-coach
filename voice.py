@@ -391,7 +391,8 @@ def delete(rid):
 
 
 # ---------- analysis ----------
-NUM = r"\b(un|une|deux|trois|quatre|cinq|[1-5]|tous|toute l'équipe|full|personne|seul)\b"
+# how many, in French and in English (04/10: "two short", "three mid" did not count as complete calls in English lobbies)
+NUM = r"\b(un|une|deux|trois|quatre|cinq|[1-5]|tous|toute l'équipe|full|personne|seul|one|two|three|four|five|both|nobody|alone|everyone)\b"
 DMG = r"\b(touch[ée]|tagged|lit|one ?shot|one|il est à|à \d+|\d+ ?(hp|pv)|moins \d+|low|bas|cramé)\b"
 UTIL = r"\b(flash|flashe|smoke|smok|molo|molotov|incendiaire|he|grenade|stuff|nade|decoy|déco)\b"
 PLAN = r"\b(on (va|part|joue|fait|rush|push|exec|tourne|save|sauve|reste)|rush|push|exec|default|split|fake|save|sauve|éco|eco|force|full ?buy|drop|stack|retake|rotate|tourne|rotation|attends|go)\b"
@@ -493,7 +494,7 @@ def mood_all(text):
     return [m] if m else []
 
 
-ANALYSIS_V = 2   # bump when the analysis changes: mood_stats analyzes the older ones again
+ANALYSIS_V = 3   # bump when the analysis changes: mood_stats analyzes the older ones again
 
 
 def mood_of(text):

@@ -210,7 +210,7 @@ def lineups(nades, side, zones_of_interest, meta, top=4):
         for value, rel, b, metric in groups[:top]:
             how = []
             if b.jump:
-                how.append("jump")
+                how.append("jumpthrow")
             if b.speed > 150:
                 how.append("running")
             elif b.walk or 20 < b.speed <= 150:
