@@ -228,8 +228,40 @@ def transcribing():
     return JOB["id"] if JOB["proc"] and JOB["proc"].poll() is None else None
 
 
+def pending(max_days=14):
+    """The recordings not transcribed yet (a match stopped their transcription), the newest first: the matches of the
+    last two weeks, at least a minute long, neither silent nor on the training server or a workshop map."""
+    out = []
+    for f in sorted(os.listdir(DIR), reverse=True) if os.path.exists(DIR) else []:
+        if not f.endswith(".json") or f.endswith((".transcript.json", ".analysis.json")) or not f[:8].isdigit():
+            continue
+        rid = f[:-5]
+        if os.path.exists(os.path.join(DIR, rid + ".transcript.json")):
+            continue
+        try:
+            with open(os.path.join(DIR, f), encoding="utf-8") as fh:
+                m = json.load(fh)
+        except (OSError, ValueError):
+            continue
+        if m.get("practice") or m.get("silent") or (m.get("duration") or 0) < 60 or time.time() - (m.get("start") or 0) > max_days * 86400                 or not str(m.get("map") or "").startswith(("de_", "cs_")):   # a workshop or training map: no match to line up with
+            continue
+        out.append(rid)
+    return out
+
+
+def resume_pending(skip=()):
+    """Nothing records nor transcribes: the newest recording a match stopped is transcribed now (the next match stops
+    it again). -> its id, or None."""
+    if REC.recording() or transcribing():
+        return None
+    for rid in pending():
+        if rid not in skip:
+            return rid if start_transcription(rid) else None
+    return None
+
+
 def pause_transcription():
-    """A new match starts: stop the transcription (it will be done again later) to keep all the power for the game."""
+    """A new match starts: stop the transcription (resume_pending does it again later) to keep all the power for the game."""
     if JOB["proc"] and JOB["proc"].poll() is None:
         JOB["proc"].terminate()
         JOB.update(proc=None, id=None)

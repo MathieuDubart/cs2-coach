@@ -511,9 +511,10 @@ def voice_status():
 
 
 def voice_watch(every=15):
-    """Stops an automatic recording when the game is gone, and refreshes the plan once a transcription is done."""
+    """Stops an automatic recording when the game is gone, refreshes the plan once a transcription is done, and
+    transcribes again the recordings a match stopped, one by one, while no map is loaded."""
     import time
-    done = set()
+    done, failed = set(), set()
     while True:
         time.sleep(every)
         try:
@@ -525,9 +526,14 @@ def voice_watch(every=15):
             p = voice.JOB.get("proc")
             if p and p.poll() is not None and voice.JOB.get("id") not in done:
                 done.add(voice.JOB["id"])
+                if p.returncode != 0:
+                    failed.add(voice.JOB["id"])
                 sid = config.settings().get("own_steamid")
                 if sid and p.returncode == 0 and not LOCK.locked():
                     refresh_plan(sid)
+            gs = gsi.state() or {}
+            if not gs.get("map") or gs.get("age", 0) > 120:   # the game in its menu or closed: what a match stopped, now
+                voice.resume_pending(failed)
         except Exception as e:
             print("microphone watch:", e, flush=True)
 
