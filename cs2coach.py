@@ -33,11 +33,28 @@ def log(*a):
 
 
 def registry():
-    return json.load(open(REGISTRY)) if os.path.exists(REGISTRY) else {}
+    if not os.path.exists(REGISTRY):
+        return {}
+    with open(REGISTRY) as f:
+        return json.load(f)
 
 
 def save_registry(r):
-    json.dump(r, open(REGISTRY, "w"), indent=1)
+    """Merged into the file as it is now, then replaced in one go: the base-growing loop (grow.py, its own process)
+    writes it too, and a reader never gets half a file."""
+    import time
+    cur = registry()
+    cur.update(r)
+    tmp = f"{REGISTRY}.{os.getpid()}.tmp"
+    with open(tmp, "w") as f:
+        json.dump(cur, f, indent=1)
+    for _ in range(50):
+        try:
+            os.replace(tmp, REGISTRY)
+            return
+        except PermissionError:   # the other process is reading it this very moment
+            time.sleep(0.1)
+    os.replace(tmp, REGISTRY)
 
 
 def collect(args, own_id):

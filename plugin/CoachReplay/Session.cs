@@ -140,6 +140,29 @@ public partial class CoachReplay
     }
     void ClearLine() { foreach (var b in beams) if (b.IsValid) b.Remove(); beams.Clear(); }
 
+    // stuff: a blue beam standing where the grenade must land (its height unknown: from below your feet to well above)
+    void DrawMark(float x, float y, float z)
+    {
+        var b = Utilities.CreateEntityByName<CBeam>("beam");
+        if (b == null) return;
+        b.Render = System.Drawing.Color.FromArgb(255, 90, 180, 255);
+        b.Width = 5f;
+        b.Teleport(new Vector3(x, y, z - 300), Vector3.Zero, Vector3.Zero);
+        b.EndPos.X = x; b.EndPos.Y = y; b.EndPos.Z = z + 500;
+        b.DispatchSpawn();
+        beams.Add(b);
+    }
+
+    // prefire: where the last ones are (the game's place names: "BombsiteA" -> "Bombsite A")
+    string LeftPlaces()
+    {
+        var names = bots.Where(b => !gone.Contains(b.Value.Sid) && !peekAt.ContainsKey(b.Key))
+            .Select(b => Utilities.GetPlayerFromSlot(b.Key)?.PlayerPawn.Value?.LastPlaceName)
+            .Where(n => !string.IsNullOrEmpty(n))
+            .Select(n => System.Text.RegularExpressions.Regex.Replace(n!, "(?<=[a-z])(?=[A-Z0-9])", " ")).Distinct();
+        return string.Join(", ", names);
+    }
+
     void CmdSession(CCSPlayerController? p, CommandInfo c)
     {
         var f = System.IO.Path.Combine(Dir, "sessions", c.GetArg(1) + ".json");
@@ -233,7 +256,7 @@ public partial class CoachReplay
     {
         var how = d.Kind == "situation" && cur != null ? SituationText() : d.Kind != "nade" ? d.Tip : d.Level switch
         {
-            0 => $"{d.How} · {d.Click} — your aim is set: just throw",
+            0 => $"{d.How} · {d.Click} — your aim is set: just throw · the blue beam: where it lands",
             1 => $"{d.How} · {d.Click} — find the aim",
             _ => "find the aim and the throw",
         };
@@ -287,6 +310,7 @@ public partial class CoachReplay
             lines.Add($"allies: {(al.Count > 0 ? Where(al) : "none")} · enemies: {Where(en)}");
         }
         if (!string.IsNullOrEmpty(cur?.Danger)) lines.Add($"⚠ {cur!.Danger}");
+        if (mine != null && mine.Hp < MinHp) lines.Add($"❤ {mine.Hp} HP in the match: {MinHp} here");
         return string.Join("<br>", lines);
     }
 
@@ -336,6 +360,7 @@ public partial class CoachReplay
             }
         }
         if (cur.Kind == "nade") { nadeWait = true; attemptEnd = DateTime.UtcNow.AddSeconds(30); }   // a throw during the countdown counts
+        if (cur.Kind == "nade" && drill?.Target is { Length: >= 2 } tg && drill.Me != null) { ClearLine(); DrawMark(tg[0], tg[1], drill.Me.Pos[2]); }
     }
 
     // the countdown of a drill keeps its card on screen; false: not in a session
@@ -363,8 +388,14 @@ public partial class CoachReplay
         if (drill?.Mode is "prefire" or "defend")
         {
             if (el >= drill.Seconds) { Finish(drill.Mode == "prefire" ? "timeout" : "done"); return; }
-            foreach (var slot in peekAt.Where(kv => kv.Value <= el).Select(kv => kv.Key).ToList())
-            {   // its timing: it peeks
+            // a hidden one peeks at its time, or when you come near its spot (not after you passed it); the last two
+            // all peek
+            var mo = Humans().Select(h => h.PlayerPawn.Value?.AbsOrigin).FirstOrDefault(o => o != null);
+            var mp = mo == null ? (Vector3?)null : new Vector3(mo.X, mo.Y, mo.Z);
+            var fewLeft = drill.Mode == "prefire" && aimOrder.Count - frags <= 2;
+            bool Near(int sl) => mp != null && bots.TryGetValue(sl, out var tt) && Vector3.Distance(Pos(tt, 0), mp.Value) < 1100;
+            foreach (var slot in peekAt.Where(kv => kv.Value <= el || fewLeft || Near(kv.Key)).Select(kv => kv.Key).ToList())
+            {   // its time: it peeks
                 peekAt.Remove(slot);
                 if (!bots.TryGetValue(slot, out var t)) continue;
                 var c = Utilities.GetPlayerFromSlot(slot);
@@ -376,8 +407,9 @@ public partial class CoachReplay
             }
             {
                 var left = (int)(drill.Seconds - el);
+                var where = drill.Mode == "prefire" && aimOrder.Count - frags <= 3 ? LeftPlaces() : "";
                 SetMain(drill.Mode == "prefire"
-                    ? $"<font color='#ff8a3d'>{drill.Title}</font> · {aimOrder.Count - frags} left · {left} s<br><font class='fontSize-s'>{string.Join(" → ", drill.Route)} · follow the gold line</font>"
+                    ? $"<font color='#ff8a3d'>{drill.Title}</font> · {aimOrder.Count - frags} left{(where != "" ? $": {where}" : "")} · {left} s<br><font class='fontSize-s'>{string.Join(" → ", drill.Route)} · follow the gold line</font>"
                     : $"<font color='#ff8a3d'>{drill.Title}</font> · {left} s · ⚔ {frags} · ☠ {deaths}");
             }
             return;

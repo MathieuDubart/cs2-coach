@@ -25,6 +25,58 @@ LOCK = threading.Lock()
 LOCAL_HOSTS = {f"127.0.0.1:{PORT}", f"localhost:{PORT}"}
 
 
+# the base grows by itself (grow.py, its own process at the lowest priority): started and stopped in Settings, back
+# on after a restart of the app; its state in out/grow.json, its switch in out/grow_ctl.json
+GROW_STATE = os.path.join(config.OUT, "grow.json")
+GROW_CTL = os.path.join(config.OUT, "grow_ctl.json")
+
+
+def grow_alive():
+    pid = (config.read_json(GROW_STATE, {}) or {}).get("pid")
+    try:
+        import psutil
+        return bool(pid) and any("grow.py" in a for a in psutil.Process(pid).cmdline())
+    except Exception:
+        return False
+
+
+def grow_start():
+    if grow_alive():
+        return
+    import subprocess
+    subprocess.Popen([sys.executable, "grow.py"], cwd=os.path.dirname(os.path.abspath(__file__)),
+                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                     creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0) | getattr(subprocess, "IDLE_PRIORITY_CLASS", 0))
+
+
+def grow_status():
+    st = config.read_json(GROW_STATE, {}) or {}
+    c = config.read_json(GROW_CTL, {}) or {}
+    tail = []
+    try:
+        with open(os.path.join(config.OUT, "grow.log"), encoding="utf-8") as f:
+            tail = [x.rstrip() for x in f.readlines()[-6:]]
+    except OSError:
+        pass
+    import shutil
+    return {"on": bool(c.get("on")), "target": int(c.get("target") or 5000), "alive": grow_alive(), "status": st.get("status"),
+            "n": st.get("n"), "codes": len(st.get("codes") or []), "players": len(st.get("players") or []),
+            "looked": len(st.get("looked") or {}), "counts": st.get("counts") or {}, "updated": st.get("updated"),
+            "free_gb": round(shutil.disk_usage(config.CACHE).free / 2 ** 30), "log": tail}
+
+
+def grow_wait():
+    """A match the base-growing loop is extracting: the app's analysis waits for its end (they write the same files)."""
+    t = time.time()
+    while time.time() - t < 300:
+        st = config.read_json(GROW_STATE, {}) or {}
+        if not st.get("step") or not grow_alive():
+            return
+        if time.time() - t < 2.5:
+            cs2coach.log("The base-growing loop finishes its current match first…")
+        time.sleep(2)
+
+
 def run_job(query, task=None, extra=None):
     """One analysis at a time (search, or Steam history sync when task is given). The caller holds LOCK.
     extra: what the page shows at the end (the view and the match of a re-analysis)."""
@@ -33,6 +85,7 @@ def run_job(query, task=None, extra=None):
                     "players": None, "view": None, "match": None, **(extra or {})})
         cs2coach.LOG_HOOK = lambda m: JOB["log"].append(m)
         cs2coach.PARTIAL_HOOK = publish_partial
+        grow_wait()
         res = task() if task else cs2coach.run_for(query)
         ids = [p["steamid"] for p in res["match_players"]] if isinstance(res, dict) else [str(res)]
         entries = {i: build_app.write_player(i) for i in ids}
@@ -190,6 +243,8 @@ class Handler(BaseHTTPRequestHandler):
         if u.path == "/api/match":   # an address /match/<match id or share code>
             m = match_info((q.get("code") or [""])[0].strip())
             return self.send(200, m) if m else self.send(404, {"error": "not a match id or share code"})
+        if u.path == "/api/grow":   # the base-growing loop: its state (Settings)
+            return self.send(200, grow_status())
         if u.path == "/api/codes":   # the share code of each match (the addresses /match/<share code>)
             return self.send(200, {k: e["sharecode"] for k, e in cs2coach.registry().items() if e.get("sharecode")})
         if u.path == "/api/ping":
@@ -325,6 +380,16 @@ class Handler(BaseHTTPRequestHandler):
             except (OSError, RuntimeError, ValueError, StopIteration) as e:
                 return self.send(400, {"error": str(e) or "training server error"})
             return self.send(404, {"error": "not found"})
+        if u.path in ("/api/grow/start", "/api/grow/stop"):   # the base-growing loop: on until the target, or off
+            on = u.path.endswith("start")
+            try:
+                target = max(100, min(20000, int(body.get("target") or 5000)))
+            except (TypeError, ValueError):
+                return self.send(400, {"error": "invalid target"})
+            config.write_json(GROW_CTL, {"on": on, "target": target})
+            if on:
+                grow_start()
+            return self.send(200, grow_status())
         if u.path == "/api/live/log":   # what the In game page shows, a few times per round: checked after the match
             import livecheck
             return self.send(200 if livecheck.log(body) else 400, {})
@@ -509,6 +574,8 @@ if __name__ == "__main__":
         threading.Thread(target=voice_watch, daemon=True).start()
         import chatcalls
         threading.Thread(target=chatcalls.watch, daemon=True).start()   # numpad keys of the paths: the focus
+        if (config.read_json(GROW_CTL, {}) or {}).get("on"):   # the base was growing: it goes on
+            threading.Timer(60, grow_start).start()
     if "--no-browser" not in sys.argv:
         webbrowser.open(url)
     srv.serve_forever()

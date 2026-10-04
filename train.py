@@ -246,7 +246,7 @@ def site_data(mp):
                 dirs.append(d)
         except (OSError, ValueError):
             continue
-    if mp in cache and cache[mp].get("n") == len(dirs) and cache[mp].get("v") == 2:
+    if mp in cache and cache[mp].get("n") == len(dirs) and cache[mp].get("v") == 3:
         return cache[mp]
     rows = []
     for d in dirs:
@@ -269,7 +269,7 @@ def site_data(mp):
             if len(S) < 25:
                 continue
             cen = np.median(np.array(S.ct.tolist(), float), axis=0)
-            near = R[[math.dist(c, cen) < 1500 for c in R.ct]]
+            near = R[[math.dist(c, cen) < 1500 and abs(c[2] - cen[2]) < 300 for c in R.ct]]   # its own floor (Nuke: A is above B)
             ents = []
             for tz, g in near.groupby("t_zone"):   # where the Ts were when they fought the site's CTs
                 if not isinstance(tz, str) or tz == z or len(g) < 12:
@@ -293,7 +293,7 @@ def site_data(mp):
             ents.sort(key=lambda e: -e["n"])
             spot = _spread(_cells(np.array(S.ct.tolist(), float)), 1)[0][1]   # the CTs' favourite spot on the site
             sites[z] = {"center": [round(float(v), 1) for v in cen], "defend": [round(float(v), 1) for v in spot], "entrances": ents[:4]}
-    cache[mp] = {"n": len(dirs), "v": 2, "sites": sites}
+    cache[mp] = {"n": len(dirs), "v": 3, "sites": sites}
     json.dump(cache, open(SITES_F, "w", encoding="utf-8"))
     return cache[mp]
 
@@ -322,7 +322,7 @@ def entries(mp, demos=24):
     cf = os.path.join(ENTRY_D, f"{mp}.json")
     try:
         c = json.load(open(cf, encoding="utf-8"))
-        if c.get("v") == 3:
+        if c.get("v") == 4:
             return c
     except (OSError, ValueError):
         pass
@@ -333,7 +333,7 @@ def entries(mp, demos=24):
                 dirs.append(d)
         except (OSError, ValueError):
             continue
-    out = {"v": 3, "A": [], "B": []}
+    out = {"v": 4, "A": [], "B": []}
     for d in dirs[:demos]:
         try:
             R = pd.read_parquet(os.path.join(config.OUT, "deep", d, "rounds.parquet"))
@@ -349,13 +349,15 @@ def entries(mp, demos=24):
         for _, r in R.iterrows():
             pt, site = int(r.plant_tick), r.plant_site
             w = T[(T.tick >= pt - 14 * 64) & (T.tick <= pt) & (T.team_num == 2)]
+            pl = w[w.steamid == r.planter].sort_values("tick")
+            pz = float(pl.Z.iloc[-1]) if len(pl) else None   # the floor of the plant (Nuke: a T on A when B is planted is not on B)
             for sid_, g in w.groupby("steamid"):
                 g = g.sort_values("tick")
                 if len(g) < 200 or not bool(g.is_alive.iloc[-1]):
                     continue
                 P = g[["X", "Y", "Z"]].to_numpy(float)
                 dist = np.hypot(P[:, 0] - r.plant_X, P[:, 1] - r.plant_Y)
-                if dist[-1] > 450 or dist[0] < 700:
+                if dist[-1] > 450 or dist[0] < 700 or (pz is not None and abs(P[-1, 2] - pz) > 200):
                     continue
                 k0 = int(np.argmax(dist <= 1500)) if (dist <= 1500).any() else 0   # from where it gets close
                 if len(g) - k0 < 40:
@@ -372,6 +374,49 @@ def entries(mp, demos=24):
                                   "from": round(float(dist[0]))})
     json.dump(out, open(cf, "w", encoding="utf-8"), separators=(",", ":"))
     return out
+
+
+def _opening(z, w=13):
+    """The height without the jumps: a morphological opening over ±w samples (positions every 2 ticks: ±0.4 s). A
+    jump's arc, shorter than the window, goes; a ramp or a box you stay on keeps its height."""
+    from numpy.lib.stride_tricks import sliding_window_view
+    e = sliding_window_view(np.pad(z, w, mode="edge"), 2 * w + 1).min(axis=1)
+    return sliding_window_view(np.pad(e, w, mode="edge"), 2 * w + 1).max(axis=1)
+
+
+def _jumps(z):
+    """How many jumps a way has (its height 25 u over the ground, again and again)."""
+    up = (np.asarray(z, float) - _opening(np.asarray(z, float))) > 25
+    return int(np.sum(up[1:] & ~up[:-1]) + (1 if len(up) and up[0] else 0))
+
+
+def _rdp(Q, eps):
+    """The points that keep the way's shape within eps (Ramer-Douglas-Peucker)."""
+    keep, stack = {0, len(Q) - 1}, [(0, len(Q) - 1)]
+    while stack:
+        a, b = stack.pop()
+        if b <= a + 1:
+            continue
+        seg, pts = Q[b] - Q[a], Q[a + 1:b] - Q[a]
+        n = float(np.linalg.norm(seg))
+        d = np.linalg.norm(np.cross(pts, seg / n), axis=1) if n > 1e-6 else np.linalg.norm(pts, axis=1)
+        k = int(np.argmax(d))
+        if d[k] > eps:
+            keep.add(a + 1 + k)
+            stack += [(a, a + 1 + k), (a + 1 + k, b)]
+    return sorted(keep)
+
+
+def _ground_line(P):
+    """The way drawn on the ground: the jumps flattened, the strafes straightened, 60 segments at most (03/10: the
+    line hung in the air and zigzagged where the real player jumped on the boxes)."""
+    Q = np.array(P[:, :3], float)
+    Q[:, 2] = _opening(Q[:, 2])
+    eps, keep = 40.0, _rdp(Q, 40.0)
+    while len(keep) > 61:
+        eps *= 1.5
+        keep = _rdp(Q, eps)
+    return [[round(float(v), 1) for v in Q[i]] for i in keep]
 
 
 def practice_drills(sid, mp):
@@ -391,14 +436,19 @@ def practice_drills(sid, mp):
         for e in pick[:2]:
             frm = replay_zone(e["zone"], mp)
             # a real hit through that entrance, from far: its way is the route (start, places, the line drawn in the game)
-            way = sorted([t for t in hits if frm in (t.get("zones") or [])], key=lambda t: -t.get("from", 0))
-            hit = random.choice(way[:5]) if way else None   # one of the ones from furthest
+            way = sorted([t for t in hits if frm in (t.get("zones") or [])], key=lambda t: -t.get("from", 0))[:6]
+            if way:   # one of the ones from furthest, with the fewest jumps (boxes: a line hard to follow)
+                jumps = {id(t): _jumps(np.array(t["path"], float).reshape(-1, 5)[:, 2]) for t in way}
+                way = [t for t in way if jumps[id(t)] == min(jumps.values())]
+            hit = random.choice(way) if way else None
             if not hit:
                 continue
             P = np.array(hit["path"], float).reshape(-1, 5)[:, :3] if hit else None
             start = [round(float(v), 1) for v in P[0]] if hit else e["start"]
             holds = [h for s_ in S["entrances"] for h in s_["holds"]]   # the angles along that way, the site's included,
-            holds = [h for h in holds if float(np.min(np.hypot(P[:, 0] - h["pos"][0], P[:, 1] - h["pos"][1]))) < 550
+            # along the way and on its floor (a height gap counts three times: a spot 350 u under the way is not on it)
+            holds = [h for h in holds if float(np.min(np.sqrt((P[:, 0] - h["pos"][0]) ** 2 + (P[:, 1] - h["pos"][1]) ** 2
+                                                              + (3 * (P[:, 2] - h["pos"][2])) ** 2))) < 550
                      and math.dist(h["pos"][:2], start[:2]) > 600]   # none right at your start
             seen_, keep = [], []
             for h in sorted(holds, key=lambda h: -h["n"]):
@@ -410,7 +460,7 @@ def practice_drills(sid, mp):
                 continue
             route = hit["zones"] if hit else [frm, site]
             first = min(keep, key=lambda h: math.dist(h["pos"], start))
-            line = [[round(float(v), 1) for v in p] for p in P[::12]] if hit else []   # the way drawn on the ground
+            line = _ground_line(P) if hit else []   # the way drawn on the ground
             out.append({"id": f"prefire:{mp}:{z}:{e['zone']}", "kind": "aim", "mode": "prefire", "map": mp,
                         "title": f"PREFIRE {site} via {frm}", "team": 2, "route": route, "line": line,
                         "tip": f"follow the gold line: {' → '.join(route)} · {len(keep)} CTs on the angles they hold there, at their real timings · they don't shoot",

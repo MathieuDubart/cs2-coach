@@ -86,6 +86,8 @@ public partial class CoachReplay : BasePlugin
     int t0, countdownEnd, kills, dmg, generation, lastBeat, nextNade;
     bool awaitRestart;
     int emptyTries;   // a drill set up again because its bots did not come
+    CCSGameRules? rules;   // the center text's blink fix (OnTick)
+    const int MinHp = 40;   // a situation: at least that many HP (2 HP in the match: dead before you could do anything)
     bool humanDead, traded;   // a situation: you died, and your killer died within 3 s
     int tradeKiller = -1, tradeUntil;
     string? builtFor;   // the situation the bots on the server were made for
@@ -111,11 +113,19 @@ public partial class CoachReplay : BasePlugin
         RegisterListener<Listeners.OnTick>(OnTick);
         RegisterListener<Listeners.OnMapStart>(_ =>
         {
+            rules = null;
             phase = cur != null || sess != null ? "setup" : "idle";
             AddTimer(4f, () => { Server.ExecuteCommand("sv_hibernate_when_empty 0"); if (sess != null) SessionResume(); else if (cur != null) Setup(); });
         });
         RegisterEventHandler<EventRoundStart>(OnRoundStart);
         RegisterEventHandler<EventPlayerDeath>(OnDeath);
+        // the bots' scripted deaths (a target waiting for its turn, a death of the demo) stay out of your kill feed
+        RegisterEventHandler<EventPlayerDeath>((e, info) =>
+        {
+            if (cur != null && e.Userid is { IsValid: true, IsBot: true } v && (e.Attacker is not { IsValid: true } || e.Attacker.Slot == v.Slot))
+                info.DontBroadcast = true;
+            return HookResult.Continue;
+        }, HookMode.Pre);
         RegisterEventHandler<EventPlayerHurt>(OnHurt);
         RegisterEventHandler<EventPlayerConnectFull>((e, _) =>
         {
@@ -222,6 +232,7 @@ public partial class CoachReplay : BasePlugin
                      "mp_roundtime_defuse 60", "mp_roundtime_hostage 60", "mp_buytime 0", "mp_autoteambalance 0", "mp_limitteams 0",
                      "mp_friendlyfire 0", "mp_autokick 0", "mp_halftime 0", "mp_maxrounds 99", "mp_match_can_clinch 0",
                      "mp_give_player_c4 0", "mp_death_drop_gun 0", "mp_randomspawn 0", "bot_quota_mode normal",
+                     "mp_playercashawards 0", "mp_teamcashawards 0",
                      "bot_join_after_player 0", "bot_chatter off", "sv_hibernate_when_empty 0", "sv_falldamage_scale 0",
                      $"bot_difficulty {diff}", "bot_kick" })
             Server.ExecuteCommand(cmd);
@@ -330,22 +341,24 @@ public partial class CoachReplay : BasePlugin
         return HookResult.Continue;
     }
 
-    static void Loadout(CCSPlayerController c, Track t)
+    static void Loadout(CCSPlayerController c, Track t, int? hp = null)
     {
         var pawn = c.PlayerPawn.Value;
         if (pawn == null) return;
         c.RemoveWeapons();
-        // bots get no grenades: the demo's are thrown again by the plugin, their own AI would throw others
+        // bots get no grenades: the demo's are thrown again by the plugin, their own AI would throw others. Nobody
+        // gets the bomb (a bot drops it for you)
         var nade = (string w) => c.IsBot && (w.Contains("grenade") || w.Contains("flashbang") || w.Contains("molotov") || w.Contains("decoy"));
-        foreach (var w in t.Weapons.Where(w => w != t.Active && !nade(w))) c.GiveNamedItem(w);
-        if (!string.IsNullOrEmpty(t.Active) && !nade(t.Active)) c.GiveNamedItem(t.Active);
-        pawn.Health = Math.Max(1, t.Hp);
+        var skip = (string w) => nade(w) || w == "weapon_c4";
+        foreach (var w in t.Weapons.Where(w => w != t.Active && !skip(w))) c.GiveNamedItem(w);
+        if (!string.IsNullOrEmpty(t.Active) && !skip(t.Active)) c.GiveNamedItem(t.Active);
+        pawn.Health = Math.Max(1, hp ?? t.Hp);
         Utilities.SetStateChanged(pawn, "CBaseEntity", "m_iHealth");
         pawn.ArmorValue = t.Armor;
         Utilities.SetStateChanged(pawn, "CCSPlayerPawn", "m_ArmorValue");
         if (pawn.ItemServices != null) new CCSPlayer_ItemServices(pawn.ItemServices.Handle).HasHelmet = t.Helmet;
         if (c.InGameMoneyServices != null) { c.InGameMoneyServices.Account = 0; Utilities.SetStateChanged(c, "CCSPlayerController", "m_pInGameMoneyServices"); }
-        if (!string.IsNullOrEmpty(t.Active)) c.ExecuteClientCommandFromServer($"use {t.Active}");
+        if (!string.IsNullOrEmpty(t.Active) && t.Active != "weapon_c4") c.ExecuteClientCommandFromServer($"use {t.Active}");
     }
 
     static void Freeze(CCSPlayerPawn pawn, bool on)
@@ -386,7 +399,7 @@ public partial class CoachReplay : BasePlugin
             {
                 if ((int)h.Team != me.Team) continue;
                 if (!h.PawnIsAlive) h.Respawn();
-                Loadout(h, me);
+                Loadout(h, me, cur.Kind is "death" or "clutch" ? Math.Max(MinHp, me.Hp) : null);
                 var pawn = h.PlayerPawn.Value;
                 if (pawn == null) continue;
                 pawn.Teleport(Pos(me, 0), Ang(me, 0), Vector3.Zero);
@@ -436,6 +449,10 @@ public partial class CoachReplay : BasePlugin
 
     void OnTick()
     {
+        // the center text (the drill's card) blinks off every second while the game rules say a restart is
+        // pending: set on every tick (CS2FlashingHtmlHudFix, the workaround found by Poggu)
+        rules ??= Utilities.FindAllEntitiesByDesignerName<CCSGameRulesProxy>("cs_gamerules").FirstOrDefault()?.GameRules;
+        if (rules != null) rules.GameRestart = rules.RestartRoundTime < Server.CurrentTime;
         var now = Server.TickCount;
         if (now - lastBeat >= 64 || now < lastBeat) { lastBeat = now; Beat(); }   // the tick count starts over with each map
         if (now < hudSent) hudSent = 0;
