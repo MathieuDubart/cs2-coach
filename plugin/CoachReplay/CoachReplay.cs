@@ -604,6 +604,8 @@ public partial class CoachReplay : BasePlugin
         t0 = Server.TickCount;
         nextNade = 0;
         if (cur?.Bomb is { F: <= 0 } && !bombDone) PlantBomb();   // after the plant: it ticks from the first second
+        // an aim drill: a reaction time before a target can hurt you (04/10, Office: killed 0.06 s after GO)
+        if (cur?.Kind == "aim") protectUntil = Server.TickCount + 48;
         SessionGo();
         foreach (var h in Humans()) { var pw = h.PlayerPawn.Value; if (pw != null) Freeze(pw, false); h.PrintToCenter("GO"); }
     }

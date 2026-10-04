@@ -101,6 +101,11 @@ def busy():
     v = _api("/api/voice/status")
     if v and (v.get("recording") or v.get("transcribing")):
         return "a recording or a transcription"
+    # the app's update with the base (Settings) computing its references: the base stays as it is meanwhile (it then
+    # goes on with the profiles while the base grows again)
+    r = config.read_json(os.path.join(config.OUT, "refresh.json"), {}) or {}
+    if r.get("running") and r.get("phase") == "base" and time.time() - (r.get("updated") or 0) < 3600:
+        return "the app is updating its references"
     return None
 
 
