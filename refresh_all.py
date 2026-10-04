@@ -4,9 +4,11 @@ and mid-round references, the T side's lanes, plays and tendencies, the weapons,
 catalog, the training's sites, held spots and real attacks), then the profiles: yours first, then your team's, then
 every other analyzed player (their analysis against the base, plan and pages).
 
-At the lowest priority; it waits while a map is loaded in CS2, a recording or a transcription runs, the app analyzes or
-the base loop is on a match. Its progress in out/refresh.json; out/refresh_ctl.json {"stop": true} stops it between two
-steps. Usage: python refresh_all.py [--mine] (--mine: the base's references, your profile and your team's only)."""
+At the lowest priority (Windows' background mode: processor, disk and memory); it waits while a map is loaded in CS2,
+a recording or a transcription runs, the app analyzes, the base loop is on a match, or the PC is short of memory. Its
+progress in out/refresh.json; out/refresh_ctl.json {"stop": true} stops it between two steps.
+Usage: python refresh_all.py [--mine] [--now] (--mine: the base's references, your profile and your team's only;
+--now: also during a match, as asked on 04/10: only the memory, an analysis of the app and the base loop stop it)."""
 import glob
 import json
 import os
@@ -20,6 +22,8 @@ STATE = os.path.join(config.OUT, "refresh.json")
 CTL = os.path.join(config.OUT, "refresh_ctl.json")
 PORT = int(os.environ.get("COACH_PORT", 8765))
 ST = {}
+NOW = "--now" in sys.argv
+MIN_FREE = 1.5 * 2 ** 30   # bytes of free memory under which it waits (CS2 froze at 21:32 on 04/10 with 3 GB left)
 
 
 def save(**kw):
@@ -41,14 +45,20 @@ def stopped():
 def busy():
     """Why it waits now (None: it can go)."""
     import grow
+    try:
+        import psutil
+        if psutil.virtual_memory().available < MIN_FREE:
+            return "the PC is short of memory"
+    except Exception:
+        pass
     s = grow._api("/api/gsi/state") or {}
-    if s.get("map"):
+    if s.get("map") and not NOW:
         return "a map is loaded in CS2"
     j = grow._api("/api/job")
     if j and j.get("running"):
         return "the app is analyzing"
     v = grow._api("/api/voice/status")
-    if v and (v.get("recording") or v.get("transcribing")):
+    if v and (v.get("recording") or v.get("transcribing")) and not NOW:
         return "a recording or a transcription"
     g = config.read_json(grow.STATE, {}) or {}
     if g.get("step") and time.time() - g["step"] < 600:
@@ -215,4 +225,9 @@ if __name__ == "__main__":
         sys.stdout = sys.stderr = open(os.path.join(config.OUT, "refresh.log"), "a", encoding="utf-8", buffering=1)
     else:
         sys.stdout.reconfigure(encoding="utf-8")
+    try:   # Windows' background mode: lower processor, disk and memory priority, the game keeps its own
+        import ctypes
+        ctypes.windll.kernel32.SetPriorityClass(ctypes.windll.kernel32.GetCurrentProcess(), 0x00100000)
+    except Exception:
+        pass
     main()
