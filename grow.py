@@ -149,6 +149,15 @@ def refill(st, reg):
             ms = leetify.matches(int(sid)) or []
         except Exception:
             ms = []
+        try:   # their Leetify stats join the reference of the Leetify-only diagnosis (leetify.reference)
+            lf = os.path.join(leetify.LDIR, f"{sid}.json")
+            if ms and not os.path.exists(lf):
+                pr = leetify.profile(int(sid))
+                if pr and pr.get("stats"):
+                    config.write_json(lf, {"stats": pr["stats"], "ranks": pr.get("ranks"), "total_matches": pr.get("total_matches"),
+                                           "t": int(time.time())})
+        except Exception:
+            pass
         n = 0
         for m in sorted(ms, key=lambda m: str(m.get("finished_at") or ""), reverse=True):
             if PER_PLAYER and n >= PER_PLAYER:

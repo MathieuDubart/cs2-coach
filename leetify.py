@@ -1,7 +1,13 @@
-"""Public data from a SteamID alone: profile resolution (Steam) and Leetify public API."""
+"""Public data from a SteamID alone: profile resolution (Steam) and Leetify public API; the Leetify-only diagnosis of a
+player without demos, against the Leetify stats of the base's players."""
+import bisect
+import glob
 import json
+import os
 import re
 import urllib.request
+
+import config
 
 API = "https://api-public.cs-prod.leetify.com"
 
@@ -60,46 +66,152 @@ def matches(steamid):
         return []
 
 
+# ---------- the Leetify-only diagnosis against the base's players (04/10) ----------
+LDIR = os.path.join(config.OUT, "population", "leetify")      # profiles saved by the base loop (grow.py)
+REF_F = os.path.join(config.OUT, "population", "leetify_ref.json")
+MIN_REF = 30   # players with the stat in the reference: under that, the fixed limits
+# metric -> (higher is better, weak limit, strong limit): the fixed limits are the quartiles of 138 players of the
+# base with Leetify (04/10), used while the reference is too small; the definitions are Leetify's
+# (https://leetify.com/blog/leetify-stats-glossary/)
+LMETRICS = {
+    "preaim": (False, 10.6, 8.7),   # degrees from first sight to damage; lower is better (Leetify's top 3 % near 8°)
+    "counter_strafing_good_shots_ratio": (True, 74.9, 82.7),   # % of shots under 34 % of the weapon's max speed
+    "reaction_time_ms": (False, 604.0, 528.0),   # time to damage, not a reflex: never near 200 ms (Leetify)
+    "flashbang_hit_friend_per_flashbang": (False, 0.42, 0.27),
+    "utility_on_death_avg": (False, 347.0, 211.0),   # $ of grenades unused at each death
+    "ct_opening_duel_success_percentage": (True, 38.9, 50.6),
+    "t_opening_duel_success_percentage": (True, 34.4, 45.7),
+    "traded_deaths_success_percentage": (True, 47.2, 54.5),
+}
+BANDS = (10000, 15000, 20000, 25000)   # Premier rating levels: under 10,000, 10-15k, 15-20k, 20-25k, 25k+
+
+
+def _band(premier):
+    try:
+        return sum(float(premier) >= b for b in BANDS)
+    except (TypeError, ValueError):
+        return None
+
+
+def reference(rebuild=False):
+    """The Leetify stats of the base's players (the profiles the app built, the players the base loop looked up):
+    per metric the sorted values, overall and per Premier level. Rebuilt once a tenth more players are saved."""
+    files = glob.glob(os.path.join(config.OUT, "players", "*", "advice.json")) + glob.glob(os.path.join(LDIR, "*.json"))
+    try:
+        with open(REF_F, encoding="utf-8") as fh:
+            cur = json.load(fh)
+        if not rebuild and cur.get("_files", 0) >= 0.9 * len(files):
+            return cur
+    except (OSError, ValueError):
+        pass
+    rows = {}
+    for f in files:
+        try:
+            with open(f, encoding="utf-8") as fh:
+                a = json.load(fh)
+        except (OSError, ValueError):
+            continue
+        L = a.get("leetify") if f.endswith("advice.json") else a
+        if not isinstance(L, dict) or not L.get("stats"):
+            continue
+        sid = os.path.basename(os.path.dirname(f)) if f.endswith("advice.json") else os.path.basename(f)[:-5]
+        rows[sid] = (L["stats"], _band((L.get("ranks") or {}).get("premier")))
+    ref = {"_files": len(files), "n": len(rows), "metrics": {}}
+    for k in LMETRICS:
+        allv, by = [], {}
+        for st, b in rows.values():
+            v = st.get(k)
+            if isinstance(v, (int, float)):
+                allv.append(float(v))
+                if b is not None:
+                    by.setdefault(str(b), []).append(float(v))
+        ref["metrics"][k] = {"all": sorted(allv), "by_band": {b: sorted(v) for b, v in by.items()}}
+    try:
+        config.write_json(REF_F, ref)
+    except OSError:
+        pass
+    return ref
+
+
+def _better_than(vals, v, hib):
+    """Share of the reference doing worse than v (100: the best)."""
+    if not vals:
+        return None
+    below = bisect.bisect_left(vals, v) / len(vals) * 100
+    return below if hib else 100 - bisect.bisect_right(vals, v) / len(vals) * 100
+
+
 def light_advice(prof, ms, steamid):
-    """Diagnosis from Leetify's aggregated stats when no demo is available."""
+    """Diagnosis from Leetify's aggregated stats when no demo is available: each stat against the Leetify stats of the
+    base's players (and of your Premier level), a weakness in their worst quarter, a strength in their best."""
     st, rt = prof.get("stats", {}), prof.get("rating", {})
     R, S = [], []
+    ref = reference()
+    band = _band((prof.get("ranks") or {}).get("premier"))
+
+    def judge(k):
+        """-> (verdict "weak"/"strong"/None, how far from the base 0-100, the comparison's words)."""
+        v = st.get(k)
+        if not isinstance(v, (int, float)):
+            return None, 0, ""
+        hib, weak, strong = LMETRICS[k]
+        M = ref["metrics"].get(k) or {}
+        vals, lvl = M.get("all") or [], (M.get("by_band") or {}).get(str(band)) or []
+        if len(vals) >= MIN_REF:
+            pct = _better_than(vals, v, hib)
+            med = vals[len(vals) // 2]
+            words = f"base median {med:.2f}".rstrip("0").rstrip(".") + (f", players of your level {lvl[len(lvl) // 2]:.2f}".rstrip("0").rstrip(".") if len(lvl) >= 15 else "") + \
+                f" · better than {pct:.0f}% of {len(vals)} players with Leetify"
+            return ("weak" if pct <= 25 else "strong" if pct >= 75 else None), 25 - pct, words
+        bad = v <= weak if hib else v >= weak
+        good = v >= strong if hib else v <= strong
+        return ("weak" if bad else "strong" if good else None), 10, f"limit of the base's worst quarter: {weak:g}"
 
     def add(score, title, short, why, do):
         R.append({"id": short, "score": score, "title": title, "short": short, "why": why, "do": do})
 
     g = lambda k: st.get(k)
-    if g("preaim") is not None:
-        (S.append(f"Good crosshair placement ({g('preaim'):.1f}° offset)") if g("preaim") <= 7 else
-         add(10 + g("preaim"), f"Crosshair poorly placed before duels: {g('preaim'):.1f}° offset", "Crosshair at head height",
-             ["Average offset between your crosshair and the enemy when they appear (Leetify)."],
-             ["Pre-aim angles at head height while moving.", "Training map: Prefire / crosshair placement."]))
-    if g("counter_strafing_good_shots_ratio") is not None:
-        cs = g("counter_strafing_good_shots_ratio")
-        (S.append(f"Clean counter-strafing ({cs:.0f}% good shots)") if cs >= 80 else
-         add(25 - cs / 5, f"Only {cs:.0f}% of shots properly counter-strafed", "Counter-strafe before shooting",
-             ["Share of your shots fired standing still."], ["Tap the opposite direction before every shot, with pistols and rifles."]))
+    vd, gap, words = judge("preaim")
+    if vd == "strong":
+        S.append(f"Good crosshair placement ({g('preaim'):.1f}°, {words})")
+    elif vd == "weak":
+        add(10 + gap / 2, f"Crosshair poorly placed before duels: {g('preaim'):.1f}°", "Crosshair at head height",
+            ["Average angle your crosshair moves from first seeing the enemy to hitting them (Leetify).", words],
+            ["Pre-aim angles at head height while moving.", "Training map: Prefire / crosshair placement."])
+    vd, gap, words = judge("counter_strafing_good_shots_ratio")
+    cs = g("counter_strafing_good_shots_ratio")
+    if vd == "strong":
+        S.append(f"Clean counter-strafing ({cs:.0f}% good shots, {words})")
+    elif vd == "weak":
+        add(12 + gap / 2, f"Only {cs:.0f}% of shots properly counter-strafed", "Counter-strafe before shooting",
+            ["Shots fired under 34% of the weapon's max speed, where inaccuracy kicks in (Leetify).", words],
+            ["Tap the opposite direction before every shot, with pistols and rifles."])
     fr, fo = g("flashbang_hit_friend_per_flashbang"), g("flashbang_hit_foe_per_flashbang")
-    if fr is not None and fr >= 0.35:
-        add(15 + fr * 10, f"Your flashes blind {fr:.2f} teammates per flash", "Flash for your teammates, not on them",
-            [f"Enemies blinded per flash: {fo:.2f}.", f"Flashes leading to a kill: {g('flashbang_leading_to_kill') or 0:.0f}%."],
+    vd, gap, words = judge("flashbang_hit_friend_per_flashbang")
+    if vd == "weak":
+        add(12 + gap / 2, f"Your flashes blind {fr:.2f} teammates per flash", "Flash for your teammates, not on them",
+            [f"Enemies blinded per flash: {fo or 0:.2f}.", f"Flashes leading to a kill: {g('flashbang_leading_to_kill') or 0:.0f}%.", words],
             ["Call your flash before throwing it.", "Learn 2 popflashes per site: they pop above the wall, not on your team."])
     ud = g("utility_on_death_avg")
-    if ud is not None and ud >= 100:
-        add(10 + ud / 20, f"${ud:.0f} of grenades in your pockets at each death on average", "Empty your pockets before 40 s",
-            ["Average value of unused grenades when you die."], ["Throw your grenades before the contact."])
+    vd, gap, words = judge("utility_on_death_avg")
+    if vd == "weak":
+        add(10 + gap / 2, f"${ud:.0f} of grenades in your pockets at each death on average", "Empty your pockets before 40 s",
+            ["Average value of unused grenades when you die.", words], ["Throw your grenades before the contact."])
     for side, k in (("CT", "ct_opening_duel_success_percentage"), ("T", "t_opening_duel_success_percentage")):
-        v = g(k)
-        if v is not None and v < 45:
-            add(8 + (45 - v) / 2, f"Opening duels as {side}: {v:.0f}% won", f"Don't take the first duel alone as {side}",
-                ["Opening duel win rate (Leetify)."], ["Leave the opening to a teammate or take it with a flash."])
+        vd, gap, words = judge(k)
+        if vd == "weak":
+            add(8 + gap / 2, f"Opening duels as {side}: {g(k):.0f}% won", f"Don't take the first duel alone as {side}",
+                ["Opening duel win rate (Leetify).", words], ["Leave the opening to a teammate or take it with a flash."])
     tr = g("traded_deaths_success_percentage")
-    if tr is not None and tr < 50:
-        add(20 - tr / 5, f"Only {tr:.0f}% of your 'tradable' deaths get traded", "Play within 2 seconds of a teammate",
-            ["When a trade was possible, it happened this share of the time."], ["Stay within trade range of a teammate."])
+    vd, gap, words = judge("traded_deaths_success_percentage")
+    if vd == "weak":
+        add(12 + gap / 2, f"Only {tr:.0f}% of your 'tradable' deaths get traded", "Play within 2 seconds of a teammate",
+            ["When a trade was possible, it happened this share of the time.", words], ["Stay within trade range of a teammate."])
     rtm = g("reaction_time_ms")
-    if rtm is not None and rtm > 650:
-        add(8, f"Reaction time of {rtm:.0f} ms", "Warm up before playing", ["Measured on your duels (Leetify)."],
+    vd, gap, words = judge("reaction_time_ms")
+    if vd == "weak":
+        add(8 + gap / 4, f"Time to damage of {rtm:.0f} ms", "Warm up before playing",
+            ["From first seeing the enemy to your first damage (Leetify): crosshair placement counts as much as reflexes.", words],
             ["10 minutes of Aim Botz and deathmatch before each session."])
     by_map = {}
     for m in ms:
