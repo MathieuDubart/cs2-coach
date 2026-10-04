@@ -18,7 +18,9 @@ KEYS = {1: "KP_1", 2: "KP_2", 3: "KP_3"}   # numpad 1, 2, 3: CS2's names (the ph
 FOCUS_OFF = "KP_MINUS"   # numpad minus: drop the focus on a path
 EXTRA = {"eco": "KP_DEL", "sit": "KP_0"}   # numpad ".": the economy plan; numpad 0: the situation, recent and global
 SITE_KEYS = {"A": "KP_7", "B": "KP_9"}   # numpad 7 / 9: A / B (CT: the site you play; once planted, both sides: the bomb's site)
-TEAM_KEY = "KP_MULTIPLY"   # numpad *: your team agreed to be recorded (what you hear, for this match: 04/10)
+TEAM_KEY = "KP_SLASH"   # numpad /: your team agreed to be recorded (what you hear, for this match: 04/10)
+OLD_KEYS = {"KP_MULTIPLY": "exec coach_team"}   # numpad *, the team key of 04/10 21:40: already used for something else
+                                                # of yours; unbound by exec coach_binds while it still runs the coach's file
 BINDS = "coach_binds.cfg"
 _LAST = {}
 WHEEL = {"A": 'playerchatwheel CW.GoA "#Chatwheel_aplan"', "B": 'playerchatwheel CW.GoB "#Chatwheel_bplan"'}   # the chat wheel's Go A / Go B
@@ -31,14 +33,31 @@ def clean(t):
     return re.sub(r"\s+", " ", t).strip()[:120]
 
 
+def _keys_file():
+    """Your CS2 key settings (where the binds stay)."""
+    import config
+    own = config.logged_in_account()[0]
+    return os.path.join(config.steam_path(), "userdata", str(int(own) - 76561197960265728), "730", "local", "cfg", "cs2_user_keys_0_slot0.vcfg")
+
+
+def _stale():
+    """Keys the coach no longer uses that your CS2 settings still bind to its files."""
+    try:
+        t = open(_keys_file(), encoding="utf-8", errors="replace").read()
+    except Exception:
+        return []
+    return [k for k, cmd in OLD_KEYS.items() if re.search(rf'"{k}"\s+"{re.escape(cmd)}"', t)]
+
+
 def binds_text():
     lines = ["// Coach CS2: numpad 1, 2 and 3 say path 1, 2 and 3 of the In game page in the team chat"]
+    lines += [f'unbind "{k}"' for k in _stale()]
     lines += [f'bind "{k}" "exec coach_path{i}"' for i, k in KEYS.items()]
     lines += [f'bind "{FOCUS_OFF}" "exec coach_focus0"']
     lines += [f'bind "{k}" "exec coach_{name}"' for name, k in EXTRA.items()]
     lines += [f'bind "{k}" "exec coach_site{site}"' for site, k in SITE_KEYS.items()]
     lines += [f'bind "{TEAM_KEY}" "exec coach_team"']
-    lines += ['echo "Coach CS2: numpad 1-2-3 say the paths in the team chat, 7 / 9 tell the coach A / B, * your team agreed to be recorded"']
+    lines += ['echo "Coach CS2: numpad 1-2-3 say the paths in the team chat, 7 / 9 tell the coach A / B, / your team agreed to be recorded"']
     return "\n".join(lines) + "\n"
 
 
@@ -81,7 +100,7 @@ def write(paths, extra=None):
 
 
 def _site_files(d):
-    tf = os.path.join(d, "coach_team.cfg")   # numpad *: only a line in the console, the app reads it
+    tf = os.path.join(d, "coach_team.cfg")   # numpad /: only a line in the console, the app reads it
     if not os.path.exists(tf):
         open(tf, "w", encoding="utf-8").write('echo "Coach CS2: team agreed"\n')
     for site in SITE_KEYS:   # only a line in the console: the app reads it (CT: your site; planted: the bomb's site)
@@ -93,9 +112,7 @@ def _site_files(d):
 def bound():
     """True when numpad 1 runs coach_path1 in your CS2 key settings (the binds were set once)."""
     try:
-        import config
-        own = config.logged_in_account()[0]
-        f = os.path.join(config.steam_path(), "userdata", str(int(own) - 76561197960265728), "730", "local", "cfg", "cs2_user_keys_0_slot0.vcfg")
+        f = _keys_file()
         return "exec coach_path1" in open(f, encoding="utf-8", errors="replace").read()
     except Exception:
         return False
@@ -104,9 +121,7 @@ def bound():
 def bound_site():
     """True when numpad 7 runs coach_siteA in your CS2 key settings (exec coach_binds once more after this update)."""
     try:
-        import config
-        own = config.logged_in_account()[0]
-        f = os.path.join(config.steam_path(), "userdata", str(int(own) - 76561197960265728), "730", "local", "cfg", "cs2_user_keys_0_slot0.vcfg")
+        f = _keys_file()
         return "exec coach_siteA" in open(f, encoding="utf-8", errors="replace").read()
     except Exception:
         return False
@@ -114,9 +129,7 @@ def bound_site():
 
 def bound_focus():
     try:
-        import config
-        own = config.logged_in_account()[0]
-        f = os.path.join(config.steam_path(), "userdata", str(int(own) - 76561197960265728), "730", "local", "cfg", "cs2_user_keys_0_slot0.vcfg")
+        f = _keys_file()
         return "exec coach_focus0" in open(f, encoding="utf-8", errors="replace").read()
     except Exception:
         return False
@@ -151,10 +164,10 @@ def watch():
                 pos = size
                 for line in chunk.decode("utf-8", "replace").splitlines():
                     m = KEY_RE.search(line)
-                    if m and m.group(3):   # numpad *: your team agreed, what you hear is recorded too (this match)
+                    if m and m.group(3):   # numpad /: your team agreed, what you hear is recorded too (this match)
                         try:
                             import voice
-                            voice.TEAM.start("your team agreed: numpad * in game", gsi.state().get("map"))
+                            voice.TEAM.start("your team agreed: numpad / in game", gsi.state().get("map"))
                         except Exception as e:
                             print("team sound:", e, flush=True)
                     elif m and m.group(2):
