@@ -1,6 +1,7 @@
 """Per-player metrics for EVERY player of a demo (reference population).
 
 Usage: python population.py            # all cached demos with a deep extraction
+       python population.py --clutch   # the 1v2+ clutches of the matches computed before they were measured
 Writes out/population/<match_id>.parquet (one row per player of the match).
 """
 import math
@@ -25,6 +26,8 @@ SKILL = ["", "Silver I", "Silver II", "Silver III", "Silver IV", "Silver Elite",
          "Master Guardian Elite", "Distinguished Master Guardian", "Legendary Eagle", "Legendary Eagle Master",
          "Supreme Master First Class", "Global Elite"]
 OUT = os.path.join(config.OUT, "population")
+SEEN_S = 1   # an enemy who saw you in the second before a hit counts as seeing you
+CLUTCH_COLS = {"clutch_n": 0, "clutch_won": 0, "clutch_multi": 0, "clutch_rounds": "", "clutch_multi_rounds": ""}
 
 
 def sid(x):
@@ -32,6 +35,92 @@ def sid(x):
         return int(x)
     except (TypeError, ValueError):
         return 0
+
+
+def _clutches(p, hurt, deaths, samples, rounds):
+    """Every player's 1v2+ clutches: the moment they are the last one alive of their team with 2 enemies or more
+    left. Per player: how many, how many won, and in how many they took damage while 2 enemies or more saw them
+    (the demo's approximate_spotted_by over the second before each hit: it updates in steps), with the rounds. hurt, deaths: the demo's events (steamids as
+    ints); samples: the side of each player per round; rounds: rounds.parquet."""
+    sides = {int(n): dict(zip(g.steamid.astype("int64"), g.side))
+             for n, g in samples.drop_duplicates(["round", "steamid"]).groupby("round")}
+    deaths = deaths.sort_values("tick")
+    found = []   # (player, round, start tick, end tick, enemies left, won)
+    for _, R in rounds.iterrows():
+        n = int(R["round"])
+        pl = {s: sd for s, sd in sides.get(n, {}).items() if s and sd in ("T", "CT")}
+        alive = {"T": {s for s, sd in pl.items() if sd == "T"}, "CT": {s for s, sd in pl.items() if sd == "CT"}}
+        t_end = int(R.end_tick) if pd.notna(R.end_tick) else int(deaths.tick.max() if len(deaths) else 0)
+        rd = deaths[(deaths.tick >= R.start_tick) & (deaths.tick <= t_end)]
+        done = set()
+        for v, t in zip(rd.user_steamid, rd.tick):
+            sd = pl.get(v)
+            if sd is None or v not in alive[sd]:
+                continue
+            alive[sd].discard(v)
+            other = "CT" if sd == "T" else "T"
+            if sd not in done and len(alive[sd]) == 1 and len(alive[other]) >= 2:
+                done.add(sd)
+                me = next(iter(alive[sd]))
+                mine = rd[(rd.user_steamid == me) & (rd.tick > t)]
+                end = int(mine.tick.iloc[0]) if len(mine) else t_end
+                found.append((me, n, int(t), end, set(alive[other]), R.winner == sd))
+    hits = {}
+    for me, n, t0, t1, foes, _ in found:
+        h = hurt[(hurt.user_steamid == me) & (hurt.tick > t0) & (hurt.tick <= t1) & hurt.attacker_steamid.isin(foes)]
+        hits[(me, n)] = sorted(set(int(x) for x in h.tick))
+    ticks = sorted({t - d for v in hits.values() for t in v for d in range(0, SEEN_S * TICK + 1, 8)})
+    seen = {}
+    if ticks:
+        sp = p.parse_ticks(["approximate_spotted_by"], ticks=ticks)
+        for t, s_, by in zip(sp.tick, sp.steamid, sp.approximate_spotted_by):
+            seen[(int(t), sid(s_))] = {sid(x) for x in (by if isinstance(by, (list, np.ndarray)) else [])}
+    out = {}
+    for me, n, t0, t1, foes, won in found:
+        o = out.setdefault(me, {k: (v if not isinstance(v, str) else []) for k, v in CLUTCH_COLS.items()})
+        o["clutch_n"] += 1
+        o["clutch_won"] += int(won)
+        o["clutch_rounds"].append(n)
+        dead = deaths[deaths.user_steamid.isin(foes) & (deaths.tick > t0)]
+        for t in hits[(me, n)]:
+            left = foes - set(dead[dead.tick < t].user_steamid)
+            saw = set().union(*(seen.get((t - d, me), set()) for d in range(0, SEEN_S * TICK + 1, 8)))
+            if len(saw & left) >= 2:
+                o["clutch_multi"] += 1
+                o["clutch_multi_rounds"].append(n)
+                break
+    for o in out.values():
+        o["clutch_rounds"] = ",".join(map(str, o["clutch_rounds"]))
+        o["clutch_multi_rounds"] = ",".join(map(str, o["clutch_multi_rounds"]))
+    return out
+
+
+def _clutch_cols(mid, p, hurt, deaths, samples):
+    """_clutches for a match of the base (its rounds from the detailed extraction), {} without them."""
+    f = os.path.join(config.DEEP, mid, "rounds.parquet")
+    if not os.path.exists(f):
+        return {}
+    return _clutches(p, hurt, deaths, samples, pd.read_parquet(f))
+
+
+def add_clutch(mid):
+    """The clutch columns for a match of the base computed before they existed: True when added."""
+    f = os.path.join(OUT, f"{mid}.parquet")
+    df = pd.read_parquet(f)
+    if "clutch_n" in df.columns:
+        return False
+    p = DemoParser(os.path.join(config.CACHE, f"{mid}.dem"))
+    hurt = p.parse_event("player_hurt")
+    deaths = p.parse_event("player_death")
+    for d in (hurt, deaths):
+        for c in ("attacker_steamid", "user_steamid"):
+            d[c] = d[c].map(sid)
+    samples = pd.read_parquet(os.path.join(config.DEEP, mid, "samples.parquet"), columns=["steamid", "side", "round"])
+    cl = _clutch_cols(mid, p, hurt, deaths, samples)
+    for k, v in CLUTCH_COLS.items():
+        df[k] = [cl.get(int(x), {}).get(k, v) for x in df.steamid]
+    df.to_parquet(f)
+    return True
 
 
 def extract(mid):
@@ -76,6 +165,7 @@ def extract(mid):
     for c in ("attacker_steamid", "user_steamid", "assister_steamid"):
         deaths[c] = deaths[c].map(sid)
     enemy_hurt = hurt[hurt.attacker_steamid != hurt.user_steamid]
+    clutch = _clutch_cols(mid, p, hurt, deaths, samples)
 
     # grenades still in inventory at death
     dticks = sorted({max(int(t) - 2, 0) for t in deaths.tick})
@@ -204,7 +294,7 @@ def extract(mid):
             "lowhp_win": low, "n_lowhp": n_low, "far_win": far, "n_far": n_far, "close_win": close, "n_close": n_close,
             "flash_duels": int(pov.oppfl.fillna(False).astype(bool).sum()), "duels": int(len(pov)),
             "xhair": float(np.median(xs)) if len(xs) >= 5 else None, "n_xhair": len(xs),
-            **sh,
+            **sh, **{k: clutch.get(int(s), {}).get(k, v) for k, v in CLUTCH_COLS.items()},
         })
     df = pd.DataFrame(rows)
     os.makedirs(OUT, exist_ok=True)
@@ -235,6 +325,14 @@ def load():
 
 if __name__ == "__main__":
     sys.stdout.reconfigure(encoding="utf-8")
+    if "--clutch" in sys.argv:
+        for f in sorted(os.listdir(OUT)):
+            if f.endswith(".parquet") and os.path.exists(os.path.join(config.CACHE, f[:-8] + ".dem")):
+                try:
+                    print(f[:-8], "added" if add_clutch(f[:-8]) else "already", flush=True)
+                except Exception as e:
+                    print(f[:-8], "ERROR", e, flush=True)
+        sys.exit()
     run_all("--force" in sys.argv)
     df = load()
     print(len(df), "player-match rows,", df.steamid.nunique() if len(df) else 0, "players")

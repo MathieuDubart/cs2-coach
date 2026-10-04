@@ -1,6 +1,7 @@
 """Mid-round movement and decisions, for every player of every demo (and pro demos):
 rotations (reaction to a site hit, travel time, route, deaths on the way), anchoring, lurking, post-plant,
-retakes, man-advantage thrown, saves in lost rounds, noise near enemies.
+retakes, man-advantage thrown, saves in lost rounds, noise near enemies; pulled by a fake (CT: set up on the site
+that gets hit and gone from it when the Ts arrive), with its rounds per match (fake_rounds) for the match page.
 
 Needs deep.py's samples/duels (+ rounds.py's rounds/loadout/steps for matchmaking demos).
 Writes out/population/midround/<match>.parquet (one row per player) and .../routes/<match>.parquet (one row per rotation).
@@ -26,6 +27,8 @@ ALONE = 1200         # no teammate within this distance = isolated
 ROUND_TIME = 115.0
 BOMB_TIME = 40.0
 ZW = 1.5             # height weight in distances (stacked sites: Nuke, Vertigo)
+SETUP_T = 25.0       # a CT's setup: where he stands 25 s into the round (8 s before the hit at most)
+PULLED = 600         # left the site by that much when the Ts hit it: pulled away
 
 
 def _meta(ddir):
@@ -106,6 +109,10 @@ def analyze(ddir, pro=False):
     def add(s, k, v=1.0):
         if s in acc:
             acc[s][k] = acc[s].get(k, 0.0) + v
+
+    def note(s, k, rnd):   # the rounds behind a count, for the match page
+        if s in acc:
+            acc[s].setdefault(k, []).append(rnd)
 
     wcls = {}
     if L is not None and len(L):
@@ -219,6 +226,17 @@ def analyze(ddir, pro=False):
             d0S = float(_dist(p0.X, p0.Y, p0.Z, cS))
             d0O = float(_dist(p0.X, p0.Y, p0.Z, cO))
             region = "site" if d0S <= rS else ("other" if d0O <= rO and d0O < d0S else "mid")
+            t_set = min(SETUP_T, hit_t - 8.0)
+            if side == "CT" and t_set >= 12:   # set up on the site that got hit: still there when the Ts came?
+                st0 = gg[gg.t <= t_set]
+                if len(st0):
+                    q = st0.iloc[-1]
+                    dset = float(_dist(q.X, q.Y, q.Z, cS))
+                    if dset <= rS:
+                        add(s, "fake_n")
+                        if region != "site" and d0S - dset >= PULLED:
+                            add(s, "fake_pulled")
+                            note(s, "fake_rounds", rnd)
             if side == "CT":
                 if region == "site":
                     add(s, "anchor_n")
@@ -321,6 +339,8 @@ def analyze(ddir, pro=False):
         clr = ST[ST.mates_alive == 0].groupby("steamid")["round"].nunique()
         for s, n in clr.items():
             add(int(s), "clutch_rounds", float(n))
+    for a in acc.values():
+        a["fake_rounds"] = ",".join(str(r) for r in a.get("fake_rounds", []))
     rows = pd.DataFrame(list(acc.values()))
     rows["match"] = os.path.basename(os.path.normpath(ddir))
     rows["pro"] = pro
@@ -406,6 +426,7 @@ BENCH = {
     "isolated": ("isolated_deaths", "rounds", 30, "isolated deaths (no teammate nearby) per 24 rounds", False, "", 24),
     "steps_alone": ("steps_alone", "rounds", 30, "audible steps when alone as T, per 24 rounds", False, "", 24),
     "steps_clutch": ("steps_clutch", "clutch_rounds", 3, "audible steps per clutch", False, "", 1),
+    "fake_pulled": ("fake_pulled", "fake_n", 5, "hits on your site after you had left it (pulled by a fake)", False, "%", 100),
 }
 
 

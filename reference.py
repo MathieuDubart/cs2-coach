@@ -28,6 +28,12 @@ METRICS = {
     "hs_pct": ("headshot kills", True, "%"),
     "kd": ("kills per death", True, ""),
 }
+# rare events, pooled over each player's matches (a rate per match would be 0 or 100 %):
+# metric -> (numerator, denominator, minimum denominator, label, higher_is_better, unit)
+POOLED = {
+    "clutch_win_pct": ("clutch_won", "clutch_n", 4, "1v2+ clutches won", True, "%"),
+    "clutch_multi_pct": ("clutch_multi", "clutch_n", 4, "1v2+ clutches where 2+ enemies see you at once", False, "%"),
+}
 
 
 def derive(df):
@@ -98,4 +104,28 @@ def benchmarks(steamid):
                              "good": float(col.quantile(.75 if hib else .25)), "n": int(len(col)),
                              "higher_rank_median": float(hi.median()) if len(hi) >= 8 else None,
                              "same_rank_median": float(sm.median()) if len(sm) >= 8 else None}
+    cols = sorted({c for v in POOLED.values() for c in v[:2]} & set(pop.columns))
+    if cols:
+        g = pop.groupby("steamid")[cols].sum(min_count=1)
+        prank = pop[(pop.rank_type == 12) & pop["rank"].notna() & (pop["rank"] > 0)].groupby("steamid")["rank"].median()
+        me_ = str(steamid)
+        for m, (a, b, mn, label, hib, unit) in POOLED.items():
+            if a not in g or b not in g:
+                continue
+            ok = g[b] >= mn
+            vals = (g.loc[ok, a] / g.loc[ok, b] * 100).astype(float)
+            col = vals.drop(me_, errors="ignore")
+            if len(col) < 15:
+                continue
+            v = float(vals[me_]) if me_ in vals.index else None
+            pct = None if v is None else float((col < v).mean() * 100) if hib else float((col > v).mean() * 100)
+            rk = prank.reindex(col.index)
+            hi = col[rk >= my_rank + 2] if my_rank and my_rank > 0 else col.iloc[0:0]
+            sm = col[(rk - my_rank).abs() <= 1] if my_rank and my_rank > 0 else col.iloc[0:0]
+            res["metrics"][m] = {"label": label, "higher_better": hib, "unit": unit, "you": v, "percentile": pct,
+                                 "median": float(col.median()), "p25": float(col.quantile(.25)), "p75": float(col.quantile(.75)),
+                                 "good": float(col.quantile(.75 if hib else .25)), "n": int(len(col)),
+                                 "n_you": float(g.loc[me_, b]) if me_ in g.index and g.loc[me_, b] == g.loc[me_, b] else 0.0,
+                                 "higher_rank_median": float(hi.median()) if len(hi) >= 8 else None,
+                                 "same_rank_median": float(sm.median()) if len(sm) >= 8 else None}
     return res
