@@ -184,7 +184,7 @@ def below_normal():
         import psutil
         psutil.Process().nice(psutil.BELOW_NORMAL_PRIORITY_CLASS)
     except Exception:
-        below_normal()
+        config.low_priority()
 
 
 def rebuild(sid, name):
