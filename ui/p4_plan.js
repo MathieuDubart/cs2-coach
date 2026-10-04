@@ -284,6 +284,9 @@ async function renderSettings(){
   const pt=st.playtime,L=st.links||{};
   v.innerHTML=head+`
   ${flag==="ok"?`<div class="jobpanel" style="padding:0"><div class="in ok">Steam confirmed the sign-in.</div></div>`:flag==="refused"||flag==="refus"?`<div class="jobpanel" style="padding:0"><div class="in err">Steam didn't confirm the sign-in. Try again.</div></div>`:""}
+  <article class="card"><h3>Display</h3>
+   <div class="btns" role="group" aria-label="Theme">${[["dark","Dark"],["light","Light"],["system","Your system's"]].map(([k,l])=>`<button type="button" data-theme-set="${k}" aria-pressed="${(store("theme")||"dark")===k}">${l}</button>`).join("")}</div>
+   <p class="note">The theme of the app on this browser. Dark is the default; "your system's" follows Windows.</p></article>
   <article class="card"><h3>Game detection ${ok(gs&&gs.installed)}</h3>
    <p>CS2 sends the app the map, your side, the round, the score, your money and your grenades: the "In game" page follows your match on its own and gives the right advice at the right time (buys during freeze time, bomb planted, end of round).</p>
    <p class="note">This is Valve's Game State Integration, the official feature used by HUDs and RGB keyboards. During a match, CS2 only sends your own info, never the enemies'.${gs&&gs.path?` File: <code>${esc(gs.path)}</code>.`:""}${gs&&gs.installed?(gs.receiving?" CS2 is sending its data.":" Restart CS2 so it picks it up."):""}</p>
@@ -369,6 +372,7 @@ async function renderSettings(){
     catch(e){msg.textContent=e.message;b.disabled=false}};
   $("#st-sync",v).onclick=async()=>{msg.textContent="";try{await api("/api/steam/sync",{sid});poll()}catch(e){msg.textContent=e.message}};
   const au=$("#st-auto",v);if(au)au.onchange=async()=>{try{await api("/api/steam/options",{sid,auto_sync:au.checked})}catch(e){msg.textContent=e.message}};
+  $$("[data-theme-set]",v).forEach(b=>b.onclick=()=>{store("theme",b.dataset.themeSet);applyTheme(b.dataset.themeSet);$$("[data-theme-set]",v).forEach(x=>x.setAttribute("aria-pressed",x===b))});
   const grb=$("#gr-go",v);if(grb)grb.onclick=async()=>{grb.disabled=true;try{await api(gr.on?"/api/grow/stop":"/api/grow/start",{target:+($("#gr-n",v)||{}).value||gr.target})}catch(e){}renderSettings()};
   $("#st-forget",v).onclick=async()=>{if(!steamForget){steamForget=true;renderSettings();return}steamForget=false;
     try{await api("/api/steam/forget",{sid});renderSettings()}catch(e){msg.textContent=e.message}};

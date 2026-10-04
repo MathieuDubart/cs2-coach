@@ -3,6 +3,7 @@
 Usage: python analyze.py <demo.dem> [steamid64] > stats.json
 """
 import json
+import pro_analyst
 import math
 import sys
 from collections import Counter, defaultdict
@@ -151,6 +152,8 @@ def analyze(path, me):
     blind = p.parse_event("player_blind")
     for c in ("attacker_steamid", "user_steamid"):
         blind[c] = blind[c].map(sid)
+    if len(blind):
+        blind["round"] = blind["tick"].map(round_of)
 
     # team per round (for me and everyone)
     def team_of(steamid, r):
@@ -167,6 +170,7 @@ def analyze(path, me):
     kast_rounds = 0
     my_side_rounds = Counter()
     score = {"me": 0, "them": 0}
+    foes_of = {}   # round -> the enemies' SteamIDs (the pro insights count your flashes on them only)
 
     for idx, r in enumerate(rounds):
         myteam = team_of(me, r)
@@ -176,6 +180,7 @@ def analyze(path, me):
         my_side_rounds[side] += 1
         mates = [s for s in players.steamid if team_of(s, r) == myteam]
         foes = [s for s in players.steamid if team_of(s, r) not in (None, myteam)]
+        foes_of[r["n"]] = set(foes)
 
         # winner from score change
         after_tick = rounds[idx + 1]["freeze_end"] if idx + 1 < len(rounds) else (last_tick or r["end"])
@@ -462,6 +467,7 @@ def analyze(path, me):
         "death_timing": timing,
         "deaths": death_list,
         "per_round": per_round,
+        "pro_insights": pro_analyst.pro_insights(me, per_round, deaths, hurt, blind, foes_of, TICKRATE),
     }
 
 

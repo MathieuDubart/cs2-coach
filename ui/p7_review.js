@@ -67,6 +67,58 @@ function factsBlock(PL){const F=PL.facts;if(!F||!F.matches)return "";const fy=F.
 // the review as plan.py builds it; a plan written in the "pro review" format (quick_brief, map_briefs, deep_dive) keeps it
 // whole under raw (04/10: a plan written by a server still running that format crashed this page)
 const reviewOf=PL=>{const R=PL.review;return R&&!R.session&&R.raw&&R.raw.session?R.raw:R&&R.session?R:null};
+// HLTV's rating colors: under 0.85, 0.85-0.95, 0.95-1.05, 1.05-1.20, over 1.20
+const rtCls=r=>r==null?"":r>=1.2?"rt-elite":r>=1.05?"rt-good":r>=.95?"rt-avg":r>=.85?"rt-low":"rt-bad";
+const rtBadge=r=>r==null?`<span class="note">—</span>`:`<span class="rt ${rtCls(r)}">${(+r).toFixed(2)}</span>`;
+// the rating match by match: a dot per match (green won, red lost), the session's bright on a band, the line at 1.00
+function ratingSpark(T){if(!T||T.length<2)return "";const W=640,H=120,pad=12,rs=T.map(x=>x.rating),lo=Math.min(.4,...rs),hi=Math.max(1.8,...rs);
+  const X=i=>pad+i*(W-2*pad)/(T.length-1),Y=r=>H-pad-(r-lo)/(hi-lo)*(H-2*pad),first=T.findIndex(x=>x.recent),bx=first>0?(X(first-1)+X(first))/2:pad;
+  return `<svg class="spark" viewBox="0 0 ${W} ${H}" role="img" aria-label="Rating match by match">
+   <rect x="${bx}" y="0" width="${W-bx}" height="${H}" rx="6" fill="var(--ct)" opacity=".08"/>
+   <line x1="${pad}" x2="${W-pad}" y1="${Y(1)}" y2="${Y(1)}" stroke="var(--muted)" stroke-dasharray="4 4" opacity=".55"/>
+   <text x="${pad}" y="${Y(1)-5}" class="vct">1.00</text>
+   <polyline points="${T.map((x,i)=>`${X(i).toFixed(1)},${Y(x.rating).toFixed(1)}`).join(" ")}" fill="none" stroke="var(--ink)" stroke-opacity=".3" stroke-width="1.5"/>
+   ${T.map((x,i)=>`<circle cx="${X(i).toFixed(1)}" cy="${Y(x.rating).toFixed(1)}" r="${x.recent?5:3.2}" fill="${x.result==="win"?"var(--good)":x.result==="loss"?"var(--bad)":"var(--muted)"}" opacity="${x.recent?1:.45}"><title>${esc(MAPN(x.map))} · ${esc(fmtDate(x.time))} · ${x.rating}</title></circle>`).join("")}</svg>`}
+// 1 · the brief: the session in 2 minutes
+function reviewBrief(R,f){const T=R.trend||[],rec=T.filter(x=>x.recent),bef=T.filter(x=>!x.recent),avg=a=>a.length?a.reduce((s,x)=>s+x.rating,0)/a.length:null;
+  const ra=avg(rec),rb=avg(bef),M=R.maps||[],ng=M.reduce((s,m)=>s+m.games,0),adr=ng?M.reduce((s,m)=>s+m.adr*m.games,0)/ng:null,PI=(R.pro||{}).items||[];
+  const works=[...R.changes.filter(c=>c.better).slice(0,2).map(c=>`${esc(c.label)}: ${f(c.before,c.unit)} → <b>${f(c.after,c.unit)}</b>`),
+    ...PI.filter(i=>i.severity==="positive").map(i=>`${esc(i.title)} <span class="note">(${i.value} of ${i.of})</span>`),
+    ...(()=>{const top=M.filter(m=>m.rating>=1.2).sort((a,b)=>b.rating-a.rating).slice(0,3);   // the maps you played well
+      return top.length?[`Strong on ${top.map(m=>`${esc(MAPN(m.map))} ${rtBadge(m.rating)}`).join(", ")}`]:[]})()].slice(0,3);
+  const watch=[...R.changes.filter(c=>!c.better).slice(0,2).map(c=>`${esc(c.label)}: ${f(c.before,c.unit)} → <b>${f(c.after,c.unit)}</b>`),
+    ...PI.filter(i=>i.severity!=="positive").map(i=>`${esc(i.title)} <span class="note">(${i.value} of ${i.of})</span>`)].slice(0,3);
+  const a0=(R.axes||[])[0],li=xs=>xs.length?`<ul>${xs.map(x=>`<li>${x}</li>`).join("")}</ul>`:"";
+  return `<section class="tier" id="tier1"><div class="tier-h"><b>1</b><h3>Quick brief</h3><span class="note">the session in 2 minutes</span></div>
+   <div class="brief">
+    <div class="tiles">
+     <div class="tile"><span class="eyebrow">Record</span><b class="num big">${R.session.wins}-${R.session.losses}</b><span class="note">${R.session.games} game${R.session.games>1?"s":""}</span></div>
+     <div class="tile"><span class="eyebrow">Rating</span><b class="big">${rtBadge(ra)}</b><span class="note">${rb!=null&&ra!=null?`<span class="${ra>=rb?"good":"bad"}">${ra>=rb?"+":"−"}${Math.abs(ra-rb).toFixed(2)}</span> vs ${rb.toFixed(2)} before`:""}</span></div>
+     <div class="tile"><span class="eyebrow">ADR</span><b class="num big">${adr==null?"—":adr.toFixed(1)}</b><span class="note">damage per round</span></div>
+     <div class="tile"><span class="eyebrow">Maps</span><b class="num big">${M.length}</b><span class="note">${M.map(m=>esc(MAPN(m.map))).join(" · ")}</span></div>
+    </div>
+    <div class="spark-box">${ratingSpark(T)}<span class="note">Your rating match by match: this session on the band, the ${bef.length} matches before dimmed. Green won, red lost.</span></div>
+   </div>
+   <div class="brief3">
+    <article class="card b-good"><span class="eyebrow">What works</span>${li(works)||`<p class="note">Nothing stands out above your usual level.</p>`}</article>
+    <article class="card b-bad"><span class="eyebrow">Watch out</span>${li(watch)||`<p class="note">Nothing slips: your numbers hold.</p>`}</article>
+    <article class="card b-next"><span class="eyebrow">Next session</span>${R.next?`<p class="lead">${esc(R.next)}</p>`:""}${a0&&a0.do.length?`<p>${esc(a0.short||a0.title)}: ${esc(a0.do[0])}</p>`:""}${!R.next&&!a0?`<p class="note">Keep your routine.</p>`:""}</article>
+   </div></section>`}
+// 2 · map by map: each map of the session
+function reviewMaps(R){const M=R.maps||[];if(!M.length)return "";
+  const side=(m,s)=>{const x=m.sides[s],pc=x.of?Math.round(100*x.won/x.of):null;
+    return `<div class="mc-side"><span class="side-tag ${s}">${s}</span><div class="mc-bar"><i style="width:${pc||0}%;background:var(--${s==="T"?"t":"ct"})"></i></div><b class="num">${pc==null?"—":pc+"%"}</b><span class="note">${x.won}/${x.of} rounds</span></div>
+     ${x.play?`<p class="mc-note"><span class="good">▲</span> ${x.play}</p>`:""}${x.avoid?`<p class="mc-note"><span class="bad">▼</span> ${x.avoid}</p>`:""}`};
+  return `<section class="tier" id="tier2"><div class="tier-h"><b>2</b><h3>Map by map</h3><span class="note">this session · round wins per side, what to play and to avoid there</span></div>
+   <div class="mapcards">${M.map(m=>`<article class="mapcard"><div class="mc-h"><b>${esc(MAPN(m.map))}</b><span class="res ${m.wins>m.losses?"win":m.wins<m.losses?"loss":"draw"}">${m.wins}-${m.losses}</span>
+     ${rtBadge(m.rating)}<span class="note num">ADR ${m.adr}</span></div>${side(m,"T")}${side(m,"CT")}</article>`).join("")}</div></section>`}
+// 3 · the pro insights of the session (from the demos)
+function reviewInsights(R){const P=R.pro||{},I=P.items||[];if(!P.matches)return "";
+  const lab={high:"priority",medium:"watch",positive:"strength"};
+  return `<h3>Pro insights</h3><p class="note">What an analyst points at in the demos of this session's ${P.matches} match${P.matches>1?"es":""}, with enough cases to say it.</p>
+   ${I.length?`<div class="ins">${I.map(i=>`<article class="ins-${i.severity}"><span class="eyebrow">${lab[i.severity]}</span><h4>${esc(i.title)}</h4><p>${esc(i.detail)}</p>
+     <div class="pbar"><i style="width:${Math.round(100*i.value/Math.max(1,i.of))}%"></i></div><span class="note num">${i.value} of ${i.of}</span></article>`).join("")}</div>`
+     :`<p>Nothing stands out: no re-peek after your kills, deaths without impact, unused flashes or death spot above the usual.</p>`}`}
 function renderReview(){const p=P(),v=$("#v-review"),PL=p.advice.plan||{},R=reviewOf(PL),X=PL.experiments||{};
   const head=`<div class="head"><div style="display:grid;gap:4px"><span class="eyebrow">${esc(p.name)}${R?` · ${esc(R.label)}, compared with your previous ${R.n_before} matches`:""}</span><h2>Review</h2></div>
     ${R?`<div class="record"><span>${R.session.wins}<small>wins</small></span><span>${R.session.losses}<small>losses</small></span></div>`:""}</div>`;
@@ -74,7 +126,10 @@ function renderReview(){const p=P(),v=$("#v-review"),PL=p.advice.plan||{},R=revi
     ${(p.advice.rules||[]).length?`<h3>Your focus areas</h3>${findings(p.advice.rules.slice(0,3).map((r,i)=>({level:i<1?"high":"mid",title:r.title,evidence:r.why,fix:r.do,drills:r.drills,sources:r.sources})))}`:""}`;return}
   const f=(x,u)=>fmtU(x,u),TREND={better:"strong",worse:"weak",mieux:"strong","moins bien":"weak"};
   v.innerHTML=head+`
-   ${R.next?`<div class="callout"><h3>For your next session</h3><p>${esc(R.next)}</p></div>`:""}
+   <nav class="tier-nav" aria-label="Review tiers"><a href="#tier1" data-tier="tier1">1 · Quick brief</a><a href="#tier2" data-tier="tier2">2 · Map by map</a><a href="#tier3" data-tier="tier3">3 · Deep dive</a></nav>
+   ${reviewBrief(R,f)}
+   ${reviewMaps(R)}
+   <section class="tier" id="tier3"><div class="tier-h"><b>3</b><h3>Deep dive</h3><span class="note">every change and its possible reasons, the demos' insights, your matches</span></div>
    <h3>What changed</h3>
    ${R.changes.length?`<div class="chg">${R.changes.map(c=>`<article class="${c.better?"better":"worse"}"><span class="eyebrow">${esc(c.label)}</span>
      <span class="ba">${f(c.before,c.unit)}<span class="arrow" aria-hidden="true">→</span><span class="${c.better?"good":"bad"}">${f(c.after,c.unit)}</span> <span class="lvl ${c.level==="clear"||c.level==="net"?"clear":"trend"}">${c.level==="clear"||c.level==="net"?"clear gap":"trend"}</span></span>
@@ -82,9 +137,10 @@ function renderReview(){const p=P(),v=$("#v-review"),PL=p.advice.plan||{},R=revi
      ${c.why.length?`<details><summary class="mini" style="cursor:pointer">Possible reasons (to check over the next matches)</summary><ul class="why">${c.why.map(w=>`<li>${esc(w)}</li>`).join("")}</ul></details>`:`<span class="note">${c.better?"No single cause in your data: keep doing what you did in these games.":"No obvious explanation in your data: keep an eye on it."}</span>`}</article>`).join("")}</div>`
      :`<p>Nothing moved clearly: your numbers are stable.</p>`}
    ${R.stable.length?`<p class="note">Stable: ${R.stable.map(esc).join(" · ")}.</p>`:""}
+   ${reviewInsights(R)}
    <div class="cols3" style="grid-template-columns:repeat(auto-fit,minmax(340px,1fr))">
     <div style="display:grid;gap:10px;align-content:start"><h3>Your last session</h3>
-     <div class="tbl"><table><thead><tr><th>Date</th><th>Map</th><th>Score</th><th class="n">Rating</th></tr></thead><tbody>${R.session.matches.map(x=>`<tr class="click" data-mid="${x.id}" tabindex="0"><td>${fmtDate(x.time)}</td><td>${MAPN(x.map)}</td><td><span class="res ${x.result}">${x.score.me}-${x.score.them}</span></td><td class="n">${f1(x.rating)}</td></tr>`).join("")}</tbody></table></div>
+     <div class="tbl"><table><thead><tr><th>Date</th><th>Map</th><th>Score</th><th class="n">Rating</th></tr></thead><tbody>${R.session.matches.map(x=>`<tr class="click" data-mid="${x.id}" tabindex="0"><td>${fmtDate(x.time)}</td><td>${MAPN(x.map)}</td><td><span class="res ${x.result}">${x.score.me}-${x.score.them}</span></td><td class="n">${rtBadge(x.rating)}</td></tr>`).join("")}</tbody></table></div>
      <p class="note">Click a match to open it.</p></div>
     <div style="display:grid;gap:10px;align-content:start"><h3>Your focus areas</h3>
      <div class="axes">${R.axes.map(a=>`<article class="card"><h3>${esc(a.short||a.title)}</h3><p class="note">${esc(a.title)}</p>
@@ -100,7 +156,9 @@ function renderReview(){const p=P(),v=$("#v-review"),PL=p.advice.plan||{},R=revi
    ${(X.suggested||[]).length?`<span class="lbl4" style="color:var(--muted)">Worth testing</span><div class="exps">${X.suggested.slice(0,3).map(suggestCard).join("")}</div>`:""}
    ${R.tests.done.length?`<details><summary style="cursor:pointer">Finished experiments (${R.tests.done.length})</summary><div class="exps" style="margin-top:10px">${R.tests.done.map(expCard).join("")}</div></details>`:""}
    <p class="note" id="xmsg" role="status"></p>
-   <div class="linkrow"><a href="#analysis">Full analysis</a><a href="#midround">Mid-round</a><a href="#progress">Progress and tracking</a><a href="#matches">Every match</a><a href="#maps">Maps and grenades</a><a href="#routine">Routine</a></div>`;
+   <div class="linkrow"><a href="#analysis">Full analysis</a><a href="#midround">Mid-round</a><a href="#progress">Progress and tracking</a><a href="#matches">Every match</a><a href="#maps">Maps and grenades</a><a href="#routine">Routine</a></div>
+   </section>`;
   wireExp(v,X,p);
+  $$("[data-tier]",v).forEach(a=>a.onclick=e=>{e.preventDefault();const t=$("#"+a.dataset.tier,v);if(t)t.scrollIntoView({behavior:"smooth",block:"start"})});   // not a #view link
   $$("tr[data-mid]",v).forEach(r=>{r.onclick=()=>{const i=p.matches.findIndex(x=>x.id===r.dataset.mid);S.match=i<0?0:i;S.mpin=i>=0;go("matches")};r.onkeydown=e=>{if(e.key==="Enter")r.click()}});
 }

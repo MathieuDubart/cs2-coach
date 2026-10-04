@@ -9,11 +9,11 @@
   --f-mono:"JetBrains Mono",ui-monospace,Consolas,monospace;
 }
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
-  --bg:#12171d; --panel:#1a2129; --ink:#e4e9ee; --muted:#93a0ad; --line:#2b3540;
-  --ct:#5b9be0; --t:#e0a63c; --good:#4cb87a; --bad:#e2665f; --warn:#d9a043; --chip:#232c36; color-scheme:dark}}
+  --bg:#0b1017; --panel:#121a25; --ink:#e8edf4; --muted:#8d99ab; --line:#223044;
+  --ct:#4d9aff; --t:#f2a93b; --good:#2ecc87; --bad:#ff5d6c; --warn:#f0b54a; --chip:#1a2433; color-scheme:dark}}
 :root[data-theme="dark"]{
-  --bg:#12171d; --panel:#1a2129; --ink:#e4e9ee; --muted:#93a0ad; --line:#2b3540;
-  --ct:#5b9be0; --t:#e0a63c; --good:#4cb87a; --bad:#e2665f; --warn:#d9a043; --chip:#232c36; color-scheme:dark}
+  --bg:#0b1017; --panel:#121a25; --ink:#e8edf4; --muted:#8d99ab; --line:#223044;
+  --ct:#4d9aff; --t:#f2a93b; --good:#2ecc87; --bad:#ff5d6c; --warn:#f0b54a; --chip:#1a2433; color-scheme:dark}
 *{box-sizing:border-box}
 [hidden]{display:none!important}
 body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:15px;line-height:1.5;margin:0}

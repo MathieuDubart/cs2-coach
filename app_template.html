@@ -12,11 +12,11 @@
   --f-mono:"JetBrains Mono",ui-monospace,Consolas,monospace;
 }
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
-  --bg:#12171d; --panel:#1a2129; --ink:#e4e9ee; --muted:#93a0ad; --line:#2b3540;
-  --ct:#5b9be0; --t:#e0a63c; --good:#4cb87a; --bad:#e2665f; --warn:#d9a043; --chip:#232c36; color-scheme:dark}}
+  --bg:#0b1017; --panel:#121a25; --ink:#e8edf4; --muted:#8d99ab; --line:#223044;
+  --ct:#4d9aff; --t:#f2a93b; --good:#2ecc87; --bad:#ff5d6c; --warn:#f0b54a; --chip:#1a2433; color-scheme:dark}}
 :root[data-theme="dark"]{
-  --bg:#12171d; --panel:#1a2129; --ink:#e4e9ee; --muted:#93a0ad; --line:#2b3540;
-  --ct:#5b9be0; --t:#e0a63c; --good:#4cb87a; --bad:#e2665f; --warn:#d9a043; --chip:#232c36; color-scheme:dark}
+  --bg:#0b1017; --panel:#121a25; --ink:#e8edf4; --muted:#8d99ab; --line:#223044;
+  --ct:#4d9aff; --t:#f2a93b; --good:#2ecc87; --bad:#ff5d6c; --warn:#f0b54a; --chip:#1a2433; color-scheme:dark}
 *{box-sizing:border-box}
 [hidden]{display:none!important}
 body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:15px;line-height:1.5;margin:0}
@@ -351,8 +351,8 @@ pre.cli{background:var(--radar-bg);color:#dfe6ec;padding:12px 14px;overflow-x:au
 .head h2{font-size:28px}
 .lede{font-size:16px;max-width:75ch}
 /* primary callout */
-.callout{background:var(--ink);color:var(--bg);padding:14px 18px;border-radius:var(--radius);display:grid;gap:6px}
-.callout h3{color:var(--bg);text-transform:uppercase;letter-spacing:.05em;font-size:15px;opacity:.75;font-family:var(--f-mono);font-weight:600}
+.callout{background:color-mix(in srgb,var(--ct) 10%,var(--panel));border:1px solid color-mix(in srgb,var(--ct) 35%,var(--line));border-left:4px solid var(--ct);padding:14px 18px;border-radius:var(--radius);display:grid;gap:6px}
+.callout h3{color:var(--muted);text-transform:uppercase;letter-spacing:.06em;font-size:13px;font-family:var(--f-mono);font-weight:600}
 .callout p{font-size:17px;line-height:1.4}
 /* tabs */
 .tabs{display:flex;flex-wrap:wrap;gap:2px;border-bottom:1px solid var(--line)}
@@ -604,6 +604,49 @@ table.lc{border-collapse:collapse;font-variant-numeric:tabular-nums;min-width:64
 .vslot-in{display:grid;gap:6px}
 .vslot.wait{display:flex;align-items:center;justify-content:center;border:1px dashed color-mix(in srgb,var(--muted) 35%,transparent);border-radius:var(--radius);box-sizing:border-box}
 .vslot.wait>span{font:600 11px var(--f-mono);color:color-mix(in srgb,var(--muted) 60%,transparent);letter-spacing:.06em;text-transform:uppercase}
+
+/* the review in three tiers (04/10) */
+.rt{display:inline-block;font:700 13px var(--f-mono);font-variant-numeric:tabular-nums;padding:2px 8px;border-radius:5px;line-height:1.35}
+.rt-elite{background:color-mix(in srgb,var(--good) 30%,transparent);color:var(--good);box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--good) 55%,transparent)}
+.rt-good{background:color-mix(in srgb,var(--good) 16%,transparent);color:var(--good)}
+.rt-avg{background:var(--chip);color:var(--ink)}
+.rt-low{background:color-mix(in srgb,var(--warn) 18%,transparent);color:var(--warn)}
+.rt-bad{background:color-mix(in srgb,var(--bad) 18%,transparent);color:var(--bad)}
+.tier-nav{display:flex;gap:6px;flex-wrap:wrap;position:sticky;top:var(--bar-h,96px);z-index:5;padding:6px 0;background:var(--bg)}
+.tier-nav a{font:600 13px var(--f-body);color:var(--muted);text-decoration:none;padding:6px 12px;border:1px solid var(--line);border-radius:20px;background:var(--panel)}
+.tier-nav a:hover{color:var(--ink);border-color:var(--ct)}
+.tier{display:grid;gap:14px;scroll-margin-top:150px;padding-top:6px}
+.tier-h{display:flex;align-items:baseline;gap:10px;border-bottom:1px solid var(--line);padding-bottom:8px}
+.tier-h b{font:700 13px var(--f-mono);color:var(--bg);background:var(--ct);border-radius:50%;width:24px;height:24px;display:inline-grid;place-items:center;align-self:center}
+.tier-h h3{margin:0;font-size:22px;text-transform:uppercase;letter-spacing:.03em}
+.brief{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.15fr);gap:14px;align-items:stretch}
+.tiles{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.tile{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:12px 14px;display:grid;gap:4px;align-content:start}
+.tile .big{font-size:30px;font-family:var(--f-display);font-weight:700;line-height:1.1}
+.tile .big .rt{font-size:24px;padding:2px 10px}
+.spark-box{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:10px 12px;display:grid;gap:6px;align-content:start}
+.spark{width:100%;height:auto;display:block}
+.brief3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.brief3 .card{border-radius:var(--radius);border-top:3px solid var(--line)}
+.brief3 .b-good{border-top-color:var(--good)}.brief3 .b-bad{border-top-color:var(--bad)}.brief3 .b-next{border-top-color:var(--ct)}
+.brief3 ul{margin:0;padding-left:18px;display:grid;gap:6px}.brief3 .lead{font-size:16px;line-height:1.4}
+.mapcards{display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:12px}
+.mapcard{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:12px 14px;display:grid;gap:8px;align-content:start}
+.mc-h{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.mc-h>b{font:700 20px var(--f-display);text-transform:uppercase;margin-right:auto}
+.mc-side{display:grid;grid-template-columns:34px minmax(60px,1fr) 44px auto;gap:8px;align-items:center}
+.side-tag{font:700 11px var(--f-mono);text-align:center;border-radius:4px;padding:2px 0}
+.side-tag.T{background:color-mix(in srgb,var(--t) 20%,transparent);color:var(--t)}.side-tag.CT{background:color-mix(in srgb,var(--ct) 20%,transparent);color:var(--ct)}
+.mc-bar{height:7px;background:var(--chip);border-radius:4px;overflow:hidden}.mc-bar i{display:block;height:100%;border-radius:4px}
+.mc-note{margin:0;font-size:13.5px;line-height:1.4;color:var(--ink)}
+.ins{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px}
+.ins article{background:var(--panel);border:1px solid var(--line);border-left:4px solid var(--muted);border-radius:var(--radius);padding:12px 14px;display:grid;gap:6px;align-content:start}
+.ins h4{margin:0;font-size:16px}.ins p{margin:0;font-size:14px;line-height:1.45}
+.ins .ins-high{border-left-color:var(--bad)}.ins .ins-medium{border-left-color:var(--warn)}.ins .ins-positive{border-left-color:var(--good)}
+.ins .ins-high .eyebrow{color:var(--bad)}.ins .ins-medium .eyebrow{color:var(--warn)}.ins .ins-positive .eyebrow{color:var(--good)}
+.pbar{height:6px;background:var(--chip);border-radius:3px;overflow:hidden}.pbar i{display:block;height:100%;background:var(--muted)}
+.ins-high .pbar i{background:var(--bad)}.ins-medium .pbar i{background:var(--warn)}.ins-positive .pbar i{background:var(--good)}
+@media (max-width:900px){.brief{grid-template-columns:1fr}.brief3{grid-template-columns:1fr}.tier-nav{position:static}}
+@media (max-width:520px){.tiles{grid-template-columns:1fr 1fr}.tile .big{font-size:24px}.mc-side{grid-template-columns:30px minmax(40px,1fr) 40px}.mc-side .note{display:none}}
 </style>
 
 <div class="bar"><div class="bar-in">
@@ -654,6 +697,11 @@ const NS="http://www.w3.org/2000/svg";
 function el(t,a,p){const e=document.createElementNS(NS,t);for(const k in a)e.setAttribute(k,a[k]);p.appendChild(e);return e}
 function tip(e,s){const t=document.createElementNS(NS,"title");t.textContent=s;e.appendChild(t);return e}
 function store(k,v){try{if(v===undefined)return JSON.parse(localStorage.getItem("cs2c:"+k));localStorage.setItem("cs2c:"+k,JSON.stringify(v))}catch(e){return null}}
+// the theme: dark unless you chose light or your system's in Settings
+function applyTheme(t){t=t||store("theme")||"dark";if(t==="system")delete document.documentElement.dataset.theme;else document.documentElement.dataset.theme=t}
+applyTheme();
+// ≈ HLTV Rating 2.0 (flashed.gg's regression, the same as context.rating)
+const rating2=(k,d,a,adr,kast,r)=>{r=Math.max(r||0,1);const kpr=k/r,dpr=d/r,apr=a/r,imp=2.13*kpr+.42*apr-.41;return .0073*kast+.3591*kpr-.5329*dpr+.2372*imp+.0032*adr+.1587};
 function press(scope,sel,b){$$(sel,scope).forEach(x=>x.setAttribute("aria-pressed",x===b))}
 function copyBtn(root){$$(".cmd button",root).forEach(b=>b.onclick=e=>{e.stopPropagation();const code=$("code",b.parentNode);
   const sel=()=>{const r=document.createRange();r.selectNodeContents(code);const s=getSelection();s.removeAllRanges();s.addRange(r)};
@@ -773,12 +821,13 @@ function qcls(v,k,fb){if(v==null)return "";const m=(((P().advice||{}).bench||{})
 function trendRows(ms,selIdx){return ms.map((m,i)=>{const s=m.sum,nr=typeof m.rounds==="number"?m.rounds:(m.per_round||[]).length,
   n24=s.nades_unused!=null&&nr?s.nades_unused*24/nr:null;return `<tr class="click" data-i="${i}" tabindex="0" aria-selected="${i===selIdx}">
   <td>${fmtDate(m.time)}</td><td>${MAPN(m.map)}</td><td>${esc(m.mode)}</td><td><span class="res ${m.result}">${m.score.me}-${m.score.them}</span></td>
+  <td class="n">${nr&&s.kast!=null&&s.adr!=null?rtBadge(rating2(s.kills,s.deaths,s.assists,s.adr,s.kast,nr)):"—"}</td>
   <td class="n">${s.kills}-${s.deaths}-${s.assists}</td><td class="n ${qcls(s.adr,"adr",cls(s.adr,85,65))}">${f1(s.adr)}</td><td class="n ${qcls(s.hs,"hs_pct",cls(s.hs,55,35))}">${f1(s.hs)}</td>
   <td class="n ${cls(s.kast,72,62)}">${f1(s.kast)}</td><td class="n ${qcls(s.traded_pct,"traded_pct",cls(s.traded_pct,25,10))}">${s.traded_pct==null?"—":f1(s.traded_pct)+"%"}</td>
   <td class="n ${qcls(n24,"nades_unused_24",cls(s.nades_unused,4,10,false))}">${s.nades_unused}</td><td class="n ${qcls(s.first_bullet,"b1_hit",cls(s.first_bullet,30,20))}">${s.first_bullet==null?"—":f1(s.first_bullet)+"%"}</td>
   <td class="n ${qcls(s.pistol_moving,"pistol_moving",cls(s.pistol_moving,25,45,false))}">${s.pistol_moving==null?"—":f1(s.pistol_moving)+"%"}</td>
   <td class="n ${qcls(s.xhair,"xhair",cls(s.xhair,4,8,false))}">${s.xhair==null?"—":f1(s.xhair)+"°"}</td><td class="n">${s.open_won}-${s.open_lost}</td></tr>`}).join("")}
-const TREND_HEAD=`<thead><tr><th>Date</th><th>Map</th><th>Mode</th><th>Score</th><th class="n">K-D-A</th><th class="n">ADR</th><th class="n">HS %</th><th class="n">KAST</th><th class="n">Deaths<br>traded</th><th class="n">Grenades<br>wasted</th><th class="n">1st bullet<br>hits</th><th class="n">Pistol<br>moving</th><th class="n">Crosshair<br>offset</th><th class="n">Openings<br>W-L</th></tr></thead>`;
+const TREND_HEAD=`<thead><tr><th>Date</th><th>Map</th><th>Mode</th><th>Score</th><th class="n" title="≈ HLTV 2.0: under 0.85 red, over 1.20 bright green">Rating</th><th class="n">K-D-A</th><th class="n">ADR</th><th class="n">HS %</th><th class="n">KAST</th><th class="n">Deaths<br>traded</th><th class="n">Grenades<br>wasted</th><th class="n">1st bullet<br>hits</th><th class="n">Pistol<br>moving</th><th class="n">Crosshair<br>offset</th><th class="n">Openings<br>W-L</th></tr></thead>`;
 const WCOL={"rifles":"var(--t)","AWP":"var(--ct)","SMG":"var(--good)","shotguns":"var(--molotov)","pistols":"var(--muted)","fusils à pompe":"var(--molotov)","pistolets":"var(--muted)"};
 function archCard(p){const A=p.advice.archetype;if(!A)return "";
   const mx=Math.max(...A.scores.map(x=>x.score),1);
@@ -1358,6 +1407,9 @@ async function renderSettings(){
   const pt=st.playtime,L=st.links||{};
   v.innerHTML=head+`
   ${flag==="ok"?`<div class="jobpanel" style="padding:0"><div class="in ok">Steam confirmed the sign-in.</div></div>`:flag==="refused"||flag==="refus"?`<div class="jobpanel" style="padding:0"><div class="in err">Steam didn't confirm the sign-in. Try again.</div></div>`:""}
+  <article class="card"><h3>Display</h3>
+   <div class="btns" role="group" aria-label="Theme">${[["dark","Dark"],["light","Light"],["system","Your system's"]].map(([k,l])=>`<button type="button" data-theme-set="${k}" aria-pressed="${(store("theme")||"dark")===k}">${l}</button>`).join("")}</div>
+   <p class="note">The theme of the app on this browser. Dark is the default; "your system's" follows Windows.</p></article>
   <article class="card"><h3>Game detection ${ok(gs&&gs.installed)}</h3>
    <p>CS2 sends the app the map, your side, the round, the score, your money and your grenades: the "In game" page follows your match on its own and gives the right advice at the right time (buys during freeze time, bomb planted, end of round).</p>
    <p class="note">This is Valve's Game State Integration, the official feature used by HUDs and RGB keyboards. During a match, CS2 only sends your own info, never the enemies'.${gs&&gs.path?` File: <code>${esc(gs.path)}</code>.`:""}${gs&&gs.installed?(gs.receiving?" CS2 is sending its data.":" Restart CS2 so it picks it up."):""}</p>
@@ -1443,6 +1495,7 @@ async function renderSettings(){
     catch(e){msg.textContent=e.message;b.disabled=false}};
   $("#st-sync",v).onclick=async()=>{msg.textContent="";try{await api("/api/steam/sync",{sid});poll()}catch(e){msg.textContent=e.message}};
   const au=$("#st-auto",v);if(au)au.onchange=async()=>{try{await api("/api/steam/options",{sid,auto_sync:au.checked})}catch(e){msg.textContent=e.message}};
+  $$("[data-theme-set]",v).forEach(b=>b.onclick=()=>{store("theme",b.dataset.themeSet);applyTheme(b.dataset.themeSet);$$("[data-theme-set]",v).forEach(x=>x.setAttribute("aria-pressed",x===b))});
   const grb=$("#gr-go",v);if(grb)grb.onclick=async()=>{grb.disabled=true;try{await api(gr.on?"/api/grow/stop":"/api/grow/start",{target:+($("#gr-n",v)||{}).value||gr.target})}catch(e){}renderSettings()};
   $("#st-forget",v).onclick=async()=>{if(!steamForget){steamForget=true;renderSettings();return}steamForget=false;
     try{await api("/api/steam/forget",{sid});renderSettings()}catch(e){msg.textContent=e.message}};
@@ -3361,6 +3414,58 @@ function factsBlock(PL){const F=PL.facts;if(!F||!F.matches)return "";const fy=F.
 // the review as plan.py builds it; a plan written in the "pro review" format (quick_brief, map_briefs, deep_dive) keeps it
 // whole under raw (04/10: a plan written by a server still running that format crashed this page)
 const reviewOf=PL=>{const R=PL.review;return R&&!R.session&&R.raw&&R.raw.session?R.raw:R&&R.session?R:null};
+// HLTV's rating colors: under 0.85, 0.85-0.95, 0.95-1.05, 1.05-1.20, over 1.20
+const rtCls=r=>r==null?"":r>=1.2?"rt-elite":r>=1.05?"rt-good":r>=.95?"rt-avg":r>=.85?"rt-low":"rt-bad";
+const rtBadge=r=>r==null?`<span class="note">—</span>`:`<span class="rt ${rtCls(r)}">${(+r).toFixed(2)}</span>`;
+// the rating match by match: a dot per match (green won, red lost), the session's bright on a band, the line at 1.00
+function ratingSpark(T){if(!T||T.length<2)return "";const W=640,H=120,pad=12,rs=T.map(x=>x.rating),lo=Math.min(.4,...rs),hi=Math.max(1.8,...rs);
+  const X=i=>pad+i*(W-2*pad)/(T.length-1),Y=r=>H-pad-(r-lo)/(hi-lo)*(H-2*pad),first=T.findIndex(x=>x.recent),bx=first>0?(X(first-1)+X(first))/2:pad;
+  return `<svg class="spark" viewBox="0 0 ${W} ${H}" role="img" aria-label="Rating match by match">
+   <rect x="${bx}" y="0" width="${W-bx}" height="${H}" rx="6" fill="var(--ct)" opacity=".08"/>
+   <line x1="${pad}" x2="${W-pad}" y1="${Y(1)}" y2="${Y(1)}" stroke="var(--muted)" stroke-dasharray="4 4" opacity=".55"/>
+   <text x="${pad}" y="${Y(1)-5}" class="vct">1.00</text>
+   <polyline points="${T.map((x,i)=>`${X(i).toFixed(1)},${Y(x.rating).toFixed(1)}`).join(" ")}" fill="none" stroke="var(--ink)" stroke-opacity=".3" stroke-width="1.5"/>
+   ${T.map((x,i)=>`<circle cx="${X(i).toFixed(1)}" cy="${Y(x.rating).toFixed(1)}" r="${x.recent?5:3.2}" fill="${x.result==="win"?"var(--good)":x.result==="loss"?"var(--bad)":"var(--muted)"}" opacity="${x.recent?1:.45}"><title>${esc(MAPN(x.map))} · ${esc(fmtDate(x.time))} · ${x.rating}</title></circle>`).join("")}</svg>`}
+// 1 · the brief: the session in 2 minutes
+function reviewBrief(R,f){const T=R.trend||[],rec=T.filter(x=>x.recent),bef=T.filter(x=>!x.recent),avg=a=>a.length?a.reduce((s,x)=>s+x.rating,0)/a.length:null;
+  const ra=avg(rec),rb=avg(bef),M=R.maps||[],ng=M.reduce((s,m)=>s+m.games,0),adr=ng?M.reduce((s,m)=>s+m.adr*m.games,0)/ng:null,PI=(R.pro||{}).items||[];
+  const works=[...R.changes.filter(c=>c.better).slice(0,2).map(c=>`${esc(c.label)}: ${f(c.before,c.unit)} → <b>${f(c.after,c.unit)}</b>`),
+    ...PI.filter(i=>i.severity==="positive").map(i=>`${esc(i.title)} <span class="note">(${i.value} of ${i.of})</span>`),
+    ...(()=>{const top=M.filter(m=>m.rating>=1.2).sort((a,b)=>b.rating-a.rating).slice(0,3);   // the maps you played well
+      return top.length?[`Strong on ${top.map(m=>`${esc(MAPN(m.map))} ${rtBadge(m.rating)}`).join(", ")}`]:[]})()].slice(0,3);
+  const watch=[...R.changes.filter(c=>!c.better).slice(0,2).map(c=>`${esc(c.label)}: ${f(c.before,c.unit)} → <b>${f(c.after,c.unit)}</b>`),
+    ...PI.filter(i=>i.severity!=="positive").map(i=>`${esc(i.title)} <span class="note">(${i.value} of ${i.of})</span>`)].slice(0,3);
+  const a0=(R.axes||[])[0],li=xs=>xs.length?`<ul>${xs.map(x=>`<li>${x}</li>`).join("")}</ul>`:"";
+  return `<section class="tier" id="tier1"><div class="tier-h"><b>1</b><h3>Quick brief</h3><span class="note">the session in 2 minutes</span></div>
+   <div class="brief">
+    <div class="tiles">
+     <div class="tile"><span class="eyebrow">Record</span><b class="num big">${R.session.wins}-${R.session.losses}</b><span class="note">${R.session.games} game${R.session.games>1?"s":""}</span></div>
+     <div class="tile"><span class="eyebrow">Rating</span><b class="big">${rtBadge(ra)}</b><span class="note">${rb!=null&&ra!=null?`<span class="${ra>=rb?"good":"bad"}">${ra>=rb?"+":"−"}${Math.abs(ra-rb).toFixed(2)}</span> vs ${rb.toFixed(2)} before`:""}</span></div>
+     <div class="tile"><span class="eyebrow">ADR</span><b class="num big">${adr==null?"—":adr.toFixed(1)}</b><span class="note">damage per round</span></div>
+     <div class="tile"><span class="eyebrow">Maps</span><b class="num big">${M.length}</b><span class="note">${M.map(m=>esc(MAPN(m.map))).join(" · ")}</span></div>
+    </div>
+    <div class="spark-box">${ratingSpark(T)}<span class="note">Your rating match by match: this session on the band, the ${bef.length} matches before dimmed. Green won, red lost.</span></div>
+   </div>
+   <div class="brief3">
+    <article class="card b-good"><span class="eyebrow">What works</span>${li(works)||`<p class="note">Nothing stands out above your usual level.</p>`}</article>
+    <article class="card b-bad"><span class="eyebrow">Watch out</span>${li(watch)||`<p class="note">Nothing slips: your numbers hold.</p>`}</article>
+    <article class="card b-next"><span class="eyebrow">Next session</span>${R.next?`<p class="lead">${esc(R.next)}</p>`:""}${a0&&a0.do.length?`<p>${esc(a0.short||a0.title)}: ${esc(a0.do[0])}</p>`:""}${!R.next&&!a0?`<p class="note">Keep your routine.</p>`:""}</article>
+   </div></section>`}
+// 2 · map by map: each map of the session
+function reviewMaps(R){const M=R.maps||[];if(!M.length)return "";
+  const side=(m,s)=>{const x=m.sides[s],pc=x.of?Math.round(100*x.won/x.of):null;
+    return `<div class="mc-side"><span class="side-tag ${s}">${s}</span><div class="mc-bar"><i style="width:${pc||0}%;background:var(--${s==="T"?"t":"ct"})"></i></div><b class="num">${pc==null?"—":pc+"%"}</b><span class="note">${x.won}/${x.of} rounds</span></div>
+     ${x.play?`<p class="mc-note"><span class="good">▲</span> ${x.play}</p>`:""}${x.avoid?`<p class="mc-note"><span class="bad">▼</span> ${x.avoid}</p>`:""}`};
+  return `<section class="tier" id="tier2"><div class="tier-h"><b>2</b><h3>Map by map</h3><span class="note">this session · round wins per side, what to play and to avoid there</span></div>
+   <div class="mapcards">${M.map(m=>`<article class="mapcard"><div class="mc-h"><b>${esc(MAPN(m.map))}</b><span class="res ${m.wins>m.losses?"win":m.wins<m.losses?"loss":"draw"}">${m.wins}-${m.losses}</span>
+     ${rtBadge(m.rating)}<span class="note num">ADR ${m.adr}</span></div>${side(m,"T")}${side(m,"CT")}</article>`).join("")}</div></section>`}
+// 3 · the pro insights of the session (from the demos)
+function reviewInsights(R){const P=R.pro||{},I=P.items||[];if(!P.matches)return "";
+  const lab={high:"priority",medium:"watch",positive:"strength"};
+  return `<h3>Pro insights</h3><p class="note">What an analyst points at in the demos of this session's ${P.matches} match${P.matches>1?"es":""}, with enough cases to say it.</p>
+   ${I.length?`<div class="ins">${I.map(i=>`<article class="ins-${i.severity}"><span class="eyebrow">${lab[i.severity]}</span><h4>${esc(i.title)}</h4><p>${esc(i.detail)}</p>
+     <div class="pbar"><i style="width:${Math.round(100*i.value/Math.max(1,i.of))}%"></i></div><span class="note num">${i.value} of ${i.of}</span></article>`).join("")}</div>`
+     :`<p>Nothing stands out: no re-peek after your kills, deaths without impact, unused flashes or death spot above the usual.</p>`}`}
 function renderReview(){const p=P(),v=$("#v-review"),PL=p.advice.plan||{},R=reviewOf(PL),X=PL.experiments||{};
   const head=`<div class="head"><div style="display:grid;gap:4px"><span class="eyebrow">${esc(p.name)}${R?` · ${esc(R.label)}, compared with your previous ${R.n_before} matches`:""}</span><h2>Review</h2></div>
     ${R?`<div class="record"><span>${R.session.wins}<small>wins</small></span><span>${R.session.losses}<small>losses</small></span></div>`:""}</div>`;
@@ -3368,7 +3473,10 @@ function renderReview(){const p=P(),v=$("#v-review"),PL=p.advice.plan||{},R=revi
     ${(p.advice.rules||[]).length?`<h3>Your focus areas</h3>${findings(p.advice.rules.slice(0,3).map((r,i)=>({level:i<1?"high":"mid",title:r.title,evidence:r.why,fix:r.do,drills:r.drills,sources:r.sources})))}`:""}`;return}
   const f=(x,u)=>fmtU(x,u),TREND={better:"strong",worse:"weak",mieux:"strong","moins bien":"weak"};
   v.innerHTML=head+`
-   ${R.next?`<div class="callout"><h3>For your next session</h3><p>${esc(R.next)}</p></div>`:""}
+   <nav class="tier-nav" aria-label="Review tiers"><a href="#tier1" data-tier="tier1">1 · Quick brief</a><a href="#tier2" data-tier="tier2">2 · Map by map</a><a href="#tier3" data-tier="tier3">3 · Deep dive</a></nav>
+   ${reviewBrief(R,f)}
+   ${reviewMaps(R)}
+   <section class="tier" id="tier3"><div class="tier-h"><b>3</b><h3>Deep dive</h3><span class="note">every change and its possible reasons, the demos' insights, your matches</span></div>
    <h3>What changed</h3>
    ${R.changes.length?`<div class="chg">${R.changes.map(c=>`<article class="${c.better?"better":"worse"}"><span class="eyebrow">${esc(c.label)}</span>
      <span class="ba">${f(c.before,c.unit)}<span class="arrow" aria-hidden="true">→</span><span class="${c.better?"good":"bad"}">${f(c.after,c.unit)}</span> <span class="lvl ${c.level==="clear"||c.level==="net"?"clear":"trend"}">${c.level==="clear"||c.level==="net"?"clear gap":"trend"}</span></span>
@@ -3376,9 +3484,10 @@ function renderReview(){const p=P(),v=$("#v-review"),PL=p.advice.plan||{},R=revi
      ${c.why.length?`<details><summary class="mini" style="cursor:pointer">Possible reasons (to check over the next matches)</summary><ul class="why">${c.why.map(w=>`<li>${esc(w)}</li>`).join("")}</ul></details>`:`<span class="note">${c.better?"No single cause in your data: keep doing what you did in these games.":"No obvious explanation in your data: keep an eye on it."}</span>`}</article>`).join("")}</div>`
      :`<p>Nothing moved clearly: your numbers are stable.</p>`}
    ${R.stable.length?`<p class="note">Stable: ${R.stable.map(esc).join(" · ")}.</p>`:""}
+   ${reviewInsights(R)}
    <div class="cols3" style="grid-template-columns:repeat(auto-fit,minmax(340px,1fr))">
     <div style="display:grid;gap:10px;align-content:start"><h3>Your last session</h3>
-     <div class="tbl"><table><thead><tr><th>Date</th><th>Map</th><th>Score</th><th class="n">Rating</th></tr></thead><tbody>${R.session.matches.map(x=>`<tr class="click" data-mid="${x.id}" tabindex="0"><td>${fmtDate(x.time)}</td><td>${MAPN(x.map)}</td><td><span class="res ${x.result}">${x.score.me}-${x.score.them}</span></td><td class="n">${f1(x.rating)}</td></tr>`).join("")}</tbody></table></div>
+     <div class="tbl"><table><thead><tr><th>Date</th><th>Map</th><th>Score</th><th class="n">Rating</th></tr></thead><tbody>${R.session.matches.map(x=>`<tr class="click" data-mid="${x.id}" tabindex="0"><td>${fmtDate(x.time)}</td><td>${MAPN(x.map)}</td><td><span class="res ${x.result}">${x.score.me}-${x.score.them}</span></td><td class="n">${rtBadge(x.rating)}</td></tr>`).join("")}</tbody></table></div>
      <p class="note">Click a match to open it.</p></div>
     <div style="display:grid;gap:10px;align-content:start"><h3>Your focus areas</h3>
      <div class="axes">${R.axes.map(a=>`<article class="card"><h3>${esc(a.short||a.title)}</h3><p class="note">${esc(a.title)}</p>
@@ -3394,8 +3503,10 @@ function renderReview(){const p=P(),v=$("#v-review"),PL=p.advice.plan||{},R=revi
    ${(X.suggested||[]).length?`<span class="lbl4" style="color:var(--muted)">Worth testing</span><div class="exps">${X.suggested.slice(0,3).map(suggestCard).join("")}</div>`:""}
    ${R.tests.done.length?`<details><summary style="cursor:pointer">Finished experiments (${R.tests.done.length})</summary><div class="exps" style="margin-top:10px">${R.tests.done.map(expCard).join("")}</div></details>`:""}
    <p class="note" id="xmsg" role="status"></p>
-   <div class="linkrow"><a href="#analysis">Full analysis</a><a href="#midround">Mid-round</a><a href="#progress">Progress and tracking</a><a href="#matches">Every match</a><a href="#maps">Maps and grenades</a><a href="#routine">Routine</a></div>`;
+   <div class="linkrow"><a href="#analysis">Full analysis</a><a href="#midround">Mid-round</a><a href="#progress">Progress and tracking</a><a href="#matches">Every match</a><a href="#maps">Maps and grenades</a><a href="#routine">Routine</a></div>
+   </section>`;
   wireExp(v,X,p);
+  $$("[data-tier]",v).forEach(a=>a.onclick=e=>{e.preventDefault();const t=$("#"+a.dataset.tier,v);if(t)t.scrollIntoView({behavior:"smooth",block:"start"})});   // not a #view link
   $$("tr[data-mid]",v).forEach(r=>{r.onclick=()=>{const i=p.matches.findIndex(x=>x.id===r.dataset.mid);S.match=i<0?0:i;S.mpin=i>=0;go("matches")};r.onkeydown=e=>{if(e.key==="Enter")r.click()}});
 }
 

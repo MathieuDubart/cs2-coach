@@ -13,6 +13,11 @@ const NS="http://www.w3.org/2000/svg";
 function el(t,a,p){const e=document.createElementNS(NS,t);for(const k in a)e.setAttribute(k,a[k]);p.appendChild(e);return e}
 function tip(e,s){const t=document.createElementNS(NS,"title");t.textContent=s;e.appendChild(t);return e}
 function store(k,v){try{if(v===undefined)return JSON.parse(localStorage.getItem("cs2c:"+k));localStorage.setItem("cs2c:"+k,JSON.stringify(v))}catch(e){return null}}
+// the theme: dark unless you chose light or your system's in Settings
+function applyTheme(t){t=t||store("theme")||"dark";if(t==="system")delete document.documentElement.dataset.theme;else document.documentElement.dataset.theme=t}
+applyTheme();
+// ≈ HLTV Rating 2.0 (flashed.gg's regression, the same as context.rating)
+const rating2=(k,d,a,adr,kast,r)=>{r=Math.max(r||0,1);const kpr=k/r,dpr=d/r,apr=a/r,imp=2.13*kpr+.42*apr-.41;return .0073*kast+.3591*kpr-.5329*dpr+.2372*imp+.0032*adr+.1587};
 function press(scope,sel,b){$$(sel,scope).forEach(x=>x.setAttribute("aria-pressed",x===b))}
 function copyBtn(root){$$(".cmd button",root).forEach(b=>b.onclick=e=>{e.stopPropagation();const code=$("code",b.parentNode);
   const sel=()=>{const r=document.createRange();r.selectNodeContents(code);const s=getSelection();s.removeAllRanges();s.addRange(r)};
@@ -132,12 +137,13 @@ function qcls(v,k,fb){if(v==null)return "";const m=(((P().advice||{}).bench||{})
 function trendRows(ms,selIdx){return ms.map((m,i)=>{const s=m.sum,nr=typeof m.rounds==="number"?m.rounds:(m.per_round||[]).length,
   n24=s.nades_unused!=null&&nr?s.nades_unused*24/nr:null;return `<tr class="click" data-i="${i}" tabindex="0" aria-selected="${i===selIdx}">
   <td>${fmtDate(m.time)}</td><td>${MAPN(m.map)}</td><td>${esc(m.mode)}</td><td><span class="res ${m.result}">${m.score.me}-${m.score.them}</span></td>
+  <td class="n">${nr&&s.kast!=null&&s.adr!=null?rtBadge(rating2(s.kills,s.deaths,s.assists,s.adr,s.kast,nr)):"—"}</td>
   <td class="n">${s.kills}-${s.deaths}-${s.assists}</td><td class="n ${qcls(s.adr,"adr",cls(s.adr,85,65))}">${f1(s.adr)}</td><td class="n ${qcls(s.hs,"hs_pct",cls(s.hs,55,35))}">${f1(s.hs)}</td>
   <td class="n ${cls(s.kast,72,62)}">${f1(s.kast)}</td><td class="n ${qcls(s.traded_pct,"traded_pct",cls(s.traded_pct,25,10))}">${s.traded_pct==null?"—":f1(s.traded_pct)+"%"}</td>
   <td class="n ${qcls(n24,"nades_unused_24",cls(s.nades_unused,4,10,false))}">${s.nades_unused}</td><td class="n ${qcls(s.first_bullet,"b1_hit",cls(s.first_bullet,30,20))}">${s.first_bullet==null?"—":f1(s.first_bullet)+"%"}</td>
   <td class="n ${qcls(s.pistol_moving,"pistol_moving",cls(s.pistol_moving,25,45,false))}">${s.pistol_moving==null?"—":f1(s.pistol_moving)+"%"}</td>
   <td class="n ${qcls(s.xhair,"xhair",cls(s.xhair,4,8,false))}">${s.xhair==null?"—":f1(s.xhair)+"°"}</td><td class="n">${s.open_won}-${s.open_lost}</td></tr>`}).join("")}
-const TREND_HEAD=`<thead><tr><th>Date</th><th>Map</th><th>Mode</th><th>Score</th><th class="n">K-D-A</th><th class="n">ADR</th><th class="n">HS %</th><th class="n">KAST</th><th class="n">Deaths<br>traded</th><th class="n">Grenades<br>wasted</th><th class="n">1st bullet<br>hits</th><th class="n">Pistol<br>moving</th><th class="n">Crosshair<br>offset</th><th class="n">Openings<br>W-L</th></tr></thead>`;
+const TREND_HEAD=`<thead><tr><th>Date</th><th>Map</th><th>Mode</th><th>Score</th><th class="n" title="≈ HLTV 2.0: under 0.85 red, over 1.20 bright green">Rating</th><th class="n">K-D-A</th><th class="n">ADR</th><th class="n">HS %</th><th class="n">KAST</th><th class="n">Deaths<br>traded</th><th class="n">Grenades<br>wasted</th><th class="n">1st bullet<br>hits</th><th class="n">Pistol<br>moving</th><th class="n">Crosshair<br>offset</th><th class="n">Openings<br>W-L</th></tr></thead>`;
 const WCOL={"rifles":"var(--t)","AWP":"var(--ct)","SMG":"var(--good)","shotguns":"var(--molotov)","pistols":"var(--muted)","fusils à pompe":"var(--molotov)","pistolets":"var(--muted)"};
 function archCard(p){const A=p.advice.archetype;if(!A)return "";
   const mx=Math.max(...A.scores.map(x=>x.score),1);

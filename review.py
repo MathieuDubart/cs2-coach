@@ -1,10 +1,16 @@
 """Cold review ("bilan"): what changed in the last session compared with the matches before, how much,
 the likely reasons (time of day, session length, maps, group, sleep, experiments started), what was tested
 and what to test next. Every "why" is a coincidence worth checking, not a proof: the text says so.
+The page shows it in three tiers (04/10): a quick brief (the record, the rating's trend match by match, what works,
+what slips, the one thing for next time), a brief per map of the session (record, rating, sides, what to play and
+to avoid there) and the deep dive (every change with its possible reasons, the pro insights summed over the
+session, the focus areas, the tests). New keys only: the page of an older plan still reads it.
 """
 import datetime as dt
+import json
 import math
 import os
+from collections import Counter
 
 import pandas as pd
 
@@ -53,6 +59,129 @@ def per_match(st, mid):
     return v
 
 
+def _insights_of(sid, st):
+    """A match's pro insights (pro_analyst), computed again from its demo when its stats.json has none or the first
+    version's (then saved in it): a few seconds a match, once."""
+    pi = st.get("pro_insights")
+    if isinstance(pi, dict) and pi.get("v") == 2:
+        return pi
+    import config
+    mid = str((st.get("match") or {}).get("match_id") or "")
+    dem = os.path.join(config.CACHE, f"{mid}.dem")
+    if not mid or not os.path.exists(dem):
+        return None
+    try:
+        import analyze
+        pi = analyze.analyze(dem, int(sid)).get("pro_insights")
+    except Exception:
+        return None
+    if not isinstance(pi, dict):
+        return None
+    st["pro_insights"] = pi
+    f = os.path.join(config.player_dir(sid), "matches", mid, "stats.json")
+    try:
+        with open(f, encoding="utf-8") as fh:
+            cur = json.load(fh)
+        cur["pro_insights"] = pi
+        config.write_json(f, cur, default=str)
+    except (OSError, ValueError):
+        pass
+    return pi
+
+
+def _map_name(mp):
+    return str(mp).split("_")[-1].capitalize()
+
+
+def pro_summary(sid, sts):
+    """The pro insights summed over the session's matches: only what stands out (with enough cases to say it)."""
+    import nades
+    rp = rpo = ut = uto = fl = flo = n = 0
+    spots, deaths_on = Counter(), Counter()
+    for st in sts:
+        pi = _insights_of(sid, st)
+        if not pi:
+            continue
+        n += 1
+        rp += pi["repeek"]["value"]
+        rpo += pi["repeek"]["of"]
+        ut += pi["untraded"]["value"]
+        uto += pi["untraded"]["of"]
+        fl += pi["flash"]["value"]
+        flo += pi["flash"]["of"]
+        for k, c in (pi.get("spots") or {}).items():
+            spots[(st["map"], k)] += c
+            deaths_on[st["map"]] += c
+    out = []
+    if rpo >= 8:
+        pct = 100 * rp / rpo
+        sev = "high" if pct >= 30 else "medium" if pct >= 20 else "positive" if pct <= 10 else None
+        if sev:
+            out.append({"id": "repeek", "severity": sev, "value": rp, "of": rpo, "pct": round(pct),
+                        "title": "Dead soon after your first kill" if sev != "positive" else "You keep the advantage after a kill",
+                        "detail": f"In {rp} of the {rpo} rounds where you got a kill, you died within 8 s." +
+                                  (" After a kill the numbers are on your side: fall back to a spot a teammate can trade from instead of peeking again."
+                                   if sev != "positive" else " After a kill you fall back instead of peeking again: keep doing it.")})
+    if uto >= 8:
+        pct = 100 * ut / uto
+        sev = "high" if pct >= 50 else "medium" if pct >= 35 else "positive" if pct <= 20 else None
+        if sev:
+            out.append({"id": "untraded", "severity": sev, "value": ut, "of": uto, "pct": round(pct),
+                        "title": "Deaths without impact" if sev != "positive" else "Your deaths are rarely for nothing",
+                        "detail": f"{ut} of your {uto} deaths: nobody traded you within 5 s and you hadn't hit anyone in the 3 s before." +
+                                  (" Take the duel closer to a teammate, or with utility." if sev != "positive" else "")})
+    if flo >= 6:
+        pct = 100 * fl / flo
+        sev = "medium" if pct <= 20 else "positive" if pct >= 50 else None
+        if sev:
+            out.append({"id": "flash", "severity": sev, "value": fl, "of": flo, "pct": round(pct),
+                        "title": "Flashes your team doesn't use" if sev == "medium" else "Flashes that pay off",
+                        "detail": f"Your flashes blinded {flo} enemies for over 1.5 s; your team hit {fl} of them while they were blind." +
+                                  (" Call it before throwing, or flash for your own peek." if sev == "medium" else "")})
+    for (mp, place), c in spots.most_common(5):   # a bombsite is where a CT anchor dies: the role, not a habit
+        if c >= 4 and c >= 0.3 * deaths_on[mp] and not str(place).startswith("Bombsite"):
+            nm = nades.humanize(place, mp) or place
+            out.append({"id": "spot", "severity": "medium", "value": c, "of": deaths_on[mp], "map": mp, "place": nm,
+                        "title": f"You keep dying at {nm} ({_map_name(mp)})",
+                        "detail": f"{c} of your {deaths_on[mp]} deaths on {_map_name(mp)} this session: the enemies can expect you there. Change the angle or the timing."})
+    order = {"high": 0, "medium": 1, "positive": 2}
+    out.sort(key=lambda x: order[x["severity"]])
+    return {"matches": n, "items": out}
+
+
+def map_briefs(recent, by_id, adv):
+    """Each map of the session: record, rating, damage, round wins per side, and what to play and to avoid there
+    (the map advice, per side)."""
+    out = {}
+    for r in recent:
+        st = by_id.get(r["id"]) or {}
+        m = out.setdefault(r["map"], {"map": r["map"], "games": 0, "wins": 0, "losses": 0, "ratings": [], "adr": [],
+                                      "T": [0, 0], "CT": [0, 0]})
+        m["games"] += 1
+        m["wins"] += r["result"] == "win"
+        m["losses"] += r["result"] == "loss"
+        m["ratings"].append(r["rating"])
+        m["adr"].append(r["adr"])
+        for side in ("T", "CT"):
+            m[side][0] += int(((st.get("overview") or {}).get("rounds_won_on_side") or {}).get(side) or 0)
+            m[side][1] += int((st.get("rounds_per_side") or {}).get(side) or 0)
+    res = []
+    for mp, m in out.items():
+        adv_m = ((adv or {}).get("maps") or {}).get(mp) or {}
+        sides = {}
+        for side in ("T", "CT"):
+            x = adv_m.get(side) or {}
+            b = x.get("bullets") or []
+            sides[side] = {"won": m[side][0], "of": m[side][1], "record": x.get("record"),
+                           "play": next((y["text"] for y in b if y.get("kind") == "exploit"), None),
+                           "avoid": next((y["text"] for y in b if y.get("kind") == "avoid"), None)}
+        res.append({"map": mp, "games": m["games"], "wins": m["wins"], "losses": m["losses"],
+                    "rating": round(sum(m["ratings"]) / len(m["ratings"]), 2), "adr": round(sum(m["adr"]) / len(m["adr"]), 1),
+                    "sides": sides})
+    res.sort(key=lambda x: (-x["games"], -x["rating"]))
+    return res
+
+
 def _mean_sd(xs):
     xs = [x for x in xs if x is not None]
     if not xs:
@@ -64,13 +193,14 @@ def _mean_sd(xs):
 
 def build(sid, stats, mid_rows, ctx, exps, adv):
     """-> the review, or None without at least 3 dated matches with a demo."""
-    rows = []
+    rows, by_id = [], {}
     for st in stats:
         t = (st.get("match") or {}).get("time")
         if not t:
             continue
         rows.append({"id": st["match"]["match_id"], "time": dt.datetime.fromisoformat(t), "map": st["map"], "result": st["result"],
                      "score": st["final_score"], **per_match(st, mid_rows.get(st["match"]["match_id"]))})
+        by_id[st["match"]["match_id"]] = st
     rows.sort(key=lambda r: r["time"])
     if len(rows) < 3:
         return None
@@ -177,7 +307,14 @@ def build(sid, stats, mid_rows, ctx, exps, adv):
         nxt = f"Fix what is slipping: {worse[0]['label'].lower()} ({worse[0]['before']:g} → {worse[0]['after']:g}).".replace(".", ",", 0)
     elif axes:
         nxt = f"Stay on track with your #1 focus: {axes[0]['short'].lower()}."
+    trend = [{"id": r["id"], "time": r["time"].isoformat(timespec="minutes"), "map": r["map"], "result": r["result"],
+              "rating": round(r["rating"], 2), "recent": r in recent} for r in before + recent]
+    try:
+        pro = pro_summary(sid, [by_id[r["id"]] for r in recent if r["id"] in by_id])
+    except Exception as e:   # a bonus: never the review's end
+        pro = {"matches": 0, "items": [], "error": str(e)[:200]}
     return {"label": label, "since": recent[0]["time"].isoformat(timespec="minutes"),
+            "trend": trend, "maps": map_briefs(recent, by_id, adv), "pro": pro,
             "session": {"games": len(recent), "wins": wins, "losses": losses,
                         "matches": [{"id": r["id"], "time": r["time"].isoformat(timespec="minutes"), "map": r["map"], "result": r["result"],
                                      "score": r["score"], "rating": round(r["rating"], 2)} for r in recent]},
