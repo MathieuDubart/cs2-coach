@@ -242,6 +242,7 @@ def follow_ups():
     skips what is done already."""
     import buys
     import midround
+    import nades_catalog
     import population
     import rounds
     import style
@@ -252,6 +253,7 @@ def follow_ups():
     tside.run_all(log=log)
     population.run_all()
     style.run_all(workers=1)
+    nades_catalog.run_all(log=log)   # the pro catalog's lineups again once the base grew by a quarter
 
 
 def _alive(pid):

@@ -235,7 +235,7 @@ class Handler(BaseHTTPRequestHandler):
             import team
             sid = (q.get("sid") or [""])[0]
             return self.send(200, team.suggestions(sid) if sid.isdigit() else [])
-        if u.path in ("/index.json", "/pros.json") or u.path.startswith(("/players/", "/radars/", "/replays/", "/teams/")):
+        if u.path in ("/index.json", "/pros.json") or u.path.startswith(("/players/", "/radars/", "/replays/", "/teams/", "/nadecat/")):
             f = os.path.normpath(os.path.join(build_app.SITE, u.path.lstrip("/")))
             rm = re.fullmatch(r"/replays/(\d{17})/(\d{6,20})\.json", u.path)
             if rm and not os.path.isfile(f):   # a 2D replay not made yet: from the match's detailed extraction, now
