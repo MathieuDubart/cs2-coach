@@ -135,7 +135,8 @@ const RENDER={ingame:renderIngame,review:renderReview,analysis:renderAnalysis,ro
 // you], /team, /players, /pros, /settings; old links (/#review) still open. The published page (one file) keeps #view.
 const GLOBAL=["team","players","pros","settings"],homeView=sid=>sid&&sid===D.own?"ingame":"analysis";
 let navAt=0,navQuiet=0,afterJob=null,CODES={};   // CODES: match id -> share code
-function pathNow(){const v=S.view;if(GLOBAL.includes(v))return "/"+v;if(!S.player)return "/";
+// /live: your In game page, the address to keep open during a match (a second screen, OBS) (04/10)
+function pathNow(){const v=S.view;if(GLOBAL.includes(v))return "/"+v;if(!S.player)return "/";if(v==="ingame"&&S.player===D.own)return "/live";
   const m=v==="matches"&&S.mpin&&P()?P().matches[S.match]:null;
   return m?`/match/${CODES[m.id]||m.id}${S.player!==D.own?"?as="+S.player:""}`:`/player/${S.player}${v===homeView(S.player)?"":"/"+v}`}
 // the address of what is on screen: a new history entry for each move of yours (back works), the same entry for the
@@ -156,6 +157,7 @@ async function route(){
   if((m=path.match(/^\/player\/(\d{17})(?:\/([a-z]+))?$/))){const sid=m[1],v=ALIAS[m[2]]||m[2];
     if(!IDX()[sid])return notYet(`This player (SteamID ${sid}) isn't analyzed yet.`,sid);
     S.view=hv||(RENDER[v]&&!GLOBAL.includes(v)?v:homeView(sid));return setPlayer(sid)}
+  if(path==="/live"&&D.own&&IDX()[D.own]){S.view="ingame";return setPlayer(D.own)}
   m=path.match(/^\/([a-z]+)$/);const g=m&&(ALIAS[m[1]]||m[1]),p=defPlayer();
   S.view=hv||(GLOBAL.includes(g)?g:homeView(p));return setPlayer(p)}
 // /match/<id or share code>: that match, seen as the player of the address (?as=), else you, else an analyzed player in it

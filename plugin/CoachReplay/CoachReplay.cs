@@ -37,6 +37,7 @@ public class Track
     [JsonPropertyName("path")] public float[] Path { get; set; } = Array.Empty<float>();
     [JsonPropertyName("death")] public int Death { get; set; } = -1;
     [JsonPropertyName("killer")] public string Killer { get; set; } = "";
+    [JsonPropertyName("kw")] public string KillWeapon { get; set; } = "";   // the gun it was killed with in the match
     [JsonPropertyName("hold")] public bool Hold { get; set; }   // stays on its spot (aim targets): only its aim is its own
     [JsonPropertyName("places")] public List<JsonElement> Places { get; set; } = new();   // your route in the match: [frame, place]
     [JsonIgnore] public float Start { get; set; }   // the frame its path starts at (a defense's attacker: when it spawned)
@@ -346,7 +347,7 @@ public partial class CoachReplay : BasePlugin
                      $"mp_roundtime_defuse {rt}", $"mp_roundtime_hostage {rt}", "mp_buytime 0", "mp_autoteambalance 0", "mp_limitteams 0",
                      "mp_friendlyfire 0", "mp_autokick 0", "mp_halftime 0", "mp_maxrounds 99", "mp_match_can_clinch 0",
                      "mp_give_player_c4 0", $"mp_death_drop_gun {drop}", $"mp_death_drop_defuser {drop}", "mp_c4timer 40",
-                     "mp_randomspawn 0", "bot_quota_mode normal",
+                     "mp_randomspawn 0", "bot_quota_mode normal", "mp_solid_teammates 0",   // no teammate's path blocks yours (04/10)
                      "mp_playercashawards 0", "mp_teamcashawards 0",
                      "bot_join_after_player 0", "bot_chatter off", "sv_hibernate_when_empty 0", "sv_falldamage_scale 0",
                      $"bot_difficulty {diff}", "bot_kick" })
@@ -650,7 +651,7 @@ public partial class CoachReplay : BasePlugin
                 // the end of its recorded path: a death in the demo (by a player still alive here, or the world), or the
                 // window is over / you were the killer: the bot plays on from there
                 if (t.Death >= 0 && t.Killer != meSid && (t.Killer == "" || !cur.Players.Any(q => q.Sid == t.Killer) || Alive(t.Killer)))
-                { pawn.CommitSuicide(false, true); gone.Add(t.Sid); Logger.LogInformation("demo kill {n} at {f}", t.Name, (int)f); }
+                { DemoKill(c, pawn, t); gone.Add(t.Sid); Logger.LogInformation("demo kill {n} at {f}", t.Name, (int)f); }
                 else { Free(slot, c, t); Logger.LogInformation("free {n} at {f} (death {d}, killer {k})", t.Name, (int)f, t.Death, t.Killer); }
                 continue;
             }
@@ -712,6 +713,46 @@ public partial class CoachReplay : BasePlugin
         var endF = cur.Kind == "clutch" ? maxFrames + 64 * 10 / cur.Step : maxFrames + 64 * 2 / cur.Step;
         if (f >= endF + (bombLive ? 45 * 64 / cur.Step : 0)) Finish(mode == "spec" ? "watched" : "survived");
     }
+
+    // a death of the demo, as it was heard and seen: its killer's shots (the sound of its gun, where it stands) and the kill
+    // feed's line, then the death (04/10: "when the Ts kill my teammates I hear them shoot: I want the real situation")
+    void DemoKill(CCSPlayerController c, CCSPlayerPawn pawn, Track t)
+    {
+        var kc = bots.Where(b => b.Value.Sid == t.Killer).Select(b => Utilities.GetPlayerFromSlot(b.Key)).FirstOrDefault(x => x is { IsValid: true, PawnIsAlive: true });
+        if (kc?.PlayerPawn.Value is { } kp)
+        {
+            // the gun of the match's kill (the killer takes it out), else the one it holds
+            var w = t.KillWeapon != "" ? t.KillWeapon : kp.WeaponServices?.ActiveWeapon.Value?.DesignerName?.Replace("weapon_", "") ?? "";
+            if (t.KillWeapon != "") kc.ExecuteClientCommandFromServer($"use weapon_{t.KillWeapon}");
+            if (ShotSound.TryGetValue(w, out var snd))
+                for (int k = 0; k < (w is "awp" or "ssg08" or "deagle" or "revolver" ? 1 : 3); k++)
+                    AddTimer(0.09f * k, () => { if (kp.IsValid) kp.EmitSound(snd); });
+            try
+            {
+                var ev = NativeAPI.CreateEvent("player_death", true);
+                NativeAPI.SetEventPlayerController(ev, "userid", c.Handle);
+                NativeAPI.SetEventPlayerController(ev, "attacker", kc.Handle);
+                NativeAPI.SetEventString(ev, "weapon", w == "" ? "world" : w);
+                NativeAPI.FireEvent(ev, false);
+            }
+            catch (Exception e) { Logger.LogInformation("kill feed: {m}", e.Message); }
+        }
+        pawn.CommitSuicide(false, true);   // its own death event stays out of the feed (the Pre hook)
+    }
+
+    // the sound event of each gun's shot
+    static readonly Dictionary<string, string> ShotSound = new()
+    {
+        ["ak47"] = "Weapon_AK47.Single", ["m4a1"] = "Weapon_M4A1.Single", ["m4a1_silencer"] = "Weapon_M4A1.Silenced", ["awp"] = "Weapon_AWP.Single",
+        ["deagle"] = "Weapon_DEagle.Single", ["glock"] = "Weapon_Glock.Single", ["hkp2000"] = "Weapon_HKP2000.Single", ["usp_silencer"] = "Weapon_USP.SilencedShot",
+        ["p250"] = "Weapon_P250.Single", ["tec9"] = "Weapon_Tec9.Single", ["fiveseven"] = "Weapon_FiveSeven.Single", ["cz75a"] = "Weapon_CZ75A.Single",
+        ["elite"] = "Weapon_Elite.Single", ["revolver"] = "Weapon_Revolver.Single", ["famas"] = "Weapon_FAMAS.Single", ["galilar"] = "Weapon_GalilAR.Single",
+        ["aug"] = "Weapon_AUG.Single", ["sg556"] = "Weapon_SG556.Single", ["ssg08"] = "Weapon_SSG08.Single", ["scar20"] = "Weapon_SCAR20.Single",
+        ["g3sg1"] = "Weapon_G3SG1.Single", ["mp9"] = "Weapon_MP9.Single", ["mac10"] = "Weapon_MAC10.Single", ["mp7"] = "Weapon_MP7.Single",
+        ["mp5sd"] = "Weapon_MP5SD.Single", ["ump45"] = "Weapon_UMP45.Single", ["p90"] = "Weapon_P90.Single", ["bizon"] = "Weapon_bizon.Single",
+        ["nova"] = "Weapon_Nova.Single", ["xm1014"] = "Weapon_XM1014.Single", ["mag7"] = "Weapon_Mag7.Single", ["sawedoff"] = "Weapon_Sawedoff.Single",
+        ["m249"] = "Weapon_M249.Single", ["negev"] = "Weapon_Negev.Single",
+    };
 
     // the demo's bomb on the ground where it was planted, ticking with the time it had left: the game's own planted_c4,
     // made the way retake servers plant it, and the game told (HUD, bots)

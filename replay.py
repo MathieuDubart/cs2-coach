@@ -166,13 +166,14 @@ def build(sid, mid, rnd, kind="death", t=None):
     try:
         K = p.parse_event("player_death")
         K = K[(K.tick >= start) & (K.tick <= end)]
-        killer_of = {}
-        for u, a_ in zip(K.user_steamid, K.attacker_steamid):
+        killer_of, weapon_of = {}, {}
+        for u, a_, w_ in zip(K.user_steamid, K.attacker_steamid, K.weapon):
             u, a_ = str(u), ("" if a_ is None or a_ != a_ else str(a_))
             killer_of.setdefault(u, "" if a_ in ("", "0", u) else a_)   # yourself or the world: ""
+            weapon_of.setdefault(u, str(w_ or ""))
     except Exception as e:
         print("deaths", mid, rnd, e, flush=True)
-        killer_of = {}
+        killer_of, weapon_of = {}, {}
     for _, s in S.iterrows():
         if s.team_num not in (2, 3) or not s.is_alive:
             continue
@@ -208,7 +209,7 @@ def build(sid, mid, rnd, kind="death", t=None):
                         "hp": int(s.health), "armor": int(s.armor_value), "helmet": bool(s.has_helmet),
                         "kit": bool(s.get("has_defuser")) and int(s.team_num) == 3,
                         "weapons": weapons, "active": _item(s.active_weapon_name), "path": path, "duck": duck,
-                        "death": death, "killer": kl})
+                        "death": death, "killer": kl, "kw": weapon_of.get(s.steamid, "") if kl else ""})
     me = next((q for q in players if q["me"]), None)
     if not me:
         raise ValueError("you are not alive at the start of this situation")

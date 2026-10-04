@@ -455,8 +455,14 @@ def _ground_line(P):
     line hung in the air and zigzagged where the real player jumped on the boxes)."""
     Q = np.array(P[:, :3], float)
     Q[:, 2] = _opening(Q[:, 2])
-    eps, keep = 40.0, _rdp(Q, 40.0)
-    while len(keep) > 61:
+    if len(Q) > 20:   # the strafes and quick peeks smoothed out (±0.25 s): the way, not the steps (04/10: "the zigzag is bad")
+        k = 8
+        pad = np.pad(Q[:, :2], ((k, k), (0, 0)), mode="edge")
+        sm = np.stack([np.convolve(pad[:, j], np.ones(2 * k + 1) / (2 * k + 1), mode="valid") for j in range(2)], 1)
+        sm[0], sm[-1] = Q[0, :2], Q[-1, :2]
+        Q[:, :2] = sm
+    eps, keep = 48.0, _rdp(Q, 48.0)
+    while len(keep) > 41:
         eps *= 1.5
         keep = _rdp(Q, eps)
     return [[round(float(v), 1) for v in Q[i]] for i in keep]

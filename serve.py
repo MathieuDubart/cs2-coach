@@ -65,6 +65,28 @@ def grow_status():
             "free_gb": round(shutil.disk_usage(config.CACHE).free / 2 ** 30), "log": tail}
 
 
+REFRESH = os.path.join(config.OUT, "refresh.json")
+REFRESH_CTL = os.path.join(config.OUT, "refresh_ctl.json")
+
+
+def refresh_alive():
+    st = config.read_json(REFRESH, {}) or {}
+    pid = st.get("pid")
+    try:
+        import psutil
+        return bool(st.get("running") and pid and psutil.pid_exists(pid) and any("refresh_all.py" in a for a in psutil.Process(pid).cmdline()))
+    except Exception:
+        return False
+
+
+def refresh_status():
+    st = dict(config.read_json(REFRESH, {}) or {})
+    st["alive"] = refresh_alive()
+    if not st["alive"]:
+        st["running"] = False
+    return st
+
+
 def grow_wait():
     """A match the base-growing loop is extracting: the app's analysis waits for its end (they write the same files)."""
     t = time.time()
@@ -119,7 +141,7 @@ def publish_partial(sid):
 
 
 # the app's addresses (like csrep's): the page is served there, and reads them
-APP_PAGES = re.compile(r"/(?:player/\d{17}(?:/[a-z]+)?|match/[A-Za-z0-9-]{1,40}|team|players|pros|settings)/?")
+APP_PAGES = re.compile(r"/(?:player/\d{17}(?:/[a-z]+)?|match/[A-Za-z0-9-]{1,40}|team|players|pros|settings|live)/?")
 
 
 def match_info(code):
@@ -256,6 +278,8 @@ class Handler(BaseHTTPRequestHandler):
             return self.send(200, m) if m else self.send(404, {"error": "not a match id or share code"})
         if u.path == "/api/grow":   # the base-growing loop: its state (Settings)
             return self.send(200, grow_status())
+        if u.path == "/api/refresh":   # everything the app shows computed again from the base (Settings)
+            return self.send(200, refresh_status())
         if u.path == "/api/codes":   # the share code of each match (the addresses /match/<share code>)
             return self.send(200, {k: e["sharecode"] for k, e in cs2coach.registry().items() if e.get("sharecode")})
         if u.path == "/api/ping":
@@ -398,6 +422,18 @@ class Handler(BaseHTTPRequestHandler):
             except (OSError, RuntimeError, ValueError, StopIteration) as e:
                 return self.send(400, {"error": str(e) or "training server error"})
             return self.send(404, {"error": "not found"})
+        if u.path in ("/api/refresh/start", "/api/refresh/stop"):   # the app's update with the base: started or stopped
+            if u.path.endswith("stop"):
+                config.write_json(REFRESH_CTL, {"stop": True})
+                return self.send(200, refresh_status())
+            if not refresh_alive():
+                import subprocess
+                config.write_json(REFRESH_CTL, {"stop": False})
+                args = [sys.executable, "refresh_all.py"] + (["--mine"] if body.get("mine") else [])
+                subprocess.Popen(args, cwd=os.path.dirname(os.path.abspath(__file__)),
+                                 creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0) | getattr(subprocess, "BELOW_NORMAL_PRIORITY_CLASS", 0))
+                time.sleep(1)
+            return self.send(200, refresh_status())
         if u.path in ("/api/grow/start", "/api/grow/stop"):   # the base-growing loop: on until the target, or off
             on = u.path.endswith("start")
             try:

@@ -108,10 +108,15 @@ public partial class CoachReplay
     static readonly Dictionary<string, string> KindName = new() { ["defend"] = "DEFENSE", ["push"] = "PUSH", ["aim"] = "AIM", ["nade"] = "STUFF", ["situation"] = "SITUATION" };
     static readonly Dictionary<string, string> KindColor = new() { ["defend"] = "#4fc3a1", ["push"] = "#ff8a3d", ["aim"] = "#ff8a3d", ["nade"] = "#5ab4ff", ["situation"] = "#e0a030" };
     int postIdx = -1;   // a defense: the spot you hold now (Posts), Posts.Count: free
+    readonly List<(Drill d, bool ok, string outcome)> sessDone = new();   // this session's drills, each one's last try
+    readonly List<(Drill d, bool ok, string outcome)> lastDone = new();   // the last session's (!again)
+    Session? lastSess;
+    int againN;
 
     void RegisterSession()
     {
         AddCommand("css_session", "start a training session: css_session <id>", (p, c) => CmdSession(p, c));
+        AddCommand("css_again", "the last session's drills again: !again <number>[,<number>], missed or all", (p, c) => Again(p, c.ArgString));
         RegisterEventHandler<EventSmokegrenadeDetonate>((e, _) => { NadeHit(e.Userid, e.X, e.Y); return HookResult.Continue; });
         RegisterEventHandler<EventFlashbangDetonate>((e, _) => { NadeHit(e.Userid, e.X, e.Y); return HookResult.Continue; });
         RegisterEventHandler<EventHegrenadeDetonate>((e, _) => { NadeHit(e.Userid, e.X, e.Y); return HookResult.Continue; });
@@ -346,13 +351,44 @@ public partial class CoachReplay
         if (!File.Exists(f)) { Say(p, $"no session {c.GetArg(1)}"); return; }
         try { sess = JsonSerializer.Deserialize<Session>(File.ReadAllText(f)); } catch (Exception e) { Say(p, e.Message); return; }
         if (sess == null || sess.Blocks.Count == 0) { sess = null; return; }
+        StartSession(sess);
+    }
+
+    void StartSession(Session s)
+    {
+        sess = s;
         difficulty = Math.Clamp(sess.Difficulty, 0, 3);
         mode = "actor";
         blockIdx = -1; points = streak = okN = doneN = drillNo = 0; drill = null; queue.Clear(); cur = null;
+        sessDone.Clear();
         Logger.LogInformation("session {id}: {n} blocks", sess.Id, sess.Blocks.Count);
         if (!Humans().Any()) { phase = "waiting"; return; }   // starts when you join
         Welcome();
         AddTimer(4f, NextBlock);
+    }
+
+    // the drills of the session that just ended, played again: one or some (!again 3, !again 2,5), the missed ones
+    // (!again missed) or all of them (!again all), in their order, all of them whatever the time (04/10: "a recap with
+    // inputs to replay the situations I missed, the defenses, the prefires, or restart the whole session")
+    void Again(CCSPlayerController? p, string arg)
+    {
+        if (lastSess == null || lastDone.Count == 0) { Say(p, "no session to play again yet"); return; }
+        if (sess != null) { Say(p, "a session is running: !stop first"); return; }
+        arg = arg.Trim().ToLowerInvariant();
+        var pick = arg is "" or "all" ? lastDone.Select(x => x.d).ToList()
+            : arg == "missed" ? lastDone.Where(x => !x.ok).Select(x => x.d).ToList()
+            : arg.Split(new[] { ',', ' ' }, StringSplitOptions.RemoveEmptyEntries).Select(x => int.TryParse(x, out var n) ? n - 1 : -1)
+                 .Where(n => n >= 0 && n < lastDone.Count).Distinct().Select(n => lastDone[n].d).ToList();
+        if (pick.Count == 0) { Say(p, arg == "missed" ? "nothing missed: well played" : "!again <number>, missed or all"); return; }
+        var blocks = new List<Block>();
+        foreach (var d in pick)   // the drills of one map and one kind in a row: one block
+        {
+            var kind = d.Kind != "aim" ? d.Kind : d.Mode == "defend" ? "defend" : d.Mode == "prefire" ? "push" : "aim";
+            if (blocks.Count > 0 && blocks[^1].Map == d.Map && blocks[^1].Kind == kind) blocks[^1].Drills.Add(d);
+            else blocks.Add(new Block { Map = d.Map, Kind = kind, Seconds = 3600, Drills = new() { d } });
+        }
+        StartSession(new Session { Id = $"{lastSess.Id}_again{++againN}", Minutes = lastSess.Minutes, Difficulty = lastSess.Difficulty,
+            Maps = blocks.Select(b => b.Map).Distinct().ToList(), Blocks = blocks });
     }
 
     void Welcome()
@@ -893,6 +929,8 @@ public partial class CoachReplay
         pts = (int)Math.Round(pts * mult);
         points += pts;
         doneN++;
+        var di = sessDone.FindIndex(x => x.d == drill);   // the recap: each drill's last try
+        if (di >= 0) sessDone[di] = (drill, ok, outcome); else sessDone.Add((drill, ok, outcome));
         Write(new Dictionary<string, object> { ["session"] = sess.Id, ["drill"] = drill.Id, ["kind"] = drill.Kind, ["map"] = drill.Map, ["ok"] = ok,
             ["outcome"] = outcome, ["points"] = pts, ["detail"] = detail, ["try"] = tries + 1, ["level"] = drill.Level, ["t"] = DateTimeOffset.UtcNow.ToUnixTimeSeconds() });
         var st = streak >= 2 ? $" · 🔥 x{mult:F1}" : "";
@@ -922,8 +960,15 @@ public partial class CoachReplay
         if (sess == null) return;
         Write(new Dictionary<string, object> { ["session"] = sess.Id, ["end"] = true, ["points"] = points, ["drills"] = doneN, ["ok"] = okN,
             ["early"] = early, ["t"] = DateTimeOffset.UtcNow.ToUnixTimeSeconds() });
-        Html($"<font color='#e0a030'>🏁 SESSION DONE</font><br><font class='fontSize-l'>{points} pts</font><br>{okN}/{doneN} drills ✔", 8);
+        Html($"<font color='#e0a030'>🏁 SESSION DONE</font><br><font class='fontSize-l'>{points} pts</font><br>{okN}/{doneN} drills ✔<br><font class='fontSize-s'>the recap is in the chat: !again to play some again</font>", 10);
         All($"Session done: {points} pts · {okN}/{doneN} drills ✔ — your progress is in the app.");
+        lastSess = sess; lastDone.Clear(); lastDone.AddRange(sessDone);
+        for (int i = 0; i < lastDone.Count; i++)
+        {
+            var (d, ok, o) = lastDone[i];
+            foreach (var h in Humans()) h.PrintToChat($" {(ok ? "\x04✔" : "\x02✘")} {i + 1}\x01 {d.Title} · {o}");
+        }
+        if (lastDone.Count > 0) All("Again: !again <number> (one), !again missed (the missed ones), !again all (the whole session).");
         ClearLine();
         if (cam != null) CamStop();
         Prac(false);
