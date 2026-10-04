@@ -1,0 +1,31 @@
+<div class="bar"><div class="bar-in">
+  <span class="brand">CS2 Coach</span>
+  <nav aria-label="Views">
+    <a href="#ingame" data-view="ingame">In game</a>
+    <a href="#review" data-view="review">Review</a>
+    <a href="#team" data-view="team">Team</a>
+    <a href="#players" data-view="players">Explore</a>
+  </nav>
+  <span class="whochip" id="whochip"></span>
+  <button type="button" class="upd" id="updbtn" hidden title="Fetch your new matches from Steam and analyze them">↻ Update</button>
+  <form class="search" id="search" role="search" autocomplete="off">
+    <input id="q" name="q" type="search" placeholder="Steam link, SteamID64, name or CSGO-… share code" aria-label="Find a player: Steam profile link, SteamID64 or name">
+    <button type="submit" id="qbtn">Analyze</button>
+  </form>
+  <a href="#settings" class="gear" data-view="settings" aria-label="Settings" title="Settings: Steam, game detection, microphone">⚙</a>
+</div><div class="subnav" id="subnav" hidden></div></div>
+<div class="jobpanel" id="job" hidden><div class="in" role="status" aria-live="polite"></div></div>
+<main>
+  <section class="view" id="v-ingame"></section>
+  <section class="view" id="v-review" hidden></section>
+  <section class="view" id="v-analysis" hidden></section>
+  <section class="view" id="v-routine" hidden></section>
+  <section class="view" id="v-midround" hidden></section>
+  <section class="view" id="v-progress" hidden></section>
+  <section class="view" id="v-team" hidden></section>
+  <section class="view" id="v-matches" hidden></section>
+  <section class="view" id="v-maps" hidden></section>
+  <section class="view" id="v-players" hidden></section>
+  <section class="view" id="v-pros" hidden></section>
+  <section class="view" id="v-settings" hidden></section>
+</main>

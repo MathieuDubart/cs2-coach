@@ -1,0 +1,106 @@
+
+// ---------- view: review (after the session, or the next day) ----------
+// what the In game page showed in your matches, checked against their demos (livecheck.py)
+function liveCheckBlock(PL){const L=PL.livecheck,maps=Object.entries((L||{}).maps||{}).sort((a,b)=>b[1].matches-a[1].matches);
+  if(!maps.length)return D.local?`<h3>Live check</h3><p class="note">After your next match with the In game page open, the coach compares what it showed with what the demo says: the site read, the rushes, path 1, the buys, the site after the plant.</p>`:"";
+  const c=(v,n,good=60)=>v==null?`<td class="note">—</td>`:`<td><b class="${v>=good?"good":v<good-15?"bad":""}">${v}%</b> <span class="note">${n}</span></td>`;
+  const K=(L||{}).calib||{},cal=[K.site_n?`site read ${K.site_T>1.05?`was too sure of itself: its odds are flattened (×${K.site_T})`:K.site_T<.95?`was too shy: its odds are sharpened (×${K.site_T})`:"is right as it is"} · ${K.site_n} rounds`:"",
+    K.rush_n&&(K.rush[0]!==1||K.rush[1]!==0)?`rush odds ${K.rush[1]>0?"raised":"lowered"} · ${K.rush_n} rounds`:"",K.plant_n&&Math.abs(K.plant_T-1)>.05?`site after the plant ${K.plant_T>1?"less":"more"} sure · ${K.plant_n} rounds`:"",
+    K.path_n&&K.path_d?`paths' % ${K.path_d>0?"raised":"lowered"} · ${K.path_n} rounds`:""].filter(Boolean);
+  return `<h3>Live check</h3><p class="note">What the In game page showed, round by round, against what the demo says. The more matches, the more it says about each map.</p>
+   ${cal.length?`<p><b>Automatic calibration</b>: ${cal.map(esc).join(" · ")}. With few rounds the change stays small; it grows with your matches.</p>`:""}
+   <div style="overflow-x:auto"><table class="lc"><thead><tr><th>Map</th><th>Matches</th><th>CT: site read right</th><th>CT: rush read right</th><th>T: path 1 played</th><th>T: won with path 1 / other</th><th>Buy like the advice</th><th>Site found after the plant</th></tr></thead>
+   <tbody>${maps.map(([m,a])=>`<tr><td><b>${esc(MAPN(m))}</b></td><td>${a.matches}</td>${c(a.site_right,a.site_n,55)}${c(a.rush_right,a.rush_n,70)}${c(a.followed,a.t_n,40)}
+     <td>${a.win_followed!=null||a.win_other!=null?`<b>${a.win_followed??"—"}%</b> / ${a.win_other??"—"}%`:`<span class="note">—</span>`}</td>${c(a.buy_same,a.buy_n,60)}${c(a.plant_right,a.plant_n,70)}</tr>`).join("")}</tbody></table></div>`}
+
+function callsBlock(PL){const C=PL.calls||[];if(!C.length)return D.local?`<h3>Your calls</h3><p class="note">No recording yet: turn on "Your calls" in <a href="#settings" style="color:var(--ct)">Settings</a>, play, and the coach analyzes your communication after the match.</p>`:"";
+  const a=C[0],pct=(x,n)=>n?Math.round(100*x/n)+"%":"—";
+  const src=((PL.phases||[]).flatMap(ph=>ph.items).find(i=>i.id==="info_calls")||{}).src;
+  return `<h3>Your calls</h3>
+   <p class="note">${a.map?MAPN(a.map):"Match"} · ${fmtDate(a.start)} · ${a.utterances} phrases, ${(a.speech_s||0)<60?`${Math.round(a.speech_s||0)} s`:`${Math.round(a.speech_s/60)} min`} of speech${a.match?"":" · match not analyzed yet: update your profile"}${a.aligned?"":" · without game detection, calls aren't lined up with rounds"}.</p>
+   <div class="gauge">
+    <div><b>${a.deaths?pct(a.deaths-a.silent_deaths,a.deaths):"—"}</b><span>of your deaths preceded by a call (10 s before)</span></div>
+    <div><b>${a.info?a.complete_share+"%":"—"}</b><span>of your calls say where and how many</span></div>
+    <div><b>${a.throws?pct(a.announced,a.throws):"—"}</b><span>of your grenades called</span></div>
+    <div><b>${a.clutch_talk_rounds}</b><span>teammate clutch${a.clutch_talk_rounds===1?"":"es"} where you talked</span></div></div>
+   <ul class="pl-list">${a.tips.map(t=>`<li class="coach">${esc(t)}</li>`).join("")}</ul>
+   ${a.examples.length?`<p class="note">Your best calls: ${a.examples.map(x=>"“"+esc(x)+"”").join(" · ")}</p>`:""}
+   ${a.rounds.length?`<details><summary style="cursor:pointer">Your calls round by round</summary><div class="tbl" style="margin-top:8px"><table><thead><tr><th class="n">Round</th><th>What you said (seconds into the round)</th><th class="n">Died at</th></tr></thead><tbody>
+     ${a.rounds.map(r=>`<tr><td class="n">${r.round}</td><td class="wrap">${r.texts.length?r.texts.map(x=>`<span class="${x.kind==="tilt"?"bad":""}">${x.t} s: ${esc(x.text)}</span>`).join("<br>"):'<span class="note">nothing</span>'}</td><td class="n">${r.died_t==null?"alive":Math.round(r.died_t)+" s"}</td></tr>`).join("")}</tbody></table></div></details>`:""}
+   ${srcLinks(src,true)}`}
+// the mood of each recorded match: one column per round (background: won or lost; bar: your damage), dots above for
+// what you felt (said with "coach <word>": ringed), a line where the sides change; and what a frustrated moment costs
+const MOOD_C={frustration:"var(--bad)",doubt:"var(--flash)",suspicion:"#b07ce8",positive:"var(--good)",note:"var(--muted)"};
+function moodBlock(PL){const C=(PL.calls||[]).filter(a=>a.aligned&&(a.rounds||[]).some(r=>r.dmg!=null));if(!C.length)return "";const MS=PL.mood;
+  const strip=a=>{const rs=a.rounds,n=rs.length,W=1000,H=70,cw=W/n;
+    return `<svg viewBox="0 0 ${W} ${H}" width="100%" style="max-width:1100px;display:block" role="img" aria-label="Rounds and feelings">${rs.map((r,i)=>{const x=i*cw,h=Math.round(30*Math.min(1,(r.dmg||0)/200)),col=r.won?"var(--good)":"var(--bad)";
+      const ms=(r.moods||[]).filter(m=>MOOD_C[m.kind]).slice(0,2),sw=i&&rs[i-1].side&&r.side&&rs[i-1].side!==r.side;
+      return `${sw?`<line x1="${x}" y1="0" x2="${x}" y2="${H-12}" stroke="var(--muted)" stroke-dasharray="3 3"/>`:""}
+        <rect x="${x+1}" y="20" width="${cw-2}" height="36" rx="2" fill="${r.won==null?"var(--line)":col}" fill-opacity=".16"/>
+        <rect x="${x+cw*.25}" y="${56-h}" width="${cw*.5}" height="${h}" rx="1" fill="${r.won==null?"var(--muted)":col}" opacity=".85"/>
+        ${ms.map((m,j)=>`<circle cx="${x+cw/2}" cy="${14-j*8}" r="3.6" fill="${MOOD_C[m.kind]}"${m.coach?` stroke="var(--ink)" stroke-width="1.4"`:""}><title>${esc(m.word||m.kind)}</title></circle>`).join("")}
+        <text x="${x+cw/2}" y="${H-1}" text-anchor="middle" class="vct">${r.round}</text>`}).join("")}</svg>`};
+  const cnt=a=>Object.entries(a.moods||{}).filter(([k,v])=>v&&MOOD_C[k]).map(([k,v])=>`<span class="vchip" style="color:${MOOD_C[k]}">● ${v}</span>`).join("");
+  return `<h3>Your mood, match by match</h3>
+   <div class="vleg"><span><i style="background:var(--bad)"></i>frustration</span><span><i style="background:var(--flash)"></i>doubt</span><span><i style="background:#b07ce8"></i>suspicion</span><span><i style="background:var(--good)"></i>positive</span><span><i style="background:var(--muted)"></i>a note</span><span>ringed: said with "coach …"</span><span>bar: your damage · background: round won / lost</span></div>
+   ${MS&&MS.after&&MS.other?`<div class="gauge"><div><b>${MS.after.adr} <small>vs ${MS.other.adr}</small></b><span>ADR in the 3 rounds after a frustrated moment (${MS.after.n} rounds) vs the others</span></div><div><b>${MS.after.won}% <small>vs ${MS.other.won}%</small></b><span>rounds won after it vs the others</span></div></div>`:""}
+   ${C.slice(0,4).map(a=>`<div class="mood-row"><div class="mood-h"><b>${a.map?MAPN(a.map):"Match"}</b><span class="note">${fmtDate(a.start)}</span>${cnt(a)}</div>${strip(a)}</div>`).join("")}`}
+// what the demos say about the frustrations of the game: blocks both ways, how your flashes are played, team flashes,
+// and the enemies whose kills look odd or who got banned (indicators, not proof)
+function factsBlock(PL){const F=PL.facts;if(!F||!F.matches)return "";const fy=F.flashes.yours,pm=x=>(x/F.matches).toFixed(1),pc=(x,n)=>n?Math.round(100*x/n)+"%":"—";
+  const bar=parts=>`<div class="fbar">${parts.filter(x=>x.v>0).map(x=>`<i style="flex:${x.v};background:${x.c}"><title>${esc(x.l)}: ${x.v}</title></i>`).join("")}</div>`;
+  const S=F.suspects||[];
+  return `<h3>What the demos say · your last ${F.matches} matches</h3>
+   <div class="gauge">
+    <div><b>${pm(F.blocks.by_n)} <small>vs ${pm(F.blocks.on_n)}</small></b><span>blocks per match: a teammate blocks you vs you block a teammate${F.blocks.by.length?` (most: ${F.blocks.by.slice(0,2).map(x=>esc(x.name)).join(", ")})`:""}</span></div>
+    <div><b>${pc(fy.mate_used,fy.n)}</b><span>of your flashes that blind (${fy.n}): a teammate shoots behind within 2.5 s</span></div>
+    <div><b>${pc(fy.mate_early,fy.n)}</b><span>a teammate peeked and got hit before your flash popped</span></div>
+    <div><b>${pm(F.teamflash.by_n)} <small>vs ${pm(F.teamflash.on_n)}</small></b><span>team flashes per match: on you vs by you</span></div></div>
+   ${fy.n?`${bar([{v:fy.mate_used,c:"var(--good)",l:"a teammate shot behind"},{v:fy.self_used,c:"var(--ct)",l:"only you shot"},{v:fy.unused,c:"var(--muted)",l:"nobody shot"}])}
+   <div class="vleg"><span><i style="background:var(--good)"></i>a teammate shoots behind</span><span><i style="background:var(--ct)"></i>only you</span><span><i style="background:var(--muted)"></i>nobody: say "flash" before throwing</span></div>`:""}
+   ${S.length?`<h3>Enemies worth a look</h3>
+   <div class="tbl"><table><thead><tr><th>Player</th><th>Match</th><th class="n">Kills</th><th class="n" title="kills on a player the killer never saw in the 3 s before">👁 unseen</th><th class="n" title="through smoke">🌫 smoke</th><th class="n" title="first hits under 0.15 s after first seeing">⚡ fast</th><th>Bans</th></tr></thead><tbody>
+    ${S.map(x=>`<tr><td><a href="https://steamcommunity.com/profiles/${esc(x.steamid)}" target="_blank" rel="noopener" style="color:var(--ct)">${esc(x.name)}</a>${x.flag?' <span class="pill weak">odd</span>':""}</td><td>${MAPN(x.map)} · ${fmtDate(x.time)}</td><td class="n">${x.kills}</td>
+      <td class="n">${x.unseen+x.wallbang_unseen}</td><td class="n">${x.thrusmoke}</td><td class="n">${x.fast==null?"—":x.fast+"%"}</td>
+      <td>${x.vac||x.game?`<span class="pill ${x.ban_after?"weak":""}">${x.vac?`VAC ${x.vac}`:""}${x.vac&&x.game?" · ":""}${x.game?`game ${x.game}`:""} · ${x.ban_after?"since this match":`${x.ban_days} days ago`}</span>`:'<span class="note">none</span>'}</td></tr>`).join("")}</tbody></table></div>
+   <p class="note">Indicators from the demo, not proof: the lobby's usual share of odd kills is high (smokes, prefires). A ban "since this match" says more than anything else. Report in Overwatch rather than during the game.${F.bans_checked?"":" Steam bans not checked: no API key."}</p>`:`<p class="note">No enemy stands out in these matches${F.bans_checked?", and none of them is banned":""}.</p>`}`}
+// the review as plan.py builds it; a plan written in the "pro review" format (quick_brief, map_briefs, deep_dive) keeps it
+// whole under raw (04/10: a plan written by a server still running that format crashed this page)
+const reviewOf=PL=>{const R=PL.review;return R&&!R.session&&R.raw&&R.raw.session?R.raw:R&&R.session?R:null};
+function renderReview(){const p=P(),v=$("#v-review"),PL=p.advice.plan||{},R=reviewOf(PL),X=PL.experiments||{};
+  const head=`<div class="head"><div style="display:grid;gap:4px"><span class="eyebrow">${esc(p.name)}${R?` · ${esc(R.label)}, compared with your previous ${R.n_before} matches`:""}</span><h2>Review</h2></div>
+    ${R?`<div class="record"><span>${R.session.wins}<small>wins</small></span><span>${R.session.losses}<small>losses</small></span></div>`:""}</div>`;
+  if(!R){v.innerHTML=head+`<div class="empty">The review compares your latest matches with the previous ones: it takes at least 3 matches analyzed with their demo.${p.light?" This profile has no demo yet.":""}</div>
+    ${(p.advice.rules||[]).length?`<h3>Your focus areas</h3>${findings(p.advice.rules.slice(0,3).map((r,i)=>({level:i<1?"high":"mid",title:r.title,evidence:r.why,fix:r.do,drills:r.drills,sources:r.sources})))}`:""}`;return}
+  const f=(x,u)=>fmtU(x,u),TREND={better:"strong",worse:"weak",mieux:"strong","moins bien":"weak"};
+  v.innerHTML=head+`
+   ${R.next?`<div class="callout"><h3>For your next session</h3><p>${esc(R.next)}</p></div>`:""}
+   <h3>What changed</h3>
+   ${R.changes.length?`<div class="chg">${R.changes.map(c=>`<article class="${c.better?"better":"worse"}"><span class="eyebrow">${esc(c.label)}</span>
+     <span class="ba">${f(c.before,c.unit)}<span class="arrow" aria-hidden="true">→</span><span class="${c.better?"good":"bad"}">${f(c.after,c.unit)}</span> <span class="lvl ${c.level==="clear"||c.level==="net"?"clear":"trend"}">${c.level==="clear"||c.level==="net"?"clear gap":"trend"}</span></span>
+     <span>${c.better?"Improving":"Slipping"} over ${esc(R.label)} against the ${c.n_before} matches before.</span>
+     ${c.why.length?`<details><summary class="mini" style="cursor:pointer">Possible reasons (to check over the next matches)</summary><ul class="why">${c.why.map(w=>`<li>${esc(w)}</li>`).join("")}</ul></details>`:`<span class="note">${c.better?"No single cause in your data: keep doing what you did in these games.":"No obvious explanation in your data: keep an eye on it."}</span>`}</article>`).join("")}</div>`
+     :`<p>Nothing moved clearly: your numbers are stable.</p>`}
+   ${R.stable.length?`<p class="note">Stable: ${R.stable.map(esc).join(" · ")}.</p>`:""}
+   <div class="cols3" style="grid-template-columns:repeat(auto-fit,minmax(340px,1fr))">
+    <div style="display:grid;gap:10px;align-content:start"><h3>Your last session</h3>
+     <div class="tbl"><table><thead><tr><th>Date</th><th>Map</th><th>Score</th><th class="n">Rating</th></tr></thead><tbody>${R.session.matches.map(x=>`<tr class="click" data-mid="${x.id}" tabindex="0"><td>${fmtDate(x.time)}</td><td>${MAPN(x.map)}</td><td><span class="res ${x.result}">${x.score.me}-${x.score.them}</span></td><td class="n">${f1(x.rating)}</td></tr>`).join("")}</tbody></table></div>
+     <p class="note">Click a match to open it.</p></div>
+    <div style="display:grid;gap:10px;align-content:start"><h3>Your focus areas</h3>
+     <div class="axes">${R.axes.map(a=>`<article class="card"><h3>${esc(a.short||a.title)}</h3><p class="note">${esc(a.title)}</p>
+       ${a.kpi&&a.before!=null?`<p>${esc(a.kpi_label)}: ${f(a.before,a.unit)} → <b>${f(a.after,a.unit)}</b> ${a.trend&&a.trend!=="stable"?`<span class="pill ${TREND[a.trend]||""}">${a.trend==="mieux"?"better":a.trend==="moins bien"?"worse":esc(a.trend)}</span>`:""}</p>`:""}
+       ${a.do.length?`<ul>${a.do.map(d=>`<li>${esc(d)}</li>`).join("")}</ul>`:""}${a.drills.length?`<p class="note">Drill: ${esc(a.drills[0])}</p>`:""}${srcLinks(a.sources,true)}</article>`).join("")}</div></div>
+   </div>
+   ${callsBlock(PL)}
+   ${moodBlock(PL)}
+   ${factsBlock(PL)}
+   ${liveCheckBlock(PL)}
+   <h3>What you're testing, what you could test</h3>
+   ${R.tests.active.length?`<div class="exps">${R.tests.active.map(expCard).join("")}</div>`:`<p class="note">No experiment running.</p>`}
+   ${(X.suggested||[]).length?`<span class="lbl4" style="color:var(--muted)">Worth testing</span><div class="exps">${X.suggested.slice(0,3).map(suggestCard).join("")}</div>`:""}
+   ${R.tests.done.length?`<details><summary style="cursor:pointer">Finished experiments (${R.tests.done.length})</summary><div class="exps" style="margin-top:10px">${R.tests.done.map(expCard).join("")}</div></details>`:""}
+   <p class="note" id="xmsg" role="status"></p>
+   <div class="linkrow"><a href="#analysis">Full analysis</a><a href="#midround">Mid-round</a><a href="#progress">Progress and tracking</a><a href="#matches">Every match</a><a href="#maps">Maps and grenades</a><a href="#routine">Routine</a></div>`;
+  wireExp(v,X,p);
+  $$("tr[data-mid]",v).forEach(r=>{r.onclick=()=>{const i=p.matches.findIndex(x=>x.id===r.dataset.mid);S.match=i<0?0:i;S.mpin=i>=0;go("matches")};r.onkeydown=e=>{if(e.key==="Enter")r.click()}});
+}
