@@ -86,15 +86,22 @@ def summarize_rounds(df, key):
     return sorted(out, key=lambda r: -r["rounds"])
 
 
+_N = [0.0, 0]
+
+
 def _n_demos():
-    return sum(1 for m in os.listdir(config.DEEP) if os.path.exists(os.path.join(config.DEEP, m, "loadout.parquet")))
+    """The base's demos (counted once a minute: a plan build asked 511 times)."""
+    import time
+    if time.time() - _N[0] > 60:
+        _N[0], _N[1] = time.time(), sum(1 for m in os.listdir(config.DEEP) if os.path.exists(os.path.join(config.DEEP, m, "loadout.parquet")))
+    return _N[1]
 
 
 def population_weapons(rebuild=False):
     """Reference: duel win rate and round stats per weapon, over every matchmaking demo."""
     if os.path.exists(WPOP) and not rebuild:
         cur = json.load(open(WPOP, encoding="utf-8"))
-        if cur.get("n_matches") == _n_demos():
+        if cur.get("n_matches", 0) >= 0.85 * _n_demos():   # good until the base grows by 15% (it grows by itself now)
             return cur
     mids = [m for m in os.listdir(config.DEEP) if os.path.exists(os.path.join(config.DEEP, m, "loadout.parquet"))]
     duels = duel_table(mids)
@@ -169,7 +176,7 @@ def weapon_zones(rebuild=False):
     """Per map, side and weapon class: where players stand at 15-25 s (setup) and how their duels go in each zone."""
     if os.path.exists(WZ) and not rebuild:
         cur = json.load(open(WZ, encoding="utf-8"))
-        if cur.get("_n") == _n_demos():
+        if cur.get("_n", 0) >= 0.85 * _n_demos():   # good until the base grows by 15% (it grows by itself now)
             return cur
     acc = defaultdict(lambda: defaultdict(lambda: {"n": 0, "k": 0, "d": 0, "won": 0}))
     duel_acc = defaultdict(lambda: defaultdict(lambda: [0, 0]))

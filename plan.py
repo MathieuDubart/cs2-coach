@@ -275,7 +275,8 @@ def zone_refs():
     n = f"v3-{weapons._n_demos()}"   # v3: callouts
     if os.path.exists(ZONE_PX):
         cur = json.load(open(ZONE_PX, encoding="utf-8"))
-        if cur.get("_n") == n:
+        cv, _, cn = str(cur.get("_n")).partition("-")
+        if cur.get("_n") == n or (cv == "v3" and cn.isdigit() and int(cn) >= 0.85 * weapons._n_demos()):   # until the base grows by 15%
             return cur
     best = {}
     for sid in os.listdir(config.PLAYERS):

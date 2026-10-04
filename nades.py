@@ -46,6 +46,18 @@ def _timer(t):
 VERSION = 3   # bump when the summary changes (texts, fields): the cache is rebuilt
 
 
+def fresh(cached, stamp, slack=0.85):
+    """A cache stamped "v<version>-<matches>-<time>" stays good while the base has not grown by more than 15% since: the
+    base grows by itself now (grow.py, a match every few minutes) and computing it again each time made every plan
+    wait (04/10: the grenade summary computed 6 times in one plan build)."""
+    try:
+        cv, cn, _ = str(cached).split("-")
+        v, n, _ = str(stamp).split("-")
+        return cv == v and int(cn) >= slack * int(n)
+    except ValueError:
+        return False
+
+
 def _stamp():
     n, latest = 0, 0.0
     for mid in os.listdir(config.DEEP) if os.path.exists(config.DEEP) else []:
@@ -62,7 +74,7 @@ def load_all(rebuild=False):
     stamp = _stamp()
     if not rebuild and os.path.exists(OUT) and os.path.exists(meta_f):
         try:
-            if json.load(open(meta_f, encoding="utf-8")).get("stamp") == stamp:
+            if fresh(json.load(open(meta_f, encoding="utf-8")).get("stamp"), stamp):
                 cached = pd.read_parquet(OUT)
                 if "self_kill" in cached:   # older files: built again once
                     return cached
@@ -290,7 +302,7 @@ def summary(rebuild=False):
     if not rebuild and os.path.exists(SUMMARY):
         try:
             cur = json.load(open(SUMMARY, encoding="utf-8"))
-            if cur.get("_stamp") == stamp:
+            if fresh(cur.get("_stamp"), stamp):
                 return cur
         except ValueError:
             pass

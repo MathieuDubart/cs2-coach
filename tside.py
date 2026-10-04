@@ -637,7 +637,8 @@ def tendencies(maps, df=None):
         return _tendencies(maps, df)
     try:
         cur = json.load(open(SUMMARY, encoding="utf-8"))
-        if cur.get("_stamp") == _stamp():
+        import nades
+        if nades.fresh(cur.get("_stamp"), _stamp()):   # good until the base grows by 15%
             cur["maps"] = {m: v for m, v in cur["maps"].items() if m in maps}
             return cur
     except (OSError, ValueError):

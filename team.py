@@ -41,15 +41,22 @@ CT_SLOT_DO = {
 
 
 # ---------- population references per map ----------
+_N = [0.0, 0]
+
+
 def _n_demos():
-    return sum(1 for m in os.listdir(config.DEEP) if os.path.exists(os.path.join(config.DEEP, m, "rounds.parquet")))
+    """The base's demos (counted once a minute: a plan build asked 511 times)."""
+    import time
+    if time.time() - _N[0] > 60:
+        _N[0], _N[1] = time.time(), sum(1 for m in os.listdir(config.DEEP) if os.path.exists(os.path.join(config.DEEP, m, "rounds.parquet")))
+    return _N[1]
 
 
 def map_meta(rebuild=False):
     """Per map: region (A / B / mid) of every zone, and where the Ts plant (share, T win rate, plant time)."""
     if os.path.exists(META) and not rebuild:
         cur = json.load(open(META, encoding="utf-8"))
-        if cur.get("_n") == _n_demos():
+        if cur.get("_n", 0) >= 0.85 * _n_demos():   # good until the base grows by 15% (it grows by itself now)
             return cur
     import midround
     sites = midround.site_centers()
