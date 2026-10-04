@@ -338,8 +338,12 @@ function nadeTable(p,map,side){const N=(p.advice.plan||{}).nades,E=N&&((N.maps||
 
 // ---------- live bar, polling ----------
 function micBtn(){const g=gsiLast||{};if(!D.local)return "";
-  if(g.mic)return `${g.mic_silent?`<span class="pill weak" title="No sound for a minute">● Mic silent: <a href="#settings" style="color:inherit">check the microphone</a></span>`:`<span class="pill weak" title="Your microphone is recorded to analyze your calls">● Mic</span>`}${g.mic_auto?"":`<button type="button" class="close" data-mic="stop">Stop recording</button>`}`;
-  return g.mic_auto?"":`<button type="button" class="close" data-mic="start" title="Records your microphone to analyze your calls after the match">Record my calls</button>`}
+  // what you hear (your teammates' voices, the game): only once every teammate said yes, for this match only (04/10)
+  const team=!g.map||g.practice?"":g.team_rec==="on"?`<span class="pill weak" title="What you hear (your teammates' voices and the game) is recorded for this match: your team agreed">● Team</span><button type="button" class="close" data-team="off">Stop</button>`
+    :g.team_rec==="pending"?`<span class="pill weak" title="Your team agreed: what you hear is recorded with your microphone, from the start of the match">● Team: with the match</span><button type="button" class="close" data-team="off">Cancel</button>`
+    :`<button type="button" class="close" data-team="on" title="Only once every teammate said yes: their voices are recorded too (France, art. 226-1), for this match only, to see after it what you did after their calls. Numpad * in game does the same.">My team agreed: record what I hear</button>`;
+  if(g.mic)return `${g.mic_silent?`<span class="pill weak" title="No sound for a minute">● Mic silent: <a href="#settings" style="color:inherit">check the microphone</a></span>`:`<span class="pill weak" title="Your microphone is recorded to analyze your calls">● Mic</span>`}${g.mic_auto?"":`<button type="button" class="close" data-mic="stop">Stop recording</button>`}${team}`;
+  return (g.mic_auto?"":`<button type="button" class="close" data-mic="start" title="Records your microphone to analyze your calls after the match">Record my calls</button>`)+team}
 function liveBar(){if(!D.local)return "";const g=gsiLast,focus=document.body.classList.contains("focus");
   const fb=`<button type="button" class="close" id="focus">${focus?"Exit 2nd screen":"2nd screen mode"}</button>`;
   if(gsiFresh())return `<div class="live on" role="status"><span class="dot" aria-hidden="true"></span><b>${MAPN(g.map)}</b><span>${g.side?`${g.side} · ${roleOf(g.map,g.side)}`:"spectating"}</span>
@@ -554,6 +558,7 @@ function renderIngame(){
   $$("[data-evsite]",v).forEach(b=>b.onclick=()=>{const s=b.dataset.evsite,on=igEv.site===s;igEv.site=on?null:s;
     if(following&&gsiLast.side==="CT"&&gsiLast.round)mark(gsiLast.round,on?null:s,{site_t:on?null:el_()});else renderIngame()});   // also marks the round for the history
   $$("[data-mic]",v).forEach(b=>b.onclick=async()=>{b.disabled=true;try{await api("/api/voice/"+b.dataset.mic,{sid:p.steamid});gsiLast=Object.assign(gsiLast||{},{mic:b.dataset.mic==="start"});renderIngame()}catch(e){b.textContent=e.message}});
+  $$("[data-team]",v).forEach(b=>b.onclick=async()=>{b.disabled=true;try{const t=(await api("/api/voice/team",{on:b.dataset.team==="on"})).team||{};gsiLast=Object.assign(gsiLast||{},{team_rec:t.on?"on":t.pending?"pending":null});renderIngame()}catch(e){b.textContent=e.message}});
   // radar: your data, or the base's positions; plant spots when the bomb site is known
   const plantSpots=()=>{const TS=PL.tside,M=TS&&TS.maps&&TS.maps[S.map],site=following&&(igEv.site||null);if(!M||!site||!(M.evidence||{}).plants)return [];
     return (((M.evidence.plants||{})[site]||{}).spots||[]).map(s=>({px:s.px,level:s.level,label:`plant ${s.share}%`,color:"var(--bad)",title:`Plant spot on ${site}: ${s.share}% of plants, Ts win ${s.t_win}% after it`}))};

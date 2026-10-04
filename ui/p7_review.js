@@ -25,9 +25,46 @@ function callsBlock(PL){const C=PL.calls||[];if(!C.length)return D.local?`<h3>Yo
     <div><b>${a.clutch_talk_rounds}</b><span>teammate clutch${a.clutch_talk_rounds===1?"":"es"} where you talked</span></div></div>
    <ul class="pl-list">${a.tips.map(t=>`<li class="coach">${esc(t)}</li>`).join("")}</ul>
    ${a.examples.length?`<p class="note">Your best calls: ${a.examples.map(x=>"“"+esc(x)+"”").join(" · ")}</p>`:""}
+   ${heardBlock(C)}${teamCallsBlock(C)}
    ${a.rounds.length?`<details><summary style="cursor:pointer">Your calls round by round</summary><div class="tbl" style="margin-top:8px"><table><thead><tr><th class="n">Round</th><th>What you said (seconds into the round)</th><th class="n">Died at</th></tr></thead><tbody>
      ${a.rounds.map(r=>`<tr><td class="n">${r.round}</td><td class="wrap">${r.texts.length?r.texts.map(x=>`<span class="${x.kind==="tilt"?"bad":""}">${x.t} s: ${esc(x.text)}</span>`).join("<br>"):'<span class="note">nothing</span>'}</td><td class="n">${r.died_t==null?"alive":Math.round(r.died_t)+" s"}</td></tr>`).join("")}</tbody></table></div></details>`:""}
    ${srcLinks(src,true)}`}
+// what your team could hear (the demos' sounds and everyone's positions) and what you called of it (04/10)
+const SND={step:"running",shot:"shots",quiet:"silenced shots",throw:"a grenade's pin",reload:"a reload",scope:"a scope",plant:"the plant",defuse:"the defuse"};
+const WHY={you_died:"you died right after",enemy_died:"it died right after",shared:"a teammate heard it too",far:"far",talking:"you were talking",none:"nothing in the way"};
+const WHY_C={you_died:"var(--bad)",enemy_died:"var(--good)",shared:"var(--ct)",far:"var(--muted)",talking:"var(--flash)",none:"var(--t)"};
+function heardBlock(C){const H=C.filter(a=>a.heard&&a.heard.heard);if(!H.length)return "";
+  const pc=(x,n)=>n?Math.round(100*x/n)+"%":"—",S=k=>H.reduce((s,a)=>s+(a.heard[k]||0),0),SP=k=>H.reduce((s,a)=>[s[0]+((a.heard[k]||{}).n||0),s[1]+((a.heard[k]||{}).called||0)],[0,0]);
+  const callable=S("callable"),called=S("called"),alone=SP("alone"),shared=SP("shared"),far=SP("far"),near=SP("near"),fights=SP("fights");
+  const rs=H.map(a=>a.heard.react_s).filter(x=>x!=null).sort((x,y)=>x-y),react=rs.length?rs[Math.floor(rs.length/2)]:null;
+  const why=Object.keys(WHY).map(k=>({k,v:H.reduce((s,a)=>s+((a.heard.why_not||{})[k]||0),0)})),kinds={};
+  H.forEach(a=>Object.entries(a.heard.by_kind||{}).forEach(([k,v])=>{const o=kinds[k]||(kinds[k]=[0,0]);o[0]+=v.n;o[1]+=v.called}));
+  const h=H[0].heard,L=(h.list||[]);
+  return `<h3>What you heard, and what you called</h3>
+   <p class="note">From the demos of your ${H.length} last recorded match${H.length>1?"es":""}: where everyone was, the enemies' shots, reloads, scopes, the bomb, and their running (faster than walking). Rough distances (a running enemy within about 1,100 units, a shot 2,000), walls not counted. Your own fights apart: ${fights[0]} sounds heard while you were shooting or being shot.</p>
+   <div class="gauge">
+    <div><b>${pc(called,callable)}</b><span>of the enemy sounds you heard called (${callable}, outside your fights)</span></div>
+    <div><b>${pc(alone[1],alone[0])}</b><span>when only you could hear them (${alone[0]}) · ${pc(shared[1],shared[0])} when a teammate could too</span></div>
+    <div><b>${react!=null?react+" s":"—"}</b><span>from hearing it to your call</span></div>
+    <div><b>${pc(S("right"),called)}</b><span>of these calls name the place</span></div></div>
+   <p>Close sounds: <b>${pc(near[1],near[0])}</b> called · far: <b>${pc(far[1],far[0])}</b> · ${Object.entries(kinds).sort((x,y)=>y[1][0]-x[1][0]).slice(0,3).map(([k,v])=>`${SND[k]||k}: <b>${pc(v[1],v[0])}</b> (${v[0]})`).join(" · ")}</p>
+   ${callable-called?`<p class="note">The ones you did not call, and what was around them:</p>
+   <div class="fbar">${why.filter(x=>x.v>0).map(x=>`<i style="flex:${x.v};background:${WHY_C[x.k]}"><title>${WHY[x.k]}: ${x.v}</title></i>`).join("")}</div>
+   <div class="vleg">${why.filter(x=>x.v>0).map(x=>`<span><i style="background:${WHY_C[x.k]}"></i>${WHY[x.k]}: ${x.v}</span>`).join("")}</div>`:""}
+   ${(h.mates||[]).length?`<p class="note">Who else heard them (${H[0].map?MAPN(H[0].map):"last match"}): ${h.mates.map(m=>`${esc(m.name)} ${m.heard}${m.only?` (only them: ${m.only})`:""}`).join(" · ")}${h.missed_by_you?` · ${h.missed_by_you} that you could not hear`:""}.</p>`:""}
+   ${L.length?`<details><summary style="cursor:pointer">Sound by sound, ${H[0].map?MAPN(H[0].map):"last match"}</summary><div class="tbl" style="margin-top:8px"><table><thead><tr><th class="n">Round</th><th class="n">Time</th><th>Where</th><th>What</th><th>Who could hear it</th><th>You</th></tr></thead><tbody>
+     ${L.map(x=>`<tr><td class="n">${x.round}</td><td class="n">${Math.round(x.t)} s</td><td>${esc(x.place||"—")}</td><td>${x.n>1?x.n+" enemies, ":""}${SND[x.kind]||esc(x.kind)}</td><td class="wrap">${x.who.map(esc).join(", ")}</td>
+       <td class="wrap">${x.fight?'<span class="note">your fight</span>':x.called?`<span class="good">“${esc(x.called)}”</span> <span class="note">${x.react!=null?x.react+" s":""}</span>`:`<span class="note">not called: ${WHY[x.why]||"—"}</span>`}${x.team_called?' <span class="pill">your team called it</span>':""}</td></tr>`).join("")}</tbody></table></div></details>`:""}`}
+// after your team's calls naming a place (your team's sound, recorded when every teammate agreed): where you went
+function teamCallsBlock(C){const T=C.filter(a=>a.team_calls&&a.team_calls.calls);if(!T.length)return "";
+  const S=k=>T.reduce((s,a)=>s+(a.team_calls[k]||0),0),n=S("calls"),pc=x=>n?Math.round(100*x/n)+"%":"—",t=T[0].team_calls;
+  const W={toward:"went toward it",away:"went the other way",stayed:"stayed",there:"already there",died:"died"};
+  return `<h3>After your team's calls</h3>
+   <p class="note">Your teammates' calls that name a place (${n}, in ${T.length} match${T.length>1?"es":""} where they agreed to be recorded), and where you went in the next 8 seconds.</p>
+   <div class="gauge"><div><b>${pc(S("toward"))}</b><span>you went toward the place called</span></div><div><b>${pc(S("stayed"))}</b><span>you stayed where you were</span></div>
+    <div><b>${pc(S("away"))}</b><span>you went the other way</span></div><div><b>${t.react_s!=null?t.react_s+" s":"—"}</b><span>from their call to your move</span></div></div>
+   <details><summary style="cursor:pointer">Call by call, ${T[0].map?MAPN(T[0].map):"last match"}</summary><div class="tbl" style="margin-top:8px"><table><thead><tr><th class="n">Round</th><th class="n">Time</th><th>Your team said</th><th>You</th></tr></thead><tbody>
+     ${t.list.map(x=>`<tr><td class="n">${x.round}</td><td class="n">${Math.round(x.t)} s</td><td class="wrap">“${esc(x.text)}”</td><td>${W[x.went]||esc(x.went)}${x.react!=null?` <span class="note">after ${x.react} s</span>`:""}</td></tr>`).join("")}</tbody></table></div></details>`}
 // the mood of each recorded match: one column per round (background: won or lost; bar: your damage), dots above for
 // what you felt (said with "coach <word>": ringed), a line where the sides change; and what a frustrated moment costs
 const MOOD_C={frustration:"var(--bad)",doubt:"var(--flash)",suspicion:"#b07ce8",positive:"var(--good)",note:"var(--muted)"};

@@ -18,6 +18,7 @@ KEYS = {1: "KP_1", 2: "KP_2", 3: "KP_3"}   # numpad 1, 2, 3: CS2's names (the ph
 FOCUS_OFF = "KP_MINUS"   # numpad minus: drop the focus on a path
 EXTRA = {"eco": "KP_DEL", "sit": "KP_0"}   # numpad ".": the economy plan; numpad 0: the situation, recent and global
 SITE_KEYS = {"A": "KP_7", "B": "KP_9"}   # numpad 7 / 9: A / B (CT: the site you play; once planted, both sides: the bomb's site)
+TEAM_KEY = "KP_MULTIPLY"   # numpad *: your team agreed to be recorded (what you hear, for this match: 04/10)
 BINDS = "coach_binds.cfg"
 _LAST = {}
 WHEEL = {"A": 'playerchatwheel CW.GoA "#Chatwheel_aplan"', "B": 'playerchatwheel CW.GoB "#Chatwheel_bplan"'}   # the chat wheel's Go A / Go B
@@ -36,7 +37,8 @@ def binds_text():
     lines += [f'bind "{FOCUS_OFF}" "exec coach_focus0"']
     lines += [f'bind "{k}" "exec coach_{name}"' for name, k in EXTRA.items()]
     lines += [f'bind "{k}" "exec coach_site{site}"' for site, k in SITE_KEYS.items()]
-    lines += ['echo "Coach CS2: numpad 1-2-3 say the paths in the team chat, 7 / 9 tell the coach A / B"']
+    lines += [f'bind "{TEAM_KEY}" "exec coach_team"']
+    lines += ['echo "Coach CS2: numpad 1-2-3 say the paths in the team chat, 7 / 9 tell the coach A / B, * your team agreed to be recorded"']
     return "\n".join(lines) + "\n"
 
 
@@ -79,6 +81,9 @@ def write(paths, extra=None):
 
 
 def _site_files(d):
+    tf = os.path.join(d, "coach_team.cfg")   # numpad *: only a line in the console, the app reads it
+    if not os.path.exists(tf):
+        open(tf, "w", encoding="utf-8").write('echo "Coach CS2: team agreed"\n')
     for site in SITE_KEYS:   # only a line in the console: the app reads it (CT: your site; planted: the bomb's site)
         sf = os.path.join(d, f"coach_site{site}.cfg")
         if not os.path.exists(sf):
@@ -122,7 +127,7 @@ def console_file():
     return os.path.join(os.path.dirname(d), "console.log") if d else None
 
 
-KEY_RE = re.compile(r"execing coach_(?:path([123])|focus0|site([AB]))\b")
+KEY_RE = re.compile(r"execing coach_(?:path([123])|focus0|site([AB])|(team))\b")
 
 
 def watch():
@@ -146,7 +151,13 @@ def watch():
                 pos = size
                 for line in chunk.decode("utf-8", "replace").splitlines():
                     m = KEY_RE.search(line)
-                    if m and m.group(2):
+                    if m and m.group(3):   # numpad *: your team agreed, what you hear is recorded too (this match)
+                        try:
+                            import voice
+                            voice.TEAM.start("your team agreed: numpad * in game", gsi.state().get("map"))
+                        except Exception as e:
+                            print("team sound:", e, flush=True)
+                    elif m and m.group(2):
                         gsi.set_site_key(m.group(2))
                     elif m:
                         gsi.set_focus(int(m.group(1)) if m.group(1) else 0)

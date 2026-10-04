@@ -24,6 +24,7 @@ import config
 DIR = os.path.join(config.OUT, "voice")
 SR = 16000
 MODEL = "large-v2"
+HEARD_V = 1   # heard.py's analysis: up it when it changes
 
 
 def settings():
@@ -128,6 +129,7 @@ class Recorder:
                 self._save()
 
     def stop(self):
+        off = TEAM.stop()   # your team's sound ends with the match
         with self.lock:
             if not self.stream:
                 return None
@@ -142,6 +144,8 @@ class Recorder:
                 self.meta["duration"] = round(self.meta["end"] - self.meta["start"], 1)
                 self.meta["peak"] = round(self.peak, 4)
                 self.meta["silent"] = self.peak < 0.01  # nothing above -40 dB: the microphone was not the one in use
+                if off is not None and self.meta.get("team"):
+                    self.meta["team"]["off"] = off
                 self._save()
                 m, self.meta = self.meta, None
             return m
@@ -153,6 +157,89 @@ class Recorder:
 REC = Recorder()
 LAST = {"key": None, "gameover": None}
 
+TEAM_SR = 48000   # the PC's sound as the sound card mixes it
+
+
+class TeamRecorder:
+    """What you hear (the PC's sound: your teammates' voices and the game), recorded beside your microphone from the
+    moment you confirm that your team agreed, for the rest of this match only: nobody's voice without their consent
+    (France, art. 226-1; 04/10: Catharsis agreed, the others are asked at the start of the match). <id>.team.flac; the
+    consent, how and when it was given, are in the recording's .json."""
+
+    def __init__(self):
+        self.thread = None
+        self.stop_ev = threading.Event()
+        self.pending = None   # agreed before the match recording started (warm-up): starts with it, same map only
+
+    def running(self):
+        return self.thread is not None and self.thread.is_alive()
+
+    def start(self, how, map_name=None):
+        """how: the consent, said as it was given ("your team agreed: the In game page's button").
+        -> True (recording), "pending" (no match recording yet: it starts with it, on this map), False (already on)."""
+        if self.running():
+            return False
+        if not REC.recording():
+            self.pending = {"how": how, "at": time.time(), "map": map_name}
+            return "pending"
+        self.pending = None
+        import soundcard as sc
+        import soundfile as sf
+        sp = sc.default_speaker()
+        mic = sc.get_microphone(id=str(sp.name), include_loopback=True)
+        with REC.lock:
+            meta = REC.meta
+            if meta is None:
+                return False
+            rid = meta["id"]
+            meta["team"] = {"on": round(time.time() - meta["start"], 2), "device": sp.name, "consent": how,
+                            "at": dt.datetime.now().isoformat(timespec="seconds"), "file": rid + ".team.flac"}
+            REC._save()
+        f = sf.SoundFile(os.path.join(DIR, rid + ".team.flac"), mode="w", samplerate=TEAM_SR, channels=1, format="FLAC")
+        self.stop_ev.clear()
+
+        def run():
+            import numpy as np
+            try:
+                with mic.recorder(samplerate=TEAM_SR, channels=1, blocksize=1024) as r:
+                    t0, n = time.time(), 0
+                    while not self.stop_ev.is_set():
+                        d = r.record(numframes=TEAM_SR // 10)
+                        d = d[:, 0] if d.ndim > 1 else d
+                        f.write(d)
+                        n += len(d)
+                        late = int((time.time() - t0) * TEAM_SR) - n   # a gap of the sound card: silence, so that
+                        if late > TEAM_SR // 2:                        # the file's time stays the match's time
+                            f.write(np.zeros(late, dtype="float32"))
+                            n += late
+            except Exception as e:
+                print("team sound:", e, flush=True)
+            finally:
+                f.close()
+        self.thread = threading.Thread(target=run, daemon=True)
+        self.thread.start()
+        return True
+
+    def resume(self, map_name=None):
+        """The match recording just started: the team sound too when your team agreed during the warm-up."""
+        p = self.pending
+        if p and time.time() - p["at"] < 30 * 60 and (not p.get("map") or not map_name or p["map"] == map_name):
+            return self.start(p["how"], map_name)
+        self.pending = None
+        return False
+
+    def stop(self):
+        """-> when it stopped, in seconds of the recording (None: it was not on)."""
+        self.pending = None
+        if not self.running():
+            return None
+        self.stop_ev.set()
+        self.thread.join(timeout=5)
+        return round(time.time() - ((REC.meta or {}).get("start") or time.time()), 2)
+
+
+TEAM = TeamRecorder()
+
 
 def on_gsi(g):
     """Called for every message of the game: start with the match (automatic mode), mark the rounds of any
@@ -161,6 +248,8 @@ def on_gsi(g):
         return
     auto = bool(settings().get("auto"))
     phase = g.get("map_phase")
+    if TEAM.pending and (g.get("map") is None or (TEAM.pending.get("map") and g.get("map") != TEAM.pending["map"])):
+        TEAM.pending = None   # agreed for a match that never started: not carried over to the next one
     if auto and g.get("practice"):   # practice or custom server: nothing to line up with a match, no automatic recording
         if REC.recording() and (REC.meta or {}).get("source") == "auto":
             REC.meta["practice"] = True   # stopped without transcription; kept (Settings lists it, delete it there)
@@ -172,6 +261,7 @@ def on_gsi(g):
             pause_transcription()  # all the power for the game
             REC.start(g.get("map"), g.get("steamid"), "auto")
             LIVE.start(g.get("map"))
+            TEAM.resume(g.get("map"))
         except Exception as e:
             print("microphone unavailable:", e, flush=True)
             return
@@ -236,7 +326,7 @@ def pending(max_days=14):
         if not f.endswith(".json") or f.endswith((".transcript.json", ".analysis.json")) or not f[:8].isdigit():
             continue
         rid = f[:-5]
-        if os.path.exists(os.path.join(DIR, rid + ".transcript.json")):
+        if os.path.exists(os.path.join(DIR, rid + ".transcript.json")) and not _team_left(rid):
             continue
         try:
             with open(os.path.join(DIR, f), encoding="utf-8") as fh:
@@ -304,16 +394,33 @@ def _spans(words, gap=0.9):
 
 
 def transcribe(rid):
+    """Your microphone, then your team's sound when your team agreed to it (<id>.team.transcript.json). Only the team's
+    part when your microphone's is done (a match stopped the job between the two)."""
+    team = os.path.exists(os.path.join(DIR, rid + ".team.flac"))
+    n = None
+    if not (team and _team_left(rid) and os.path.exists(os.path.join(DIR, rid + ".transcript.json"))):
+        n = transcribe_file(rid)
+    if team:
+        transcribe_file(rid, team=True)
+    return n
+
+
+def _team_left(rid):
+    """Your team's sound recorded and not transcribed yet."""
+    return os.path.exists(os.path.join(DIR, rid + ".team.flac")) and not os.path.exists(os.path.join(DIR, rid + ".team.transcript.json"))
+
+
+def transcribe_file(rid, team=False):
     """Two passes over the recording, one in French and one in English (Whisper translates what isn't in the language
     it is told: "site clear" became "cité claire"). The phrases of both passes are lined up, and each keeps the pass
     whose words the model is surest of (mean log-probability): your English calls stay English, your French stays
-    French."""
+    French. team: the team's sound (their times start when it was switched on: meta["team"]["on"])."""
     import math
     meta = json.load(open(os.path.join(DIR, rid + ".json"), encoding="utf-8"))
     from faster_whisper import WhisperModel
     threads = int(os.environ.get("COACH_TX_THREADS") or min(8, os.cpu_count() or 4))   # fewer when it runs next to a match
     model = WhisperModel(MODEL, device="cpu", compute_type="int8", cpu_threads=threads)
-    path = os.path.join(DIR, meta["file"])
+    path = os.path.join(DIR, rid + ".team.flac" if team else meta["file"])
     W = {lang: _words(model, path, lang, meta.get("map")) for lang in ("fr", "en")}
     spans = sorted(_spans(W["fr"]) + _spans(W["en"]))
     merged = []
@@ -338,8 +445,9 @@ def transcribe(rid):
         if text and not HALLUCINATIONS.search(text):
             out.append({"start": round(best[2][0][0], 2), "end": round(best[2][-1][1], 2), "text": text, "lang": best[1],
                         "p": round(best[0], 2)})
-    json.dump({"id": rid, "model": MODEL, "bilingual": True, "time": dt.datetime.now().isoformat(timespec="minutes"), "utterances": out},
-              open(os.path.join(DIR, rid + ".transcript.json"), "w", encoding="utf-8"), ensure_ascii=False, indent=1)
+    json.dump({"id": rid, "model": MODEL, "bilingual": True, "time": dt.datetime.now().isoformat(timespec="minutes"), "utterances": out,
+               **({"team": True, "offset": (meta.get("team") or {}).get("on", 0)} if team else {})},
+              open(os.path.join(DIR, rid + (".team.transcript.json" if team else ".transcript.json")), "w", encoding="utf-8"), ensure_ascii=False, indent=1)
     return len(out)
 
 
@@ -370,7 +478,7 @@ def recordings():
         return []
     out = []
     for f in sorted(os.listdir(DIR), reverse=True):
-        if f.endswith(".json") and not f.endswith((".transcript.json", ".analysis.json")):
+        if f.endswith(".json") and f.count(".") == 1:   # a recording's own file (not its transcripts or analyses)
             m = json.load(open(os.path.join(DIR, f), encoding="utf-8"))
             rid = m["id"]
             a = os.path.join(DIR, rid + ".analysis.json")
@@ -379,12 +487,14 @@ def recordings():
                         "transcribed": os.path.exists(os.path.join(DIR, rid + ".transcript.json")),
                         "silent": bool(m.get("silent")) or (m.get("peak") is not None and m["peak"] < 0.01),
                         "match": json.load(open(a, encoding="utf-8")).get("match") if os.path.exists(a) else None,
-                        "audio": os.path.exists(os.path.join(DIR, m["file"]))})
+                        "audio": os.path.exists(os.path.join(DIR, m["file"])),
+                        "team": (m.get("team") or {}).get("consent")})
     return out
 
 
 def delete(rid):
-    for ext in (".flac", ".json", ".transcript.json", ".analysis.json", ".log"):
+    for ext in (".flac", ".json", ".transcript.json", ".analysis.json", ".log", ".team.flac", ".team.transcript.json", ".team.analysis.json",
+                ".heard.analysis.json"):
         f = os.path.join(DIR, rid + ext)
         if os.path.exists(f):
             os.remove(f)
@@ -494,7 +604,7 @@ def mood_all(text):
     return [m] if m else []
 
 
-ANALYSIS_V = 3   # bump when the analysis changes: mood_stats analyzes the older ones again
+ANALYSIS_V = 4   # bump when the analysis changes: mood_stats analyzes the older ones again
 
 
 def mood_of(text):
@@ -629,10 +739,40 @@ def analyze(rid, sid):
            "examples": [u["text"] for u in utts if u["complete"]][:4],
            "tilt_rounds": [r["round"] for r in rr if any(x["kind"] == "tilt" for x in r["texts"])][:6],
            "moods": {k: sum(1 for u in utts for mo in u.get("moods") or [] if mo["kind"] == k) for k in MOODS + ("note",)}}
+    if mid and live:
+        res.update(_heard(rid, meta, mid, sid, live, utts))
     res["tips"] = tips(res)
     res["v"] = ANALYSIS_V
     json.dump(res, open(os.path.join(DIR, rid + ".analysis.json"), "w", encoding="utf-8"), ensure_ascii=False, indent=1)
     return res
+
+
+def _heard(rid, meta, mid, sid, live, utts):
+    """What your team could hear in the match (its demo) and what you did with it; after your team's calls, where you
+    went (when your team agreed to the team sound). Kept in <id>.heard.analysis.json until the transcripts change."""
+    import heard
+    tt = os.path.join(DIR, rid + ".team.transcript.json")
+    key = [mid, str(sid), os.path.getmtime(os.path.join(DIR, rid + ".transcript.json")),
+           os.path.getmtime(tt) if os.path.exists(tt) else None, HEARD_V]
+    cf = os.path.join(DIR, rid + ".heard.analysis.json")
+    try:
+        c = json.load(open(cf, encoding="utf-8"))
+        if c.get("key") == key:
+            return c["res"]
+    except Exception:
+        pass
+    out = {}
+    try:
+        team_u = json.load(open(tt, encoding="utf-8"))["utterances"] if os.path.exists(tt) else None
+        off = float((meta.get("team") or {}).get("on") or 0.0)
+        out["heard"] = heard.analyze(mid, sid, live, utts, team_u, off, meta.get("map"))
+        if team_u:
+            out["team_calls"] = heard.after_calls(mid, sid, live, team_u, off, meta.get("map"))
+    except Exception as e:
+        print("what you heard: analysis impossible:", e, flush=True)
+        return {}
+    json.dump({"key": key, "res": out}, open(cf, "w", encoding="utf-8"), ensure_ascii=False)
+    return out
 
 
 def tips(a):

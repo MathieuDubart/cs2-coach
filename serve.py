@@ -230,6 +230,7 @@ class Handler(BaseHTTPRequestHandler):
                 s["mic"] = voice.REC.recording()
                 s["mic_silent"] = voice.REC.recording() and time.time() - (voice.REC.meta or {}).get("start", time.time()) > 60 and voice.REC.peak < 0.01
                 s["mic_auto"] = bool(voice.settings().get("auto"))
+                s["team_rec"] = "on" if voice.TEAM.running() else "pending" if voice.TEAM.pending else None   # your team agreed: what you hear
             except Exception:
                 pass
             return self.send(200, s)
@@ -364,8 +365,17 @@ class Handler(BaseHTTPRequestHandler):
                     voice.pause_transcription()
                     voice.REC.start(g.get("map"), body.get("sid") or config.settings().get("own_steamid"), "manual")
                     voice.LIVE.start(g.get("map"))
+                    voice.TEAM.resume(g.get("map"))
                 elif act == "stop":
                     voice.finish()
+                elif act == "team":   # your team agreed: what you hear is recorded too, for this match only (04/10)
+                    if body.get("on") is False:
+                        voice.TEAM.stop()
+                    else:
+                        g = gsi.state()
+                        if not g.get("map") or g.get("practice"):
+                            return self.send(409, {"error": "No match loaded."})
+                        voice.TEAM.start("your team agreed: the In game page's button", g.get("map"))
                 elif act == "transcribe":
                     if not voice.start_transcription(str(body.get("id") or "")):
                         return self.send(409, {"error": "A transcription is already running."})
@@ -550,7 +560,9 @@ def voice_status():
             "recording": bool(m), "level": round(voice.REC.peak, 4) if m else None,
             "current": m and {k: m[k] for k in ("id", "map", "start_iso", "device", "source")},
             "transcribing": voice.transcribing(), "recordings": voice.recordings()[:12],
-            "live": {"on": voice.settings().get("live", True), "running": voice.LIVE.running(), "last": voice.LIVE.last}}
+            "live": {"on": voice.settings().get("live", True), "running": voice.LIVE.running(), "last": voice.LIVE.last},
+            "team": {**{k: v for k, v in ((m or {}).get("team") or {}).items() if k in ("consent", "at", "device")},
+                     "on": voice.TEAM.running(), "pending": bool(voice.TEAM.pending)}}
 
 
 def voice_watch(every=15):

@@ -374,7 +374,7 @@ async function renderSettings(){
     ${vs.recording?`<p><b class="bad">● Recording</b> ${vs.current.map?`(${MAPN(vs.current.map)})`:""}, since ${fmtDate(vs.current.start_iso)} <button type="button" id="v-stop">Stop</button></p>`:""}
     ${vs.transcribing?`<p class="note"><span class="spin" aria-hidden="true"></span>Transcribing (${esc(vs.transcribing)}): it runs at low priority and pauses when a match starts.</p>`:""}
     ${vs.recordings.length?`<div class="tbl"><table><thead><tr><th>Date</th><th>Map</th><th class="n">Length</th><th class="n">Rounds found</th><th>Transcription</th><th></th></tr></thead><tbody>
-      ${vs.recordings.map(r=>`<tr><td>${fmtDate(r.start)}</td><td>${r.map?MAPN(r.map):"—"}${r.practice?' <span class="pill">practice</span>':""}</td><td class="n">${r.duration?Math.round(r.duration/60)+" min":"in progress"}</td><td class="n">${r.rounds_marked||"—"}</td>
+      ${vs.recordings.map(r=>`<tr><td>${fmtDate(r.start)}</td><td>${r.map?MAPN(r.map):"—"}${r.practice?' <span class="pill">practice</span>':""}${r.team?` <span class="pill" title="${esc(r.team)}">+ team sound</span>`:""}</td><td class="n">${r.duration?Math.round(r.duration/60)+" min":"in progress"}</td><td class="n">${r.rounds_marked||"—"}</td>
         <td>${r.silent?'<span class="bad">silent: wrong microphone</span>':r.transcribed?"done":r.duration?`<button type="button" data-vtr="${r.id}">Transcribe</button>`:"—"}</td><td><button type="button" data-vdel="${r.id}">Delete</button></td></tr>`).join("")}</tbody></table></div>`
       :`<p class="note">No recording yet.</p>`}<span class="note" id="v-msg" role="status"></span>`
     :`<p class="note">Microphone unavailable on this PC${vs&&vs.error?` (${esc(vs.error)})`:""}.</p>`}</article>
