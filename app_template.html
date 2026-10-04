@@ -1485,13 +1485,17 @@ const DIFF=["Easy","Normal","Hard","Expert"];
 function trainDiff(){try{return +(localStorage.getItem("coach_diff")??2)}catch(e){return 2}}
 function tPref(k,d){try{return localStorage.getItem("coach_t"+k)??d}catch(e){return d}}
 function tSet(k,v){try{localStorage.setItem("coach_t"+k,v)}catch(e){}}
-const BLOCK={aim:"🎯 Aim",nade:"💨 Stuff",situation:"🔁 Situations"};
+const BLOCK={defend:"🛡 Defense",push:"🚶 Push",aim:"🎯 Aim",nade:"💨 Stuff",situation:"🔁 Situations"};
 async function trainLoad(box,sid){clearTimeout(TRAIN.timer);
   let d;try{d=await (await fetch("/api/train?sid="+sid)).json()}catch(e){box.innerHTML=`<span class="note">The local server doesn't answer.</span>`;return}
   if(!box.isConnected)return;
   const st=d.status||{},R=d.results||{},sc=d.scenarios||[],P=d.progress||{level:1,xp:0,from:0,to:300,due:{}},M=d.maps||{},ss=st.session;
   if(!st.installed){box.innerHTML=`<span class="note">Training server not installed (plugin/make_server.py, then plugin/build.py).</span>`;return}
-  const mins=+tPref("min","20"),where=tPref("where","random"),df=trainDiff(),due=P.due||{},nd=Object.values(due).reduce((a,b)=>a+b,0);
+  // the bots' level and the warm-up preselected from your last sessions and matches, unless you chose them in the last
+  // 12 hours (04/10: "the bots' level preselected from my level in training")
+  const sg=P.suggest||null,chose=Date.now()-(+tPref("at","0"))<12*3600e3;
+  let mins=+tPref("min","20"),df=trainDiff();if(sg&&!chose){df=sg.diff;if(sg.warmup)mins=5}
+  const where=tPref("where","random"),due=P.due||{},nd=Object.values(due).reduce((a,b)=>a+b,0);
   const pct=Math.max(0,Math.min(100,100*(P.xp-P.from)/Math.max(1,P.to-P.from)));
   const mapsTop=Object.keys(M).slice(0,8);
   const chip=(k,v,lab,on)=>`<button type="button" data-t${k}="${v}" aria-pressed="${on}">${lab}</button>`;
@@ -1504,10 +1508,10 @@ async function trainLoad(box,sid){clearTimeout(TRAIN.timer);
   box.innerHTML=`<div class="tplay">
      <div class="tlvl"><b>LVL ${P.level}</b><div class="tbar"><i style="width:${pct}%"></i></div><span>${P.xp} / ${P.to} XP</span>${nd?`<span class="tdue">🔁 ${nd} to redo</span>`:""}${P.mastered?`<span>⭐ ${P.mastered} mastered</span>`:""}</div>
      ${live}
-     <div class="trow"><span class="tk2">⏱</span>${[10,20,30,45].map(m=>chip("min",m,m+" min",m===mins)).join("")}</div>
+     <div class="trow"><span class="tk2">⏱</span>${[5,10,20,30,45].map(m=>chip("min",m,m===5?"5 min · warm-up":m+" min",m===mins)).join("")}</div>
      <div class="trow"><span class="tk2">🗺</span>${chip("where","random","🎲 Random",where==="random")}${chip("where","mix","🔀 Mix",where==="mix")}${mapsTop.map(m=>chip("where",m,MAPN(m),where===m)).join("")}</div>
-     <div class="trow"><span class="tk2">🤖</span>${DIFF.map((n,i)=>`<button type="button" data-tdiff="${i}" aria-pressed="${i===df}">${n}</button>`).join("")}</div>
-     <div class="trow"><button type="button" class="tbig" data-tgo>${ss&&st.running?"↻ NEW SESSION":"▶ PLAY"}</button>${st.running?`<button type="button" data-tstop>Stop server</button>`:""}<span class="note" id="tmsg" role="status">${BLOCK.aim} → ${BLOCK.nade} → ${BLOCK.situation}</span></div>
+     <div class="trow"><span class="tk2">🤖</span>${DIFF.map((n,i)=>`<button type="button" data-tdiff="${i}" aria-pressed="${i===df}">${n}</button>`).join("")}${sg?`<span class="note">suggested: ${DIFF[sg.diff]} · ${esc(sg.why)}${sg.warmup?` · warm-up: ${esc(sg.warm_why)}`:""}</span>`:""}</div>
+     <div class="trow"><button type="button" class="tbig" data-tgo>${ss&&st.running?"↻ NEW SESSION":"▶ PLAY"}</button>${ss&&st.running&&!st.humans?`<button type="button" data-tjoin>↪ Rejoin the server</button>`:""}${st.running?`<button type="button" data-tstop>Stop server</button>`:""}<span class="note" id="tmsg" role="status">${mins<=5?`${BLOCK.defend} → ${BLOCK.push}`:`${BLOCK.defend} → ${BLOCK.push} → ${BLOCK.nade} → ${BLOCK.situation}`}</span></div>
    </div>
    <details class="tcarte"><summary>Situations one by one (${sc.length})</summary>
    ${maps.length>1?`<div class="btns" role="group" aria-label="Map"><button type="button" data-tmap="" aria-pressed="${!TRAIN.map}">All</button>${maps.map(m=>`<button type="button" data-tmap="${m}" aria-pressed="${TRAIN.map===m}">${MAPN(m)}</button>`).join("")}</div>`:""}
@@ -1518,10 +1522,13 @@ async function trainLoad(box,sid){clearTimeout(TRAIN.timer);
   if(TRAIN.open)$(".tcarte",box).open=true;
   $(".tcarte",box).ontoggle=e=>TRAIN.open=e.target.open;
   const msg=$("#tmsg",box);
-  $$("[data-tmin]",box).forEach(b=>b.onclick=()=>{tSet("min",b.dataset.tmin);trainLoad(box,sid)});
+  $$("[data-tmin]",box).forEach(b=>b.onclick=()=>{tSet("min",b.dataset.tmin);tSet("at",Date.now());trainLoad(box,sid)});
   $$("[data-twhere]",box).forEach(b=>b.onclick=()=>{tSet("where",b.dataset.twhere);trainLoad(box,sid)});
   $$("[data-tmap]",box).forEach(b=>b.onclick=()=>{TRAIN.map=b.dataset.tmap||null;trainLoad(box,sid)});
-  $$("[data-tdiff]",box).forEach(b=>b.onclick=()=>{try{localStorage.setItem("coach_diff",b.dataset.tdiff)}catch(e){}trainLoad(box,sid)});
+  $$("[data-tdiff]",box).forEach(b=>b.onclick=()=>{try{localStorage.setItem("coach_diff",b.dataset.tdiff)}catch(e){}tSet("at",Date.now());trainLoad(box,sid)});
+  // the game crashed or was closed during a session: back on its server (04/10: "a rejoin button is missing")
+  const jn=$("[data-tjoin]",box);if(jn)jn.onclick=async()=>{jn.disabled=true;msg.textContent="CS2 joins the server (started first if it is closed)…";
+    try{await api("/api/train/join",{})}catch(e){msg.textContent="Failed: "+e.message;jn.disabled=false}};
   const sp=$("[data-tstop]",box);if(sp)sp.onclick=async()=>{sp.disabled=true;try{await api("/api/train/stop",{})}catch(e){msg.textContent="Failed: "+e.message}trainLoad(box,sid)};
   const go=$("[data-tgo]",box);if(go)go.onclick=async()=>{go.disabled=true;msg.textContent=st.running?"Preparing the session…":"Preparing the session and starting the server (about 15 s)…";
     try{const r=await api("/api/train/session",{sid,minutes:mins,where,diff:df});

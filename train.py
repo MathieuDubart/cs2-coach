@@ -26,8 +26,12 @@ import replay
 STATE_F = os.path.join(config.OUT, "train_progress.json")
 SITES_F = os.path.join(config.OUT, "train_sites.json")
 SESS = os.path.join(replay.COACH, "sessions")
-SPLIT = {"aim": 0.25, "nade": 0.25, "situation": 0.5}   # share of the time of each block
-EST = {"aim": 85, "nade": 40, "situation": 45}   # seconds a drill takes, about (with a retry): how many to prepare
+# share of the time of each block: defending a site (CT), the push routes with their prefires (T), the stuff, the
+# situations (04/10: "a CT training, then a T one: the push routes"); a warm-up (5 min) is the first two only
+SPLIT = {"defend": 0.17, "push": 0.17, "aim": 0.34, "nade": 0.2, "situation": 0.46}
+WARMUP = {"defend": 0.5, "push": 0.5, "aim": 1.0}
+WARMUP_MIN = 5
+EST = {"defend": 110, "push": 75, "aim": 85, "nade": 40, "situation": 45}   # seconds a drill takes, about (with a retry)
 RIFLE = {2: "weapon_ak47", 3: "weapon_m4a1"}
 PRIMARY = {"AK-47": "ak47", "M4A4": "m4a1", "M4A1-S": "m4a1_silencer", "AWP": "awp", "Galil AR": "galilar",
            "FAMAS": "famas", "SG 553": "sg556", "AUG": "aug", "SSG 08": "ssg08", "MP9": "mp9", "MAC-10": "mac10"}
@@ -248,7 +252,7 @@ def site_data(mp):
         except (OSError, ValueError):
             continue
     # computed again when the map has a quarter more matches (the base grows by itself: not at every Play)
-    if mp in cache and cache[mp].get("v") == 3 and cache[mp].get("n", 0) >= 0.8 * len(dirs):
+    if mp in cache and cache[mp].get("v") == 4 and cache[mp].get("n", 0) >= 0.8 * len(dirs):
         return cache[mp]
     rows = []
     for d in dirs:
@@ -289,15 +293,22 @@ def site_data(mp):
                 tcen = np.median(T, axis=0)
                 ents.append({"zone": tz, "n": int(len(g)), "dist": round(dist),
                              "start": [round(float(v), 1) for v in _spread(_cells(T), 1)[0][1]],
-                             "holds": [{"pos": [round(float(v), 1) for v in p], "ang": _angle(p, tcen), "n": c, "t": _hold_t(CP, tm, p)}
-                                       for c, p in holds],
+                             "holds": [{"pos": [round(float(v), 1) for v in p], "ang": _angle(p, tcen), "n": c, "t": _hold_t(CP, tm, p),
+                                        "zone": _hold_zone(CP, g.ct_zone.to_numpy(), p, mp)} for c, p in holds],
                              "spawns": [[round(float(v), 1) for v in p] for _, p in spawn]})
             ents.sort(key=lambda e: -e["n"])
             spot = _spread(_cells(np.array(S.ct.tolist(), float)), 1)[0][1]   # the CTs' favourite spot on the site
             sites[z] = {"center": [round(float(v), 1) for v in cen], "defend": [round(float(v), 1) for v in spot], "entrances": ents[:4]}
-    cache[mp] = {"n": len(dirs), "v": 3, "sites": sites}
+    cache[mp] = {"n": len(dirs), "v": 4, "sites": sites}
     json.dump(cache, open(SITES_F, "w", encoding="utf-8"))
     return cache[mp]
+
+
+def _hold_zone(CP, zones, p, mp):
+    """A hold's place name: the most common zone of the CTs who fought from there (Backsite, Heaven…)."""
+    near = np.hypot(CP[:, 0] - p[0], CP[:, 1] - p[1]) < 110
+    z = pd.Series(zones[near] if near.any() else zones).dropna()
+    return replay_zone(z.mode().iloc[0], mp) if len(z) else None
 
 
 def _timings(holds):
@@ -465,7 +476,7 @@ def practice_drills(sid, mp):
         hits = [t for t in (entries(mp).get(letter) or []) if t.get("from", 0) >= 1300 and len(t.get("zones") or []) >= 2
                 and not any("CT" in zn for zn in t["zones"])   # an attack, not a late rotation through the CTs' side
                 and replay_zone("Bombsite" + ("B" if letter == "A" else "A"), mp) not in t["zones"]]   # nor a drop from the other site (Nuke)
-        for e in pick[:2]:
+        for e in pick[:3]:   # the push routes: one per entrance on the site
             frm = replay_zone(e["zone"], mp)
             # a real hit through that entrance, from far: its way is the route (start, places, the line drawn in the game)
             way = sorted([t for t in hits if frm in (t.get("zones") or [])], key=lambda t: -t.get("from", 0))[:6]
@@ -478,10 +489,12 @@ def practice_drills(sid, mp):
             P = np.array(hit["path"], float).reshape(-1, 5)[:, :3] if hit else None
             start = [round(float(v), 1) for v in P[0]] if hit else e["start"]
             holds = [h for s_ in S["entrances"] for h in s_["holds"]]   # the angles along that way, the site's included,
-            # along the way and on its floor (a height gap counts three times: a spot 350 u under the way is not on it)
-            holds = [h for h in holds if float(np.min(np.sqrt((P[:, 0] - h["pos"][0]) ** 2 + (P[:, 1] - h["pos"][1]) ** 2
-                                                              + (3 * (P[:, 2] - h["pos"][2])) ** 2))) < 550
-                     and math.dist(h["pos"][:2], start[:2]) > 600]   # none right at your start
+            # along the way: a spot above it sees it (Heaven, a box, a balcony: 04/10 "all the high positions at A are
+            # not used"), a spot under it is on another floor (a height gap under the way counts three times)
+            def _gap(h):
+                dz = h["pos"][2] - P[:, 2]
+                return float(np.min(np.sqrt((P[:, 0] - h["pos"][0]) ** 2 + (P[:, 1] - h["pos"][1]) ** 2 + np.where(dz > 0, dz, 3 * dz) ** 2)))
+            holds = [h for h in holds if _gap(h) < 650 and math.dist(h["pos"][:2], start[:2]) > 600]   # none right at your start
             seen_, keep = [], []
             for h in sorted(holds, key=lambda h: -h["n"]):
                 if all(math.dist(h["pos"], q) > 160 for q in seen_):
@@ -511,6 +524,14 @@ def practice_drills(sid, mp):
         ways = Counter(t["zone"] for t in tracks)
         froms = ", ".join(f"{w} {round(100 * n / len(tracks))}%" for w, n in ways.most_common(4)) if tracks else \
             ", ".join(dict.fromkeys(replay_zone(e["zone"], mp) for e in S["entrances"]))
+        # the spots to hold, one after the other, before playing free (04/10: "a specific work on positions: backsite,
+        # then that one, then free"): the most held of the site, each its own place
+        posts = []
+        for h in sorted((h for e in S["entrances"] for h in e["holds"]), key=lambda h: -h["n"]):
+            if h.get("zone") and all(h["zone"] != q["zone"] and math.dist(h["pos"], q["pos"]) > 300 for q in posts):
+                posts.append({"pos": h["pos"], "ang": h["ang"], "zone": h["zone"]})
+            if len(posts) >= 2:
+                break
         for kit in _defense_kits(sid):
             out.append({"id": f"defend:{mp}:{z}:{kit['cls']}", "kind": "aim", "mode": "defend", "map": mp,
                         "title": f"DEFEND {site} · {kit['name']}", "team": 3,
@@ -518,7 +539,7 @@ def practice_drills(sid, mp):
                         "me": {"pos": S["defend"], "ang": _angle(S["defend"], spawns[0]["pos"] if spawns else tracks[0]["path"][:3])},
                         "weapons": kit["weapons"], "bot_weapons": kit["bot_weapons"], "armor": 100, "helmet": kit["helmet"],
                         "bots": spawns, "tracks": tracks, "seconds": kit["seconds"], "alive": kit["alive"], "goal": kit["goal"],
-                        "weight": kit["weight"]})
+                        "posts": posts, "weight": kit["weight"]})
     return out
 
 
@@ -831,19 +852,23 @@ def build(sid, minutes=20, where="random", difficulty=2):
         w = np.array([mine[m] for m in names], float)
         chosen = [str(np.random.choice(names, p=w / w.sum()))]
     per_map = minutes * 60 / len(chosen)
-    all_sc = replay.scenarios(sid, n=40)
+    warm = minutes <= WARMUP_MIN   # a quick warm-up before a game: aim only, no stuff, no situation (04/10)
+    split = WARMUP if warm else SPLIT
+    all_sc = [] if warm else replay.scenarios(sid, n=40)
     blocks, todo = [], []
     for mp in chosen:
-        aim = lambda s_, m_: practice_drills(s_, m_) or aim_drills(s_, m_)   # hostage maps: your duel spots
-        for kind, fn in (("aim", aim), ("nade", nade_drills), ("situation", lambda s_, m_: situation_drills(s_, m_, all_sc))):
-            secs = per_map * SPLIT[kind]
+        pr = practice_drills(sid, mp)
+        kinds = [("defend", lambda s_, m_: [d for d in pr if d.get("mode") == "defend"]),
+                 ("push", lambda s_, m_: [d for d in pr if d.get("mode") == "prefire"])] if pr else [("aim", aim_drills)]   # hostage maps: your duel spots
+        if not warm:
+            kinds += [("nade", nade_drills), ("situation", lambda s_, m_: situation_drills(s_, m_, all_sc))]
+        for kind, fn in kinds:
+            secs = per_map * split[kind]
             cands = fn(sid, mp)
             if not cands:
                 continue
             n = max(1, int(secs / EST[kind]) + 1)
             picked = _pick(cands, n, p["items"], nsess, weight=lambda c: c.get("weight", 1.0))
-            if kind == "aim":   # a warm-up first: the prefires, then the defenses
-                picked.sort(key=lambda c: {"prefire": 0, "defend": 1}.get(c.get("mode"), 2))
             drills = []
             for d in picked:
                 if kind == "nade":   # guided, then the spot and how, then the spot only
@@ -859,7 +884,7 @@ def build(sid, minutes=20, where="random", difficulty=2):
         raise ValueError("nothing to train on these maps yet")
     sid_ = time.strftime("s%Y%m%d_%H%M%S")
     sess = {"id": sid_, "minutes": minutes, "where": where, "maps": chosen, "difficulty": int(difficulty),
-            "level": level(p["xp"]), "blocks": blocks}
+            "level": level(p["xp"]), "warmup": warm, "blocks": blocks}
     os.makedirs(SESS, exist_ok=True)
     first = [d for d in blocks[0]["drills"] if blocks[0]["kind"] == "situation"][:1]
     for d in first:   # a session that starts with a situation: that one now
@@ -870,7 +895,7 @@ def build(sid, minutes=20, where="random", difficulty=2):
         import threading
         from concurrent.futures import ThreadPoolExecutor
         threading.Thread(target=lambda: list(ThreadPoolExecutor(3).map(lambda d: _scenario(sid, d), rest)), daemon=True).start()
-    p["sessions"].append({"id": sid_, "t": time.time(), "minutes": minutes, "maps": chosen, "done": False})
+    p["sessions"].append({"id": sid_, "t": time.time(), "minutes": minutes, "maps": chosen, "done": False, "difficulty": int(difficulty)})
     _save(p)
     return sess
 
@@ -882,8 +907,46 @@ def _scenario(sid, d):
         print("situation", d["id"], repr(e), flush=True)
 
 
-def summary():
-    """For the page: level, XP, last sessions, what comes back next time."""
+def suggest(sid, p=None):
+    """What the page preselects (04/10: "the bots' level from my level in training", "a 5 min warm-up when I know my
+    stuff or I just played"): the bots' level from your last two sessions (85 % of the drills or more: one up; half or
+    less: one down; else the same), the warm-up when your last match ended under two hours ago or you master most of
+    your lineups."""
+    p = p or progress()
+    done = [x for x in p["sessions"] if x.get("done") and x.get("drills")][-2:]
+    last = next((x for x in reversed(p["sessions"]) if x.get("difficulty") is not None), None)
+    d = int(last["difficulty"]) if last else None
+    if d is None and done:   # sessions before 04/10: the level is in their file
+        try:
+            with open(os.path.join(SESS, f"{done[-1]['id']}.json"), encoding="utf-8") as fh:
+                d = int(json.load(fh).get("difficulty", 2))
+        except (OSError, ValueError):
+            d = None
+    rate = sum(x.get("ok", 0) for x in done) / max(1, sum(x.get("drills", 0) for x in done)) if done else None
+    diff, why = (2 if d is None else d), "your last level"
+    if d is not None and rate is not None and rate >= 0.85 and d < 3:
+        diff, why = d + 1, f"{round(100 * rate)} % of your last drills ✔: one level up"
+    elif d is not None and rate is not None and rate <= 0.5 and d > 0:
+        diff, why = d - 1, f"{round(100 * rate)} % of your last drills ✔: one level down"
+    warm, wwhy = False, ""
+    try:   # your last match: the match list (start + length), you among its players
+        acc = int(sid) - 76561197960265728
+        with open(os.path.join(config.CACHE, "matches.json"), encoding="utf-8") as fh:
+            reg = json.load(fh)
+        ends = [time.mktime(time.strptime(m["time"][:16], "%Y-%m-%dT%H:%M")) + (m.get("duration_s") or 2400)
+                for m in reg.values() if acc in (m.get("accounts") or []) and m.get("time")]
+        if ends and time.time() - max(ends) < 2 * 3600:
+            warm, wwhy = True, "you played a match less than two hours ago"
+    except (OSError, ValueError, TypeError, KeyError):
+        pass
+    nade = [v for k, v in p["items"].items() if k.startswith("nade:")]
+    if not warm and len(nade) >= 8 and sum(v["box"] >= 2 for v in nade) >= 0.7 * len(nade):
+        warm, wwhy = True, "you master most of your lineups"
+    return {"diff": diff, "why": why, "warmup": warm, "warm_why": wwhy}
+
+
+def summary(sid=None):
+    """For the page: level, XP, last sessions, what comes back next time, what to preselect."""
     p = ingest()
     nsess = len(p["sessions"])
     due = [k for k, v in p["items"].items() if v["next"] <= nsess]
@@ -892,7 +955,7 @@ def summary():
         kinds[k.split(":")[0] if ":" in k else "situation"] = kinds.get(k.split(":")[0] if ":" in k else "situation", 0) + 1
     stars = {k: v["box"] for k, v in p["items"].items()}
     return {**level(p["xp"]), "sessions": p["sessions"][-5:], "due": kinds, "mastered": sum(1 for v in stars.values() if v >= 3),
-            "items": len(stars)}
+            "items": len(stars), "suggest": suggest(sid, p) if sid and str(sid).isdigit() else None}
 
 
 def _game_running():

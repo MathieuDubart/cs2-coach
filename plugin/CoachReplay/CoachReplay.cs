@@ -84,6 +84,7 @@ public class Scenario
     [JsonPropertyName("bomb")] public Bomb? Bomb { get; set; }   // planted in the window (or before it)
     [JsonPropertyName("plant")] public string Plant { get; set; } = "";   // the bomb in the real round, said on screen
     [JsonPropertyName("line")] public List<float[]> Line { get; set; } = new();   // your way in the match, drawn on the ground
+    [JsonPropertyName("clock")] public float Clock { get; set; }   // the real round's clock at the start (s left; 0: unknown)
 }
 
 public partial class CoachReplay : BasePlugin
@@ -108,6 +109,10 @@ public partial class CoachReplay : BasePlugin
     // a bot on its recorded path keeps the real player's aim this long after it has seen you, then fights on its own: a
     // player's reaction time (04/10, "as if they had lag": they used to aim at you the very tick they saw you)
     const int ReactTicks = 13;
+    // a bot on its path notices you this close, or when you shoot this close (a silenced gun: half): it then plays on
+    // its own (04/10: "expert bots that don't even look at me")
+    const float Near = 350f, Earshot = 1200f;
+    const string NullModel = "models/props_doors/null.vmdl";   // an empty model of the game (the grenade camera's)
     bool bombLive, bombDone;   // a situation: the bomb is down here / the demo's plant is done (or will not be)
     int protectUntil;   // a defense: you just came back, nothing hurts you until this tick
     bool humanDead, traded;   // a situation: you died, and your killer died within 3 s
@@ -133,6 +138,7 @@ public partial class CoachReplay : BasePlugin
         try { heCreate = new(HeSig); } catch (Exception e) { heCreate = null; Logger.LogInformation("no HE: {m}", e.Message); }
         try { molotovCreate = new(MolotovSig); } catch (Exception e) { molotovCreate = null; Logger.LogInformation("no molotov: {m}", e.Message); }
         RegisterListener<Listeners.OnTick>(OnTick);
+        RegisterListener<Listeners.OnServerPrecacheResources>(m => m.AddResource(NullModel));
         RegisterListener<Listeners.OnMapStart>(_ =>
         {
             rules = null;
@@ -155,6 +161,24 @@ public partial class CoachReplay : BasePlugin
             return HookResult.Continue;
         });
         RegisterListener<Listeners.OnEntityTakeDamagePre>(OnTakeDamage);
+        // your shots: the bots on their path that hear them react (they fight on their own)
+        RegisterEventHandler<EventWeaponFire>((e, _) =>
+        {
+            if (cur == null || phase != "live" || mode != "actor" || e.Userid is not { IsValid: true, IsBot: false } h) return HookResult.Continue;
+            var w = e.Weapon ?? "";
+            if (w.Contains("knife") || w.Contains("grenade") || w.Contains("flashbang") || w.Contains("molotov") || w.Contains("decoy")) return HookResult.Continue;
+            if (h.PlayerPawn.Value?.AbsOrigin is not { } o) return HookResult.Continue;
+            var me = new Vector3(o.X, o.Y, o.Z);
+            var r = e.Silenced || w.Contains("silencer") ? Earshot / 2 : Earshot;
+            foreach (var (slot, t) in bots.ToList())
+            {
+                if (t.Hold || t.Team == cur.Team || free.Contains(slot) || gone.Contains(t.Sid)) continue;   // your enemies
+                var c = Utilities.GetPlayerFromSlot(slot);
+                if (c?.PlayerPawn.Value?.AbsOrigin is { } bo && Vector3.Distance(new Vector3(bo.X, bo.Y, bo.Z), me) < r)
+                { Free(slot, c, t); Logger.LogInformation("heard {n}", t.Name); }
+            }
+            return HookResult.Continue;
+        });
         // a situation's bomb: defused or blown up, the situation is over
         RegisterEventHandler<EventBombDefused>((e, _) => { if (cur is { Kind: "death" or "clutch" } && phase == "live") Finish("defused"); return HookResult.Continue; });
         RegisterEventHandler<EventBombExploded>((e, _) => { if (cur is { Kind: "death" or "clutch" } && phase == "live") Finish("exploded"); return HookResult.Continue; });
@@ -219,6 +243,25 @@ public partial class CoachReplay : BasePlugin
                     Logger.LogInformation("dbgping site trigger at {x:F0} {y:F0} {z:F0}", s.AbsOrigin?.X, s.AbsOrigin?.Y, s.AbsOrigin?.Z);
                 Logger.LogInformation("dbgping: {n} by {b} ({a})", "done", b.PlayerName, arg);
             });
+        });
+        AddCommand("css_dbgents", "the map's entity classes and how many of each", (p, c) =>
+        {
+            foreach (var g in Utilities.GetAllEntities().Where(e => e.DesignerName != null).GroupBy(e => e.DesignerName).OrderBy(g => g.Key))
+                Logger.LogInformation("dbgents {d} {n}", g.Key, g.Count());
+        });
+        AddCommand("css_dbgdoors", "the map's doors: class and position", (p, c) =>
+        {
+            foreach (var d in Utilities.FindAllEntitiesByDesignerName<CBaseEntity>("prop_door_rotating"))
+            {
+                try
+                {
+                    var o = d.AbsOrigin;
+                    var n = d.CBodyComponent?.SceneNode;
+                    Logger.LogInformation("dbgdoors #{i} valid {v} origin {o} node {n} at {x:F0} {y:F0} {z:F0}", d.Index, d.IsValid, o != null, n != null,
+                        o?.X ?? n?.AbsOrigin?.X, o?.Y ?? n?.AbsOrigin?.Y, o?.Z ?? n?.AbsOrigin?.Z);
+                }
+                catch (Exception ex) { Logger.LogInformation("dbgdoors #{i}: {m}", d.Index, ex.Message); }
+            }
         });
         AddCommand("css_dbgline", "draw a test line (3 segments) and count the beams", (p, c) =>
         {
@@ -296,8 +339,11 @@ public partial class CoachReplay : BasePlugin
         // a situation as it was: the dead drop their gun and their kit, to pick up like in the match (the round restart
         // of each try clears the ground); the drills keep the ground clean
         var drop = cur.Kind is "death" or "clutch" ? 1 : 0;
-        foreach (var cmd in new[] { "mp_warmup_end", "mp_ignore_round_win_conditions 1", "mp_freezetime 0", "mp_roundtime 60",
-                     "mp_roundtime_defuse 60", "mp_roundtime_hostage 60", "mp_buytime 0", "mp_autoteambalance 0", "mp_limitteams 0",
+        // a situation: the game's clock says the real round's time (from GO: 5 s of countdown first), 04/10 "put the real
+        // timing of the game"; the drills: an hour
+        var rt = (cur.Kind is "death" or "clutch" && cur.Clock > 0 ? (cur.Clock + 5) / 60f : 60f).ToString("0.###", System.Globalization.CultureInfo.InvariantCulture);
+        foreach (var cmd in new[] { "mp_warmup_end", "mp_ignore_round_win_conditions 1", "mp_freezetime 0", $"mp_roundtime {rt}",
+                     $"mp_roundtime_defuse {rt}", $"mp_roundtime_hostage {rt}", "mp_buytime 0", "mp_autoteambalance 0", "mp_limitteams 0",
                      "mp_friendlyfire 0", "mp_autokick 0", "mp_halftime 0", "mp_maxrounds 99", "mp_match_can_clinch 0",
                      "mp_give_player_c4 0", $"mp_death_drop_gun {drop}", $"mp_death_drop_defuser {drop}", "mp_c4timer 40",
                      "mp_randomspawn 0", "bot_quota_mode normal",
@@ -443,6 +489,31 @@ public partial class CoachReplay : BasePlugin
     // yaw; you look up or down yourself
     static Vector3 Upright(Vector3 ang) => new(0, ang.Y, 0);
 
+    // the map's doors near these points opened (a door in the way of a real player's path was open in the match; one
+    // in a grenade's way, open for the pro who threw it)
+    void OpenDoors(IEnumerable<Vector3> pts, float r = 96f)
+    {
+        var doors = Utilities.FindAllEntitiesByDesignerName<CBaseEntity>("prop_door_rotating")
+            .Where(d => d.IsValid && d.AbsOrigin != null).Select(d => (d, o: new Vector3(d.AbsOrigin!.X, d.AbsOrigin.Y, d.AbsOrigin.Z))).ToList();
+        if (doors.Count == 0) return;
+        var open = new HashSet<uint>();
+        foreach (var p in pts)
+            foreach (var (d, o) in doors)
+                if (!open.Contains(d.Index) && Vector3.DistanceSquared(p, o) < r * r)
+                {
+                    d.AcceptInput("Open");
+                    open.Add(d.Index);
+                }
+        if (open.Count > 0) Logger.LogInformation("{n} door(s) opened", open.Count);
+    }
+
+    // a path's point at a (fractional) frame
+    static Vector3 PathAt(Track t, float ft)
+    {
+        var i = Math.Clamp((int)ft, 0, Math.Max(0, t.Frames - 2));
+        return t.Frames < 2 ? Pos(t, 0) : Vector3.Lerp(Pos(t, i), Pos(t, i + 1), Math.Clamp(ft - i, 0f, 1f));
+    }
+
     // a bot leaves its recorded path and plays on its own: it moves again by itself, with its grenades
     void Free(int slot, CCSPlayerController c, Track t)
     {
@@ -465,11 +536,13 @@ public partial class CoachReplay : BasePlugin
     static Vector3 Pos(Track t, int i) => new(t.Path[i * 5], t.Path[i * 5 + 1], t.Path[i * 5 + 2]);
     static Vector3 Ang(Track t, int i) => new(t.Path[i * 5 + 4], t.Path[i * 5 + 3], 0);
 
-    // everyone on the first frame, loadouts of the demo, 3 s to look around, then it plays. A bot on its path does not
-    // move by itself (the plugin moves it, and its own steps fought the path: legs still while it slid, 04/10)
+    // everyone on the first frame, loadouts of the demo, 3 s to look around, then it plays. The doors the real players
+    // went through are open (04/10: shot through a door that was open for them in the match, closed here). A bot on
+    // its path walks it (OnTick); an aim target holds its spot without moving
     void Place()
     {
         if (cur == null) return;
+        OpenDoors(cur.Players.SelectMany(t => Enumerable.Range(0, t.Frames).Where(k => k % 4 == 0).Select(k => Pos(t, k))));
         foreach (var (slot, t) in bots)
         {
             var c = Utilities.GetPlayerFromSlot(slot);
@@ -480,7 +553,7 @@ public partial class CoachReplay : BasePlugin
             var pw = c.PlayerPawn.Value;
             if (pw == null) continue;
             pw.Teleport(Pos(t, 0), Upright(Ang(t, 0)), Vector3.Zero);
-            Freeze(pw, true);
+            Freeze(pw, t.Hold);
         }
         var me = cur.Players.FirstOrDefault(t => t.Me);
         if (mode == "actor" && me != null)
@@ -557,6 +630,7 @@ public partial class CoachReplay : BasePlugin
         var mePawn = Humans().Select(h => h.PlayerPawn.Value).FirstOrDefault(p => p != null && p.IsValid && p.LifeState == (byte)LifeState_t.LIFE_ALIVE);
         uint[]? seen = null;
         if (mePawn != null && mode == "actor") { var m = mePawn.EntitySpottedState.SpottedByMask; seen = new[] { m[0], m[1] }; }
+        Vector3? mePos = mode == "actor" && mePawn?.AbsOrigin is { } mo ? new Vector3(mo.X, mo.Y, mo.Z) : null;
         var meSid = cur.Players.FirstOrDefault(t => t.Me)?.Sid ?? "";
         int maxFrames = 0;
         foreach (var (slot, t) in bots)
@@ -589,11 +663,27 @@ public partial class CoachReplay : BasePlugin
             {   // it has seen you for a reaction time: from now on it fights like a player, not on its recorded path
                 Free(slot, c, t); Logger.LogInformation("contact {n} at {f}", t.Name, (int)f); continue;
             }
+            var here = pawn.AbsOrigin is { } ho ? new Vector3(ho.X, ho.Y, ho.Z) : pos;
+            if (phase == "live" && mePos != null && t.Team != cur.Team && Vector3.DistanceSquared(here, mePos.Value) < Near * Near)
+            {   // you are right on it: a player would notice you, path or not
+                Free(slot, c, t); Logger.LogInformation("close {n} at {f}", t.Name, (int)f); continue;
+            }
             // the real player's way and facing; until it reacts, the real player's aim too (not yet yours)
             var y0 = t.Path[i * 5 + 3]; var dy = ((t.Path[i * 5 + 8] - y0 + 540f) % 360f) - 180f;
             var pitch = t.Path[i * 5 + 4] + (t.Path[i * 5 + 9] - t.Path[i * 5 + 4]) * a;
-            var vel = phase == "live" ? (p1 - p0) * (cur.Rate / (float)cur.Step) : Vector3.Zero;
-            pawn.Teleport(pos, new Vector3(0, y0 + dy * a, 0), vel);
+            var face = new Vector3(0, y0 + dy * a, 0);
+            // it walks: its speed takes it to where the path is at the next tick, and the game moves it (its legs move
+            // like a player's; moved by teleports it slid, 04/10). Too far from its path (a closed door, a box it
+            // jumped on in the match), or not live yet: put back on it
+            var next = PathAt(t, ft + 1f / cur.Step) - here;
+            if (phase != "live" || new Vector2(next.X, next.Y).Length() > 72f || Math.Abs(next.Z) > 56f)
+                pawn.Teleport(pos, face, phase == "live" ? (p1 - p0) * (cur.Rate / (float)cur.Step) : Vector3.Zero);
+            else
+            {   // the path's own speed, plus a third of the gap beyond it each tick (all of a gap at once: 786 u/s jolts)
+                var pv = (p1 - p0) * (cur.Rate / (float)cur.Step);
+                var gap = next - pv / 64f;
+                pawn.Teleport(null, face, new Vector3(pv.X + gap.X * 22f, pv.Y + gap.Y * 22f, pawn.AbsVelocity?.Z ?? 0f));
+            }
             if (pawn.EyeAngles is { } eye && Math.Abs(eye.X - pitch) > 0.5f)
             { eye.X = pitch; Utilities.SetStateChanged(pawn, "CCSPlayerPawn", "m_angEyeAngles"); }
         }
@@ -761,8 +851,12 @@ public partial class CoachReplay : BasePlugin
             // stuff: your own grenades never hurt you; from their side, what they would take is counted
             if (cur.Kind == "nade" && victim.DesignerName == "player" && new CCSPlayerPawn(victim.Handle).OriginalController.Value is { IsBot: false })
             {
-                if (nadeStage == "theirs") theirsDmg += (int)info.Damage;
-                return HookResult.Handled;
+                if (nadeStage != "theirs") return HookResult.Handled;
+                // from their side you take it, never to death (04/10: "I don't see the damage it does to me")
+                var vp = new CCSPlayerPawn(victim.Handle);
+                theirsDmg += (int)info.Damage;
+                info.Damage = Math.Min(info.Damage, Math.Max(0, vp.Health - 1));
+                return HookResult.Continue;
             }
             if (victim.DesignerName == "player" && Server.TickCount < protectUntil && new CCSPlayerPawn(victim.Handle).OriginalController.Value is { IsBot: false })
                 return HookResult.Handled;   // a defense: you just came back on your spot

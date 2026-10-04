@@ -226,7 +226,7 @@ class Handler(BaseHTTPRequestHandler):
                 sc, err = [], str(e)
             try:
                 import train
-                prog, maps_ = train.summary(), (train.maps(sid) if sid.isdigit() else {})
+                prog, maps_ = train.summary(sid), (train.maps(sid) if sid.isdigit() else {})
             except Exception as e:
                 prog, maps_, err = None, {}, err or str(e)
             return self.send(200, {"status": replay.status(), "scenarios": sc, "results": replay.results(), "progress": prog,
@@ -382,6 +382,13 @@ class Handler(BaseHTTPRequestHandler):
                     return self.send(200, train.play(sid, minutes, where, diff))
                 if act == "stop":
                     return self.send(200, replay.stop())
+                if act == "join":   # the game back on the session's server (it crashed or was closed meanwhile, 04/10)
+                    if not replay.status().get("running"):
+                        return self.send(409, {"error": "The training server is not running."})
+                    import threading
+                    import train
+                    threading.Thread(target=train._connect, daemon=True).start()
+                    return self.send(200, replay.status())
                 if act == "cmd":   # the plugin's commands: again, next, previous, spec, difficulty
                     c = str(body.get("cmd") or "")
                     if not re.fullmatch(r"r|n|p|spec|stop|diff [0-3]", c):

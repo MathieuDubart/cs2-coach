@@ -105,7 +105,8 @@ def scenarios(sid, n=15):
             mine = dead[dead.victim == sid]
             if len(mine) and mine.tick.iloc[0] < last.tick:
                 continue
-            foes = 5 - int(((dead.victim_side != side) & (dead.tick <= last.tick)).sum())
+            n_en = int(((L["round"] == r) & (L.side != side)).sum()) or 5   # the enemy team as it was (one may have left)
+            foes = n_en - int(((dead.victim_side != side) & (dead.tick <= last.tick)).sum())
             if not 1 <= foes <= 3 or bool(me.won.get(r)):   # 1v4, 1v5: nothing much to learn
                 continue
             out.append({"id": f"{mid}_r{int(r)}_c", "mid": mid, "map": mp, "round": int(r), "kind": "clutch",
@@ -159,6 +160,19 @@ def build(sid, mid, rnd, kind="death", t=None):
                       ticks=[start])
     S["steamid"] = S.steamid.astype(str)
     players = []
+    team_of = {str(r.steamid): int(r.team_num) for r in S.itertuples() if r.team_num in (2, 3)}
+    # who killed whom in the window, from the demo's own deaths (04/10: a bot you killed in the match with a kill the
+    # duels table did not keep died on its own in the replay, though you did not kill it this time)
+    try:
+        K = p.parse_event("player_death")
+        K = K[(K.tick >= start) & (K.tick <= end)]
+        killer_of = {}
+        for u, a_ in zip(K.user_steamid, K.attacker_steamid):
+            u, a_ = str(u), ("" if a_ is None or a_ != a_ else str(a_))
+            killer_of.setdefault(u, "" if a_ in ("", "0", u) else a_)   # yourself or the world: ""
+    except Exception as e:
+        print("deaths", mid, rnd, e, flush=True)
+        killer_of = {}
     for _, s in S.iterrows():
         if s.team_num not in (2, 3) or not s.is_alive:
             continue
@@ -171,6 +185,9 @@ def build(sid, mid, rnd, kind="death", t=None):
             path += [round(float(x), 1), round(float(y), 1), round(float(z), 1), round(float(yw), 1), round(float(pt), 1)]
         duck = [int(i) for i, v in enumerate(k.ducking.fillna(False)) if v]
         died = Dr[(Dr.victim == s.steamid) & (Dr.tick >= start) & (Dr.tick <= end)]
+        kl = killer_of.get(s.steamid, str(died.killer.iloc[0]) if len(died) else "")
+        if kl and team_of.get(kl) == int(s.team_num):   # a teammate's spray in the match (04/10, Nuke R16): not here
+            death, kl = -1, ""
         weapons = [w for w in (_item(i) for i in (s.inventory or [])) if w]
         places = []   # your route in the match: where you went, when (the screen shows the next one)
         if s.steamid == sid and "last_place_name" in k:
@@ -191,7 +208,7 @@ def build(sid, mid, rnd, kind="death", t=None):
                         "hp": int(s.health), "armor": int(s.armor_value), "helmet": bool(s.has_helmet),
                         "kit": bool(s.get("has_defuser")) and int(s.team_num) == 3,
                         "weapons": weapons, "active": _item(s.active_weapon_name), "path": path, "duck": duck,
-                        "death": death, "killer": str(died.killer.iloc[0]) if len(died) else ""})
+                        "death": death, "killer": kl})
     me = next((q for q in players if q["me"]), None)
     if not me:
         raise ValueError("you are not alive at the start of this situation")
@@ -217,7 +234,8 @@ def build(sid, mid, rnd, kind="death", t=None):
           "start_tick": start, "key": (key - start) // STEP, "team": me["team"], "zone": zone,
           "title": f"{mp.replace('de_', '').replace('cs_', '').title()} R{rnd} · {'clutch' if kind == 'clutch' else 'death'}"
                    f"{' · ' + zone if zone else ''}", "players": players, "nades": _nades(p, start, end, teams),
-          "danger": danger, "goal": goal, "bomb": bomb, "plant": plant, "line": line}
+          "danger": danger, "goal": goal, "bomb": bomb, "plant": plant, "line": line,
+          "clock": round(max(0.0, ROUND_S - (start - t0) / 64), 1)}
     os.makedirs(SCEN, exist_ok=True)
     f = os.path.join(SCEN, f"{sc['id']}.json")
     json.dump(sc, open(f, "w", encoding="utf-8"), ensure_ascii=False, separators=(",", ":"))
@@ -225,6 +243,7 @@ def build(sid, mid, rnd, kind="death", t=None):
 
 
 C4_TIMER = 40   # mp_c4timer (competitive)
+ROUND_S = 115   # a round's time after the freeze time (Premier, competitive: 1:55)
 
 
 def _bomb(p, R, rnd, t0, t_end, start, end, me):

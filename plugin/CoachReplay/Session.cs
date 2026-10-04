@@ -46,6 +46,7 @@ public class Drill
     [JsonPropertyName("seconds")] public int Seconds { get; set; } = 75;
     [JsonPropertyName("alive")] public int Alive { get; set; } = 3;
     [JsonPropertyName("goal")] public int Goal { get; set; } = 8;   // defend: the frags that make it a success
+    [JsonPropertyName("posts")] public List<Spot> Posts { get; set; } = new();   // defend: the spots to hold in turn, then free
     [JsonPropertyName("armor")] public int Armor { get; set; } = 100;   // both sides (a pistol defense: no helmet)
     [JsonPropertyName("helmet")] public bool Helmet { get; set; } = true;
     [JsonPropertyName("tracks")] public List<EntryTrack> Tracks { get; set; } = new();   // defend: real hits on the site
@@ -103,8 +104,10 @@ public partial class CoachReplay
     DateTime attemptEnd;
     static readonly Random Rng = new();
     string introHtml = "";
-    static readonly Dictionary<string, string> KindName = new() { ["aim"] = "AIM", ["nade"] = "STUFF", ["situation"] = "SITUATION" };
-    static readonly Dictionary<string, string> KindColor = new() { ["aim"] = "#ff8a3d", ["nade"] = "#5ab4ff", ["situation"] = "#e0a030" };
+    // the blocks: defending a site (CT), the push routes (T), aim on hostage maps, the stuff, the situations
+    static readonly Dictionary<string, string> KindName = new() { ["defend"] = "DEFENSE", ["push"] = "PUSH", ["aim"] = "AIM", ["nade"] = "STUFF", ["situation"] = "SITUATION" };
+    static readonly Dictionary<string, string> KindColor = new() { ["defend"] = "#4fc3a1", ["push"] = "#ff8a3d", ["aim"] = "#ff8a3d", ["nade"] = "#5ab4ff", ["situation"] = "#e0a030" };
+    int postIdx = -1;   // a defense: the spot you hold now (Posts), Posts.Count: free
 
     void RegisterSession()
     {
@@ -221,6 +224,12 @@ public partial class CoachReplay
         var cp = Utilities.CreateEntityByName<CDynamicProp>("prop_dynamic");
         if (cp == null) return;
         cp.DispatchSpawn();
+        // an empty model, drawn by nobody: without a model it was the ERROR model, its shadow following your grenade
+        // (04/10: "the shadow of the Gmod ERROR is still there")
+        cp.SetModel(NullModel);
+        cp.RenderMode = RenderMode_t.kRenderNone;
+        Utilities.SetStateChanged(cp, "CBaseModelEntity", "m_nRenderMode");
+        cp.AcceptInput("DisableShadow");
         cam = cp; camNade = nd; camEnd = Server.TickCount + 8 * 64;   // at most 8 s
         camDir = new Vector3(1, 0, 0);
         CamTick();
@@ -281,6 +290,10 @@ public partial class CoachReplay
         AddTimer(0.8f, () =>
         {
             if (g != sessGen || nadeStage != "theirs") return;
+            // your own throw's smoke or fire goes first: only the one coming at you (04/10: "a double smoke")
+            foreach (var cls in new[] { "smokegrenade_projectile", "molotov_projectile", "inferno" })
+                foreach (var e in Utilities.FindAllEntitiesByDesignerName<CBaseEntity>(cls))
+                    if (e.IsValid) e.Remove();
             Server.ExecuteCommand("sv_cheats 1");   // only for this: the same grenade again
             Server.ExecuteCommand("sv_rethrow_last_grenade");
             Server.ExecuteCommand("sv_cheats 0");
@@ -534,6 +547,11 @@ public partial class CoachReplay
             // a flash pops in the air: its ring would float; the beam then stands from your feet's height
             DrawMark(tg[0], tg[1], drill.Me.Pos[2], tg.Length >= 3 && drill.Type != "flash" ? tg[2] : null, r);
             if (drill.Level == 0) DrawCross(drill);
+            // the doors in its way open, as for the player who threw it (04/10: the HE through Squeaky hit the closed door)
+            var from = new Vector3(drill.Me.Pos[0], drill.Me.Pos[1], drill.Me.Pos[2] + 64);
+            var to = new Vector3(tg[0], tg[1], tg.Length >= 3 ? tg[2] : drill.Me.Pos[2]);
+            var steps = Math.Max(1, (int)(Vector3.Distance(from, to) / 48));
+            OpenDoors(Enumerable.Range(0, steps + 1).Select(k => Vector3.Lerp(from, to, k / (float)steps)), 128f);
         }
     }
 
@@ -552,8 +570,37 @@ public partial class CoachReplay
         lastHud = Server.TickCount;
         if (cur.Kind == "aim" && string.IsNullOrEmpty(drill?.Mode)) AimCard();
         if (drill?.Mode == "prefire") Html($"<font color='#ff8a3d'>GO</font> · clear {aimOrder.Count} · {drill.Seconds} s", 2);
-        if (drill?.Mode == "defend") Html($"<font color='#ff8a3d'>HOLD</font> · {drill.Seconds} s · they are coming", 2);
+        if (drill?.Mode == "defend") { postIdx = -1; Html($"<font color='#ff8a3d'>HOLD</font> · {drill.Seconds} s · they are coming", 2); }
     }
+
+    // a defense in turns: each spot to hold for its share of the time (marked on the ground, you are put on it), then free
+    // (04/10: "a specific work on positions: backsite is my job, then that one, then free")
+    void DefendPost(float el)
+    {
+        if (drill == null || cur == null || drill.Posts.Count == 0) return;
+        var n = drill.Posts.Count + 1;
+        var ph = Math.Min(n - 1, (int)(el / (drill.Seconds / (float)n)));
+        if (ph == postIdx) return;
+        postIdx = ph;
+        ClearLine();
+        if (ph >= drill.Posts.Count) { Html("<font color='#4fc3a1'>FREE</font> · play the site where you want", 3); return; }
+        var p = drill.Posts[ph];
+        var at = new Vector3(p.Pos[0], p.Pos[1], p.Pos[2]);
+        var green = System.Drawing.Color.FromArgb(255, 79, 195, 161);
+        for (int i = 0; i < 16; i++)
+        {
+            float a0 = i * MathF.PI / 8, a1 = (i + 1) * MathF.PI / 8;
+            Beam(at + new Vector3(40 * MathF.Cos(a0), 40 * MathF.Sin(a0), 4), at + new Vector3(40 * MathF.Cos(a1), 40 * MathF.Sin(a1), 4), green, 2.5f);
+        }
+        foreach (var h in Humans())
+            if (h.PawnIsAlive && h.PlayerPawn.Value is { } pw) pw.Teleport(at, new Vector3(0, p.Ang[1], 0), Vector3.Zero);
+        Html($"<font color='#4fc3a1'>HOLD {p.Zone}</font> · {ph + 1}/{drill.Posts.Count}, then free", 3);
+    }
+
+    // where you come back in a defense: the spot you hold, or the site's
+    Vector3 DefendSpot() => drill != null && postIdx >= 0 && postIdx < drill.Posts.Count
+        ? new Vector3(drill.Posts[postIdx].Pos[0], drill.Posts[postIdx].Pos[1], drill.Posts[postIdx].Pos[2])
+        : Pos(cur!.Players.First(p => p.Me), 0);
 
     void SessionTick()
     {
@@ -562,6 +609,7 @@ public partial class CoachReplay
         if (drill?.Mode is "prefire" or "defend")
         {
             if (el >= drill.Seconds) { Finish(drill.Mode == "prefire" ? "timeout" : "done"); return; }
+            if (drill.Mode == "defend") DefendPost(el);
             // a hidden one peeks at its time, or when you come near its spot (not after you passed it); the last two
             // all peek
             var mo = Humans().Select(h => h.PlayerPawn.Value?.AbsOrigin).FirstOrDefault(o => o != null);
@@ -584,7 +632,8 @@ public partial class CoachReplay
                 var where = drill.Mode == "prefire" && aimOrder.Count - frags <= 3 ? LeftPlaces() : "";
                 SetMain(drill.Mode == "prefire"
                     ? $"<font color='#ff8a3d'>{drill.Title}</font> · {aimOrder.Count - frags} left{(where != "" ? $": {where}" : "")} · {left} s<br><font class='fontSize-s'>{string.Join(" → ", drill.Route)} · follow the gold line</font>"
-                    : $"<font color='#ff8a3d'>{drill.Title}</font> · {left} s · ⚔ {frags} · ☠ {deaths}");
+                    : $"<font color='#ff8a3d'>{drill.Title}</font> · {left} s · ⚔ {frags} · ☠ {deaths}"
+                      + (drill.Posts.Count == 0 || postIdx < 0 ? "" : postIdx < drill.Posts.Count ? $"<br><font class='fontSize-s'>hold {drill.Posts[postIdx].Zone} (the green ring)</font>" : "<br><font class='fontSize-s'>free</font>"));
             }
             return;
         }
@@ -640,7 +689,7 @@ public partial class CoachReplay
                 {
                     if (g != generation || phase != "live" || cur == null) return;
                     var me = cur.Players.First(p => p.Me);
-                    var spot = Pos(me, 0);
+                    var spot = DefendSpot();
                     // the attackers already on your spot are taken away (they come again from an entrance, on other real
                     // ways): no death the moment you are back (04/10, "the spawn kill problem is very annoying")
                     foreach (var (sl, _) in bots)
@@ -648,7 +697,8 @@ public partial class CoachReplay
                             && Vector3.Distance(new Vector3(o.X, o.Y, o.Z), spot) < 900)
                             bp.CommitSuicide(false, true);
                     protectUntil = Server.TickCount + 2 * 64;
-                    foreach (var h in Humans()) { h.Respawn(); Loadout(h, me); h.PlayerPawn.Value?.Teleport(spot, Upright(Ang(me, 0)), Vector3.Zero); }
+                    var face = postIdx >= 0 && postIdx < drill.Posts.Count ? new Vector3(0, drill.Posts[postIdx].Ang[1], 0) : Upright(Ang(me, 0));
+                    foreach (var h in Humans()) { h.Respawn(); Loadout(h, me); h.PlayerPawn.Value?.Teleport(spot, face, Vector3.Zero); }
                 });
                 return true;
             }
@@ -672,7 +722,7 @@ public partial class CoachReplay
                     zone = tr.Zone;
                     free.Remove(slot);
                     contact.Remove(slot);
-                    if (c.PlayerPawn.Value is { } pw) { pw.Teleport(Pos(t, 0), Upright(Ang(t, 0)), Vector3.Zero); Freeze(pw, true); }
+                    if (c.PlayerPawn.Value is { } pw) { pw.Teleport(Pos(t, 0), Upright(Ang(t, 0)), Vector3.Zero); Freeze(pw, false); }   // it walks its way
                 }
                 else
                 {
@@ -770,7 +820,7 @@ public partial class CoachReplay
         }
         if (attempts >= 3) { nadeWait = false; DrillDone(false, "miss", 0, away); return; }
         // once more: back on the spot with a new grenade; after two misses the aim is shown
-        var show = attempts >= 2 && drill.Level >= 1;
+        var show = attempts >= 1 && drill.Level >= 1;   // the aim from the first miss (04/10: "it lacks cues")
         Html($"<font color='#ff5a5a'>{q}</font> {away}<br>throw {attempts + 1}/3{(show ? " · here is the aim" : "")}", 2);
         nadeWait = false;
         var g = sessGen;
