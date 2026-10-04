@@ -515,10 +515,12 @@ _LANDS = {}
 
 def _land(mp, typ, pos):
     """Where that very throw landed (the one whose spot and aim the drill gives), not the middle of its group: a
-    bouncing molotov of the group can land 300 u from it (03/10)."""
+    bouncing molotov of the group can land 300 u from it (03/10). With its height when the demo it comes from is here
+    (its detonation point): x, y, z; else x, y."""
     if mp not in _LANDS:
         try:
-            N = pd.read_parquet(os.path.join(config.OUT, "population", "nades.parquet"), columns=["map", "type", "X", "Y", "land_px", "land_py"])
+            N = pd.read_parquet(os.path.join(config.OUT, "population", "nades.parquet"),
+                                columns=["map", "match", "round", "type", "X", "Y", "land_px", "land_py"])
             _LANDS[mp] = N[N["map"] == mp]
         except Exception:
             _LANDS[mp] = None
@@ -526,7 +528,101 @@ def _land(mp, typ, pos):
     if N is None or not len(N):
         return None
     m = N[(N.type == typ) & ((N.X - pos[0]).abs() < 1) & ((N.Y - pos[1]).abs() < 1)]
-    return _world(mp, float(m.land_px.median()), float(m.land_py.median())) if len(m) else None
+    if not len(m):
+        return None
+    pts = []
+    for mid, rnd in zip(m["match"].astype(str), m["round"]):   # the same throw in its demo: x, y and z
+        try:
+            G = pd.read_parquet(os.path.join(config.OUT, "deep", mid, "grenades.parquet"),
+                                columns=["round", "type", "X", "Y", "land_X", "land_Y", "land_Z"])
+        except Exception:
+            continue
+        g = G[(G["round"] == rnd) & (G.type == typ) & ((G.X - pos[0]).abs() < 1) & ((G.Y - pos[1]).abs() < 1)].dropna()
+        pts += g[["land_X", "land_Y", "land_Z"]].values.tolist()
+        if len(pts) >= 5:
+            break
+    if pts:
+        return [round(float(v), 1) for v in np.median(np.array(pts, float), axis=0)]
+    return _world(mp, float(m.land_px.median()), float(m.land_py.median()))
+
+
+SPOTS_F = os.path.join(config.OUT, "train_spots.json")
+
+
+def _map_dirs(mp):
+    dirs = []
+    for d in sorted(os.listdir(os.path.join(config.OUT, "deep"))):
+        try:
+            with open(os.path.join(config.OUT, "deep", d, "meta.json"), encoding="utf-8") as fh:
+                if json.load(fh).get("map") == mp:
+                    dirs.append(d)
+        except (OSError, ValueError):
+            continue
+    return dirs
+
+
+def _spots(mp):
+    """Where each side really stands on the map: the duels of every demo (killers and victims), 64 u cells with their
+    mean position and how often. Cached per map, computed again after a quarter more matches."""
+    try:
+        with open(SPOTS_F, encoding="utf-8") as fh:
+            cache = json.load(fh)
+    except (OSError, ValueError):
+        cache = {}
+    dirs = _map_dirs(mp)
+    c = cache.get(mp)
+    if c and c.get("n", 0) >= 0.8 * len(dirs):
+        return c
+    cells = {}
+    for d in dirs:
+        try:
+            D = pd.read_parquet(os.path.join(config.OUT, "deep", d, "duels.parquet"),
+                                columns=["killer_side", "victim_side", "killer_X", "killer_Y", "killer_Z", "victim_X", "victim_Y", "victim_Z"])
+        except Exception:
+            continue
+        for who in ("killer", "victim"):
+            for sd, x, y, z in zip(D[f"{who}_side"], D[f"{who}_X"], D[f"{who}_Y"], D[f"{who}_Z"]):
+                if sd in ("T", "CT") and x == x and y == y and z == z:
+                    k = (sd, int(x // 64), int(y // 64), int(z // 64))
+                    a = cells.setdefault(k, [0, 0.0, 0.0, 0.0])
+                    a[0] += 1
+                    a[1] += x
+                    a[2] += y
+                    a[3] += z
+    out = {"n": len(dirs), "T": [], "CT": []}
+    for (sd, *_), (n, sx, sy, sz) in sorted(cells.items(), key=lambda kv: -kv[1][0]):
+        if len(out[sd]) < 4000:
+            out[sd].append([round(sx / n, 1), round(sy / n, 1), round(sz / n, 1), n])
+    cache[mp] = out
+    with open(SPOTS_F, "w", encoding="utf-8") as fh:
+        json.dump(cache, fh, separators=(",", ":"))
+    return out
+
+
+def _victims(mp, team, typ, land, me):
+    """The enemies a grenade is for: 2 spots of the other side, the most held ones at the right distance from where
+    it lands (a smoke 350-1100 u, a flash 250-900, an HE 80-350), on its floor, turned to it; a molotov: in its fire,
+    turned to where it came from."""
+    if not land or len(land) < 3:
+        return []
+    lx, ly, lz = land[:3]
+    if typ == "molotov":
+        dx, dy = me[0] - lx, me[1] - ly
+        d = math.hypot(dx, dy) or 1.0
+        p = [round(lx + 40 * dx / d, 1), round(ly + 40 * dy / d, 1), round(lz, 1)]
+        return [{"pos": p, "ang": _angle([p[0], p[1], p[2] + 64], [me[0], me[1], me[2] + 64])}]
+    lo, hi = {"smoke": (350, 1100), "flash": (250, 900), "he": (80, 350)}.get(typ, (250, 900))
+    # on its floor; a flash pops in the air: the ones up to 450 u under it, never over it (Nuke: A is right above B)
+    lo_z, hi_z = (-450, 100) if typ == "flash" else (-200, 200)
+    S = _spots(mp)["CT" if team == 2 else "T"]
+    out = []
+    for x, y, z, n in S:   # the most held first
+        if lo <= math.hypot(x - lx, y - ly) <= hi and lo_z < z - lz < hi_z and all(math.dist([x, y, z], o["pos"]) > 250 for o in out):
+            look = [lx, ly, lz + (0 if typ == "flash" else 40)]
+            out.append({"pos": [x, y, z], "ang": _angle([x, y, z + 64], look)})
+            if len(out) >= 2:
+                break
+    return out
 
 
 def nade_drills(sid, mp):
@@ -553,11 +649,12 @@ def nade_drills(sid, mp):
                 if not item or not x.get("to_px"):
                     continue
                 name = {"smoke": "Smoke", "flash": "Flash", "he": "HE", "molotov": "Molotov"}[typ]
+                land = _land(mp, typ, pos) or _world(mp, *x["to_px"])
                 out.append({"id": f"nade:{mp}:{side}:{typ}:{x['from_key']}>{x['to_key']}", "kind": "nade", "map": mp,
                             "title": f"{name} → {x['to']}", "tip": f"from {x['from']} · {x.get('timer') or ''}".strip(" ·"),
                             "team": team, "type": typ, "item": item, "how": x.get("how") or "standing still",
                             "click": {"right": "right click", "both": "left + right click"}.get(x.get("click"), "left click"),
-                            "me": {"pos": pos, "ang": ang}, "target": _land(mp, typ, pos) or _world(mp, *x["to_px"]),
+                            "me": {"pos": pos, "ang": ang}, "target": land, "victims": _victims(mp, team, typ, land, pos),
                             "weight": 1 + 10 * float(x.get("score") or 0)})
     return out
 

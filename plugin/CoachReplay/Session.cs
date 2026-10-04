@@ -38,7 +38,8 @@ public class Drill
     [JsonPropertyName("item")] public string Item { get; set; } = "";
     [JsonPropertyName("how")] public string How { get; set; } = "";
     [JsonPropertyName("click")] public string Click { get; set; } = "";
-    [JsonPropertyName("target")] public float[]? Target { get; set; }
+    [JsonPropertyName("target")] public float[]? Target { get; set; }   // stuff: where it lands (x, y, and z when known)
+    [JsonPropertyName("victims")] public List<Spot> Victims { get; set; } = new();   // stuff: the enemies' spots it is for
     [JsonPropertyName("level")] public int Level { get; set; }
     [JsonPropertyName("scenario")] public string? Scenario { get; set; }
     [JsonPropertyName("mode")] public string Mode { get; set; } = "";   // aim: prefire, defend, or "" (your duel spots)
@@ -84,9 +85,17 @@ public partial class CoachReplay
     readonly List<double> reacts = new();
     int aimNext, aimSpawn, aimHs, frags, deaths, plants, lastHud;
     readonly Dictionary<int, float> peekAt = new();   // prefire: the bots still hidden, and when they peek
-    // stuff: three throws
+    // stuff: three throws, the camera on your grenade, then from their side
     int attempts;
     bool nadeWait;
+    string nadeStage = "";   // "throw": your throws (the camera follows them), "theirs": watching it from their spot
+    bool pracOn;   // CS2's grenade practice views are on (stuff drills only)
+    CDynamicProp? cam;
+    CBaseCSGrenadeProjectile? camNade;
+    Vector3 camDir = new(1, 0, 0);
+    int camEnd, theirsDmg;
+    float theirsFlash;
+    (bool ok, string outcome, int pts, string detail)? theirsRes;
     DateTime attemptEnd;
     static readonly Random Rng = new();
     string introHtml = "";
@@ -101,6 +110,12 @@ public partial class CoachReplay
         RegisterEventHandler<EventHegrenadeDetonate>((e, _) => { NadeHit(e.Userid, e.X, e.Y); return HookResult.Continue; });
         RegisterEventHandler<EventMolotovDetonate>((e, _) => { NadeHit(e.Userid, e.X, e.Y); return HookResult.Continue; });
         RegisterEventHandler<EventBombPlanted>((e, _) => { BombPlanted(); return HookResult.Continue; });
+        RegisterListener<Listeners.OnEntitySpawned>(ent =>
+        {
+            if (sess == null || nadeStage != "throw" || !ent.DesignerName.EndsWith("_projectile")) return;
+            var h = ent.Handle;
+            Server.NextFrame(() => CamStart(h));   // its thrower is set on the next frame
+        });
     }
 
     static string MapName(string m) { var n = m.Replace("de_", "").Replace("cs_", ""); return n.Length > 0 ? char.ToUpper(n[0]) + n[1..] : m; }
@@ -140,17 +155,161 @@ public partial class CoachReplay
     }
     void ClearLine() { foreach (var b in beams) if (b.IsValid) b.Remove(); beams.Clear(); }
 
-    // stuff: a blue beam standing where the grenade must land (its height unknown: from below your feet to well above)
-    void DrawMark(float x, float y, float z)
+    void Beam(Vector3 a, Vector3 b2, System.Drawing.Color c, float w)
     {
         var b = Utilities.CreateEntityByName<CBeam>("beam");
         if (b == null) return;
-        b.Render = System.Drawing.Color.FromArgb(255, 90, 180, 255);
-        b.Width = 5f;
-        b.Teleport(new Vector3(x, y, z - 300), Vector3.Zero, Vector3.Zero);
-        b.EndPos.X = x; b.EndPos.Y = y; b.EndPos.Z = z + 500;
+        b.Render = c;
+        b.Width = w;
+        b.Teleport(a, Vector3.Zero, Vector3.Zero);
+        b.EndPos.X = b2.X; b.EndPos.Y = b2.Y; b.EndPos.Z = b2.Z;
         b.DispatchSpawn();
         beams.Add(b);
+    }
+
+    // stuff: where it must land: a beam standing there (from under your feet to well above when its height is not
+    // known), and a ring on the ground of the PERFECT zone when it is
+    void DrawMark(float x, float y, float z, float? ground, float r)
+    {
+        var blue = System.Drawing.Color.FromArgb(255, 90, 180, 255);
+        Beam(new Vector3(x, y, (ground ?? z) - (ground == null ? 300 : 0)), new Vector3(x, y, (ground ?? z) + (ground == null ? 500 : 260)), blue, 5f);
+        if (ground == null) return;
+        for (int i = 0; i < 16; i++)
+        {
+            var a0 = i * MathF.PI / 8; var a1 = (i + 1) * MathF.PI / 8;
+            Beam(new Vector3(x + r * MathF.Cos(a0), y + r * MathF.Sin(a0), ground.Value + 4), new Vector3(x + r * MathF.Cos(a1), y + r * MathF.Sin(a1), ground.Value + 4), blue, 3f);
+        }
+    }
+
+    // stuff: a green cross 150 u ahead on the aim, from your eyes: put the crosshair on it
+    void DrawCross(Drill d)
+    {
+        if (d.Me == null) return;
+        var eye = new Vector3(d.Me.Pos[0], d.Me.Pos[1], d.Me.Pos[2] + (d.How.Contains("crouch") ? 46 : 64));
+        float p = d.Me.Ang[0] * MathF.PI / 180, y = d.Me.Ang[1] * MathF.PI / 180;
+        var fw = new Vector3(MathF.Cos(p) * MathF.Cos(y), MathF.Cos(p) * MathF.Sin(y), -MathF.Sin(p));
+        var right = new Vector3(MathF.Sin(y), -MathF.Cos(y), 0);
+        var up = Vector3.Normalize(Vector3.Cross(right, fw));
+        var at = eye + fw * 150;
+        var green = System.Drawing.Color.FromArgb(255, 90, 230, 90);
+        Beam(at - right * 4, at + right * 4, green, 0.8f);
+        Beam(at - up * 4, at + up * 4, green, 0.8f);
+    }
+
+    // CS2's grenade practice views (stuff drills only): the landing preview while you aim, the trail after the throw
+    void Prac(bool on)
+    {
+        if (on == pracOn) return;
+        pracOn = on;
+        Server.ExecuteCommand($"sv_grenade_trajectory_prac_pipreview {(on ? 1 : 0)}");
+        Server.ExecuteCommand($"sv_grenade_trajectory_prac_trailtime {(on ? 4 : 0)}");
+    }
+
+    // the grenade camera: your view follows your grenade (a camera prop as your view entity), you wait meanwhile
+    void CamStart(nint h)
+    {
+        if (sess == null || drill == null || cur?.Kind != "nade" || nadeStage != "throw" || cam != null) return;
+        var nd = new CBaseCSGrenadeProjectile(h);
+        if (!nd.IsValid || nd.Thrower.Value?.OriginalController.Value is not { IsBot: false } c) return;
+        var pawn = c.PlayerPawn.Value;
+        if (pawn?.CameraServices == null) return;
+        var cp = Utilities.CreateEntityByName<CDynamicProp>("prop_dynamic");
+        if (cp == null) return;
+        cp.DispatchSpawn();
+        cam = cp; camNade = nd; camEnd = Server.TickCount + 8 * 64;   // at most 8 s
+        camDir = new Vector3(1, 0, 0);
+        CamTick();
+        pawn.CameraServices.ViewEntity.Raw = cp.EntityHandle.Raw;
+        Utilities.SetStateChanged(pawn, "CBasePlayerPawn", "m_pCameraServices");
+        Freeze(pawn, true);
+    }
+
+    void CamTick()
+    {
+        if (cam == null) return;
+        if (!cam.IsValid) { cam = null; return; }
+        if (camNade != null && camNade.IsValid && camNade.AbsOrigin is { } o)
+        {
+            var pos = new Vector3(o.X, o.Y, o.Z);
+            var v = camNade.AbsVelocity;
+            var vel = v == null ? Vector3.Zero : new Vector3(v.X, v.Y, v.Z);
+            if (vel.Length() > 60) camDir = Vector3.Normalize(vel);   // landed: the last way it went
+            var at = pos - camDir * 90 + new Vector3(0, 0, 20);
+            var look = pos - at;
+            var yaw = MathF.Atan2(look.Y, look.X) * 180 / MathF.PI;
+            var pitch = -MathF.Atan2(look.Z, MathF.Sqrt(look.X * look.X + look.Y * look.Y)) * 180 / MathF.PI;
+            cam.Teleport(at, new Vector3(pitch, yaw, 0), Vector3.Zero);
+        }
+        if (Server.TickCount >= camEnd) CamStop();
+    }
+
+    void CamStop()
+    {
+        var cp = cam;
+        cam = null; camNade = null;
+        foreach (var h in Humans())
+        {
+            var pawn = h.PlayerPawn.Value;
+            if (pawn?.CameraServices == null) continue;
+            pawn.CameraServices.ViewEntity.Raw = uint.MaxValue;
+            AddTimer(0.3f, () => { if (pawn.IsValid) Utilities.SetStateChanged(pawn, "CBasePlayerPawn", "m_pCameraServices"); });
+            if (nadeStage == "throw") Freeze(pawn, false);
+        }
+        if (cp != null) AddTimer(0.4f, () => { if (cp.IsValid) cp.Remove(); });
+    }
+
+    // from their side: you stand where the enemies it is for stand, turned to it, and the same grenade comes again
+    void Theirs((bool ok, string outcome, int pts, string detail) res)
+    {
+        if (drill == null || drill.Victims.Count == 0) { DrillDone(res.ok, res.outcome, res.pts, res.detail); return; }
+        var v = drill.Victims[Rng.Next(drill.Victims.Count)];
+        nadeStage = "theirs"; theirsDmg = 0; theirsFlash = 0; theirsRes = res;
+        foreach (var h in Humans())
+        {
+            var pawn = h.PlayerPawn.Value;
+            if (pawn == null || !h.PawnIsAlive) continue;
+            pawn.Teleport(new Vector3(v.Pos[0], v.Pos[1], v.Pos[2]), new Vector3(v.Ang[0], v.Ang[1], 0), Vector3.Zero);
+            Freeze(pawn, true);
+        }
+        SetMain($"<font color='#5ab4ff'>FROM THEIR SIDE</font> · {drill.Title}<br><font class='fontSize-s'>where they really stand: watch it come</font>");
+        var g = sessGen;
+        AddTimer(0.8f, () =>
+        {
+            if (g != sessGen || nadeStage != "theirs") return;
+            Server.ExecuteCommand("sv_cheats 1");   // only for this: the same grenade again
+            Server.ExecuteCommand("sv_rethrow_last_grenade");
+            Server.ExecuteCommand("sv_cheats 0");
+        });
+        AddTimer(12f, () => TheirsDone(g));   // in case it never pops
+    }
+
+    // it popped on them: what it did, then the drill ends
+    void TheirsPopped()
+    {
+        if (drill == null || nadeStage != "theirs") return;
+        var g = sessGen;
+        AddTimer(0.2f, () =>
+        {
+            if (g != sessGen) return;
+            foreach (var h in Humans()) theirsFlash = Math.Max(theirsFlash, h.PlayerPawn.Value?.FlashDuration ?? 0);
+        });
+        AddTimer(drill.Type switch { "smoke" => 5f, "molotov" => 4f, "flash" => 3f, _ => 2.5f }, () => TheirsDone(g));
+    }
+
+    void TheirsDone(int g)
+    {
+        if (g != sessGen || nadeStage != "theirs" || theirsRes == null || drill == null) return;
+        nadeStage = "";
+        foreach (var h in Humans()) { var pw = h.PlayerPawn.Value; if (pw != null) Freeze(pw, false); }
+        var what = drill.Type switch
+        {
+            "flash" => theirsFlash > 0.3f ? $"blinded {theirsFlash:F1} s here" : "not blinded from here: it pops out of their sight",
+            "smoke" => "their view through it: cut",
+            _ => theirsDmg > 0 ? $"−{theirsDmg} HP here" : "no damage here",
+        };
+        var r = theirsRes.Value;
+        theirsRes = null;
+        DrillDone(r.ok, r.outcome, r.pts, $"{r.detail} · from their side: {what}");
     }
 
     // prefire: where the last ones are (the game's place names: "BombsiteA" -> "Bombsite A")
@@ -256,8 +415,8 @@ public partial class CoachReplay
     {
         var how = d.Kind == "situation" && cur != null ? SituationText() : d.Kind != "nade" ? d.Tip : d.Level switch
         {
-            0 => $"{d.How} · {d.Click} — your aim is set: just throw · the blue beam: where it lands",
-            1 => $"{d.How} · {d.Click} — find the aim",
+            0 => $"{d.How} · {d.Click} — crosshair on the green cross · it must land in the blue ring",
+            1 => $"{d.How} · {d.Click} — find the aim: the blue ring is where it lands",
             _ => "find the aim and the throw",
         };
         var again = tries > 0 ? " · AGAIN" : "";
@@ -360,7 +519,16 @@ public partial class CoachReplay
             }
         }
         if (cur.Kind == "nade") { nadeWait = true; attemptEnd = DateTime.UtcNow.AddSeconds(30); }   // a throw during the countdown counts
-        if (cur.Kind == "nade" && drill?.Target is { Length: >= 2 } tg && drill.Me != null) { ClearLine(); DrawMark(tg[0], tg[1], drill.Me.Pos[2]); }
+        Prac(cur.Kind == "nade");
+        nadeStage = cur.Kind == "nade" ? "throw" : "";
+        if (cur.Kind == "nade" && drill?.Target is { Length: >= 2 } tg && drill.Me != null)
+        {
+            ClearLine();
+            var r = drill.Type switch { "flash" or "he" or "molotov" => 120f, _ => 80f };   // the PERFECT zone
+            // a flash pops in the air: its ring would float; the beam then stands from your feet's height
+            DrawMark(tg[0], tg[1], drill.Me.Pos[2], tg.Length >= 3 && drill.Type != "flash" ? tg[2] : null, r);
+            if (drill.Level == 0) DrawCross(drill);
+        }
     }
 
     // the countdown of a drill keeps its card on screen; false: not in a session
@@ -547,6 +715,11 @@ public partial class CoachReplay
 
     void NadeHit(CCSPlayerController? u, float x, float y)
     {
+        if (sess != null && cur?.Kind == "nade" && u is { IsValid: true, IsBot: false })
+        {
+            if (cam != null) camEnd = Math.Min(camEnd, Server.TickCount + 64);   // the camera stays 1 s on it
+            if (nadeStage == "theirs") { TheirsPopped(); return; }
+        }
         if (sess == null || drill == null || cur?.Kind != "nade" || phase is not ("live" or "countdown") || !nadeWait || u == null || !u.IsValid || u.IsBot) return;
         var tg = drill.Target;
         if (tg == null || tg.Length < 2) return;
@@ -566,7 +739,11 @@ public partial class CoachReplay
         {
             nadeWait = false;
             var pts = (int)((q == "PERFECT" ? 150 : 100) * (attempts == 1 ? 1 : attempts == 2 ? 0.6 : 0.35) * (1 + 0.25 * drill.Level));
-            DrillDone(true, q.ToLower(), pts, $"{away} · throw {attempts}");
+            var res = (true, q.ToLower(), pts, $"{away} · throw {attempts}");
+            if (drill.Victims.Count == 0) { DrillDone(res.Item1, res.Item2, res.pts, res.Item4); return; }
+            Html($"<font color='#5ad15a'>✔ {q}</font> {away}<br>now from their side", 3);
+            var g0 = sessGen;
+            AddTimer(1.6f, () => { if (g0 == sessGen) Theirs(res); });   // after the camera
             return;
         }
         if (attempts >= 3) { nadeWait = false; DrillDone(false, "miss", 0, away); return; }
@@ -636,6 +813,8 @@ public partial class CoachReplay
         if (sess == null || drill == null) return;
         phase = "done";
         ClearLine();
+        if (cam != null) CamStop();
+        nadeStage = "";
         if (ok) { streak++; okN++; } else streak = 0;
         var mult = ok ? 1 + 0.1 * Math.Min(5, streak - 1) : 1.0;
         pts = (int)Math.Round(pts * mult);
@@ -673,6 +852,8 @@ public partial class CoachReplay
         Html($"<font color='#e0a030'>🏁 SESSION DONE</font><br><font class='fontSize-l'>{points} pts</font><br>{okN}/{doneN} drills ✔", 8);
         All($"Session done: {points} pts · {okN}/{doneN} drills ✔ — your progress is in the app.");
         ClearLine();
+        if (cam != null) CamStop();
+        Prac(false);
         SetMain("");
         sess = null; drill = null; cur = null; phase = "idle"; bots.Clear(); builtFor = null; sessGen++;
         Server.ExecuteCommand("bot_kick");

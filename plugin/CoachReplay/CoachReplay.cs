@@ -457,6 +457,7 @@ public partial class CoachReplay : BasePlugin
         if (now - lastBeat >= 64 || now < lastBeat) { lastBeat = now; Beat(); }   // the tick count starts over with each map
         if (now < hudSent) hudSent = 0;
         HudTick();
+        CamTick();
         if (cur == null || (phase != "countdown" && phase != "live")) return;
         if (phase == "countdown" && now >= countdownEnd) Go();
         var f = phase == "live" ? (now - t0) / (float)cur.Step : 0f;
@@ -606,6 +607,12 @@ public partial class CoachReplay : BasePlugin
         if (cur == null) return HookResult.Continue;
         try
         {
+            // stuff: your own grenades never hurt you; from their side, what they would take is counted
+            if (cur.Kind == "nade" && victim.DesignerName == "player" && new CCSPlayerPawn(victim.Handle).OriginalController.Value is { IsBot: false })
+            {
+                if (nadeStage == "theirs") theirsDmg += (int)info.Damage;
+                return HookResult.Handled;
+            }
             var att = info.Attacker.Value;
             var hurt = info.Inflictor.Value?.DesignerName == "trigger_hurt" || att?.DesignerName == "trigger_hurt";   // logged "by null (trigger_hurt)"
             if (victim.DesignerName == "player" && hurt && new CCSPlayerPawn(victim.Handle).OriginalController.Value is { IsBot: false })
