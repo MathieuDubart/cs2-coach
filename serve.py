@@ -237,6 +237,17 @@ class Handler(BaseHTTPRequestHandler):
             return self.send(200, team.suggestions(sid) if sid.isdigit() else [])
         if u.path in ("/index.json", "/pros.json") or u.path.startswith(("/players/", "/radars/", "/replays/", "/teams/")):
             f = os.path.normpath(os.path.join(build_app.SITE, u.path.lstrip("/")))
+            rm = re.fullmatch(r"/replays/(\d{17})/(\d{6,20})\.json", u.path)
+            if rm and not os.path.isfile(f):   # a 2D replay not made yet: from the match's detailed extraction, now
+                try:
+                    import deepdive
+                    import shutil
+                    src = deepdive.ensure_replay(rm.group(1), rm.group(2))
+                    if src:
+                        os.makedirs(os.path.dirname(f), exist_ok=True)
+                        shutil.copy(src, f)
+                except Exception as e:
+                    print("replay:", e, flush=True)
             if f.startswith(os.path.normpath(build_app.SITE) + os.sep) and os.path.isfile(f):
                 return self.send(200, config._retry(lambda: open(f, "rb").read(), f))
             return self.send(404, {"error": "not found"})

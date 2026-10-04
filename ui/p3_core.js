@@ -339,7 +339,7 @@ async function replayBlock(host,p,m){
     <div class="rp-feed"></div></div>`;
   let R=RP[`${p.steamid}:${m.id}`];
   if(!R){try{const r=await fetch(`replays/${p.steamid}/${m.id}.json`);R=r.ok?await r.json():null}catch(e){R=null}RP[`${p.steamid}:${m.id}`]=R}
-  if(!R){host.innerHTML=`<div class="empty">No 2D replay for this match (demo not kept).</div>`;return}
+  if(!R){host.innerHTML=`<div class="empty">No 2D replay for this match: its demo was not extracted in detail.</div>`;return}
   const me=R.players.findIndex(x=>x.steamid===p.steamid);const box=$(".radar-box",host),svg=$("svg",box),ov=$("g",svg),img=$("image",svg);
   let ri=0,t=0,timer=null;const lv0=m.map_data.levels[0].key;img.setAttribute("href",D.radars[`${m.map}:${lv0}`]||"");
   const rb=$(".rp-rounds",box);rb.innerHTML=R.rounds.map((r,i)=>{const pr=m.per_round.find(x=>x.round===r.n);return `<button type="button" class="${pr?pr.side:""}" data-ri="${i}" aria-pressed="${i===0}" title="${pr?(pr.won?"won":"lost"):""}">${r.n}</button>`}).join("");

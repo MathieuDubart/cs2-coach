@@ -122,6 +122,20 @@ def replay(mid):
             "rounds": rounds}
 
 
+def ensure_replay(sid, mid):
+    """A match's 2D replay for a player's page, built from the match's detailed extraction when it is missing (0.3 s,
+    no demo needed): the replays were only made by run(), last run on 10/01, so every later match had none (04/10)."""
+    mid = str(mid)
+    dst = os.path.join(config.player_dir(sid), "replays", f"{mid}.json")
+    if os.path.exists(dst):
+        return dst
+    if not os.path.exists(os.path.join(config.DEEP, mid, "samples.parquet")):
+        return None
+    os.makedirs(os.path.dirname(dst), exist_ok=True)
+    config.write_json(dst, replay(mid), ensure_ascii=False, separators=(",", ":"))
+    return dst
+
+
 def grenade_audit(steamid, my_matches):
     """My grenades vs pro grenades on the same maps: what I throw, and what pros throw from my zones that I never do."""
     import proref
