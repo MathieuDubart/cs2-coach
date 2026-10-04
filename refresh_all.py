@@ -177,6 +177,16 @@ def profiles(mine_only=False):
     return first + rest
 
 
+def below_normal():
+    """Below normal, not idle: Windows 11 hardly runs an idle-priority process next to busier ones (05/10: a profile of
+    10 s took 17 min beside two transcriptions); during a match, busy() puts it in background mode for the game."""
+    try:
+        import psutil
+        psutil.Process().nice(psutil.BELOW_NORMAL_PRIORITY_CLASS)
+    except Exception:
+        below_normal()
+
+
 def rebuild(sid, name):
     """One profile against the base as it is now: its analysis (light profiles: nothing to redo), plan and page.
     -> its index entry."""
@@ -205,7 +215,7 @@ def worker():
     """A share of the profiles (--part=i/N); its entries for the index go to its state file, the main run writes it."""
     i, n = (int(x) for x in PART.split("/"))
     ids = (config.read_json(IDS, []) or [])[i::n]
-    config.low_priority()
+    below_normal()
     index = _names()
     ST.clear()
     save(pid=os.getpid(), running=True, total=len(ids), done=0, current=None, paused=None, errors=[], entries={})
@@ -244,7 +254,7 @@ def main():
     mine_only = "--mine" in sys.argv
     workers = max(1, int(arg("workers", 1)))
     since = float(arg("since", 0) or 0)
-    config.low_priority()
+    below_normal()
     cur = config.read_json(STATE, {}) or {}
     if cur.get("running") and cur.get("pid") and cur["pid"] != os.getpid():
         try:
