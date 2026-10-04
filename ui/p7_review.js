@@ -112,10 +112,13 @@ function reviewMaps(R){const M=R.maps||[];if(!M.length)return "";
   return `<section class="tier" id="tier2"><div class="tier-h"><b>2</b><h3>Map by map</h3><span class="note">this session · round wins per side, what to play and to avoid there</span></div>
    <div class="mapcards">${M.map(m=>`<article class="mapcard"><div class="mc-h"><b>${esc(MAPN(m.map))}</b><span class="res ${m.wins>m.losses?"win":m.wins<m.losses?"loss":"draw"}">${m.wins}-${m.losses}</span>
      ${rtBadge(m.rating)}<span class="note num">ADR ${m.adr}</span></div>${side(m,"T")}${side(m,"CT")}</article>`).join("")}</div></section>`}
-// 3 · the pro insights of the session (from the demos)
-function reviewInsights(R){const P=R.pro||{},I=P.items||[];if(!P.matches)return "";
+// 3 · the analyst's reads of the session (from the demos), against the base and the pros
+function reviewInsights(R){const X=R.pro||{},I=X.items||[];if(!X.matches)return "";
+  if(!I.length||I[0].ref!==undefined||I[0].title===undefined)return readsSection(P(),X,"Analyst reads",`What a team's analyst points at in the demos of this session's ${X.matches} match${X.matches>1?"es":""}, against the base and the pros.`)||
+    `<h3>Analyst reads</h3><p>Nothing to say yet on this session's matches.</p>`;
+  const P0=X;
   const lab={high:"priority",medium:"watch",positive:"strength"};
-  return `<h3>Pro insights</h3><p class="note">What an analyst points at in the demos of this session's ${P.matches} match${P.matches>1?"es":""}, with enough cases to say it.</p>
+  return `<h3>Pro insights</h3><p class="note">What an analyst points at in the demos of this session's ${P0.matches} match${P0.matches>1?"es":""}, with enough cases to say it.</p>
    ${I.length?`<div class="ins">${I.map(i=>`<article class="ins-${i.severity}"><span class="eyebrow">${lab[i.severity]}</span><h4>${esc(i.title)}</h4><p>${esc(i.detail)}</p>
      <div class="pbar"><i style="width:${Math.round(100*i.value/Math.max(1,i.of))}%"></i></div><span class="note num">${i.value} of ${i.of}</span></article>`).join("")}</div>`
      :`<p>Nothing stands out: no re-peek after your kills, deaths without impact, unused flashes or death spot above the usual.</p>`}`}

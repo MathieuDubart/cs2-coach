@@ -60,13 +60,35 @@ function metaBlock(PL){if(!PL.meta||!PL.meta.length)return "";
   return `<h3>What changed in the game</h3><p class="note">Research of ${esc(PL.updated)}: patches, map pool and what they mean for your game.</p>
   <div class="meta-list">${PL.meta.map(m=>`<article><span class="eyebrow">${esc(m.date)}</span><b>${esc(m.title)}</b><p>${esc(m.text)}</p><p><b>For you:</b> ${esc(m.impact)}</p>${srcLinks(m.src,true)}</article>`).join("")}</div>`}
 function noPlan(v){v.innerHTML=`<div class="empty">This player's plan isn't computed yet. Run their analysis again from the search bar ("Update" button).</div>`}
+// ---------- the tabs' briefs (04/10) ----------
+// mid-round: your weakest decisions against the base and the pros, your strengths, the fix or reflex to apply
+function midBrief(PL){const M=PL.mid;if(!M)return "";const wk=M.weak.filter(w=>w.id!=="note"),pb=(PL.playbook||[]).find(x=>x.prio>0);
+  const ln=w=>`<b>${esc(w.label[0].toUpperCase()+w.label.slice(1))}</b>: you ${fmtU(w.you,w.unit)} <span class="note">· base ${fmtU(w.median,w.unit)}${w.pro!=null?`, pros ${fmtU(w.pro,w.unit)}`:""}</span>`;
+  return tabBrief({id:"mr-brief",works:M.strong.slice(0,3).map(x=>esc(x.text)),fix:wk.slice(0,3).map(ln),
+    next:wk[0]&&wk[0].fix?esc(wk[0].fix):pb?`If ${esc(lc(pb.if))} → ${esc(pb.then)}`:null,nextLabel:"In your next match"})}
+// progress: what improves and what slips over your last 3 matches, the test to run
+function progBrief(PL){const K=PL.kpis||[],X=PL.experiments||{},act=(X.experiments||[]).filter(e=>e.status==="active"),L=PL.level;
+  const d=k=>k.recent-k.before,better=k=>k.higher_better?d(k)>0:d(k)<0,moved=k=>k.recent!=null&&k.before!=null&&Math.abs(d(k))>1e-9;
+  const kl=k=>`${esc(k.label)}: <b>${fmtU(k.recent,k.unit)}</b> <span class="note">· before ${fmtU(k.before,k.unit)}</span>`;
+  const nx=act[0]?`Keep testing: ${esc(act[0].title)}`:(X.suggested||[])[0]?`Start a test: ${esc(X.suggested[0].title)}`:L&&L.focus&&L.focus[0]?esc(L.focus[0]):null;
+  return tabBrief({id:"pg-brief",works:K.filter(k=>moved(k)&&better(k)).map(kl),fix:K.filter(k=>moved(k)&&!better(k)).map(kl),next:nx,nextLabel:"This week",
+    worksNone:"No indicator is improving over your last 3 matches yet.",fixNone:"No indicator is slipping over your last 3 matches."})}
+// routine: the situations where you play clearly better or worse (time, session, group...), the first habit to keep
+function routineBrief(PL){const C=PL.context,ph=(PL.phases||[])[0],first=ph&&ph.items&&ph.items[0];
+  const rows=C?C.factors.flatMap(x=>x.rows.filter(r=>r.delta!=null&&(r.level==="reliable"||r.level==="trend")).map(r=>({...r,title:x.title}))):[];
+  const rl=r=>`${esc(r.title)}: <b>${esc(r.group)}</b> <span class="note">· rating ${r.delta>0?"+":""}${r.delta.toFixed(2)} over ${r.n} games</span>`;
+  return tabBrief({id:"rt-brief",works:rows.filter(r=>r.delta>0).sort((a,b)=>b.delta-a.delta).map(rl),fix:rows.filter(r=>r.delta<0).sort((a,b)=>a.delta-b.delta).map(rl),
+    next:C&&C.recs&&C.recs[0]?esc(C.recs[0].text):first?`<b>${esc(first.title)}</b>: ${esc(first.text)}`:null,nextLabel:"Before your next session",
+    worksNone:"No situation where you clearly play better yet.",fixNone:"No situation where you clearly play worse yet."})}
 function renderRoutine(){
   const p=P(),v=$("#v-routine"),PL=p.advice.plan;if(!PL)return noPlan(v);
   v.innerHTML=`<div class="head"><div style="display:grid;gap:4px"><span class="eyebrow">${esc(p.name)} · ${levelLine(PL.level)}</span><h2>Routine: before, during, after</h2></div></div>
+   ${secNav([["rt-brief","Brief"],["rt-habits","Habits"],["rt-phases","Before, during, after"],PL.party?["rt-group","Group"]:null,PL.meta&&PL.meta.length?["rt-meta","State of the game"]:null])}
+   ${routineBrief(PL)}${anchor("rt-habits")}
    <div class="pg-grid2">${P().steamid===D.own?checkinCard((PL.context||{}).journal_n):""}${PL.context?contextBlock(PL.context):`<article class="card"><h3>Your playing habits</h3><p class="note">No dated match for this player: habits (times, sessions, group) need demos or a Leetify history.</p></article>`}</div>
-   <div class="phases">${PL.phases.map(phaseCard).join("")}</div>
-   ${partyBlock(PL)}
-   ${metaBlock(PL)}`;
+   ${anchor("rt-phases")}<div class="phases">${PL.phases.map(phaseCard).join("")}</div>
+   ${PL.party?anchor("rt-group"):""}${partyBlock(PL)}
+   ${PL.meta&&PL.meta.length?anchor("rt-meta"):""}${metaBlock(PL)}`;
   $$("[data-ck]",v).forEach(g=>$$("button",g).forEach(bt=>bt.onclick=()=>{ckState[g.dataset.ck]=bt.dataset.v;press(g,"button",bt)}));
   const sl=$("#ck-sleep",v),nt=$("#ck-note",v);if(sl)sl.oninput=()=>ckState.sleep_h=sl.value;if(nt)nt.oninput=()=>ckState.note=nt.value;
   const sv=$("#ck-save",v);if(sv)sv.onclick=async()=>{sv.disabled=true;const msg=$("#ck-msg",v);
@@ -114,17 +136,19 @@ function renderMidround(){
   if(!wpSide||!ws.includes(wpSide))wpSide=ws.includes(S.side)?S.side:ws[0];
   const B=M&&M.bench;
   v.innerHTML=`<div class="head"><div style="display:grid;gap:4px"><span class="eyebrow">${esc(p.name)}${B?` · ${B.matches} matches · compared with ${B.n_players} players of the base and ${B.n_pros} pros`:""}</span><h2>Mid-round: movement and decisions</h2></div></div>
+   ${secNav([["mr-brief","Brief"],M?["mr-decisions","Your decisions"]:null,["mr-reflexes","Reflexes"],maps.length?["mr-maps","Per map"]:null])}
+   ${midBrief(PL)}${anchor("mr-decisions")}
    ${M?`${M.weak.length?`<div class="insights">${M.weak.map(w=>`<article class="card"><h3>${w.id==="note"?"What pros do":esc(w.label[0].toUpperCase()+w.label.slice(1))}</h3>
        <p>${w.id==="note"?esc(w.text):`<span class="num">you ${fmtU(w.you,w.unit)}</span> · base median ${fmtU(w.median,w.unit)}${w.pro!=null?` · pros ${fmtU(w.pro,w.unit)}`:""}`}</p>
        ${w.fix?`<div class="fix"><h4>What to do</h4><p>${esc(w.fix)}</p></div>`:""}${w.percentile!=null?`<span class="note">You do better than ${w.percentile}% of the players of the base.</span>`:""}</article>`).join("")}</div>`:""}
      ${M.strong.length?`<div class="strengths">${M.strong.map(s=>`<span>${esc(s.text)}</span>`).join("")}</div>`:""}
      ${B?`<details><summary style="cursor:pointer;font-family:var(--f-display);font-size:20px;font-weight:600">All your mid-round indicators</summary><p class="note" style="margin:8px 0">Bar: your percentile in the base (further right, you do better than most; the line marks the median). "Indicative": neither good nor bad in itself, read it with the rest.</p>${midMetricRows(B)}</details>`:""}`
      :`<div class="empty">Mid-round indicators need demos of this player. The reflexes below apply to everyone.</div>`}
-   <h3>If… then…: mid-round reflexes</h3>
+   ${anchor("mr-reflexes")}<h3>If… then…: mid-round reflexes</h3>
    <div class="btns" role="group" aria-label="Filter the reflexes">${[...(anyMe?[["me","Priority for you"]]:[]),["all","All"],["CT","CT"],["T","T"]].map(([k,t])=>`<button type="button" data-pb="${k}" aria-pressed="${pbSide===k}">${t}</button>`).join("")}</div>
    <div class="pb">${pb.map(x=>`<article class="pbc ${isBoth(x)?"":x.side}">${x.prio>0?`<span class="you">Priority for you</span>`:""}<span class="eyebrow">${isBoth(x)?"CT and T":x.side}</span>
      <span class="if">If ${esc(lc(x.if))}</span><span>→ ${esc(x.then)}</span><span class="why">${esc(x.why)}</span>${srcLinks(x.src,true)}</article>`).join("")}</div>
-   ${maps.length?`<h3>Per map: rotations and positions by weapon</h3>
+   ${maps.length?`${anchor("mr-maps")}<h3>Per map: rotations and positions by weapon</h3>
    <div class="chips" role="group" aria-label="Map">${maps.map((m,i)=>`${chipSep(maps,i)}<button type="button" data-mm="${m}" aria-pressed="${m===midMap}">${MAPN(m)}</button>`).join("")}</div>
    ${Object.keys(R).length?`<div class="rot">${Object.entries(R).sort().map(([s,r])=>rotCard(s,r)).join("")}</div>
      <p class="note">"Leave": seconds between at least 2 Ts reaching the site and you leaving toward it (negative: you had left before). "Travel": from leaving to arriving. Routes: the first 3 zones crossed.</p>`
@@ -175,21 +199,23 @@ function renderProgress(){
   const L=PL.level,T=PL.training,X=PL.experiments,Wp=PL.weapons,K=PL.kpis||[];
   const ex=(X&&X.experiments)||[],act=ex.filter(e=>e.status==="active"),old=ex.filter(e=>e.status!=="active");
   v.innerHTML=`<div class="head"><div style="display:grid;gap:4px"><span class="eyebrow">${esc(p.name)}</span><h2>Progress</h2></div></div>
+   ${secNav([["pg-brief","Brief"],["pg-level","Level and role"],T?["pg-warmup","Warm-up"]:null,D.local&&p.steamid===D.own?["pg-train","Training"]:null,X?["pg-exp","Experiments"]:null,Wp?["pg-weapons","Weapons"]:null,PL.buys&&PL.buys.types?["pg-buys","Buys"]:null,K.length?["pg-kpis","Indicators"]:null])}
+   ${progBrief(PL)}${anchor("pg-level")}
    <div class="insights">
     <article class="card"><h3>Your level</h3><p>${levelLine(L)}</p>${L&&L.focus.length?`<div class="fix"><h4>At this level, work on</h4><ol>${L.focus.map(f=>`<li>${esc(f)}</li>`).join("")}</ol></div>`:""}${srcLinks(L&&L.src,true)}</article>
     ${PL.role?`<article class="card"><h3>Your role: ${esc((p.advice.archetype||{}).name||PL.role.role)}</h3><ul>${PL.role.items.map(t=>`<li>${esc(t)}</li>`).join("")}</ul>${srcLinks(PL.role.src,true)}</article>`:""}
    </div>
-   ${T?`<h3>Today's warm-up · ${T.total_min} min</h3><ol class="warm">${T.warmup.map(w=>`<li><b>${w.min} min · ${esc(w.map)}</b><span>${esc(w.text)}</span><span class="note">Why: ${esc(w.why)}</span>${srcLinks(w.src,true)}</li>`).join("")}</ol>
+   ${T?`${anchor("pg-warmup")}<h3>Today's warm-up · ${T.total_min} min</h3><ol class="warm">${T.warmup.map(w=>`<li><b>${w.min} min · ${esc(w.map)}</b><span>${esc(w.text)}</span><span class="note">Why: ${esc(w.why)}</span>${srcLinks(w.src,true)}</li>`).join("")}</ol>
     <div class="tech">${T.week.map(w=>`<div><b>${esc(w.title)}</b>${esc(w.text)}</div>`).join("")}</div>`:""}
-   ${D.local&&p.steamid===D.own?`<h3>Training</h3><div id="trainbox" class="train"><span class="note">Loading…</span></div>`:""}
-   ${X?`<h3>Experiments</h3><p class="note">You start a test and play normally: the coach compares your next matches with your previous 15 and gives a verdict once there is enough data (difference significant at 90%).${D.local?"":" Starting or ending an experiment happens in the local app."}</p>
+   ${D.local&&p.steamid===D.own?`${anchor("pg-train")}<h3>Training</h3><div id="trainbox" class="train"><span class="note">Loading…</span></div>`:""}
+   ${X?`${anchor("pg-exp")}<h3>Experiments</h3><p class="note">You start a test and play normally: the coach compares your next matches with your previous 15 and gives a verdict once there is enough data (difference significant at 90%).${D.local?"":" Starting or ending an experiment happens in the local app."}</p>
     ${act.length?`<span class="lbl4" style="color:var(--muted)">Running</span><div class="exps">${act.map(expCard).join("")}</div>`:""}
     ${X.suggested.length?`<span class="lbl4" style="color:var(--muted)">Suggested for you</span><div class="exps">${X.suggested.map(suggestCard).join("")}</div>`:""}
     ${old.length?`<details><summary style="cursor:pointer">Finished experiments (${old.length})</summary><div class="exps" style="margin-top:10px">${old.map(expCard).join("")}</div></details>`:""}
     <p class="note" id="xmsg" role="status"></p>`:""}
-   ${Wp?weaponsBlock(Wp):""}
-   ${buysBlock(PL.buys)}
-   ${K.length?`<h3>Tracking your indicators</h3><p class="note">Match by match. In color: the trend of your last 3 matches against the previous ones.</p><div class="kpis">${K.map(kpiCard).join("")}</div>`:""}`;
+   ${Wp?anchor("pg-weapons")+weaponsBlock(Wp):""}
+   ${PL.buys&&PL.buys.types?anchor("pg-buys"):""}${buysBlock(PL.buys)}
+   ${K.length?`${anchor("pg-kpis")}<h3>Tracking your indicators</h3><p class="note">Match by match. In color: the trend of your last 3 matches against the previous ones.</p><div class="kpis">${K.map(kpiCard).join("")}</div>`:""}`;
   wireExp(v,X,p);
   const tb=$("#trainbox",v);if(tb)trainLoad(tb,p.steamid);
 }
@@ -264,7 +290,7 @@ function growCard(g){
   if(!g)return "";
   const n=g.n||0,t=g.target||5000,pct=Math.min(100,Math.round(n/t*100)),ok=(g.counts||{}).ok||0;
   return `<article class="card"><h3>The base: ${n} matches ${g.on?`<span class="pill strong">${g.alive?"growing":"starting"}</span>`:`<span class="pill">stopped</span>`}</h3>
-   <p>The players of your matches, their recent matchmaking games (from Leetify, for the players who use it, 5 each at most), then the players of those matches, and so on until the target: more duels, grenades and real hits to compare you with and to train on.</p>
+   <p>The players of your matches, their recent matchmaking games (from Leetify, for the players who use it: all of their last month), then the players of those matches, and so on until the target: more duels, grenades and real hits to compare you with and to train on.</p>
    <div style="height:8px;background:var(--line);border-radius:4px;overflow:hidden;margin:6px 0"><div style="width:${pct}%;height:100%;background:var(--ct)"></div></div>
    <p class="note">${esc(g.status||"not started")}${g.on||ok?` · ${ok} new match(es) · ${g.codes} waiting · ${g.looked} player(s) looked up`:""} · ${g.free_gb} GB free on the disk</p>
    <p class="note">One match from Valve every 30 s at most, through your Steam session (Steam may show you in game a few seconds). It pauses while CS2 is open, during an analysis, a recording or a transcription, at the lowest priority otherwise. The demos stay (the practice part uses them); it stops at the target or when the disk has 150 GB left.</p>

@@ -305,3 +305,36 @@ table.lc{border-collapse:collapse;font-variant-numeric:tabular-nums;min-width:64
 .ins-high .pbar i{background:var(--bad)}.ins-medium .pbar i{background:var(--warn)}.ins-positive .pbar i{background:var(--good)}
 @media (max-width:900px){.brief{grid-template-columns:1fr}.brief3{grid-template-columns:1fr}.tier-nav{position:static}}
 @media (max-width:520px){.tiles{grid-template-columns:1fr 1fr}.tile .big{font-size:24px}.mc-side{grid-template-columns:30px minmax(40px,1fr) 40px}.mc-side .note{display:none}}
+/* the analyst's reads (04/10) */
+.mreads{display:grid;gap:8px}
+.rd-list{list-style:none;margin:0;padding:0;display:grid;gap:6px}
+.rd-list li{display:grid;grid-template-columns:minmax(150px,230px) minmax(0,1fr) auto;gap:10px;align-items:center;padding:8px 12px;border:1px solid var(--line);border-left:3px solid var(--line);border-radius:var(--radius);background:var(--panel)}
+.rd-list li.bad{border-left-color:var(--bad)} .rd-list li.good{border-left-color:var(--good)}
+.rd-list .rd-t{font-weight:600}
+.rd-list li.bad .rd-v b{color:var(--bad)} .rd-list li.good .rd-v b{color:var(--good)}
+.rchips{display:flex;gap:4px;flex-wrap:wrap}
+.rchip{font:600 12px var(--f-mono);padding:2px 7px;border:1px solid var(--line);border-radius:10px;background:var(--chip);color:var(--ink);cursor:pointer}
+.rchip:hover,.rchip:focus-visible{border-color:var(--ct);color:var(--ct)}
+.rd-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px}
+.rd-card{border:1px solid var(--line);border-top:3px solid var(--line);border-radius:var(--radius);background:var(--panel);padding:12px 14px;display:grid;gap:8px;align-content:start}
+.rd-card.sev-high{border-top-color:var(--bad)} .rd-card.sev-medium{border-top-color:var(--warn)} .rd-card.sev-positive{border-top-color:var(--good)}
+.rd-h{display:flex;gap:8px;align-items:baseline;flex-wrap:wrap}.rd-h h4{margin:0;font-size:17px}
+.rd-h .tag{font:700 11px var(--f-mono);text-transform:uppercase;letter-spacing:.06em;padding:2px 6px;border-radius:4px;background:var(--chip)}
+.sev-high .tag{color:var(--bad)} .sev-medium .tag{color:var(--warn)} .sev-positive .tag{color:var(--good)}
+.rd-num{display:flex;gap:10px;align-items:baseline}.rd-num b{font:700 30px var(--f-display)}
+.sev-high .rd-num b{color:var(--bad)} .sev-positive .rd-num b{color:var(--good)}
+.rd-bar{position:relative;height:10px;border-radius:5px;background:var(--chip)}
+.rd-bar i{position:absolute;left:0;top:0;bottom:0;border-radius:5px;background:var(--ct)}
+.sev-high .rd-bar i{background:var(--bad)} .sev-medium .rd-bar i{background:var(--warn)} .sev-positive .rd-bar i{background:var(--good)}
+.rd-bar .mk{position:absolute;top:-3px;bottom:-3px;width:3px;margin-left:-1px;border-radius:2px;background:var(--ink)}
+.rd-bar .mk.pro{background:var(--flash)}
+.rd-card .what{margin:0;color:var(--muted);font-size:14px}.rd-card .fix{margin:0}
+.rd-card .where{display:grid;gap:4px}.rd-card .where>span{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.rd-card .src{margin:0;font-size:12px;color:var(--muted)}.rd-card .src a{color:var(--ct)}
+@media (max-width:640px){.rd-list li{grid-template-columns:1fr}}
+/* the tabs' briefs and section bars (04/10) */
+.tabbrief{margin:2px 0 4px}
+.sec-anchor{display:block;height:0;scroll-margin-top:150px}
+.more-btn{justify-self:start;font:600 13px var(--f-body);padding:6px 12px;border:1px solid var(--line);border-radius:var(--radius);background:var(--panel);color:var(--ink);cursor:pointer}
+.more-btn:hover{border-color:var(--ct)}
+.brief3 .rchips{display:inline-flex;margin-left:6px;vertical-align:middle}
