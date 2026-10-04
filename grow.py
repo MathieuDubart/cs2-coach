@@ -1,7 +1,7 @@
 """The base grows by itself (04/10, the user: "fait le en boucle pour avoir 5000 matches analysés"): crawl.py's
 rebound, but as a loop that never stops on its own. The players of the matches already here, their recent
-matchmaking games (Leetify's public API gives their share codes, for the players who use Leetify; 5 at most per
-player, for a varied base), each one fetched from Valve through this PC's Steam session like a pasted code, its
+matchmaking games (Leetify's public API gives their share codes, for the players who use Leetify; all of their
+last month, as far as Valve keeps the demos: the user's choice on 04/10, "tous leurs matchs du mois"), each one fetched from Valve through this PC's Steam session like a pasted code, its
 demo downloaded and extracted with the per-player numbers of the base; then the players of that match in turn.
 - one request to Valve every 30 s at most, slower when it refuses (Steam closed, too many requests);
 - paused while you play or the app works: CS2 open (a match, the training server), an analysis of the app, a
@@ -26,10 +26,10 @@ from coach import DemoGone
 STATE = os.path.join(config.OUT, "grow.json")
 CTL = os.path.join(config.OUT, "grow_ctl.json")
 LOG_F = os.path.join(config.OUT, "grow.log")
-PER_PLAYER = 5            # recent matches taken per player: a varied base, not a few players' whole history
+PER_PLAYER = 0            # matches taken per player, 0: every matchmaking game of the last DAYS days (5 until 04/10)
 GAP, MAX_GAP = 30, 600    # s between two requests to Valve's game coordinator, and the most it backs off to
 MIN_FREE_GB = 150         # the loop stops when the disk has that much left
-DAYS = 25                 # codes from the last 25 days: Valve keeps a demo about 28
+DAYS = 27                 # the last month, as far as Valve keeps a demo (about 28 days)
 RELOOK_DAYS = 7           # a player looked up again a week later (their new matches)
 PORT = int(os.environ.get("COACH_PORT", 8765))
 ID0 = 76561197960265728   # SteamID64 of account id 0
@@ -151,7 +151,7 @@ def refill(st, reg):
             ms = []
         n = 0
         for m in sorted(ms, key=lambda m: str(m.get("finished_at") or ""), reverse=True):
-            if n >= PER_PLAYER:
+            if PER_PLAYER and n >= PER_PLAYER:
                 break
             code = str(m.get("data_source_match_id") or "")
             if not code.startswith("CSGO-") or "wingman" in str(m.get("data_source") or ""):
@@ -271,6 +271,8 @@ def main():
         return
     st["pid"] = os.getpid()
     st.pop("step", None)
+    if st.get("per_player", 5) != PER_PLAYER:   # the players looked up for 5 matches: again, for the rest of their month
+        st["looked"], st["players"], st["per_player"] = {}, [], PER_PLAYER
     save(st)
     log("loop started" + (" (one match)" if once else ""))
     try:
