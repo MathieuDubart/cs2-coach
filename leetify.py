@@ -83,6 +83,9 @@ LMETRICS = {
     "t_opening_duel_success_percentage": (True, 34.4, 45.7),
     "traded_deaths_success_percentage": (True, 47.2, 54.5),
 }
+LFMT = {"preaim": "{:.1f}°", "counter_strafing_good_shots_ratio": "{:.0f}%", "reaction_time_ms": "{:.0f} ms",
+        "flashbang_hit_friend_per_flashbang": "{:.2f}", "utility_on_death_avg": "${:.0f}", "ct_opening_duel_success_percentage": "{:.0f}%",
+        "t_opening_duel_success_percentage": "{:.0f}%", "traded_deaths_success_percentage": "{:.0f}%"}
 BANDS = (10000, 15000, 20000, 25000)   # Premier rating levels: under 10,000, 10-15k, 15-20k, 20-25k, 25k+
 
 
@@ -160,12 +163,13 @@ def light_advice(prof, ms, steamid):
         if len(vals) >= MIN_REF:
             pct = _better_than(vals, v, hib)
             med = vals[len(vals) // 2]
-            words = f"base median {med:.2f}".rstrip("0").rstrip(".") + (f", players of your level {lvl[len(lvl) // 2]:.2f}".rstrip("0").rstrip(".") if len(lvl) >= 15 else "") + \
+            fm = LFMT[k].format
+            words = f"base median {fm(med)}" + (f", players of your level {fm(lvl[len(lvl) // 2])}" if len(lvl) >= 15 else "") + \
                 f" · better than {pct:.0f}% of {len(vals)} players with Leetify"
             return ("weak" if pct <= 25 else "strong" if pct >= 75 else None), 25 - pct, words
         bad = v <= weak if hib else v >= weak
         good = v >= strong if hib else v <= strong
-        return ("weak" if bad else "strong" if good else None), 10, f"limit of the base's worst quarter: {weak:g}"
+        return ("weak" if bad else "strong" if good else None), 10, f"the base's worst quarter starts at {LFMT[k].format(weak)}"
 
     def add(score, title, short, why, do):
         R.append({"id": short, "score": score, "title": title, "short": short, "why": why, "do": do})
