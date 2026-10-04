@@ -194,6 +194,50 @@ def _extract(src, out):
         raise RuntimeError(f"{type(e).__name__}: {str(e)[:200]}") from None
 
 
+def _in_workers(fn, jobs, workers, done, batch=0, wait=None):
+    """fn(*args) for each (key, args) of jobs, in `workers` processes at the lowest priority: done(key, result, error)
+    as each one ends; with batch, `batch` jobs at a time and wait() before each batch. A worker that dies (memory
+    exhausted, a crash inside the demo parser) breaks the whole pool and every job still in it fails with it: those
+    run again one at a time in their own process, then the rest goes on in a new pool. A job that stops its process
+    even alone fails; the others go on."""
+    from concurrent.futures import ProcessPoolExecutor, as_completed
+    from concurrent.futures.process import BrokenProcessPool
+    jobs = list(jobs)
+    while jobs:
+        lost = []
+        with ProcessPoolExecutor(workers, initializer=config.low_priority) as ex:
+            while jobs and not lost:
+                if wait:
+                    wait()
+                n = batch or len(jobs)
+                part, jobs = jobs[:n], jobs[n:]
+                futs = {}
+                for key, args in part:
+                    try:
+                        futs[ex.submit(fn, *args)] = (key, args)
+                    except BrokenProcessPool:
+                        lost.append((key, args))
+                for fu in as_completed(futs):
+                    try:
+                        done(futs[fu][0], fu.result(), None)
+                    except BrokenProcessPool:
+                        lost.append(futs[fu])
+                    except Exception as e:
+                        done(futs[fu][0], None, e)
+        for key, args in lost:
+            log(f"[{key}] its process stopped abruptly (out of memory?): again, alone")
+            if wait:
+                wait()
+            with ProcessPoolExecutor(1, initializer=config.low_priority) as ex:
+                try:
+                    done(key, ex.submit(fn, *args).result(), None)
+                except BrokenProcessPool:
+                    done(key, None, RuntimeError("its process stops abruptly even alone (memory, or a demo the parser "
+                                                 "cannot read): skipped"))
+                except Exception as e:
+                    done(key, None, e)
+
+
 def _ensure_deep(deep):
     """Detailed extraction of the new demos: in separate processes at the lowest priority (the game and the
     app's page keep the CPU), two at a time, waiting for the end of a match between demos."""
@@ -212,18 +256,9 @@ def _ensure_deep(deep):
             except Exception as e:
                 log(f"[{mid}] extraction ERROR: {e}")
         return
-    from concurrent.futures import ProcessPoolExecutor
-    with ProcessPoolExecutor(2, initializer=config.low_priority) as ex:
-        for i in range(0, len(todo), 2):
-            config.wait_for_match_end(log, "demo extraction")
-            futs = [(mid, ex.submit(_extract, os.path.join(config.CACHE, f"{mid}.dem"), os.path.join(config.DEEP, mid)))
-                    for mid in todo[i:i + 2]]
-            for mid, fu in futs:
-                log(f"[{mid}] detailed extraction")
-                try:
-                    fu.result()
-                except Exception as e:
-                    log(f"[{mid}] extraction ERROR: {e}")
+    _in_workers(_extract, [(mid, (os.path.join(config.CACHE, f"{mid}.dem"), os.path.join(config.DEEP, mid))) for mid in todo],
+                2, lambda mid, _, err: log(f"[{mid}] extraction ERROR: {err}" if err else f"[{mid}] detailed extraction"),
+                batch=2, wait=lambda: config.wait_for_match_end(log, "demo extraction"))
 
 
 def player_matches(steamid):
@@ -275,12 +310,9 @@ def analyze_player(steamid, reg):
         import multiprocessing
         log(f"Analyzing {len(todo)} match(es)…")
         if multiprocessing.current_process().name == "MainProcess" and len(todo) > 1:
-            from concurrent.futures import ProcessPoolExecutor, as_completed
             config.wait_for_match_end(log, "match analysis")
-            with ProcessPoolExecutor(min(8, len(todo)), initializer=config.low_priority) as ex:
-                futs = [ex.submit(_analyze_match, steamid, mid, reg.get(mid, {})) for mid in todo]
-                for f in as_completed(futs):
-                    log("  " + f.result())
+            _in_workers(_analyze_match, [(mid, (steamid, mid, reg.get(mid, {}))) for mid in todo], min(8, len(todo)),
+                        lambda mid, res, err: log("  " + (f"[{mid}] ERROR: {err}" if err else res)))
         else:  # already inside a worker (batch profiling): stay sequential
             for mid in todo:
                 config.wait_for_match_end(log, "match analysis")
