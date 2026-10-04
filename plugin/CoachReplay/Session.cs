@@ -45,6 +45,9 @@ public class Drill
     [JsonPropertyName("mode")] public string Mode { get; set; } = "";   // aim: prefire, defend, or "" (your duel spots)
     [JsonPropertyName("seconds")] public int Seconds { get; set; } = 75;
     [JsonPropertyName("alive")] public int Alive { get; set; } = 3;
+    [JsonPropertyName("goal")] public int Goal { get; set; } = 8;   // defend: the frags that make it a success
+    [JsonPropertyName("armor")] public int Armor { get; set; } = 100;   // both sides (a pistol defense: no helmet)
+    [JsonPropertyName("helmet")] public bool Helmet { get; set; } = true;
     [JsonPropertyName("tracks")] public List<EntryTrack> Tracks { get; set; } = new();   // defend: real hits on the site
     [JsonPropertyName("route")] public List<string> Route { get; set; } = new();   // prefire: the places of the way
     [JsonPropertyName("line")] public List<float[]> Line { get; set; } = new();   // prefire: the way, drawn on the ground
@@ -54,6 +57,7 @@ public class EntryTrack
 {
     [JsonPropertyName("zone")] public string Zone { get; set; } = "";
     [JsonPropertyName("path")] public float[] Path { get; set; } = Array.Empty<float>();
+    [JsonPropertyName("nades")] public List<Nade> Nades { get; set; } = new();   // the grenades its player threw on the way (f: its frame)
 }
 
 public class Block
@@ -196,12 +200,13 @@ public partial class CoachReplay
         Beam(at - up * 4, at + up * 4, green, 0.8f);
     }
 
-    // CS2's grenade practice views (stuff drills only): the landing preview while you aim, the trail after the throw
+    // CS2's grenade practice views (stuff drills only): the trail after the throw. Never the landing preview while you
+    // aim (04/10: "the camera at the bottom left is a bit of a cheat": in a match you find the throw without it)
     void Prac(bool on)
     {
         if (on == pracOn) return;
         pracOn = on;
-        Server.ExecuteCommand($"sv_grenade_trajectory_prac_pipreview {(on ? 1 : 0)}");
+        Server.ExecuteCommand("sv_grenade_trajectory_prac_pipreview 0");
         Server.ExecuteCommand($"sv_grenade_trajectory_prac_trailtime {(on ? 4 : 0)}");
     }
 
@@ -268,7 +273,7 @@ public partial class CoachReplay
         {
             var pawn = h.PlayerPawn.Value;
             if (pawn == null || !h.PawnIsAlive) continue;
-            pawn.Teleport(new Vector3(v.Pos[0], v.Pos[1], v.Pos[2]), new Vector3(v.Ang[0], v.Ang[1], 0), Vector3.Zero);
+            pawn.Teleport(new Vector3(v.Pos[0], v.Pos[1], v.Pos[2]), Upright(new Vector3(v.Ang[0], v.Ang[1], 0)), Vector3.Zero);
             Freeze(pawn, true);
         }
         SetMain($"<font color='#5ab4ff'>FROM THEIR SIDE</font> · {drill.Title}<br><font class='fontSize-s'>where they really stand: watch it come</font>");
@@ -430,17 +435,17 @@ public partial class CoachReplay
     {
         var s = new Scenario { Id = d.Id, Map = d.Map, Kind = "aim", Title = d.Title, Team = d.Team };
         var me = d.Me ?? new Spot();
-        s.Players.Add(new Track { Sid = "me", Name = "you", Team = d.Team, Me = true, Hp = 100, Armor = 100, Helmet = true, Weapons = d.Weapons,
+        s.Players.Add(new Track { Sid = "me", Name = "you", Team = d.Team, Me = true, Hp = 100, Armor = d.Armor, Helmet = d.Helmet, Weapons = d.Weapons,
             Active = d.Weapons.LastOrDefault(), Path = new[] { me.Pos[0], me.Pos[1], me.Pos[2], me.Ang[1], me.Ang[0] } });
-        if (d.Mode == "defend")   // a few attackers at a time, played by the game's AI (they carry the bomb: they come to the site)
+        if (d.Mode == "defend")   // a few attackers at a time on real hits' ways, with their grenades, then the game's AI
         {
             for (int k = 0; k < Math.Min(d.Alive, Math.Max(d.Bots.Count, d.Tracks.Count)); k++)
             {
                 var tr = d.Tracks.Count > 0 ? d.Tracks[Rng.Next(d.Tracks.Count)] : null;
                 var b = d.Bots.Count > 0 ? d.Bots[Rng.Next(d.Bots.Count)] : new Spot();
-                s.Players.Add(new Track { Sid = $"att{k}", Name = tr?.Zone ?? b.Zone ?? $"Attacker {k + 1}", Team = 5 - d.Team, Hp = 100, Armor = 100, Helmet = true,
+                s.Players.Add(new Track { Sid = $"att{k}", Name = tr?.Zone ?? b.Zone ?? $"Attacker {k + 1}", Team = 5 - d.Team, Hp = 100, Armor = d.Armor, Helmet = d.Helmet,
                     Weapons = d.BotWeapons, Active = d.BotWeapons.FirstOrDefault(w => w.Contains("ak47") || w.Contains("m4")) ?? d.BotWeapons.LastOrDefault(),
-                    Path = tr?.Path ?? new[] { b.Pos[0], b.Pos[1], b.Pos[2], b.Ang[1], b.Ang[0] } });
+                    Path = tr?.Path ?? new[] { b.Pos[0], b.Pos[1], b.Pos[2], b.Ang[1], b.Ang[0] }, TrackNades = tr?.Nades ?? new() });
             }
             return s;
         }
@@ -468,6 +473,7 @@ public partial class CoachReplay
             var en = cur.Players.Where(p => p.Team != mine.Team).ToList();
             lines.Add($"allies: {(al.Count > 0 ? Where(al) : "none")} · enemies: {Where(en)}");
         }
+        if (!string.IsNullOrEmpty(cur?.Plant)) lines.Add($"💣 {cur!.Plant}");   // planted or not: what you have to do (04/10)
         if (!string.IsNullOrEmpty(cur?.Danger)) lines.Add($"⚠ {cur!.Danger}");
         if (mine != null && mine.Hp < MinHp) lines.Add($"❤ {mine.Hp} HP in the match: {MinHp} here");
         return string.Join("<br>", lines);
@@ -487,6 +493,7 @@ public partial class CoachReplay
     // Place() is done: the aim targets but the first wait (dead) for their turn
     void SessionPlaced()
     {
+        if (cur is { Kind: "death" or "clutch" } && cur.Line.Count > 1) DrawLine(cur.Line);   // your way in the match, on the ground
         if (sess == null || cur == null) return;
         if (drill?.Mode == "prefire" && drill.Line.Count > 1) DrawLine(drill.Line);
         if (cur.Kind == "aim" && drill?.Mode is "prefire" or "defend")
@@ -514,8 +521,7 @@ public partial class CoachReplay
                 var me = cur.Players.First(p => p.Me);
                 var d = Pos(first, 0) - Pos(me, 0);
                 var yaw = MathF.Atan2(d.Y, d.X) * 180 / MathF.PI;
-                var pitch = -MathF.Atan2(d.Z, MathF.Sqrt(d.X * d.X + d.Y * d.Y)) * 180 / MathF.PI;
-                foreach (var h in Humans()) h.PlayerPawn.Value?.Teleport(Pos(me, 0), new Vector3(pitch, yaw, 0), Vector3.Zero);
+                foreach (var h in Humans()) h.PlayerPawn.Value?.Teleport(Pos(me, 0), new Vector3(0, yaw, 0), Vector3.Zero);
             }
         }
         if (cur.Kind == "nade") { nadeWait = true; attemptEnd = DateTime.UtcNow.AddSeconds(30); }   // a throw during the countdown counts
@@ -570,7 +576,7 @@ public partial class CoachReplay
                 if (c == null || !c.IsValid) continue;
                 c.Respawn();
                 Loadout(c, t);
-                c.PlayerPawn.Value?.Teleport(Pos(t, 0), Ang(t, 0), Vector3.Zero);
+                if (c.PlayerPawn.Value is { } pw) { pw.Teleport(Pos(t, 0), Upright(Ang(t, 0)), Vector3.Zero); Freeze(pw, true); }
                 gone.Remove(t.Sid);
             }
             {
@@ -587,7 +593,12 @@ public partial class CoachReplay
             var me = cur.Players.FirstOrDefault(p => p.Me);
             var fr = (Server.TickCount - t0) / (float)cur.Step;
             var next = me?.Places.Select(p => (at: p[0].GetInt32(), nm: p[1].GetString())).Where(p => p.at > fr + 8).Select(p => p.nm).FirstOrDefault();
-            SetMain($"<font color='#e0a030'>{drill?.Title}</font>{(next != null ? $"<br>→ {next} <font class='fontSize-s'>(your route in the match)</font>" : "")}");
+            var bomb = "";
+            if (bombLive)   // the bomb's clock, and what it asks of you
+                foreach (var c4 in Utilities.FindAllEntitiesByDesignerName<CPlantedC4>("planted_c4"))
+                    bomb = $"<br><font color='#ff5a5a'>💣 {(c4.BombSite == 1 ? "B" : "A")} · {Math.Max(0, c4.C4Blow - Server.CurrentTime):F0} s</font>{(cur.Team == 3 ? " · defuse it" : " · keep it ticking")}";
+            var way = cur.Line.Count > 1 ? "your route in the match: the gold line" : "your route in the match";
+            SetMain($"<font color='#e0a030'>{drill?.Title}</font>{bomb}{(next != null ? $"<br>→ {next} <font class='fontSize-s'>({way})</font>" : "")}");
         }
         if (cur.Kind == "aim" && string.IsNullOrEmpty(drill?.Mode))
             SetMain($"<font color='#ff8a3d'>{drill?.Title}</font> · target {Math.Max(1, aimNext)}/{aimOrder.Count}");
@@ -622,14 +633,22 @@ public partial class CoachReplay
         if (drill.Mode == "defend")
         {
             var g = generation;
-            if (!v.IsBot)   // you: back on the spot in 1.5 s
+            if (!v.IsBot)   // you: back on the spot in 1.5 s, out of reach for 2 s
             {
                 deaths++;
                 AddTimer(1.5f, () =>
                 {
                     if (g != generation || phase != "live" || cur == null) return;
                     var me = cur.Players.First(p => p.Me);
-                    foreach (var h in Humans()) { h.Respawn(); Loadout(h, me); h.PlayerPawn.Value?.Teleport(Pos(me, 0), Ang(me, 0), Vector3.Zero); }
+                    var spot = Pos(me, 0);
+                    // the attackers already on your spot are taken away (they come again from an entrance, on other real
+                    // ways): no death the moment you are back (04/10, "the spawn kill problem is very annoying")
+                    foreach (var (sl, _) in bots)
+                        if (Utilities.GetPlayerFromSlot(sl) is { IsValid: true, PawnIsAlive: true } bc && bc.PlayerPawn.Value is { AbsOrigin: { } o } bp
+                            && Vector3.Distance(new Vector3(o.X, o.Y, o.Z), spot) < 900)
+                            bp.CommitSuicide(false, true);
+                    protectUntil = Server.TickCount + 2 * 64;
+                    foreach (var h in Humans()) { h.Respawn(); Loadout(h, me); h.PlayerPawn.Value?.Teleport(spot, Upright(Ang(me, 0)), Vector3.Zero); }
                 });
                 return true;
             }
@@ -643,15 +662,17 @@ public partial class CoachReplay
                 c.Respawn();
                 Loadout(c, t);
                 string? zone;
-                if (drill.Tracks.Count > 0)   // another real hit on the site, walked from now; it fights once it sees you
+                if (drill.Tracks.Count > 0)   // another real hit on the site, walked from now with its grenades; it fights once it sees you
                 {
                     var tr = drill.Tracks[Rng.Next(drill.Tracks.Count)];
                     t.Path = tr.Path;
+                    t.TrackNades = tr.Nades;
+                    t.NadeNext = 0;
                     t.Start = (Server.TickCount - t0) / (float)cur.Step;
                     zone = tr.Zone;
                     free.Remove(slot);
                     contact.Remove(slot);
-                    c.PlayerPawn.Value?.Teleport(Pos(t, 0), Ang(t, 0), Vector3.Zero);
+                    if (c.PlayerPawn.Value is { } pw) { pw.Teleport(Pos(t, 0), Upright(Ang(t, 0)), Vector3.Zero); Freeze(pw, true); }
                 }
                 else
                 {
@@ -660,7 +681,7 @@ public partial class CoachReplay
                     if (far.Count == 0) far = drill.Bots;
                     var sp = far[Rng.Next(far.Count)];
                     zone = sp.Zone;
-                    c.PlayerPawn.Value?.Teleport(new Vector3(sp.Pos[0], sp.Pos[1], sp.Pos[2]), new Vector3(sp.Ang[0], sp.Ang[1], 0), Vector3.Zero);
+                    c.PlayerPawn.Value?.Teleport(new Vector3(sp.Pos[0], sp.Pos[1], sp.Pos[2]), new Vector3(0, sp.Ang[1], 0), Vector3.Zero);
                 }
                 if (zone != null) { c.PlayerName = zone; Utilities.SetStateChanged(c, "CBasePlayerController", "m_iszPlayerName"); }
                 gone.Remove(t.Sid);
@@ -686,8 +707,9 @@ public partial class CoachReplay
                 if (c == null || !c.IsValid) return;
                 c.Respawn();
                 Loadout(c, t);
-                c.PlayerPawn.Value?.Teleport(Pos(t, 0), Ang(t, 0), Vector3.Zero);
+                if (c.PlayerPawn.Value is { } pw) { pw.Teleport(Pos(t, 0), Upright(Ang(t, 0)), Vector3.Zero); Freeze(pw, true); }
                 gone.Remove(t.Sid);
+                free.Remove(slot);
                 aimSpawn = Server.TickCount;
                 AimCard();
             });
@@ -763,8 +785,9 @@ public partial class CoachReplay
                 h.ExecuteClientCommandFromServer($"use {drill.Item}");
                 var t = cur.Players.First(p => p.Me);
                 var ang = show ? new Vector3(me.Ang[0], me.Ang[1], 0) : Ang(t, 0);
-                h.PlayerPawn.Value?.Teleport(new Vector3(me.Pos[0], me.Pos[1], me.Pos[2]), ang, Vector3.Zero);
+                h.PlayerPawn.Value?.Teleport(new Vector3(me.Pos[0], me.Pos[1], me.Pos[2]), Upright(ang), Vector3.Zero);
             }
+            if (show) DrawCross(drill);   // the aim shown: the green cross (your view is not turned to it: the body would lean)
             nadeWait = true;
             attemptEnd = DateTime.UtcNow.AddSeconds(25);
         });
@@ -786,7 +809,7 @@ public partial class CoachReplay
         }
         else if (cur.Kind == "aim" && drill?.Mode == "defend")
         {
-            ok = frags >= 8 && frags >= deaths;   // 03/10: 15 frags for 11 deaths never counted
+            ok = frags >= drill.Goal && frags >= deaths;   // 03/10: 15 frags for 11 deaths never counted
             pts = Math.Max(0, frags * 40 + aimHs * 15 - deaths * 50 - plants * 60);
             detail = $"{frags} frags · {deaths} death(s) · {aimHs} HS{(plants > 0 ? $" · {plants} planted" : "")}";
         }
@@ -800,9 +823,9 @@ public partial class CoachReplay
         }
         else
         {
-            outcome = SitOutcome(outcome);   // a kill or a trade is needed (04/10)
-            ok = outcome is "won" or "survived" or "traded" or "kill";
-            pts = (outcome == "won" ? 300 : outcome == "survived" ? 200 : outcome is "traded" or "kill" ? 120 : 0) + 25 * kills;
+            outcome = SitOutcome(outcome);   // a kill or a trade is needed (04/10); the bomb's end is the round's
+            ok = outcome is "won" or "survived" or "traded" or "kill" || BombWon(outcome);
+            pts = (outcome == "won" || BombWon(outcome) ? 300 : outcome == "survived" ? 200 : outcome is "traded" or "kill" ? 120 : 0) + 25 * kills;
             detail = $"{kills} kill(s) · {dmg} dmg · {alive:F1} s";
         }
         DrillDone(ok, outcome, pts, detail);
@@ -823,7 +846,7 @@ public partial class CoachReplay
         Write(new Dictionary<string, object> { ["session"] = sess.Id, ["drill"] = drill.Id, ["kind"] = drill.Kind, ["map"] = drill.Map, ["ok"] = ok,
             ["outcome"] = outcome, ["points"] = pts, ["detail"] = detail, ["try"] = tries + 1, ["level"] = drill.Level, ["t"] = DateTimeOffset.UtcNow.ToUnixTimeSeconds() });
         var st = streak >= 2 ? $" · 🔥 x{mult:F1}" : "";
-        var shown = outcome switch { "kill" => "KILL, THEN DEAD", "passive" => "NO KILL", _ => outcome.ToUpper() };
+        var shown = outcome switch { "kill" => "KILL, THEN DEAD", "passive" => "NO KILL", "exploded" => "BOMB EXPLODED", _ => outcome.ToUpper() };
         Html(ok ? $"<font color='#5ad15a'>✔ {shown}</font> +{pts}{st}<br>{detail}<br>⭐ {points}"
                 : $"<font color='#ff5a5a'>✘ {shown}</font><br>{detail}<br>⭐ {points}", 3);
         All($"{(ok ? "\x04✔" : "\x02✘")} {drill.Title}\x01 · {outcome} · {detail} · +{pts} (total {points}){st}");

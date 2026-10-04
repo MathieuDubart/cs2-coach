@@ -15,6 +15,7 @@ import math
 import os
 import random
 import time
+from collections import Counter
 
 import numpy as np
 import pandas as pd
@@ -312,18 +313,44 @@ def _timings(holds):
 ENTRY_D = os.path.join(config.OUT, "train_entries")
 
 
+def _hit_nades(p, ticks):
+    """The grenades thrown in the windows of a demo's hits: (tick, thrower, the plugin's nade: type, first position and
+    speed), like replay._nades (a thrower dead in the replay throws nothing)."""
+    try:
+        g = p.parse_grenades()
+    except Exception:
+        return []
+    lo, hi = min(ticks), max(ticks)
+    g = g[g.grenade_type.isin(list(replay.NADES)) & g.x.notna() & (g.tick >= lo) & (g.tick <= hi)].sort_values("tick")
+    out = []
+    for (_, sid_, typ), e in g.groupby(["grenade_entity_id", "steamid", "grenade_type"]):
+        t = e.tick.to_numpy()
+        cuts = [0] + [i for i in range(1, len(t)) if t[i] - t[i - 1] > 2] + [len(t)]
+        for a, b in zip(cuts, cuts[1:]):
+            r = e.iloc[a:b]
+            if len(r) < 2:
+                continue
+            dt = (int(r.tick.iloc[1]) - int(r.tick.iloc[0])) / 64
+            v = [(float(r[c].iloc[1]) - float(r[c].iloc[0])) / dt for c in ("x", "y", "z")]
+            v[2] += 0.5 * 320 * dt
+            out.append((int(r.tick.iloc[0]), str(sid_), {"type": replay.NADES[typ], "inc": False, "life": int(r.tick.iloc[-1]) - int(r.tick.iloc[0]),
+                                                          "p": [round(float(r[c].iloc[0]), 1) for c in ("x", "y", "z")], "v": [round(x, 1) for x in v]}))
+    return out
+
+
 def entries(mp, demos=24):
     """Real hits on each site, from the base's demos: for every plant, the planter and the Ts entering with him, their
     path in the 14 s before the plant (positions every 2 ticks), the ones that came from outside (700 u away or more)
-    and ended on the site. The attackers of a defense walk them (then fight on their own once they see you). Cached per
-    map."""
+    and ended on the site; with the moment a CT first saw each one (spot: its frame, -1: never) and the grenades it
+    threw on the way (f: their frame). The attackers of a defense walk them, throw them, then fight on their own once
+    they see you. Cached per map."""
     from demoparser2 import DemoParser
     import nades
     os.makedirs(ENTRY_D, exist_ok=True)
     cf = os.path.join(ENTRY_D, f"{mp}.json")
     try:
         c = json.load(open(cf, encoding="utf-8"))
-        if c.get("v") == 4:
+        if c.get("v") == 5:
             return c
     except (OSError, ValueError):
         pass
@@ -334,7 +361,7 @@ def entries(mp, demos=24):
                 dirs.append(d)
         except (OSError, ValueError):
             continue
-    out = {"v": 4, "A": [], "B": []}
+    out = {"v": 5, "A": [], "B": []}
     for d in dirs[:demos]:
         try:
             R = pd.read_parquet(os.path.join(config.OUT, "deep", d, "rounds.parquet"))
@@ -342,8 +369,9 @@ def entries(mp, demos=24):
             if not len(R):
                 continue
             want = sorted({t for pt in R.plant_tick for t in range(int(pt) - 14 * 64, int(pt) + 1, 2)})
-            T = DemoParser(os.path.join(config.CACHE, f"{d}.dem")).parse_ticks(
-                ["X", "Y", "Z", "yaw", "pitch", "is_alive", "team_num", "last_place_name"], ticks=want)
+            dp = DemoParser(os.path.join(config.CACHE, f"{d}.dem"))
+            T = dp.parse_ticks(["X", "Y", "Z", "yaw", "pitch", "is_alive", "team_num", "last_place_name", "spotted"], ticks=want)
+            thrown = _hit_nades(dp, want)
         except Exception as e:
             print("entries", d, e, flush=True)
             continue
@@ -371,8 +399,11 @@ def entries(mp, demos=24):
                     if nm and (not zones or zones[-1] != nm):
                         zones.append(nm)
                 pl = g.last_place_name.fillna("").iloc[k0]
+                seen = g.spotted.astype(object).eq(True).to_numpy() if "spotted" in g else np.zeros(len(g), bool)
+                t0_ = int(g.tick.iloc[0])
+                own = [{"f": (tk - t0_) // 2, **nd} for tk, by, nd in thrown if by == str(sid_) and t0_ <= tk <= int(g.tick.iloc[-1])]
                 out[site].append({"zone": nades.humanize(pl, mp) or "?", "path": path, "k0": k0, "zones": zones,
-                                  "from": round(float(dist[0]))})
+                                  "from": round(float(dist[0])), "spot": int(np.argmax(seen)) if seen.any() else -1, "nades": own})
     json.dump(out, open(cf, "w", encoding="utf-8"), separators=(",", ":"))
     return out
 
@@ -471,31 +502,87 @@ def practice_drills(sid, mp):
                         "seconds": 90, "weight": 2 + min(1.0, e["n"] / 400)})
         spawns = [{"pos": p, "ang": _angle(p, S["defend"]), "zone": replay_zone(e["zone"], mp)} for e in S["entrances"] for p in e["spawns"]]
         letter = z.replace("Bombsite", "")[:1]
-        tracks = (entries(mp).get(letter) or []) if letter in ("A", "B") else []
-        # real hits on this site, from their last point 1,500 u from your spot (time to see them come): they walk
-        # them, then fight
-        def _far(t, spot=S["defend"]):
-            P_ = np.array(t["path"], float).reshape(-1, 5)
-            d_ = np.hypot(P_[:, 0] - spot[0], P_[:, 1] - spot[1])
-            close = np.nonzero(d_ < 1500)[0]
-            k = int(close[0]) - 1 if len(close) and close[0] > 0 else 0
-            return {"zone": t["zone"], "path": t["path"][5 * max(0, k):]}
-
-        def _d0(t, spot=S["defend"]):
-            return math.dist(t["path"][:2], spot[:2])
-        tracks = [t for t in tracks if not any("CT" in zn for zn in t.get("zones") or [])]   # attacks, not rotations
-        far = [t for t in tracks if _d0(t) >= 1500]
-        if len(far) < 6:
-            far = [t for t in tracks if _d0(t) >= 1100]
-        tracks = [_far(t) for t in random.sample(far, min(16, len(far)))]   # only the ones that come from far
-        if len(spawns) >= 2:
-            froms = ", ".join(dict.fromkeys(replay_zone(e["zone"], mp) for e in S["entrances"]))
-            out.append({"id": f"defend:{mp}:{z}", "kind": "aim", "mode": "defend", "map": mp, "title": f"DEFEND {site}",
-                        "team": 3, "tip": f"90 s · they come like real hits, from {froms} · frag as many as you can · you respawn",
-                        "me": {"pos": S["defend"], "ang": _angle(S["defend"], spawns[0]["pos"])},
-                        "weapons": ["weapon_knife", RIFLE[3]], "bot_weapons": ["weapon_knife", RIFLE[2]],
-                        "bots": spawns, "tracks": tracks, "seconds": 90, "alive": 3, "weight": 4})
+        hits = (entries(mp).get(letter) or []) if letter in ("A", "B") else []
+        other = replay_zone("Bombsite" + ("B" if letter == "A" else "A"), mp)
+        hits = [t for t in hits if not any("CT" in zn for zn in t.get("zones") or []) and other not in (t.get("zones") or [])]   # attacks
+        tracks = _defense_tracks(hits, S["defend"])
+        if len(spawns) < 2 and not tracks:
+            continue
+        ways = Counter(t["zone"] for t in tracks)
+        froms = ", ".join(f"{w} {round(100 * n / len(tracks))}%" for w, n in ways.most_common(4)) if tracks else \
+            ", ".join(dict.fromkeys(replay_zone(e["zone"], mp) for e in S["entrances"]))
+        for kit in _defense_kits(sid):
+            out.append({"id": f"defend:{mp}:{z}:{kit['cls']}", "kind": "aim", "mode": "defend", "map": mp,
+                        "title": f"DEFEND {site} · {kit['name']}", "team": 3,
+                        "tip": f"{kit['seconds']} s · {kit['alive']} at a time, the ways real hits come: {froms} · {kit['goal']} frags · you respawn",
+                        "me": {"pos": S["defend"], "ang": _angle(S["defend"], spawns[0]["pos"] if spawns else tracks[0]["path"][:3])},
+                        "weapons": kit["weapons"], "bot_weapons": kit["bot_weapons"], "armor": 100, "helmet": kit["helmet"],
+                        "bots": spawns, "tracks": tracks, "seconds": kit["seconds"], "alive": kit["alive"], "goal": kit["goal"],
+                        "weight": kit["weight"]})
     return out
+
+
+def _defense_tracks(hits, spot, n=24):
+    """A defense's attackers: real hits on the site in their real proportions (the ways attackers really take: few by
+    mid when few go by mid, 04/10), each one from 2 s before a CT first saw it in its match, so it walks in out of sight
+    instead of appearing in front of you ("the spawn kill problem"), never closer than 700 u; with its grenades."""
+    cut = []
+    for t in hits:
+        P = np.array(t["path"], float).reshape(-1, 5)
+        d = np.hypot(P[:, 0] - spot[0], P[:, 1] - spot[1])
+        sp = t.get("spot", -1)
+        if 0 <= sp < 32 and d[0] < 1200:   # seen from its very first second, close: it would appear in your sight
+            continue
+        k = max(0, sp - 64) if sp >= 0 else 0
+        while k > 0 and d[k] < 700:
+            k -= 1
+        if d[k] < 700 or len(P) - k < 40:
+            continue
+        cut.append({"zone": t["zone"], "path": t["path"][5 * k:], "nades": [dict(nd, f=nd["f"] - k) for nd in t.get("nades") or [] if nd["f"] >= k]})
+    by = {}
+    for t in cut:
+        by.setdefault(t["zone"], []).append(t)
+    pick = []
+    for w, ts in by.items():   # each way its share of the n
+        pick += random.sample(ts, min(len(ts), max(1, round(n * len(ts) / len(cut)))))
+    random.shuffle(pick)
+    return pick[:n]
+
+
+KIT_CLASS = {"rifle": ("M4A4", "M4A1-S", "AK-47", "FAMAS", "Galil AR", "AUG", "SG 553"),
+             "close": ("MAG-7", "XM1014", "Nova", "Sawed-Off", "MP9", "MAC-10", "MP7", "MP5-SD", "UMP-45", "P90", "PP-Bizon"),
+             "awp": ("AWP", "SSG 08")}
+
+
+def _defense_kits(sid):
+    """The weapons of your site defenses: the ones you play as CT (your demos), one defense each: your rifle, your
+    close-range weapon and the AWP when you play them, your pistol (04/10: "other weapons than the M4, ones I do play:
+    the pistol, closer range, the sniper"). Longer with the rifle, and more at a time; fewer for the AWP and the pistol."""
+    prim, pist, n = Counter(), Counter(), 0
+    for mid, _ in _my_matches(str(sid)):
+        try:
+            L = pd.read_parquet(os.path.join(config.OUT, "deep", mid, "loadout.parquet"), columns=["steamid", "side", "primary", "pistol"])
+        except Exception:
+            continue
+        L = L[(L.steamid.astype(str) == str(sid)) & (L.side == "CT")]
+        n += len(L)
+        prim.update(L.primary.dropna())
+        pist.update(L.pistol.dropna())
+    pistol = next((p for p, _ in pist.most_common() if replay._item(p)), "USP-S")
+    side_arm = replay._item(pistol) or "weapon_usp_silencer"
+    kits = []
+    for cls, names in KIT_CLASS.items():
+        best = max((x for x in names if prim[x] and replay._item(x)), key=lambda x: prim[x], default=None)
+        if cls == "rifle" and not best:
+            best = "M4A4"
+        if not best or (cls != "rifle" and sum(prim[x] for x in names) < max(5, 0.05 * n)):
+            continue
+        kits.append({"cls": cls, "name": best, "weapons": ["weapon_knife", side_arm, replay._item(best)], "helmet": True,
+                     "bot_weapons": ["weapon_knife", "weapon_glock", RIFLE[2]], "seconds": {"rifle": 120}.get(cls, 100),
+                     "alive": 4 if cls == "rifle" else 3, "goal": {"rifle": 10, "close": 8, "awp": 7}[cls], "weight": 4 if cls == "rifle" else 3})
+    kits.append({"cls": "pistol", "name": pistol, "weapons": ["weapon_knife", side_arm], "helmet": False,
+                 "bot_weapons": ["weapon_knife", "weapon_glock"], "seconds": 90, "alive": 3, "goal": 6, "weight": 3})
+    return kits
 
 
 def replay_zone(z, mp=None):
@@ -614,10 +701,21 @@ def _victims(mp, team, typ, land, me):
     lo, hi = {"smoke": (350, 1100), "flash": (250, 900), "he": (80, 350)}.get(typ, (250, 900))
     # on its floor; a flash pops in the air: the ones up to 450 u under it, never over it (Nuke: A is right above B)
     lo_z, hi_z = (-450, 100) if typ == "flash" else (-200, 200)
+    # a smoke or a flash is for the ones beyond it, seen from where you throw it: the line it cuts, the players it
+    # blinds as they come (04/10: "are these lines people hold? rarely": they were any spot near it)
+    ax, ay = lx - me[0], ly - me[1]
+    an = math.hypot(ax, ay) or 1.0
+    cone = {"smoke": 0.5, "flash": 0.26}.get(typ)   # cos 60°, cos 75°
+
+    def beyond(x, y):
+        if cone is None:
+            return True
+        bx, by = x - lx, y - ly
+        return (ax * bx + ay * by) / (an * (math.hypot(bx, by) or 1.0)) >= cone
     S = _spots(mp)["CT" if team == 2 else "T"]
     out = []
     for x, y, z, n in S:   # the most held first
-        if lo <= math.hypot(x - lx, y - ly) <= hi and lo_z < z - lz < hi_z and all(math.dist([x, y, z], o["pos"]) > 250 for o in out):
+        if lo <= math.hypot(x - lx, y - ly) <= hi and lo_z < z - lz < hi_z and beyond(x, y) and all(math.dist([x, y, z], o["pos"]) > 250 for o in out):
             look = [lx, ly, lz + (0 if typ == "flash" else 40)]
             out.append({"pos": [x, y, z], "ang": _angle([x, y, z + 64], look)})
             if len(out) >= 2:
@@ -625,37 +723,80 @@ def _victims(mp, team, typ, land, me):
     return out
 
 
+def _my_setup(sid, mp):
+    """Where you stand on each side of this map 15 to 30 s into your rounds (your demos: the spot you play, not where the
+    round takes you: on Fachwerk you hold Apps, you end up on A), and the zones your enemies come from when you fight
+    from those spots. -> ({side: Counter(zone)}, {side: Counter(enemy zone)})."""
+    setup, faced = {"CT": Counter(), "T": Counter()}, {"CT": Counter(), "T": Counter()}
+    duels = []
+    for mid, _ in _my_matches(str(sid), mp):
+        deep = os.path.join(config.OUT, "deep", mid)
+        try:
+            S = pd.read_parquet(os.path.join(deep, "samples.parquet"), columns=["steamid", "side", "round", "t", "zone"])
+            D = pd.read_parquet(os.path.join(deep, "duels.parquet"), columns=["killer", "victim", "killer_side", "victim_side", "killer_zone", "victim_zone"])
+        except Exception:
+            continue
+        S = S[(S.steamid.astype(str) == str(sid)) & (S.t >= 15) & (S.t <= 30)]
+        for (_, side), g in S.groupby(["round", "side"]):
+            z = g.zone.dropna().mode()
+            if side in setup and len(z):
+                setup[side][z.iloc[0]] += 1
+        for who, en in (("killer", "victim"), ("victim", "killer")):
+            d = D[D[who].astype(str) == str(sid)]
+            duels += list(zip(d[f"{who}_side"], d[f"{who}_zone"], d[f"{en}_zone"]))
+    for side, mz, ez in duels:
+        if side in faced and mz in dict(setup[side].most_common(3)) and isinstance(ez, str):
+            faced[side][ez] += 1
+    return setup, faced
+
+
+REPEATABLE = ("standing still", "jumpthrow", "crouching", "jumpthrow + crouching")
+
+
 def nade_drills(sid, mp):
-    """The lineups your plan recommends on this map (the zones you play, both sides)."""
-    try:
-        a = json.load(open(os.path.join(config.player_dir(sid), "advice.json"), encoding="utf-8"))
-        M = a["plan"]["nades"]["maps"][mp]
-    except (OSError, ValueError, KeyError):
-        return []
+    """The lineups for where you play: thrown from the spots you hold 15-30 s into your rounds, or landing where your
+    enemies come from when you hold them (04/10: "I'm an Apps player, I don't play long: this smoke changes nothing for
+    me"). Only throws you can repeat from a spot: standing, crouching or a jumpthrow (04/10: "you say running jump: it
+    goes way too far": a running throw starts somewhere the demos don't tell)."""
+    import nades
+    S = (nades.summary().get("maps") or {}).get(mp) or {}
+    setup, faced = _my_setup(sid, mp)
     out = []
-    for side, S in M.items():
-        if not isinstance(S, dict):
+    for side, M in S.items():
+        if not isinstance(M, dict) or not setup.get(side):
             continue
         team = 2 if side == "T" else 3
-        for typ, T in (S.get("types") or {}).items():
-            for x in (T.get("picks") or [])[:3]:
-                sp = (x.get("setpos") or "").replace(";", " ").split()
-                try:
-                    pos = [float(v) for v in sp[1:4]]
-                    ang = [float(sp[5]), float(sp[6])]
-                except (IndexError, ValueError):
+        su, fa = setup[side], faced[side]
+        top, n_su = dict(su.most_common(3)), sum(su.values())
+        hot, n_fa = dict(fa.most_common(5)), sum(fa.values()) or 1
+        cands = []
+        for typ, T in (M.get("types") or {}).items():
+            for x in T.get("groups") or []:
+                if (x.get("how") or "standing still") not in REPEATABLE or (typ == "flash" and (x.get("blind") or 0) < 20):
                     continue
-                item = NADE_ITEM[typ][team] if typ == "molotov" else NADE_ITEM.get(typ)
-                if not item or not x.get("to_px"):
-                    continue
-                name = {"smoke": "Smoke", "flash": "Flash", "he": "HE", "molotov": "Molotov"}[typ]
-                land = _land(mp, typ, pos) or _world(mp, *x["to_px"])
-                out.append({"id": f"nade:{mp}:{side}:{typ}:{x['from_key']}>{x['to_key']}", "kind": "nade", "map": mp,
-                            "title": f"{name} → {x['to']}", "tip": f"from {x['from']} · {x.get('timer') or ''}".strip(" ·"),
-                            "team": team, "type": typ, "item": item, "how": x.get("how") or "standing still",
-                            "click": {"right": "right click", "both": "left + right click"}.get(x.get("click"), "left click"),
-                            "me": {"pos": pos, "ang": ang}, "target": land, "victims": _victims(mp, team, typ, land, pos),
-                            "weight": 1 + 10 * float(x.get("score") or 0)})
+                rel = top.get(x["from_key"], 0) / n_su + 0.5 * hot.get(x["to_key"], 0) / n_fa
+                if rel > 0:
+                    cands.append((rel * (0.5 + float(x.get("score") or 0)), rel, typ, x))
+        for w, rel, typ, x in sorted(cands, key=lambda c: -c[0])[:12]:
+            sp = (x.get("setpos") or "").replace(";", " ").split()
+            try:
+                pos = [float(v) for v in sp[1:4]]
+                ang = [float(sp[5]), float(sp[6])]
+            except (IndexError, ValueError):
+                continue
+            item = NADE_ITEM[typ][team] if typ == "molotov" else NADE_ITEM.get(typ)
+            if not item or not x.get("to_px"):
+                continue
+            name = {"smoke": "Smoke", "flash": "Flash", "he": "HE", "molotov": "Molotov"}[typ]
+            land = _land(mp, typ, pos) or _world(mp, *x["to_px"])
+            mine = x["from_key"] in top
+            why = f"from {x['from']}, your spot" if mine else f"onto {x['to']}, where they come at you from your spot"
+            out.append({"id": f"nade:{mp}:{side}:{typ}:{x['from_key']}>{x['to_key']}", "kind": "nade", "map": mp,
+                        "title": f"{name} → {x['to']}", "tip": f"{why} · {x.get('timer') or ''}".strip(" ·"),
+                        "team": team, "type": typ, "item": item, "how": x.get("how") or "standing still",
+                        "click": {"right": "right click", "both": "left + right click"}.get(x.get("click"), "left click"),
+                        "me": {"pos": pos, "ang": ang}, "target": land, "victims": _victims(mp, team, typ, land, pos),
+                        "weight": 1 + 10 * w})
     return out
 
 

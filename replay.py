@@ -155,7 +155,8 @@ def build(sid, mid, rnd, kind="death", t=None):
     ticks = list(range(start, end + 1, STEP))
     T = p.parse_ticks(["X", "Y", "Z", "yaw", "pitch", "is_alive", "team_num", "ducking", "last_place_name"], ticks=ticks)
     T["steamid"] = T.steamid.astype(str)
-    S = p.parse_ticks(["team_num", "inventory", "active_weapon_name", "health", "armor_value", "has_helmet", "is_alive"], ticks=[start])
+    S = p.parse_ticks(["team_num", "inventory", "active_weapon_name", "health", "armor_value", "has_helmet", "has_defuser", "is_alive"],
+                      ticks=[start])
     S["steamid"] = S.steamid.astype(str)
     players = []
     for _, s in S.iterrows():
@@ -188,6 +189,7 @@ def build(sid, mid, rnd, kind="death", t=None):
         at = nades.humanize(k.last_place_name.fillna("").iloc[0], mp) if len(k) and "last_place_name" in k else None
         players.append({"sid": s.steamid, "name": str(s["name"])[:31], "team": int(s.team_num), "me": s.steamid == sid, "places": places, "at": at,
                         "hp": int(s.health), "armor": int(s.armor_value), "helmet": bool(s.has_helmet),
+                        "kit": bool(s.get("has_defuser")) and int(s.team_num) == 3,
                         "weapons": weapons, "active": _item(s.active_weapon_name), "path": path, "duck": duck,
                         "death": death, "killer": str(died.killer.iloc[0]) if len(died) else ""})
     me = next((q for q in players if q["me"]), None)
@@ -201,15 +203,57 @@ def build(sid, mid, rnd, kind="death", t=None):
     if kind == "death" and len(md):   # who got you, from where, with what
         k0 = md.iloc[0]
         danger = f"{k0.killer_name} got you from {nades.humanize(k0.killer_zone, mp) or '?'} ({k0.weapon})"
+    bomb, plant = _bomb(p, R, rnd, t0, t_end, start, end, me)
+    goal = "win the round (a kill at least)" if kind == "clutch" else "a kill, or get traded (no kill: no point)"
+    if bomb and bomb["f"] == 0 and kind == "clutch":   # after the plant the bomb decides the round
+        goal = "win the round: defuse it" if me["team"] == 3 else "win the round: the bomb blows up, or they all die"
+    try:   # your way in the match, drawn on the ground like the prefire's (04/10: "give me the route on the ground")
+        import train
+        line = train._ground_line(np.array(me["path"], float).reshape(-1, 5)) if len(me["path"]) >= 10 else []
+    except Exception as e:
+        print("line", mid, rnd, e, flush=True)
+        line = []
     sc = {"id": f"{mid}_r{rnd}_{kind[0]}", "map": mp, "match": mid, "round": rnd, "kind": kind, "rate": 64, "step": STEP,
           "start_tick": start, "key": (key - start) // STEP, "team": me["team"], "zone": zone,
           "title": f"{mp.replace('de_', '').replace('cs_', '').title()} R{rnd} · {'clutch' if kind == 'clutch' else 'death'}"
                    f"{' · ' + zone if zone else ''}", "players": players, "nades": _nades(p, start, end, teams),
-          "danger": danger, "goal": "win the round (a kill at least)" if kind == "clutch" else "a kill, or get traded (no kill: no point)"}
+          "danger": danger, "goal": goal, "bomb": bomb, "plant": plant, "line": line}
     os.makedirs(SCEN, exist_ok=True)
     f = os.path.join(SCEN, f"{sc['id']}.json")
     json.dump(sc, open(f, "w", encoding="utf-8"), ensure_ascii=False, separators=(",", ":"))
     return sc
+
+
+C4_TIMER = 40   # mp_c4timer (competitive)
+
+
+def _bomb(p, R, rnd, t0, t_end, start, end, me):
+    """The round's bomb for the situation: planted before it starts (ticking from the first second with the time it had
+    left), during it (by its planter at that moment, if he is still alive in the replay; yours: you plant it), or not in
+    the window. -> (the bomb for the plugin or None, the line said on screen)."""
+    try:
+        ev = p.parse_event("bomb_planted", player=["X", "Y", "Z", "last_place_name"])
+    except Exception:
+        ev = None
+    rows = ev[(ev.tick >= t0) & (ev.tick <= t_end)] if ev is not None and len(ev) else []
+    if not len(rows):
+        return None, "not planted: no plant in this round"
+    b = rows.iloc[0]
+    tick, by = int(b.tick), str(b.user_steamid)
+    site = R.plant_site.get(rnd) if "plant_site" in R.columns else None
+    if site not in ("A", "B"):
+        site = "B" if str(b.get("user_last_place_name") or "").endswith("B") else "A"
+    if tick > end:
+        return None, f"not planted yet (in the match: {site}, {round((tick - start) / 64)} s after this starts)"
+    left = C4_TIMER - max(0, start - tick) / 64
+    bomb = {"f": max(0, (tick - start) // STEP), "pos": [round(float(b[f"user_{c}"]), 1) for c in "XYZ"],
+            "site": 0 if site == "A" else 1, "left": round(left, 1), "by": by}
+    if tick <= start:
+        return bomb, f"planted at {site} · {left:.0f} s left · " + ("defuse it" if me["team"] == 3 else "keep it ticking")
+    secs = round((tick - start) / 64)
+    if by == me["sid"]:
+        return bomb, f"you have the bomb: in the match you planted {site} {secs} s in"
+    return bomb, f"not planted yet: in the match they plant {site} {secs} s in"
 
 
 NADES = {"CSmokeGrenadeProjectile": "smoke", "CFlashbangProjectile": "flash", "CHEGrenadeProjectile": "he",
