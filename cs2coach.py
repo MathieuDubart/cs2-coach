@@ -261,15 +261,43 @@ def _ensure_deep(deep):
                 batch=2, wait=lambda: config.wait_for_match_end(log, "demo extraction"))
 
 
+_PM = {"key": None, "index": {}}
+
+
+def _match_index():
+    """steamid -> match ids of the cached demos, read once per process while the demo folder keeps its matches
+    (05/10: each profile read the positions file of every match, 2,000 files per profile)."""
+    import pandas as pd
+    try:
+        es = [e for e in os.scandir(config.DEEP) if e.is_dir()]
+    except OSError:
+        return {}
+    key = (len(es), max((e.stat().st_mtime for e in es), default=0))
+    if _PM["key"] != key:
+        idx = {}
+        for e in es:
+            p = os.path.join(e.path, "samples.parquet")
+            if not os.path.exists(p):
+                continue
+            try:
+                ids = set(pd.read_parquet(p, columns=["steamid"]).steamid)
+            except Exception:   # a file the base loop is writing (it failed a profile's plan, 05/10): left out this time
+                continue
+            for s in ids:
+                try:
+                    idx.setdefault(int(s), []).append(e.name)
+                except (TypeError, ValueError):
+                    pass
+        _PM.update(key=key, index=idx)
+    return _PM["index"]
+
+
 def player_matches(steamid):
     """Match ids of cached demos where this player appears."""
-    import pandas as pd
-    ids = []
-    for mid in os.listdir(config.DEEP):
-        p = os.path.join(config.DEEP, mid, "samples.parquet")
-        if os.path.exists(p) and steamid in set(pd.read_parquet(p, columns=["steamid"]).steamid):
-            ids.append(mid)
-    return ids
+    try:
+        return list(_match_index().get(int(steamid), []))
+    except (TypeError, ValueError):
+        return []
 
 
 def _analyze_match(steamid, mid, m):
