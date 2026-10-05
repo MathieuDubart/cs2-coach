@@ -60,6 +60,26 @@ def remote_size(ftp, path):
 
 
 LOG_F = os.path.join(config.OUT, "deploy.log")
+STATE_F = os.path.join(config.OUT, "deploy_state.json")   # the sha256 of each file as last sent, per site
+
+
+def sha256(path):
+    import hashlib
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        for b in iter(lambda: f.read(1 << 20), b""):
+            h.update(b)
+    return h.hexdigest()
+
+
+def unchanged(state, r, p, ftp):
+    """Already on the site as it is here: its sha256 as last sent; for a zip whose name carries its content (a
+    runtime's key, a base's version) never sent from this record, the same size on the site. A code or full-install
+    zip keeps its name across builds of one version (05/10): only its sha256 tells."""
+    if state.get(r) == sha256(p):
+        return remote_size(ftp, r) == os.path.getsize(p) if r.endswith(".zip") else True
+    b = r.rsplit("/", 1)[-1]
+    return r not in state and b.startswith(("runtime-", "base-")) and remote_size(ftp, r) == os.path.getsize(p)
 
 
 def log(msg):
@@ -119,10 +139,12 @@ def main():
         s["deploy"] = {"host": host, "user": user, "dir": rdir}
         config.save_settings(s)
     made, sent, kept, done = set(), 0, 0, 0
+    allstate = config.read_json(STATE_F, {}) or {}
+    state = allstate.setdefault(f"{host}:{rdir}", {})
     for p, r in todo:
         size = os.path.getsize(p)
-        if r.startswith("releases/") and r.endswith(".zip") and remote_size(ftp, r) == size:
-            kept += 1   # a published release never changes
+        if unchanged(state, r, p, ftp):
+            kept += 1
             done += size
             continue
         ensure_dir(ftp, r, made)
@@ -141,6 +163,8 @@ def main():
         except ftplib.error_perm:
             pass
         ftp.rename(tmp, r)
+        state[r] = sha256(p)
+        config.write_json(STATE_F, allstate)
         sent += 1
         done += size
         log(f"  {r} ({size / 2 ** 20:.1f} MB) · {100 * done / total:.0f} % of the whole")
@@ -153,7 +177,7 @@ def main():
                 ftp.delete(f"releases/{b}")
                 log(f"  removed releases/{b}")
     ftp.quit()
-    log(f"published: {sent} file(s) sent, {kept} release file(s) already there · https://wily.valentingassend.com")
+    log(f"published: {sent} file(s) sent, {kept} file(s) already there as they are · https://wily.valentingassend.com")
 
 
 if __name__ == "__main__":
