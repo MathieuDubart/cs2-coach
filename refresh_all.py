@@ -76,8 +76,9 @@ def busy():
     v = grow._api("/api/voice/status")
     if v and (v.get("recording") or v.get("transcribing")) and not NOW:
         return "a recording or a transcription"
-    g = config.read_json(grow.STATE, {}) or {}
-    if g.get("step") and time.time() - g["step"] < 600:
+    g = config.read_json(grow.STATE, {}) or {}   # the base's references only: the profiles go on beside the loop (05/10:
+    base = not PART and ST.get("phase", "base") == "base"   # it is on a match nearly all the time, the profiles waited)
+    if base and g.get("step") and time.time() - g["step"] < 600:
         return "the base loop is on a match"
     return None
 
