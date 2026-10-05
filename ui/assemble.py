@@ -41,7 +41,7 @@ def fonts_css():
 def build():
     css, extra, shell = read("p0_base.css"), read("p1_extra.css"), read("p2_shell.html")
     js = "".join(read(f) for f in PARTS_JS)
-    return f"<title>CS2 Coach</title>\n<style>{fonts_css()}{css}{extra}</style>\n\n{shell}\n<script>\n{js}</script>\n", js
+    return f"<title>Wily</title>\n<style>{fonts_css()}{css}{extra}</style>\n\n{shell}\n<script>\n{js}</script>\n", js
 
 
 if __name__ == "__main__":

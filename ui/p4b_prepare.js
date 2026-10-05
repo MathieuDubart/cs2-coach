@@ -45,7 +45,7 @@ function prepNades(p,sel){const rows=[];
   return `<div class="pnades">${rows.map(({mp,side,l})=>`<div class="pnade"><span class="tag ${side.toLowerCase()}">${side}</span><b>${TYPE[l.type]||esc(l.type)}</b> ${esc(l.from_zone)} → ${esc(nTo(l,mp)||"?")}${l.t!=null?` · ${clock(l.t)}`:""}<span class="note"> · ${esc(MAPN(mp))}${l.how?" · "+esc(l.how):""}</span><div class="cmd"><code>${esc(l.setpos)}</code><button type="button">Copy</button></div></div>`).join("")}</div>`}
 // your focus of the week (focus.py), and its change among the coach's next axes (Review and Prepare)
 function focusCard(p,extra){const F=focusOf(p);
-  if(!F)return `<article class="card b-next"><span class="eyebrow">Focus of the week</span><p class="note">The coach picks it once a few of your matches are analyzed.</p></article>`;
+  if(!F)return `<article class="card b-next"><span class="eyebrow">Focus of the week</span><p class="note">I pick it once a few of your matches are analyzed.</p></article>`;
   const own=D.local&&p.steamid===D.own,u=F.until?new Date(F.until):null;
   return `<article class="card b-next focus-card"><span class="eyebrow">Focus of the week${u&&!isNaN(u)?` · until ${u.toLocaleDateString("en-US",{weekday:"short",month:"short",day:"numeric"})}`:""}${F.manual?" · your pick":""}</span>
    <p class="lead">${esc(F.short)}</p>

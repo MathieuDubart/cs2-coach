@@ -356,7 +356,7 @@ function nowVisual(p,g,following){
   const ph=g.round_phase,ct=g.side==="CT",P={},put=(s,...h)=>{(P[s]=P[s]||[]).push(...h)};
   const TS=(p.advice.plan||{}).tside,r=ct?tsidePredict(TS,g.map,g,evFor(g)):null;
   if(ph==="freezetime"){put("reset",vReset(p,g));put("key",vKey(p,g));
-    if(voiceOn()&&navigator.userActivation&&!navigator.userActivation.hasBeenActive)put("call",`<span class="vchip">🔊 click this page once: the coach's voice</span>`);
+    if(voiceOn()&&navigator.userActivation&&!navigator.userActivation.hasBeenActive)put("call",`<span class="vchip">🔊 click this page once so I can talk</span>`);
     if(typeof antiEco==="function"&&antiEco(p,g))put("eco",`<span class="vchip bad">! eco kill spots on the map: clear them, no close duel</span>`);
     if(ct)put("focus",vMySite(p,g));
     put("peek",vPeekTimes(g,null));

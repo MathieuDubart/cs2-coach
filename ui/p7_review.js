@@ -2,7 +2,7 @@
 // ---------- view: review (after the session, or the next day) ----------
 // what the In game page showed in your matches, checked against their demos (livecheck.py)
 function liveCheckBlock(PL){const L=PL.livecheck,maps=Object.entries((L||{}).maps||{}).sort((a,b)=>b[1].matches-a[1].matches);
-  if(!maps.length)return D.local?`<h3>Live check</h3><p class="note">After your next match with the In game page open, the coach compares what it showed with what the demo says: the site read, the rushes, path 1, the buys, the site after the plant.</p>`:"";
+  if(!maps.length)return D.local?`<h3>Live check</h3><p class="note">After your next match with the In game page open, I compare what I showed you with what the demo says: the site read, the rushes, path 1, the buys, the site after the plant.</p>`:"";
   const c=(v,n,good=60)=>v==null?`<td class="note">—</td>`:`<td><b class="${v>=good?"good":v<good-15?"bad":""}">${v}%</b> <span class="note">${n}</span></td>`;
   const K=(L||{}).calib||{},cal=[K.site_n?`site read ${K.site_T>1.05?`was too sure of itself: its odds are flattened (×${K.site_T})`:K.site_T<.95?`was too shy: its odds are sharpened (×${K.site_T})`:"is right as it is"} · ${K.site_n} rounds`:"",
     K.rush_n&&(K.rush[0]!==1||K.rush[1]!==0)?`rush odds ${K.rush[1]>0?"raised":"lowered"} · ${K.rush_n} rounds`:"",K.plant_n&&Math.abs(K.plant_T-1)>.05?`site after the plant ${K.plant_T>1?"less":"more"} sure · ${K.plant_n} rounds`:"",
@@ -13,7 +13,7 @@ function liveCheckBlock(PL){const L=PL.livecheck,maps=Object.entries((L||{}).map
    <tbody>${maps.map(([m,a])=>`<tr><td><b>${esc(MAPN(m))}</b></td><td>${a.matches}</td>${c(a.site_right,a.site_n,55)}${c(a.rush_right,a.rush_n,70)}${c(a.followed,a.t_n,40)}
      <td>${a.win_followed!=null||a.win_other!=null?`<b>${a.win_followed??"—"}%</b> / ${a.win_other??"—"}%`:`<span class="note">—</span>`}</td>${c(a.buy_same,a.buy_n,60)}${c(a.plant_right,a.plant_n,70)}</tr>`).join("")}</tbody></table></div>`}
 
-function callsBlock(PL){const C=PL.calls||[];if(!C.length)return D.local?`<h3>Your calls</h3><p class="note">No recording yet: turn on "Your calls" in <a href="#settings" style="color:var(--ct)">Settings</a>, play, and the coach analyzes your communication after the match.</p>`:"";
+function callsBlock(PL){const C=PL.calls||[];if(!C.length)return D.local?`<h3>Your calls</h3><p class="note">No recording yet: turn on "Your calls" in <a href="#settings" style="color:var(--ct)">Settings</a>, play, and I analyze your communication after the match.</p>`:"";
   const a=C[0],pct=(x,n)=>n?Math.round(100*x/n)+"%":"—";
   const src=((PL.phases||[]).flatMap(ph=>ph.items).find(i=>i.id==="info_calls")||{}).src;
   return `<h3>Your calls</h3>

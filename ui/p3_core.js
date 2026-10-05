@@ -324,7 +324,7 @@ function renderAnalysis(){
     ${secNav([["an-brief","Brief"],["an-coach","Coach"],readsOf().all?["an-reads","Analyst reads"]:null,p.advice.bench?["an-base","Vs the base"]:null,["an-role","Role and deep analysis"],p.advice.pros?["an-pros","Pros like you"]:null,ms.length?["an-matches","Matches"]:null])}
     ${analysisBrief(p,auto)}
     ${D.local&&p.steamid!==D.own?`<article class="card form" id="follow-card"><h3>Follow ${esc(p.name)}'s matches</h3><p class="note">Loading…</p></article>`:""}
-    ${anchor("an-coach")}${auto.length?`<h3>What the coach detects · ${ms.length} matches</h3>`:""}
+    ${anchor("an-coach")}${auto.length?`<h3>What I see · ${ms.length} matches</h3>`:""}
     ${findings(auto)}
     ${anchor("an-reads")}${readsSection(p,readsOf().all,`What an analyst points at · ${ms.length} matches`,"Read in your demos like a team's analyst would, each against the base (its median player, the players ranked above you) and pros when their demos tell. A round opens the match's 2D replay.")}
     ${p.overall?`<details class="old-notes"><summary style="cursor:pointer;font-family:var(--f-display);font-size:18px;font-weight:600">Earlier hand-written analysis${p.overall.scope?` · ${esc(p.overall.scope)}`:""}</summary>
@@ -395,7 +395,7 @@ function renderMatches(){
   const rb=$("#reanalyze",v);if(rb)rb.onclick=async()=>{rb.disabled=true;rb.textContent="Re-analysis running…";
     jobFrom=S.view;try{const r=await fetch("/api/reanalyze",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({sid:p.steamid,mid:m.id})});const j=await r.json();
       if(!r.ok){jobPanel(`<b>${esc(j.error||"Error")}</b>${j.query?` (${esc(j.query)})`:""}`,"err");rb.disabled=false;rb.textContent="Re-analyze this match";if(r.status===409)poll();return}
-      poll()}catch(e){jobPanel(`<b>The local server doesn't answer.</b> Restart "Coach CS2.bat".`,"err");rb.disabled=false;rb.textContent="Re-analyze this match"}};
+      poll()}catch(e){jobPanel(`<b>The local server doesn't answer.</b> Restart "Wily.bat" and I'll be back.`,"err");rb.disabled=false;rb.textContent="Re-analyze this match"}};
   const box=$(".radar-box",v),ov=$("g",box);
   function draw(){
     $("image",box).setAttribute("href",D.radars[`${m.map}:${st.level}`]||"");ov.replaceChildren();const L=st.level;

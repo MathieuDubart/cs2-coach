@@ -86,7 +86,7 @@ def check(force=False):
         raw = _get(URL + "latest.json").read()
         sig = _get(URL + "latest.json.sig").read().decode().strip()
         if not verify(raw, sig):
-            raise ValueError("the update's signature is not the coach's: nothing installed")
+            raise ValueError("this update isn't signed by my author: I won't install it")
         man = json.loads(raw)
         st.update(checked=time.time(), latest=man, raw=raw.decode(), sig=sig, error=None)
     except Exception as e:
@@ -119,7 +119,7 @@ def _download(entry):
             ST["done"] += len(b)
     if h.hexdigest() != entry["sha256"]:
         os.remove(path + ".part")
-        raise ValueError(f"{entry['file']}: not the file the coach signed")
+        raise ValueError(f"{entry['file']}: not the file my author signed, I won't install it")
     os.replace(path + ".part", path)
     return path
 

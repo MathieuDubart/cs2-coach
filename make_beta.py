@@ -74,6 +74,20 @@ def log(*a):
     print(time.strftime("%H:%M:%S"), *a, flush=True)
 
 
+def gentle():
+    """Below normal priority: the game keeps the processor (05/10: CS2 open while a release was built)."""
+    try:
+        import psutil
+        psutil.Process().nice(psutil.BELOW_NORMAL_PRIORITY_CLASS)
+    except Exception:
+        config.low_priority()
+
+
+def pause_for_match(what):
+    """A match running: the package waits for its end (the app's own rule: the game first)."""
+    config.wait_for_match_end(log=lambda m: log(m), what=what)
+
+
 def fetch(url):
     os.makedirs(DL, exist_ok=True)
     p = os.path.join(DL, url.rsplit("/", 1)[-1])
@@ -230,6 +244,8 @@ def copy_base(dst, pseudo, mine, dailycsnades=False):
         for f in os.listdir(src):
             if not (f.endswith(".parquet") and f[:-8].isdigit()):
                 continue
+            if n["tables"] % 500 == 0:
+                pause_for_match("the package")
             s, t = os.path.join(src, f), os.path.join(out, d, f)
             try:
                 if not _settled(s):
@@ -369,32 +385,33 @@ def check(dst, mine, sid):
 # ---------------------------------------------------------------- the rest
 
 LAUNCHER = r"""@echo off
-rem Coach CS2: the app on this PC (http://127.0.0.1:8765). Its window stays hidden; the page opens in your browser.
+rem Wily, your CS2 coach, on this PC (http://127.0.0.1:8765). Its window stays hidden; the page opens in your browser.
 rem Its own Python only: never the libraries another Python installed on this PC.
 cd /d "%~dp0"
 set PYTHONNOUSERSITE=1
 start "" "%~dp0python\pythonw.exe" -s serve.py
 """
 AUTOSTART = r"""@echo off
-rem Starts Coach CS2 in the background each time you sign in to Windows (Win+R, shell:startup to remove it).
+rem Starts Wily in the background each time you sign in to Windows (Win+R, shell:startup to remove it).
 set "STARTUP=%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup"
-powershell -NoProfile -Command "$s=(New-Object -ComObject WScript.Shell).CreateShortcut('%STARTUP%\Coach CS2.lnk'); $s.TargetPath='%~dp0python\pythonw.exe'; $s.Arguments='-s serve.py --no-browser'; $s.WorkingDirectory='%~dp0'; $s.WindowStyle=7; $s.Save()"
-echo Coach CS2 now starts with Windows: http://127.0.0.1:8765
+powershell -NoProfile -Command "$s=(New-Object -ComObject WScript.Shell).CreateShortcut('%STARTUP%\Wily.lnk'); $s.TargetPath='%~dp0python\pythonw.exe'; $s.Arguments='-s serve.py --no-browser'; $s.WorkingDirectory='%~dp0'; $s.WindowStyle=7; $s.Save()"
+echo Wily now starts with Windows: http://127.0.0.1:8765
 pause
 """
-README = """COACH CS2 (alpha)
-=================
+README = """WILY (alpha)
+============
 
-This is an alpha: the first version open to other players. Things will break; tell the coach
-(contact@valentingassend.com) and the next version fixes it.
+Hi, I'm Wily, your CS2 coach. I follow your matches live on your second screen, warm you up before you play (map
+sheets, and a training server where bots replay your own situations), and review your matches with you after.
+I run on this PC: your matches, your profile and your voice stay here.
 
-Your coach for CS2: the live guide on your second screen, the warm-up before you play (map sheets and the training
-server with bots), and the review after your matches. Everything runs on this PC.
+I'm an alpha, the first version open to every player: things will break. Tell me with the "alpha · report" tag at
+the top of my page, or write to my author (contact@valentingassend.com).
 Website, updates, privacy policy and terms: https://wily.valentingassend.com
 
 INSTALL
 1. Unzip this folder where you want to keep it, on a drive with a few GB free (not in Program Files).
-2. Double-click "Coach CS2.bat". The app opens in your browser at http://127.0.0.1:8765
+2. Double-click "Wily.bat". I open in your browser at http://127.0.0.1:8765
    (Windows may ask to confirm the first time: the app is not signed yet.)
 3. Settings (the gear, top right):
    - Steam: your Steam Web API key and your match history authentication code (the links to get them are on the
@@ -407,10 +424,10 @@ INSTALL
 6. Prepare > Training: "Install the training server" (a few minutes, no extra space: its files are links to the game's).
 
 DAILY USE
-- "Coach CS2.bat" (or "Start with Windows.bat" once, to have it always running).
+- "Wily.bat" (or "Start with Windows.bat" once, to have me always running).
 - Update (top bar): downloads and analyzes your new matches.
 - Live during a match on your 2nd screen, Prepare before playing, Review after.
-- Settings > App updates: new versions of the app and of the base, checked against the coach's signature.
+- Settings > App updates: my new versions and my base, checked against my author's signature.
 - Something wrong, or an idea? The "alpha · report" tag at the top of the app sends a report from any page
   (you see exactly what is sent first).
 
@@ -429,7 +446,7 @@ THIRD_PARTY_NOTICES.txt and the LICENSES folder.
 
 
 def extras(dst, sid, update):
-    open(os.path.join(dst, "Coach CS2.bat"), "w", encoding="utf-8", newline="\r\n").write(LAUNCHER)
+    open(os.path.join(dst, "Wily.bat"), "w", encoding="utf-8", newline="\r\n").write(LAUNCHER)
     open(os.path.join(dst, "Start with Windows.bat"), "w", encoding="utf-8", newline="\r\n").write(AUTOSTART)
     open(os.path.join(dst, "README.txt"), "w", encoding="utf-8", newline="\r\n").write(README)
     os.makedirs(os.path.join(dst, "cache"), exist_ok=True)
@@ -476,7 +493,7 @@ def release(dst, version, base, notes):
         zip_dir(dst, rt_z, top=False, only={"python"})
     base_z = os.path.join(RELEASES, f"base-{base['version']}.zip")
     zip_dir(os.path.join(dst, "out"), base_z, top=False, skip={"settings.json"})
-    setup_z = os.path.join(RELEASES, f"CoachCS2-{version}.zip")
+    setup_z = os.path.join(RELEASES, f"Wily-{version}.zip")
     zip_dir(dst, setup_z, top=True)
     build = (config.read_json(os.path.join(dst, "VERSION.json"), {}) or {}).get("build")
     man = {"app": version, "build": build, "released": int(time.time()), "notes": notes,
@@ -508,11 +525,13 @@ def main():
     version = version or pub.get("app") or "dev-" + time.strftime("%Y%m%d-%H%M")
     # a player's package built from the published code carries its build: their app offers no update to the same code
     build = None if arg("--release") else pub.get("build")
-    dst = os.path.join(DIST, "CoachCS2")
+    dst = os.path.join(DIST, "Wily")
     if os.path.exists(dst):
         shutil.rmtree(dst)
     os.makedirs(os.path.join(dst, "out", "site"))
     t0 = time.time()
+    gentle()
+    pause_for_match("the package")
     copy_code(dst, version, build)
     mine = set()
     if sid and not generic:
@@ -522,16 +541,18 @@ def main():
     extras(dst, None if generic else sid, update)
     check(dst, mine, None if generic else sid)
     if "--no-python" not in sys.argv:
+        pause_for_match("the package")
         runtime(os.path.join(dst, "python"))
     size = sum(os.path.getsize(os.path.join(r, f)) for r, _, fs in os.walk(dst) for f in fs)
     log(f"folder: {dst} ({size / 2 ** 20:.0f} MB, {round(time.time() - t0)} s)")
     if arg("--release"):
+        pause_for_match("the release")
         release(dst, version, base, arg("--notes") or "")
         import site_wily
         site_wily.build()
     elif "--no-zip" not in sys.argv:
         who = "any-player" if generic else (re.sub(r"[^\w-]", "", config.display_name(sid)) or sid)
-        z = os.path.join(DIST, f"CoachCS2-{time.strftime('%Y%m%d')}-{who}{'-update' if update else ''}.zip")
+        z = os.path.join(DIST, f"Wily-{time.strftime('%Y%m%d')}-{who}{'-update' if update else ''}.zip")
         zip_dir(dst, z)
         log(f"zip: {z} ({os.path.getsize(z) / 2 ** 20:.0f} MB)")
 

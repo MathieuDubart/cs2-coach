@@ -551,7 +551,7 @@ class Handler(BaseHTTPRequestHandler):
             except (TypeError, ValueError):
                 return self.send(400, {"error": "invalid target"})
             if on and config.role() == "client":
-                return self.send(403, {"error": "The base grows on the coach's server: its references come with the app's updates."})
+                return self.send(403, {"error": "My base grows on my author's PC: it comes to you with my updates."})
             config.write_json(GROW_CTL, {"on": on, "target": target})
             if on:
                 grow_start()
@@ -779,12 +779,12 @@ if __name__ == "__main__":
     try:
         srv = ThreadingHTTPServer(("127.0.0.1", PORT), Handler)
     except OSError:
-        print(f"Coach CS2 is already running: open http://127.0.0.1:{PORT}/#ingame")
+        print(f"Wily is already running: open http://127.0.0.1:{PORT}/#ingame")
         if "--no-browser" not in sys.argv:
             webbrowser.open(f"http://127.0.0.1:{PORT}/#ingame")
         sys.exit(0)
     url = f"http://127.0.0.1:{PORT}/#ingame"
-    print(f"Coach CS2: {url}  (Ctrl+C to stop)")
+    print(f"Wily: {url}  (Ctrl+C to stop)")
     if os.environ.get("COACH_TEST"):  # a test copy: leaves the game's settings, the Steam sync and the microphone alone
         print("test copy: game detection, sync and microphone left to the main app")
     else:

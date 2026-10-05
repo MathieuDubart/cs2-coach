@@ -38,11 +38,11 @@ function contextBlock(C){
    ${srcLinks([C.rating_source],true)}</article>`}
 // your journal: only on your own profile; folded until it becomes a habit (3 entries), with its count
 function checkinCard(nj){
-  if(!D.local)return `<article class="card"><h3>Pre-session journal</h3><p class="note">The journal (sleep, energy, warm-up) is filled in the local app: double-click <code>Coach CS2.bat</code>.</p></article>`;
+  if(!D.local)return `<article class="card"><h3>Pre-session journal</h3><p class="note">The journal (sleep, energy, warm-up) is filled in the local app: double-click <code>Wily.bat</code>.</p></article>`;
   const b=(k,vals)=>`<div class="btns" role="group" data-ck="${k}">${vals.map(([val,t])=>`<button type="button" data-v="${val}" aria-pressed="${String(ckState[k])===String(val)}">${t}</button>`).join("")}</div>`;
   const five=[[1,"1"],[2,"2"],[3,"3"],[4,"4"],[5,"5"]];
   return `<article class="card form"><details${(nj||0)>=3?" open":""}><summary style="cursor:pointer;font-family:var(--f-display);font-size:20px;font-weight:600">Pre-session journal <span class="note" style="font:13px var(--f-body)">· ${nj?`${nj} entr${nj>1?"ies":"y"} so far`:"not used yet"}</span></summary>
-   <p class="note">20 seconds before your first game. Each entry is linked to the matches of the next 6 hours: over the weeks, the coach measures how your sleep, energy and warm-up affect your rating.</p>
+   <p class="note">20 seconds before your first game. Each entry is linked to the matches of the next 6 hours: over the weeks, I measure how your sleep, energy and warm-up affect your rating.</p>
    <div class="row"><label class="f" for="ck-sleep">Sleep (hours)</label><input id="ck-sleep" type="number" min="0" max="14" step="0.5" value="${esc(ckState.sleep_h??"")}"></div>
    <div class="row"><span class="f">Energy (1-5)</span>${b("energy",five)}</div>
    <div class="row"><span class="f">Mood (1-5)</span>${b("mood",five)}</div>
@@ -209,7 +209,7 @@ function renderProgress(){
     ${PL.role?`<article class="card"><h3>Your role: ${esc((p.advice.archetype||{}).name||PL.role.role)}</h3><ul>${PL.role.items.map(t=>`<li>${esc(t)}</li>`).join("")}</ul>${srcLinks(PL.role.src,true)}</article>`:""}
    </div>
    ${T||D.local&&p.steamid===D.own?`<p class="note">Today's warm-up and the training server are in <a href="#prepare" style="color:var(--ct)">Prepare</a>, with your map sheets.</p>`:""}
-   ${X?`${anchor("pg-exp")}<h3>Experiments</h3><p class="note">You start a test and play normally: the coach compares your next matches with your previous 15 and gives a verdict once there is enough data (difference significant at 90%).${D.local?"":" Starting or ending an experiment happens in the local app."}</p>
+   ${X?`${anchor("pg-exp")}<h3>Experiments</h3><p class="note">You start a test and play normally: I compare your next matches with your previous 15 and gives a verdict once there is enough data (difference significant at 90%).${D.local?"":" Starting or ending an experiment happens in the local app."}</p>
     ${act.length?`<span class="lbl4" style="color:var(--muted)">Running</span><div class="exps">${act.map(expCard).join("")}</div>`:""}
     ${X.suggested.length?`<span class="lbl4" style="color:var(--muted)">Suggested for you</span><div class="exps">${X.suggested.map(suggestCard).join("")}</div>`:""}
     ${old.length?`<details><summary style="cursor:pointer">Finished experiments (${old.length})</summary><div class="exps" style="margin-top:10px">${old.map(expCard).join("")}</div></details>`:""}
@@ -228,7 +228,7 @@ function tSet(k,v){try{localStorage.setItem("coach_t"+k,v)}catch(e){}}
 const BLOCK={defend:"🛡 Defense",push:"🚶 Push",aim:"🎯 Aim",nade:"💨 Stuff",situation:"🔁 Situations"};
 // not on this PC yet (a player's copy of the app, 05/10): made from the app, CS2's files linked next to the game
 function trainInstall(box,sid,st){const ins=st.install||{};
-  box.innerHTML=`<div class="tinstall"><p><b>The training server isn't on this PC yet.</b> It is a separate copy of CS2 next to the game, where bots replay real situations of your matches. Its files are links to the game's: no extra space, and the game itself is never touched. Metamod:Source, CounterStrikeSharp and the coach's plugin go in that copy only. It takes a few minutes.</p>
+  box.innerHTML=`<div class="tinstall"><p><b>The training server isn't on this PC yet.</b> It is a separate copy of CS2 next to the game, where bots replay real situations of your matches. Its files are links to the game's: no extra space, and the game itself is never touched. Metamod:Source, CounterStrikeSharp and my plugin go in that copy only. It takes a few minutes.</p>
    ${ins.running?`<p class="note"><span class="spin" aria-hidden="true"></span>${esc(ins.log||"Installing…")}</p>`:`${ins.error?`<p class="note">Failed: ${esc(ins.error)}</p>`:""}<div class="btns"><button type="button" class="primary" id="t-install">Install the training server</button></div>`}
    ${st.path?`<p class="note">Folder: <code>${esc(st.path)}</code></p>`:""}</div>`;
   const b=box.querySelector("#t-install");
@@ -304,8 +304,8 @@ let steamForget=false;
 function growCard(g){
   if(!g)return "";
   if(g.client){const pk=g.pack||{};
-    return `<article class="card"><h3>The base: ${pk.matches?Number(pk.matches).toLocaleString():"?"} matches <span class="pill">from the coach's server</span></h3>
-   <p>The references you are compared with, the lineups and their groups, the T side's plays, the weapons and the training's real attacks come from the full base${pk.built?`, as it was on ${esc(new Date(pk.built*1000).toLocaleDateString())}`:""}. Your own matches are downloaded and analyzed on this PC; a new version of the app brings the base as it grew.</p></article>`}
+    return `<article class="card"><h3>My base: ${pk.matches?Number(pk.matches).toLocaleString():"?"} matches <span class="pill">came with this version</span></h3>
+   <p>The references you are compared with, the lineups and their groups, the T side's plays, the weapons and the training's real attacks come from the full base${pk.built?`, as it was on ${esc(new Date(pk.built*1000).toLocaleDateString())}`:""}. Your own matches are downloaded and analyzed right here; each new version of me brings my base as it grew.</p></article>`}
   const n=g.n||0,t=g.target||5000,pct=Math.min(100,Math.round(n/t*100)),ok=(g.counts||{}).ok||0;
   return `<article class="card"><h3>The base: ${n} matches ${g.on?`<span class="pill strong">${g.alive?"growing":"starting"}</span>`:`<span class="pill">stopped</span>`}</h3>
    <p>The players of your matches, their recent matchmaking games (from Leetify, for the players who use it: all of their last month), then the players of those matches, and so on until the target: more duels, grenades and real hits to compare you with and to train on.</p>
@@ -325,7 +325,7 @@ function updateCard(u){
    ${av.length?`<ul class="note">${list}</ul>${u.latest&&u.latest.notes?`<p>${esc(u.latest.notes)}</p>`:""}`:`<p class="note">${u.error?`Check failed: ${esc(u.error)}`:"Up to date."}</p>`}
    ${busy?`<div style="height:8px;background:var(--line);border-radius:4px;overflow:hidden;margin:6px 0"><div style="width:${pct}%;height:100%;background:var(--ct)"></div></div><p class="note">${pr.restarting?"Restarting the app…":pr.part==="installing"?"Installing…":`Downloading ${UPW[pr.part]||""}…`}</p>`:""}
    ${pr.error?`<p class="note">Failed: ${esc(pr.error)}</p>`:""}
-   <p class="note">Every update is signed by the coach and checked on this PC before it is installed. Your settings, matches, profile and voice stay as they are.</p>
+   <p class="note">Every update is signed by my author and checked here before I install it. Your settings, matches, profile and voice stay as they are.</p>
    <div class="btns">${av.length&&!busy?`<button type="button" class="primary" id="up-go">Install the update</button>`:""}<button type="button" id="up-check"${busy?" disabled":""}>Check now</button></div></article>`}
 function wireUpdate(v){
   const go=$("#up-go",v),ck=$("#up-check",v);
@@ -350,9 +350,9 @@ function shareCard(c){
      <p class="note">The base loop pulls them every hour while it runs; each match is checked again here (the app's own tables, no real SteamID, no name) and kept once.</p>
      ${c.token?`<div class="btns"><button type="button" id="ct-pull">Pull now</button></div>`:""}</article>`}
   return `<article class="card" id="ct-card"><h3>Share my matches with the base ${c.on?`<span class="pill strong">on</span>`:`<span class="pill">off</span>`}</h3>
-   <p>The base you are compared with grows with the players who use the app. When this is on, your new matches go to the coach anonymized: what the app extracted from each demo (positions, duels, grenades, buys, rounds), where every SteamID becomes a random id used for that match only, every name is blank and the match id is random. Never your demos, your voice, your settings or your profile.</p>
+   <p>The base you are compared with grows with the players who use the app. When this is on, your new matches come to me anonymized: what the app extracted from each demo (positions, duels, grenades, buys, rounds), where every SteamID becomes a random id used for that match only, every name is blank and the match id is random. Never your demos, your voice, your settings or your profile.</p>
    <p class="note">${c.on?`${c.sent} match(es) shared${c.waiting?` · ${c.waiting} waiting`:""}${c.last?` · last ${when(c.last)}`:""}`:"Off: nothing leaves this PC."}${c.error?` · last try failed: ${esc(c.error)}`:""}</p>
-   <p class="note">You can turn it off at any time. To have what this PC sent deleted before it joins the base, write to the coach with this installation's id: <code>${esc(c.install||"")}</code>. <a href="https://wily.valentingassend.com/privacy.html" target="_blank" rel="noopener" style="color:var(--ct)">Privacy policy</a></p>
+   <p class="note">You can turn it off at any time. To have what this PC sent deleted before it joins the base, write to my author with this installation's id: <code>${esc(c.install||"")}</code>. <a href="https://wily.valentingassend.com/privacy.html" target="_blank" rel="noopener" style="color:var(--ct)">Privacy policy</a></p>
    <div class="btns"><button type="button"${c.on?"":` class="primary"`} id="ct-on">${c.on?"Stop sharing":"Share my matches"}</button>${c.on&&c.waiting?`<button type="button" id="ct-send"${c.sending?" disabled":""}>Send now</button>`:""}</div></article>`}
 function wireShare(v){
   const on=$("#ct-on",v),sd=$("#ct-send",v),pl=$("#ct-pull",v);
@@ -379,7 +379,7 @@ function wireReport(){const d=$("#bugdlg");if(!d||d.dataset.wired)return;d.datas
       else{m.textContent="The site can't be reached right now: your report is kept on this PC and sent as soon as it can.";b.disabled=false}}
     catch(e){m.textContent=e.message;b.disabled=false}}}
 function reportCard(){if(D.role!=="client")return "";
-  return `<article class="card"><h3>Alpha <span class="pill">0.0.x</span></h3><p>The app is open to every player for the first time: things will break. Tell the coach what happened, or an idea: the "alpha · report" tag at the top does it from any page.</p>
+  return `<article class="card"><h3>Alpha <span class="pill">0.0.x</span></h3><p>I'm in alpha: open to every player for the first time, so things will break. Tell me what broke, or an idea: the "alpha · report" tag at the top works from any page.</p>
    <div class="btns"><button type="button" class="primary" data-report="bug">Report a bug</button><button type="button" data-report="idea">Suggest an idea</button></div></article>`}
 // the coach's PC: what players reported, the newest first
 function reportsCard(rs){if(D.role==="client"||!Array.isArray(rs))return "";
@@ -401,7 +401,7 @@ function wireReports(v){
 function usageCard(u){if(!u||!u.client)return "";
   const t=u.today||{},nv=Object.keys(t.views||{}).length,na=Object.values(t.actions||{}).reduce((a,b)=>a+b,0);
   return `<article class="card" id="us-card"><h3>Usage statistics ${u.on?`<span class="pill strong">on</span>`:`<span class="pill">off</span>`}</h3>
-   <p>Anonymous counters, per day: the pages you open and how long, the buttons you use, the errors the page meets, whether Live runs during a match, the app's version and your screen's size class. No identifier, no SteamID, no name, nothing you write. A day once over is sent to the coach, added to that day's totals and thrown away.</p>
+   <p>Anonymous counters, per day: the pages you open and how long, the buttons you use, the errors the page meets, whether Live runs during a match, the app's version and your screen's size class. No identifier, no SteamID, no name, nothing you write. A finished day is sent to me, added to that day's totals and thrown away.</p>
    <p class="note">${u.on?`Today so far: ${nv} page(s), ${na} click(s) counted · ${u.days_sent} day(s) sent`:"Off: nothing is counted or sent."}</p>
    ${u.on&&u.today?`<details><summary>Today's counters, exactly</summary><pre class="uspre">${esc(JSON.stringify(u.today,null,1))}</pre></details>`:""}
    <div class="btns"><button type="button" id="us-on">${u.on?"Turn it off":"Turn it on"}</button></div></article>`}
@@ -457,9 +457,9 @@ async function pollRefresh(v){clearTimeout(S.rfTimer);
 async function renderSettings(){
   const v=$("#v-settings");
   const head=`<div class="head"><div style="display:grid;gap:4px"><span class="eyebrow">Everything stays on this PC</span><h2>Settings</h2></div></div>`;
-  if(!D.local){v.innerHTML=head+`<div class="empty">Settings live in the local app: double-click <code>Coach CS2.bat</code>, then open Settings.</div>`;return}
+  if(!D.local){v.innerHTML=head+`<div class="empty">My settings live in the local app: double-click <code>Wily.bat</code>, then open Settings.</div>`;return}
   v.innerHTML=head+`<div class="empty"><span class="spin" aria-hidden="true"></span>Reading your Steam connection…</div>`;
-  let st;try{st=await (await fetch("/api/steam/status"+(D.own?`?sid=${D.own}`:""))).json()}catch(e){v.innerHTML=head+`<div class="empty">The local server doesn't answer: restart "Coach CS2.bat".</div>`;return}
+  let st;try{st=await (await fetch("/api/steam/status"+(D.own?`?sid=${D.own}`:""))).json()}catch(e){v.innerHTML=head+`<div class="empty">I don't answer: restart "Wily.bat" and I'll be back.</div>`;return}
   let gs=null;try{gs=await (await fetch("/api/gsi/status")).json()}catch(e){}
   let vs=null;try{vs=await (await fetch("/api/voice/status")).json()}catch(e){}
   let cc=null;try{cc=await (await fetch("/api/coach/status")).json()}catch(e){}
@@ -489,7 +489,7 @@ async function renderSettings(){
    ${cc&&cc.bound&&!cc.site_bound?`<p>Numpad 7 / 9 are new: run <code>exec coach_binds</code> once more in CS2's console.</p>`:""}
    ${cc&&cc.bound?`<p class="note">The keys are set.</p>`:`<p>One time only, in CS2's console: <code>exec coach_binds</code> (the keys then stay in your CS2 settings).</p>`}
    <p class="note">Numpad 1, 2, 3 were free in your CS2 keys. The In game page must be open during the match (it gives the paths). When the path ends on a site, the key also gives CS2's own "Go A" / "Go B" of the chat wheel (the order bots follow). A file only says that line and that order, never another command.</p></article>
-  <article class="card"><h3>The coach's voice at the buy time</h3>
+  <article class="card"><h3>My voice at the buy time</h3>
    <p>When you're frustrated (a word or a shout after your death, "coach, énervé"), after two rounds lost dead without a kill, or when you don't understand ("qu'est-ce qu'on fait", "coach, perdu"): a few seconds of voice during the buy time, once per round. Calm, then one thing to do this round, or a simple plan.</p>
    <div class="row"><label style="display:flex;gap:8px;align-items:center;font-size:14px"><input type="checkbox" id="c-voice" ${voiceOn()?"checked":""}> Speak at the buy time</label><button type="button" id="c-voice-test">Hear it</button></div>
    <div class="row"><label style="display:flex;gap:8px;align-items:center;font-size:14px"><input type="checkbox" id="c-info" ${infoOn()?"checked":""}> Say "l'info !" when I die (your rounds with a call before your death are won far more often)</label></div>
@@ -513,21 +513,21 @@ async function renderSettings(){
   <div class="insights">
    <article class="card"><h3>1. Who are you? ${ok(st.login)}</h3>
     ${st.login?`<p>Signed in with Steam: <b>${esc(st.login.name||st.login.steamid)}</b> <span class="num note">${esc(st.login.steamid)}</span>, on ${fmtDate(st.login.time)}. This account is your default profile in the app.</p>`
-      :`<p>Sign in through Steam's official page: it confirms your account to the coach. The coach never sees your password, only your SteamID.</p>`}
+      :`<p>Sign in through Steam's official page: it confirms your account to me. I never see your password, only your SteamID.</p>`}
     <p><a class="primary" style="display:inline-block;text-decoration:none" href="/api/steam/login">${st.login?"Sign in with Steam again":"Sign in with Steam"}</a></p>
     ${st.pc_account&&st.pc_account.steamid?`<p class="note">Steam account open on this PC: ${esc(st.pc_account.name||"")} <span class="num">${esc(st.pc_account.steamid)}</span>.</p>`:""}</article>
    <article class="card"><h3>Playtime</h3>
     ${pt?`<div class="gauge"><div><b>${pt.total_h.toLocaleString("en-US")} h</b><span>on CS2 in total</span></div><div><b>${pt.two_weeks_h} h</b><span>over the last 2 weeks</span></div></div>
       <p class="note">Source: ${esc(pt.source)}${pt.last_played?` · last played ${fmtDate(pt.last_played)}`:""}. Used to set your priorities by experience.</p>`
-      :`<p class="note">No playtime found: this account hasn't played on this PC. With the API key (step 2), the coach reads it from Steam if your game details are public.</p>`}</article>
+      :`<p class="note">No playtime found: this account hasn't played on this PC. With the API key (step 2), I read it from Steam if your game details are public.</p>`}</article>
   </div>
   <article class="card form"><h3>2. Full, automatic history ${ok(st.has_key&&st.has_auth)}</h3>
-   <p>Valve only gives your <b>last 8 matches</b> and deletes demos after about <b>a month</b>. With these two codes, the coach finds <b>every new match</b>, even if it hasn't run for weeks. It analyzes the demos still available and keeps the date, score, your kills and deaths and your teammates for all the others: your times, sessions, streaks and group become measurable over your whole history.</p>
+   <p>Valve only gives your <b>last 8 matches</b> and deletes demos after about <b>a month</b>. With these two codes, I find <b>every new match</b>, even if it hasn't run for weeks. It analyzes the demos still available and keeps the date, score, your kills and deaths and your teammates for all the others: your times, sessions, streaks and group become measurable over your whole history.</p>
    <div class="row"><span class="f">Steam API key ${ok(st.has_key)}</span><input id="st-key" type="password" autocomplete="off" spellcheck="false" placeholder="${st.has_key?"already saved · paste a new key to replace it":"32 characters"}" style="flex:1;min-width:220px;font:14px var(--f-mono);background:var(--bg);color:var(--ink);border:1px solid var(--line);border-radius:3px;padding:5px 8px"></div>
    <p class="note">Create it on <a href="${esc(L.key)}" target="_blank" rel="noopener" style="color:var(--ct)">steamcommunity.com/dev/apikey</a> (signed in to your Steam account). Domain name: write <code>localhost</code>.</p>
    <div class="row"><span class="f">Authentication code ${ok(st.has_auth)}</span><input id="st-auth" type="password" autocomplete="off" spellcheck="false" placeholder="${st.has_auth?"already saved":"XXXX-XXXXX-XXXX"}" style="width:220px;font:14px var(--f-mono);background:var(--bg);color:var(--ink);border:1px solid var(--line);border-radius:3px;padding:5px 8px">
      <input id="st-known" type="text" autocomplete="off" spellcheck="false" placeholder="Code of your last match CSGO-… (optional)" style="flex:1;min-width:240px;font:14px var(--f-mono)"></div>
-   <p class="note">On <a href="${esc(L.auth)}" target="_blank" rel="noopener" style="color:var(--ct)">Steam's CS2 help page</a> (signed in to your account): "Create authentication code". The same page shows the code of your last match. If it's empty, the coach finds it from your last 8 matches (Steam open, CS2 closed).</p>
+   <p class="note">On <a href="${esc(L.auth)}" target="_blank" rel="noopener" style="color:var(--ct)">Steam's CS2 help page</a> (signed in to your account): "Create authentication code". The same page shows the code of your last match. If it's empty, I find it from your last 8 matches (Steam open, CS2 closed).</p>
    <div class="row"><button type="button" class="primary" id="st-save">Save and check</button>
      <button type="button" class="primary" id="st-sync" ${st.has_auth?"":"disabled"}>Sync now</button><span class="note" id="st-msg" role="status"></span></div>
    ${st.has_auth?`<div class="row"><label style="display:flex;gap:8px;align-items:center;font-size:14px"><input type="checkbox" id="st-auto" ${st.auto_sync?"checked":""}> Sync automatically when the app starts, then every 30 minutes (off: the ↻ Update button at the top does it when you want)</label></div>

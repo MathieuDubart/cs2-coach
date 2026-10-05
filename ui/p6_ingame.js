@@ -352,8 +352,8 @@ function liveBar(){if(!D.local)return "";const g=gsiLast,focus=document.body.cla
     <span>Round ${g.round??"—"}${g.score_ct!=null?` · CT ${g.score_ct} - ${g.score_t} T`:""}</span>${g.money!=null?`<span>${money(g.money)}</span>`:""}${liveFocus()}
     ${g.round_phase==="over"?`<span class="tip">5 s: why did this round go that way? Then one long exhale.</span>`:""}<span class="sp">${igManual?`<button type="button" class="close" id="follow">Follow the game</button>`:""}${micBtn()}${fb}</span></div>`;
   const st=gsiStatus;
-  return `<div class="live"><span class="dot" aria-hidden="true"></span>${st&&st.installed?"<span>Detection is on: this page follows your match as soon as you're in game.</span>"
-    :`<span>Pick your map and side, or <a href="#settings" style="color:var(--ct)">turn on game detection</a>: this page will follow your match by itself.</span>`}<span class="sp">${micBtn()}${fb}</span></div>`}
+  return `<div class="live"><span class="dot" aria-hidden="true"></span>${st&&st.installed?"<span>I'm ready. Launch your match: I'll follow it from here.</span>"
+    :`<span>Pick your map and side, or <a href="#settings" style="color:var(--ct)">turn on game detection</a> and I'll follow your match by myself.</span>`}<span class="sp">${micBtn()}${fb}</span></div>`}
 async function gsiPoll(){clearTimeout(gsiTimer);if(!D.local||S.view!=="ingame")return;
   try{const g=await (await fetch("/api/gsi/state")).json();const sig=x=>x?[x.map,x.side,x.round,x.round_phase,x.money,x.bomb,x.age!=null&&x.age<75,JSON.stringify(x.hist||{}),JSON.stringify(x.nades||{}),x.health===0,x.elapsed==null?"":Math.floor(x.elapsed/5),x.pos?x.pos.map(c=>Math.round(c/100)).join(","):"",x.call?x.call.t:""].join("|"):"";
     const before=sig(gsiLast)+(gsiLast&&gsiLast.mic);gsiLast=g&&Object.keys(g).length?g:null;

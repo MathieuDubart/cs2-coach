@@ -27,7 +27,7 @@ function renderPlayers(){
     ${e.top_rule?`<span class="note">Priority: ${esc(e.top_rule)}</span>`:""}</button>`).join("")||`<div class="empty">No player matches.</div>`}</div>
   ${list.length>shown.length?`<div class="btns"><button type="button" id="jmore">Show ${Math.min(24,list.length-shown.length)} more (${list.length-shown.length} left)</button></div>`:""}
   <div class="card"><h3>Analyze any player</h3>
-    <p>${D.local?"Paste their Steam profile link, SteamID64 or custom URL name in the search bar at the top: the analysis runs on your PC.":"In the local version (double-click <code>Coach CS2.bat</code>), paste their Steam profile link or SteamID64 in the search bar at the top. This published page can only show players already analyzed."}</p>
+    <p>${D.local?"Paste their Steam profile link, SteamID64 or custom URL name in the search bar at the top: the analysis runs on your PC.":"In the local version (double-click <code>Wily.bat</code>), paste their Steam profile link or SteamID64 in the search bar at the top. This published page can only show players already analyzed."}</p>
     <p class="note">Demo sources: the ones already downloaded, their recent matchmaking matches via Leetify (about a month), their share codes (<code>--sharecode</code>) or their whole history with their authentication code (<code>--authcode</code>). Without demos, a light profile is built from their Leetify stats.</p></div>`;
   const jf=$("#jf",v);jf.oninput=()=>{jq=jf.value.trim().toLowerCase();jshow=24;const pos=jf.selectionStart;renderPlayers();const n=$("#jf");n.focus();n.setSelectionRange(pos,pos)};
   $$("[data-sort]",v).forEach(b=>b.onclick=()=>{jsort=b.dataset.sort;jshow=24;renderPlayers()});
@@ -87,7 +87,7 @@ async function startAnalysis(q,after){
   $("#qbtn").disabled=true;
   try{const r=await fetch("/api/analyze?q="+encodeURIComponent(q));const j=await r.json();
     if(!r.ok){jobPanel(`<b>${esc(j.error||"Error")}</b>${j.query?` (${esc(j.query)})`:""}`,"err");$("#qbtn").disabled=false;if(r.status===409)poll();return}
-    poll()}catch(e){jobPanel(`<b>The local server doesn't answer.</b> Restart "Coach CS2.bat".`,"err");$("#qbtn").disabled=false}}
+    poll()}catch(e){jobPanel(`<b>The local server doesn't answer.</b> Restart "Wily.bat" and I'll be back.`,"err");$("#qbtn").disabled=false}}
 function poll(){clearTimeout(polling);polling=setTimeout(async()=>{
   let j;try{j=await (await fetch("/api/job")).json()}catch(e){return poll()}
   const logs=(j.log||[]).slice(-60).map(esc).join("\n");
@@ -126,7 +126,7 @@ $("#search").addEventListener("submit",async e=>{e.preventDefault();const q=$("#
   const local=`http://127.0.0.1:8765/?q=${encodeURIComponent(q)}#ingame`;
   jobPanel(`<b>This player isn't in this page yet.</b><p>The analysis runs on your PC. Click below: the local app opens in a new tab and starts the analysis right away (a first preview in seconds, the full profile in a few minutes).</p>
     <p><a href="${esc(local)}" target="_blank" rel="noopener" style="display:inline-block;font:600 15px var(--f-body);padding:8px 14px;background:var(--ink);color:var(--bg);border-radius:3px;text-decoration:none">Analyze on my PC</a></p>
-    <p class="note">The local app must be running: double-click <code>Coach CS2.bat</code> in the app folder, or turn on its automatic start with <code>autostart.bat</code>.</p>`)});
+    <p class="note">I need to be running: double-click <code>Wily.bat</code> in my folder, or turn on its automatic start with <code>autostart.bat</code>.</p>`)});
 
 // ---------- routing ----------
 const RENDER={ingame:renderIngame,prepare:renderPrepare,review:renderReview,profile:renderProfile,analysis:renderAnalysis,routine:renderRoutine,midround:renderMidround,progress:renderProgress,team:renderTeam,matches:renderMatches,maps:renderMaps,players:renderPlayers,pros:renderPros,settings:renderSettings};
@@ -190,7 +190,7 @@ function show(view){view=ALIAS[view]||view;if(!RENDER[view])view="ingame";if(vie
   if(view==="settings"){renderSettings();window.scrollTo(0,0);return}
   if(view==="team"){renderTeam();window.scrollTo(0,0);return}
   // no profile: the welcome (and on a new install, 05/10, everywhere until a first profile)
-  if(!S.player){if(view==="ingame"||view==="review"||!Object.keys(IDX()).length)welcome($("#v-"+view));else $("#v-"+view).innerHTML=`<div class="empty">Pick a profile first: yours from the home page, or anyone in Explore.</div>`;return}
+  if(!S.player){if(view==="ingame"||view==="review"||!Object.keys(IDX()).length)welcome($("#v-"+view));else $("#v-"+view).innerHTML=`<div class="empty">Show me a profile first: yours from the home page, or anyone in Explore.</div>`;return}
   if(!D.players[S.player]){$("#v-"+view).innerHTML=`<div class="empty"><span class="spin" aria-hidden="true"></span>Loading the profile…</div>`;return}
   RENDER[view]();navUpdate(view);window.scrollTo(0,0);
   if(view==="prepare"&&D.local)prepWatch();   // CS2 loads a map: Live takes over

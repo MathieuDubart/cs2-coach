@@ -39,13 +39,13 @@ function navUpdate(view){const g=GROUP[view]||view;
   if(fc){fc.hidden=!F;if(F){fc.textContent="Focus · "+F.short;fc.title="Your focus of the week: see it in Review";fc.onclick=()=>{if(S.player!==D.own){S.view="review";setPlayer(D.own)}else go("review")}}}
   document.body.classList.toggle("ingame",view==="ingame")}
 function welcome(v){const own=D.own;
-  v.innerHTML=`<div class="welcome"><h2>Welcome to CS2 Coach</h2>
-   <p class="lede">The coach analyzes your CS2 matches and follows you at three moments:</p>
+  v.innerHTML=`<div class="welcome"><h2>Hi, I'm Wily</h2>
+   <p class="lede">I watch your CS2 matches and tell you what wins rounds. I'm with you at three moments:</p>
    <ul style="font-size:15px"><li><b>Live</b>: a sheet to keep on a 2nd screen that follows your match (what to buy, where the Ts are likely to go, your paths, your rotations).</li>
      <li><b>Prepare</b>: before you play, a timed warm-up built on your weak points and a 60-second sheet for each map.</li>
      <li><b>Review</b>: after your session or the next day, what changed, why, your focus of the week and what you could test.</li></ul>
    ${D.local&&own?`<p><button type="button" class="primary" id="w-own">Analyze this PC's Steam account</button></p>`:""}
    <form class="search" id="w-form" autocomplete="off"><input id="w-q" type="search" placeholder="Your Steam profile link or SteamID64" aria-label="Your Steam profile link"><button type="submit">Analyze</button></form>
-   <p class="note">${D.local?"The analysis runs on this PC (Steam open, CS2 closed to fetch your latest matches): a first preview in seconds, the full profile in a few minutes.":"The analysis runs in the local app: double-click Coach CS2.bat."} You can also look at any player in <a href="#players" style="color:var(--ct)">Explore</a>.</p></div>`;
+   <p class="note">${D.local?"I work right here on your PC (Steam open, CS2 closed so I can fetch your latest matches): a first look in seconds, your full profile in a few minutes.":"I run in the local app: double-click Wily.bat."} You can also look at any player in <a href="#players" style="color:var(--ct)">Explore</a>.</p></div>`;
   const wo=$("#w-own",v);if(wo)wo.onclick=()=>{partialShown=null;startAnalysis(own)};
   $("#w-form",v).onsubmit=e=>{e.preventDefault();const q=$("#w-q",v).value.trim();if(!q)return;$("#q").value=q;$("#search").requestSubmit()}}
