@@ -5,7 +5,6 @@ With a small config file in CS2's cfg folder, the game sends the live state of Y
 player's own information: no information about opponents. The in-game sheet uses it to follow the match by itself.
 """
 import os
-import re
 import secrets
 import threading
 import time
@@ -28,19 +27,10 @@ HIST = {}   # the match being played: result and side of every round, and where 
 
 
 def cfg_dir():
-    """CS2's cfg folder, found through Steam's library list."""
-    sp = config.steam_path()
-    libs = [sp]
-    try:
-        txt = open(os.path.join(sp, "steamapps", "libraryfolders.vdf"), encoding="utf-8", errors="replace").read()
-        libs += [p.replace("\\\\", "\\") for p in re.findall(r'"path"\s*"([^"]+)"', txt)]
-    except OSError:
-        pass
-    for lib in dict.fromkeys(libs):
-        d = os.path.join(lib, "steamapps", "common", "Counter-Strike Global Offensive", "game", "csgo", "cfg")
-        if os.path.isdir(d):
-            return d
-    return None
+    """CS2's cfg folder (config.cs2_dir: the library Steam installed the game in)."""
+    g = config.cs2_dir()
+    d = os.path.join(g, "game", "csgo", "cfg") if g else None
+    return d if d and os.path.isdir(d) else None
 
 
 def token():

@@ -910,19 +910,24 @@ def build(ids, owner=None):
 def suggestions(sid, limit=8):
     """Likely teammates of a player: partners seen in their team, then players met most often."""
     sid = int(sid)
-    cnt = defaultdict(int)
+    cnt, names = defaultdict(int), {}
     for mid in os.listdir(config.DEEP):
         f = os.path.join(config.DEEP, mid, "samples.parquet")
         if not os.path.exists(f):
             continue
-        s = pd.read_parquet(f, columns=["steamid", "side", "round"])
-        r1 = s[s["round"] == s["round"].min()].drop_duplicates("steamid").set_index("steamid")["side"]
+        try:   # their in-game name too: a teammate not analyzed here is shown by name, not by SteamID (05/10, the beta)
+            s = pd.read_parquet(f, columns=["steamid", "name", "side", "round"])
+        except Exception:   # an older extraction without the names
+            s = pd.read_parquet(f, columns=["steamid", "side", "round"])
+        r1 = s[s["round"] == s["round"].min()].drop_duplicates("steamid").set_index("steamid")
         if sid not in r1.index:
             continue
-        for p, sd in r1.items():
-            if p != sid and sd == r1[sid] and p:
+        for p, row in r1.iterrows():
+            if p != sid and row["side"] == r1.at[sid, "side"] and p:
                 cnt[int(p)] += 1
-    rows = [{"steamid": str(p), "name": config.display_name(p), "together": n,
+                if isinstance(row.get("name"), str) and row["name"]:
+                    names[int(p)] = row["name"]
+    rows = [{"steamid": str(p), "name": config.display_name(p, names.get(p)), "together": n,
              "analyzed": os.path.exists(os.path.join(config.player_dir(p), "advice.json"))} for p, n in cnt.items()]
     rows.sort(key=lambda r: (-r["together"], not r["analyzed"]))
     return rows[:limit]

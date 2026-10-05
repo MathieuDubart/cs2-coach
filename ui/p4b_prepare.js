@@ -77,7 +77,7 @@ function renderPrepare(){
       <div class="pmin"><b>${b.mins}</b><span>min</span></div>
       <div class="pbody"><h4>${esc(b.title)}</h4><p>${esc(b.text)}</p><p class="note">Why: ${esc(b.why)}</p>
        ${b.kind==="nades"?prepNades(p,sel):""}
-       ${b.kind==="train"&&own?`<div class="btns" style="align-items:center"><button type="button" data-ptrain="${i}">▶ Launch on the training server</button><span class="note" id="ptmsg" role="status"></span></div>`:""}</div>
+       ${b.kind==="train"&&own?`<div class="btns" data-ptrainbox style="align-items:center"><button type="button" data-ptrain="${i}">▶ Launch on the training server</button><span class="note" id="ptmsg" role="status"></span></div>`:""}</div>
       <div class="pact">${done?`<button type="button" data-pundo="${i}" title="Mark it not done">✓ Done</button>`:cur?`<b class="ptime" id="ptime">${fmtLeft(left)}</b><button type="button" data-pdone="${i}">Done</button>`:`<button type="button" class="primary" data-pstart="${i}">Start</button>`}</div></li>`};
   const step2=()=>`<section class="prep2"><ol class="prep-prog">${B.map(block).join("")}</ol>
     <div class="btns"><button type="button" data-pstep="3">I'm ready →</button></div>
@@ -106,7 +106,7 @@ function renderPrepare(){
       if(msg)msg.textContent=`${r.blocks.map(x=>`${BLOCK[x.kind]} ${Math.round(x.seconds/60)}′`).join(" → ")}: CS2 joins the server, follow the screen.`;
       PREP.tick=null;setTimeout(()=>{if(S.view==="prepare")renderPrepare()},6000)}
     catch(e){if(msg)msg.textContent="Failed: "+e.message;b.disabled=false}});
-  copyBtn(v);wireCheckin(v,p);wireFocus(v,p,renderPrepare);
+  copyBtn(v);wireCheckin(v,p);wireFocus(v,p,renderPrepare);prepTrainCheck(v);
   if(st.cur!=null&&st.t0&&B[st.cur]){const b=B[st.cur];   // the block running: its clock, and done when it reaches zero
     PREP.tick=setInterval(()=>{const t=$("#ptime",v);if(!t||S.view!=="prepare"){clearInterval(PREP.tick);return}
       const left=b.mins*60-(Date.now()-st.t0)/1000;t.textContent=fmtLeft(left);if(left<=0){clearInterval(PREP.tick);finish(st.cur)}},1000)}}
@@ -115,3 +115,16 @@ function prepWatch(){clearTimeout(PREP.watch);if(S.view!=="prepare"||!D.local)re
   fetch("/api/gsi/state").then(r=>r.json()).then(g=>{if(S.view!=="prepare")return;
     if(g&&g.map&&!g.practice&&(g.age==null||g.age<30)&&g.map_phase&&g.map_phase!=="gameover"){if(D.own&&S.player!==D.own){S.view="ingame";setPlayer(D.own)}else go("ingame");return}
     PREP.watch=setTimeout(prepWatch,3000)}).catch(()=>{PREP.watch=setTimeout(prepWatch,6000)})}
+
+// the training server not on this PC yet (a player's copy of the app, 05/10): installed from the warm-up's block, which
+// then launches it
+async function prepTrainCheck(v){const box=$("[data-ptrainbox]",v);if(!box||!D.local)return;
+  let st;try{const r=await fetch("/api/train/status");if(!r.ok)return;st=await r.json()}catch(e){return}
+  if(typeof st.installed!=="boolean"||!box.isConnected||S.view!=="prepare")return;   // an older local server: the launch button stays
+  if(st.installed){if(!$("[data-ptrain]",box))renderPrepare();return}
+  const ins=st.install||{};
+  box.innerHTML=ins.running?`<span class="note"><span class="spin" aria-hidden="true"></span>Installing the training server: ${esc(ins.log||"…")}</span>`
+    :`<button type="button" class="primary" data-pinstall>Install the training server</button><span class="note" role="status">${ins.error?`Failed: ${esc(ins.error)}`:"Once, a few minutes: a separate copy of CS2 next to the game, its files linked (no extra space, the game itself untouched)."}</span>`;
+  const b=$("[data-pinstall]",box);
+  if(b)b.onclick=async()=>{b.disabled=true;try{await api("/api/train/install",{})}catch(e){b.disabled=false;$(".note",box).textContent="Failed: "+e.message;return}prepTrainCheck(v)};
+  if(ins.running)setTimeout(()=>prepTrainCheck(v),2500)}

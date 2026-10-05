@@ -13,3 +13,5 @@ __pycache__/
 *.bz2
 *.rar
 *.part
+# The players' packages (make_beta.py)
+dist/

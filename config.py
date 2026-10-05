@@ -41,6 +41,42 @@ def logged_in_account():
     return (best[1], best[2]) if best else (None, None)
 
 
+def cs2_dir():
+    """CS2's install folder on any PC, found through Steam's library list: the library Steam installed it in (its
+    appmanifest_730.acf) with the game in it. A library can keep an old partial copy (here 19 GB on C: without cs2.exe)."""
+    sp = steam_path()
+    libs = [sp]
+    try:
+        txt = open(os.path.join(sp, "steamapps", "libraryfolders.vdf"), encoding="utf-8", errors="replace").read()
+        libs += [p.replace("\\\\", "\\") for p in re.findall(r'"path"\s*"([^"]+)"', txt)]
+    except OSError:
+        pass
+    found = []
+    for lib in dict.fromkeys(libs):
+        d = os.path.join(lib, "steamapps", "common", "Counter-Strike Global Offensive")
+        if os.path.isdir(os.path.join(d, "game", "csgo")):
+            found.append((os.path.exists(os.path.join(lib, "steamapps", "appmanifest_730.acf"))
+                          and os.path.exists(os.path.join(d, "game", "bin", "win64", "cs2.exe")), d))
+    return max(found, key=lambda f: f[0])[1] if found else None
+
+
+def cs2server_dir():
+    """The training server's folder: set by COACH_CS2SERVER or in the settings, else E:\\CS2Server where it was made
+    first, else next to the game on its drive (its files are hard links to the game's: the same drive)."""
+    p = os.environ.get("COACH_CS2SERVER") or settings().get("cs2server")
+    if p:
+        return p
+    if os.path.isdir(r"E:\CS2Server"):
+        return r"E:\CS2Server"
+    g = cs2_dir()
+    return os.path.join(os.path.splitdrive(g)[0] + os.sep, "CS2CoachServer") if g else os.path.join(HERE, "CS2CoachServer")
+
+
+def role():
+    """"client": a player's own copy of the app (the beta, 05/10); the base grows on the coach's server only."""
+    return settings().get("role") or "server"
+
+
 # ---------- files shared between the server, its threads and the worker processes ----------
 def _retry(fn, what, tries=100, wait=0.05):
     """Windows: a file open in another process can't be replaced or is being replaced: wait a little."""

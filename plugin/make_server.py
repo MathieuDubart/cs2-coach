@@ -3,17 +3,27 @@
 The game's files are hard-linked (no copy, no space; read-only for the server), except the ones a server could write:
 the cfg folder and gameinfo.gi are real copies, console.log, logs and replays are left out. Metamod:Source and
 CounterStrikeSharp go into the copy only (addons), and the copy's gameinfo.gi loads Metamod. The game itself never sees
-any of it. Run again after a CS2 update: new files are linked, the rest stays. Then plugin/build.py puts the coach's
-replay plugin in it."""
+any of it. Run again after a CS2 update: new files are linked, the rest stays. The coach's replay plugin goes in too
+(plugin/CoachReplay/bin/out: built by plugin/build.py, shipped built to the players who don't build it).
+
+Any PC (05/10, the beta): the game is found through Steam's libraries, the server goes next to it on its drive (hard
+links only work on one NTFS drive), or where COACH_CS2SERVER or the settings' "cs2server" say."""
 import os
 import re
 import shutil
 import sys
 import zipfile
 
-SRC = os.environ.get("COACH_CS2", r"E:\SteamLibrary\steamapps\common\Counter-Strike Global Offensive")
-DST = os.environ.get("COACH_CS2SERVER", r"E:\CS2Server")
-HERE = os.environ.get("COACH_SERVER_ZIPS", r"E:\dev	ools")   # mmsource.zip (Metamod:Source 2.0) and css-runtime.zip (CounterStrikeSharp with runtime)
+HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, os.path.dirname(HERE))
+import config  # noqa: E402
+
+SRC = os.environ.get("COACH_CS2") or config.cs2_dir()
+DST = config.cs2server_dir()
+# mmsource.zip (Metamod:Source 2.0) and css-runtime.zip (CounterStrikeSharp with runtime): next to this file in the
+# players' copy, in E:\dev\tools on the coach's PC
+ZIPS = [d for d in (os.environ.get("COACH_SERVER_ZIPS"), HERE, os.path.join(os.path.dirname(os.path.dirname(HERE)), "tools")) if d]
+PLUGIN = os.path.join(HERE, "CoachReplay", "bin", "out")
 SKIP_DIRS = {os.path.normcase(os.path.join("game", "csgo", d)) for d in ("replays", "logs", "addons", "demoheaders")}
 COPY_DIRS = {os.path.normcase(os.path.join("game", "csgo", "cfg"))}
 COPY_FILES = {os.path.normcase(os.path.join("game", "csgo", "gameinfo.gi"))}
@@ -22,13 +32,42 @@ SKIP_FILES = {os.path.normcase(os.path.join("game", "csgo", "console.log"))}
 
 def current():
     """The server copy has the game's version (an update replaces the game's files: the links then point to the old ones)."""
+    if not SRC:
+        return False
     try:
         return os.path.samefile(os.path.join(SRC, "game", "csgo", "steam.inf"), os.path.join(DST, "game", "csgo", "steam.inf"))
     except OSError:
         return False
 
 
-def main():
+def _zip(name):
+    for d in ZIPS:
+        p = os.path.join(d, name)
+        if os.path.exists(p):
+            return p
+    raise RuntimeError(f"{name} is missing (Metamod:Source and CounterStrikeSharp go next to plugin/make_server.py)")
+
+
+def plugin():
+    """The coach's plugin in the server, when it is missing or an older build. -> True when copied."""
+    src = os.path.join(PLUGIN, "CoachReplay.dll")
+    dst = os.path.join(DST, "game", "csgo", "addons", "counterstrikesharp", "plugins", "CoachReplay")
+    if not os.path.exists(src):
+        return False
+    if os.path.exists(os.path.join(dst, "CoachReplay.dll")) and os.path.getmtime(os.path.join(dst, "CoachReplay.dll")) >= os.path.getmtime(src):
+        return False
+    os.makedirs(dst, exist_ok=True)
+    for f in ("CoachReplay.dll", "CoachReplay.pdb"):
+        if os.path.exists(os.path.join(PLUGIN, f)):
+            shutil.copy2(os.path.join(PLUGIN, f), dst)
+    return True
+
+
+def main(log=print):
+    if not SRC or not os.path.isdir(os.path.join(SRC, "game", "csgo")):
+        raise RuntimeError("CS2 was not found in Steam's libraries: install it, then try again")
+    if os.path.splitdrive(os.path.abspath(SRC))[0].lower() != os.path.splitdrive(os.path.abspath(DST))[0].lower():
+        raise RuntimeError(f"The training server must be on CS2's drive ({os.path.splitdrive(SRC)[0]}): its files are links to the game's, not copies")
     linked = copied = 0
     for root, dirs, files in os.walk(SRC):
         rel = os.path.relpath(root, SRC)
@@ -59,18 +98,27 @@ def main():
                 shutil.copy2(s, d)
                 copied += 1
             else:
-                os.link(s, d)
+                try:
+                    os.link(s, d)
+                except OSError as e:
+                    raise RuntimeError(f"The game's files can't be linked there ({e.strerror}): the training server needs CS2's drive, in NTFS") from e
                 linked += 1
+            if (linked + copied) % 2000 == 0:
+                log(f"Linking the game's files: {linked + copied}…")
     csgo = os.path.join(DST, "game", "csgo")
     for z, sub_dir in (("mmsource.zip", "metamod"), ("css-runtime.zip", "counterstrikesharp")):
         if not os.path.isdir(os.path.join(csgo, "addons", sub_dir)):
-            zipfile.ZipFile(os.path.join(HERE, z)).extractall(csgo)
+            log(f"Adding {'Metamod:Source' if sub_dir == 'metamod' else 'CounterStrikeSharp'}…")
+            zipfile.ZipFile(_zip(z)).extractall(csgo)
     gi = os.path.join(csgo, "gameinfo.gi")
     t = open(gi, encoding="utf-8").read()
     if "csgo/addons/metamod" not in t:
         t = re.sub(r"(\n(\s*)Game\s+csgo\s*\n)", r"\n\2Game\tcsgo/addons/metamod\1", t, count=1)
         open(gi, "w", encoding="utf-8").write(t)
-    print(f"linked {linked}, copied {copied}; metamod in gameinfo: {'csgo/addons/metamod' in open(gi, encoding='utf-8').read()}")
+    new_plugin = plugin()
+    log(f"linked {linked}, copied {copied}; metamod in gameinfo: {'csgo/addons/metamod' in open(gi, encoding='utf-8').read()}"
+        f"{'; the coach plugin added' if new_plugin else ''}")
+    return {"linked": linked, "copied": copied, "plugin": new_plugin}
 
 
 if __name__ == "__main__":

@@ -345,4 +345,6 @@ def main():
 
 
 if __name__ == "__main__":
+    if config.role() == "client":   # the base grows on the coach's server only (05/10, the beta)
+        sys.exit("a player's copy of the app: the base grows on the coach's server")
     main()

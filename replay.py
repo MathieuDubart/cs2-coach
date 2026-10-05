@@ -12,9 +12,12 @@ Nothing here touches the game: the server is its own copy, and the game joins it
 import json
 import os
 import secrets
+import shutil
 import socket
 import struct
 import subprocess
+import sys
+import threading
 import time
 
 import numpy as np
@@ -22,7 +25,7 @@ import pandas as pd
 
 import config
 
-SERVER = os.environ.get("COACH_CS2SERVER", r"E:\CS2Server")
+SERVER = config.cs2server_dir()   # COACH_CS2SERVER, the settings, or next to the game (any PC)
 EXE = os.path.join(SERVER, "game", "bin", "win64", "cs2.exe")
 CSGO = os.path.join(SERVER, "game", "csgo")
 COACH = os.path.join(CSGO, "coach")   # scenarios/, results.jsonl, live.json (the plugin's heartbeat)
@@ -57,12 +60,26 @@ def _item(name):
 
 # ---------------------------------------------------------------- the situations
 
+# a player's history (05/10, the beta): the demos of the base's matches stay on the coach's PC (200-300 MB each), their
+# situations come built from them (make_beta.py), one folder per match
+PREBUILT = os.path.join(config.OUT, "scenarios")
+
+
+def _has_demo(mid):
+    return os.path.exists(os.path.join(config.CACHE, f"{mid}.dem"))
+
+
+def _prebuilt(mid, rnd, kind):
+    f = os.path.join(PREBUILT, str(mid), f"{mid}_r{int(rnd)}_{kind[0]}.json")
+    return f if os.path.exists(f) else None
+
+
 def _own_matches(sid, n=15):
     md = os.path.join(config.player_dir(sid), "matches")
     out = []
     for mid in os.listdir(md) if os.path.isdir(md) else []:
         deep = os.path.join(config.OUT, "deep", mid)
-        if os.path.exists(os.path.join(config.CACHE, f"{mid}.dem")) and os.path.exists(os.path.join(deep, "duels.parquet")):
+        if (_has_demo(mid) or os.path.isdir(os.path.join(PREBUILT, mid))) and os.path.exists(os.path.join(deep, "duels.parquet")):
             try:
                 st = json.load(open(os.path.join(md, mid, "stats.json"), encoding="utf-8"))
             except (OSError, ValueError):
@@ -112,6 +129,8 @@ def scenarios(sid, n=15):
             out.append({"id": f"{mid}_r{int(r)}_c", "mid": mid, "map": mp, "round": int(r), "kind": "clutch",
                         "t": round(float(last.t), 1), "side": side, "zone": last.victim_zone, "vs": foes,
                         "mine": me.primary.get(r) or me.pistol.get(r), "won": False, "score": {1: 5, 2: 4}.get(foes, 3)})
+    # a match without its demo (the player's history): only the situations built on the coach's PC
+    out = [s for s in out if _has_demo(s["mid"]) or _prebuilt(s["mid"], s["round"], s["kind"])]
     return sorted(out, key=lambda s: (-s["score"], -int(s["mid"]), s["round"]))
 
 
@@ -120,6 +139,12 @@ def scenarios(sid, n=15):
 def build(sid, mid, rnd, kind="death", t=None):
     from demoparser2 import DemoParser
     sid, mid, rnd = str(sid), str(mid), int(rnd)
+    pre = None if _has_demo(mid) else _prebuilt(mid, rnd, kind)
+    if pre:   # a match of the player's history: built on the coach's PC
+        sc = json.load(open(pre, encoding="utf-8"))
+        os.makedirs(SCEN, exist_ok=True)
+        shutil.copyfile(pre, os.path.join(SCEN, f"{sc['id']}.json"))
+        return sc
     deep = os.path.join(config.OUT, "deep", mid)
     R = pd.read_parquet(os.path.join(deep, "rounds.parquet")).set_index("round")
     D = pd.read_parquet(os.path.join(deep, "duels.parquet"))
@@ -402,7 +427,7 @@ def status():
     up = _pid_alive(s.get("pid"))
     h = heartbeat() if up else None
     h = h or {}
-    return {"installed": installed(), "running": up, "map": (h.get("map") or s.get("map")) if up else None,
+    return {"installed": installed(), "install": dict(INSTALL), "path": SERVER, "running": up, "map": (h.get("map") or s.get("map")) if up else None,
             "humans": h.get("humans", 0), "scenario": h.get("scenario"), "state": h.get("state"),
             "session": {k: h.get(k) for k in ("session", "block", "drill", "points", "ok", "done", "streak", "left")} if h.get("session") else None,
             "connect": f"connect 127.0.0.1:{PORT}"}
@@ -410,17 +435,40 @@ def status():
 
 def _update():
     """After a CS2 update the server copy still links the old files (the game would refuse it): linked again first."""
-    import sys
     sys.path.insert(0, os.path.join(config.HERE, "plugin"))
     import make_server
     if not make_server.current():
         make_server.main()
+    make_server.plugin()   # a newer build of the coach's plugin (an update of the app)
+
+
+INSTALL = {"running": False, "log": None, "error": None}
+
+
+def install():
+    """The training server made on this PC from the app (05/10, the beta: a player without plugin/make_server.py at
+    hand): CS2's files linked next to the game (no copy, a few minutes), Metamod, CounterStrikeSharp and the plugin."""
+    if INSTALL["running"]:
+        return status()
+
+    def run():
+        try:
+            sys.path.insert(0, os.path.join(config.HERE, "plugin"))
+            import make_server
+            make_server.main(log=lambda m: INSTALL.update(log=m))
+        except Exception as e:
+            INSTALL["error"] = str(e) or type(e).__name__
+        finally:
+            INSTALL["running"] = False
+    INSTALL.update(running=True, error=None, log="Starting…")
+    threading.Thread(target=run, daemon=True).start()
+    return status()
 
 
 def start(mp):
     """The server on this map (started hidden, or its map changed); back when it answers."""
     if not installed():
-        raise RuntimeError("training server not installed (tools/make_server.py, then the CoachReplay plugin)")
+        raise RuntimeError("The training server is not installed yet: install it from the Prepare page")
     s = _state()
     if _pid_alive(s.get("pid")):
         if s.get("map") != mp:

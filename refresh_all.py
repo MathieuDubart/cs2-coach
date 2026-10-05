@@ -140,6 +140,8 @@ def _tside():
 
 
 def base_steps():
+    if config.role() == "client":   # a player's copy: the base's references come with the app's updates, from the full base
+        return []
     import leetify
     import midround
     import nades

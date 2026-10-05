@@ -226,11 +226,19 @@ function trainDiff(){try{return +(localStorage.getItem("coach_diff")??2)}catch(e
 function tPref(k,d){try{return localStorage.getItem("coach_t"+k)??d}catch(e){return d}}
 function tSet(k,v){try{localStorage.setItem("coach_t"+k,v)}catch(e){}}
 const BLOCK={defend:"🛡 Defense",push:"🚶 Push",aim:"🎯 Aim",nade:"💨 Stuff",situation:"🔁 Situations"};
+// not on this PC yet (a player's copy of the app, 05/10): made from the app, CS2's files linked next to the game
+function trainInstall(box,sid,st){const ins=st.install||{};
+  box.innerHTML=`<div class="tinstall"><p><b>The training server isn't on this PC yet.</b> It is a separate copy of CS2 next to the game, where bots replay real situations of your matches. Its files are links to the game's: no extra space, and the game itself is never touched. Metamod:Source, CounterStrikeSharp and the coach's plugin go in that copy only. It takes a few minutes.</p>
+   ${ins.running?`<p class="note"><span class="spin" aria-hidden="true"></span>${esc(ins.log||"Installing…")}</p>`:`${ins.error?`<p class="note">Failed: ${esc(ins.error)}</p>`:""}<div class="btns"><button type="button" class="primary" id="t-install">Install the training server</button></div>`}
+   ${st.path?`<p class="note">Folder: <code>${esc(st.path)}</code></p>`:""}</div>`;
+  const b=box.querySelector("#t-install");
+  if(b)b.onclick=async()=>{b.disabled=true;try{await api("/api/train/install",{})}catch(e){b.disabled=false;b.insertAdjacentHTML("afterend",`<span class="note">${esc(e.message)}</span>`);return}trainLoad(box,sid)};
+  if(ins.running)TRAIN.timer=setTimeout(()=>{if(box.isConnected)trainLoad(box,sid)},2500)}
 async function trainLoad(box,sid){clearTimeout(TRAIN.timer);
   let d;try{d=await (await fetch("/api/train?sid="+sid)).json()}catch(e){box.innerHTML=`<span class="note">The local server doesn't answer.</span>`;return}
   if(!box.isConnected)return;
   const st=d.status||{},R=d.results||{},sc=d.scenarios||[],P=d.progress||{level:1,xp:0,from:0,to:300,due:{}},M=d.maps||{},ss=st.session;
-  if(!st.installed){box.innerHTML=`<span class="note">Training server not installed (plugin/make_server.py, then plugin/build.py).</span>`;return}
+  if(!st.installed){trainInstall(box,sid,st);return}
   // the bots' level and the warm-up preselected from your last sessions and matches, unless you chose them in the last
   // 12 hours (04/10: "the bots' level preselected from my level in training")
   const sg=P.suggest||null,chose=Date.now()-(+tPref("at","0"))<12*3600e3;
@@ -295,6 +303,9 @@ let steamForget=false;
 // those, until the target; paused while you play
 function growCard(g){
   if(!g)return "";
+  if(g.client){const pk=g.pack||{};
+    return `<article class="card"><h3>The base: ${pk.matches?Number(pk.matches).toLocaleString():"?"} matches <span class="pill">from the coach's server</span></h3>
+   <p>The references you are compared with, the lineups and their groups, the T side's plays, the weapons and the training's real attacks come from the full base${pk.built?`, as it was on ${esc(new Date(pk.built*1000).toLocaleDateString())}`:""}. Your own matches are downloaded and analyzed on this PC; a new version of the app brings the base as it grew.</p></article>`}
   const n=g.n||0,t=g.target||5000,pct=Math.min(100,Math.round(n/t*100)),ok=(g.counts||{}).ok||0;
   return `<article class="card"><h3>The base: ${n} matches ${g.on?`<span class="pill strong">${g.alive?"growing":"starting"}</span>`:`<span class="pill">stopped</span>`}</h3>
    <p>The players of your matches, their recent matchmaking games (from Leetify, for the players who use it: all of their last month), then the players of those matches, and so on until the target: more duels, grenades and real hits to compare you with and to train on.</p>
@@ -309,6 +320,12 @@ function refreshCard(r){
   const pb=r.phase==="profiles"?`profiles ${r.profiles_done||0}/${r.profiles_total||0}`:`the base's references ${r.steps_done||0}/${r.steps_total||0}`;
   const pct=r.phase==="profiles"?Math.round(100*(r.profiles_done||0)/Math.max(1,r.profiles_total||1)):Math.round(100*(r.steps_done||0)/Math.max(1,r.steps_total||1));
   const state=run?`${r.paused?`paused: ${esc(r.paused)}`:`${esc(r.current||"…")}`} · ${pb}`:r.finished?`last update ${ago(r.finished)}${r.stopped?" (stopped)":""} · ${r.profiles_done||0}/${r.profiles_total||0} profiles`:"never run";
+  if(r.client)return `<article class="card" id="rf-card"><h3>Update my profile ${run?`<span class="pill strong">updating</span>`:""}</h3>
+   <p>Your profile and your team's analyzed again against the base's references that came with this version of the app: plan, pages, training.</p>
+   ${run?`<div style="height:8px;background:var(--line);border-radius:4px;overflow:hidden;margin:6px 0"><div style="width:${pct}%;height:100%;background:var(--ct)"></div></div>`:""}
+   <p class="note">${state}</p>
+   ${(r.errors||[]).length?`<p class="note">Failed: ${(r.errors||[]).map(esc).join(" · ")}</p>`:""}
+   <div class="btns">${run?`<button type="button" id="rf-stop">Stop</button>`:`<button type="button" class="primary" id="rf-mine">Update my profile</button>`}</div></article>`;
   return `<article class="card" id="rf-card"><h3>Update the app with the base ${run?`<span class="pill strong">updating</span>`:""}</h3>
    <p>The base grows every day: the lineups and their groups, the references you are compared with, the T side's plays, the weapons, the training's sites, held spots and real attacks, the pro catalog are computed again from it, then your profile, your team's, and every other analyzed player's (their analysis against the base, their plan and pages).</p>
    ${run?`<div style="height:8px;background:var(--line);border-radius:4px;overflow:hidden;margin:6px 0"><div style="width:${pct}%;height:100%;background:var(--ct)"></div></div>`:""}

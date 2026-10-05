@@ -245,6 +245,7 @@ table.lc{border-collapse:collapse;font-variant-numeric:tabular-nums;min-width:64
 .tbig{font:700 20px var(--f-display);padding:10px 34px;border-radius:var(--radius);background:var(--accent,#e0a030);color:#111;border:0;cursor:pointer}
 .tbig:disabled{opacity:.5}
 .tlive{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:8px 12px;border-radius:var(--radius);background:color-mix(in srgb,var(--good,#3ba55d) 14%,transparent);font:600 14px var(--f-body)}
+.tinstall{display:grid;gap:8px;max-width:72ch}.tinstall p{margin:0}
 .tlive>b{color:var(--good,#3ba55d)}
 .tcarte>summary{cursor:pointer;font-weight:600;margin:6px 0}
 .tcarte{display:grid;gap:8px}

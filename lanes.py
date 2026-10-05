@@ -45,7 +45,7 @@ def geo(rebuild=False):
     if os.path.exists(GEO) and not rebuild:
         try:
             cur = json.load(open(GEO, encoding="utf-8"))
-            if cur.get("_n") == n:
+            if cur.get("_n") == n or config.role() == "client":   # a player's copy: the full base's, not its own few demos' (05/10)
                 return cur
         except (OSError, ValueError):
             pass

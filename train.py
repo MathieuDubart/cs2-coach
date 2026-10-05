@@ -632,9 +632,13 @@ def _land(mp, typ, pos):
     bouncing molotov of the group can land 300 u from it (03/10). With its height when the demo it comes from is here
     (its detonation point): x, y, z; else x, y."""
     if mp not in _LANDS:
+        f = os.path.join(config.OUT, "population", "nades.parquet")
+        cols = ["map", "match", "round", "type", "X", "Y", "land_px", "land_py"]
         try:
-            N = pd.read_parquet(os.path.join(config.OUT, "population", "nades.parquet"),
-                                columns=["map", "match", "round", "type", "X", "Y", "land_px", "land_py"])
+            try:   # a player's copy: each throw's landing came with the base, its demo stays on the coach's PC (05/10)
+                N = pd.read_parquet(f, columns=cols + ["land_X", "land_Y", "land_Z"])
+            except Exception:
+                N = pd.read_parquet(f, columns=cols)
             _LANDS[mp] = N[N["map"] == mp]
         except Exception:
             _LANDS[mp] = None
@@ -644,6 +648,10 @@ def _land(mp, typ, pos):
     m = N[(N.type == typ) & ((N.X - pos[0]).abs() < 1) & ((N.Y - pos[1]).abs() < 1)]
     if not len(m):
         return None
+    if "land_X" in m and m.land_X.notna().any():
+        q = m[m.land_X.notna() & m.land_Z.notna()][["land_X", "land_Y", "land_Z"]].to_numpy(float)[:5]
+        if len(q):
+            return [round(float(v), 1) for v in np.median(q, axis=0)]
     pts = []
     for mid, rnd in zip(m["match"].astype(str), m["round"]):   # the same throw in its demo: x, y and z
         try:

@@ -123,7 +123,7 @@ def summary(force=False):
     if not force and os.path.exists(OUT):
         try:
             c = json.load(open(OUT, encoding="utf-8"))
-            if c.get("sig") == sig:
+            if c.get("sig") == sig or config.role() == "client":   # a player's copy: the full base's, not its own few demos' (05/10)
                 return c["maps"]
         except (OSError, ValueError):
             pass

@@ -62,7 +62,8 @@ def grow_status():
     return {"on": bool(c.get("on")), "target": int(c.get("target") or 5000), "alive": grow_alive(), "status": st.get("status"),
             "n": st.get("n"), "codes": len(st.get("codes") or []), "players": len(st.get("players") or []),
             "looked": len(st.get("looked") or {}), "counts": st.get("counts") or {}, "updated": st.get("updated"),
-            "free_gb": round(shutil.disk_usage(config.CACHE).free / 2 ** 30), "log": tail}
+            "free_gb": round(shutil.disk_usage(config.CACHE).free / 2 ** 30), "log": tail,
+            "client": config.role() == "client", "pack": config.read_json(os.path.join(config.OUT, "base_pack.json"), None)}
 
 
 REFRESH = os.path.join(config.OUT, "refresh.json")
@@ -84,6 +85,7 @@ def refresh_status():
     st["alive"] = refresh_alive()
     if not st["alive"]:
         st["running"] = False
+    st["client"] = config.role() == "client"
     return st
 
 
@@ -242,6 +244,9 @@ class Handler(BaseHTTPRequestHandler):
         if u.path == "/api/gsi/status":
             import gsi
             return self.send(200, gsi.status())
+        if u.path == "/api/train/status":   # installed, installing, running (Prepare's warm-up asks before offering it)
+            import replay
+            return self.send(200, replay.status())
         if u.path == "/api/train":   # the training server, your situations to play again, your tries
             import replay
             sid = (q.get("sid") or [""])[0] or str(config.settings().get("own_steamid") or "")
@@ -416,6 +421,10 @@ class Handler(BaseHTTPRequestHandler):
                         return self.send(400, {"error": "invalid map"})
                     diff = int(body["diff"]) if body.get("diff") is not None else 2
                     return self.send(200, train.play(sid, minutes, where, diff))
+                if act == "install":   # a player's PC: CS2's files linked next to the game, Metamod, CounterStrikeSharp, the plugin
+                    if config.in_match():
+                        return self.send(409, {"error": "A match is running: install after it."})
+                    return self.send(200, replay.install())
                 if act == "stop":
                     return self.send(200, replay.stop())
                 if act == "join":   # the game back on the session's server (it crashed or was closed meanwhile, 04/10)
@@ -451,6 +460,8 @@ class Handler(BaseHTTPRequestHandler):
                 target = max(100, min(20000, int(body.get("target") or 5000)))
             except (TypeError, ValueError):
                 return self.send(400, {"error": "invalid target"})
+            if on and config.role() == "client":
+                return self.send(403, {"error": "The base grows on the coach's server: its references come with the app's updates."})
             config.write_json(GROW_CTL, {"on": on, "target": target})
             if on:
                 grow_start()
@@ -697,7 +708,7 @@ if __name__ == "__main__":
         threading.Thread(target=voice_watch, daemon=True).start()
         import chatcalls
         threading.Thread(target=chatcalls.watch, daemon=True).start()   # numpad keys of the paths: the focus
-        if (config.read_json(GROW_CTL, {}) or {}).get("on"):   # the base was growing: it goes on
+        if config.role() != "client" and (config.read_json(GROW_CTL, {}) or {}).get("on"):   # the base was growing: it goes on
             threading.Timer(60, grow_start).start()
     if "--no-browser" not in sys.argv:
         webbrowser.open(url)
