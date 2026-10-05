@@ -411,3 +411,18 @@ details.rlayers .btns{margin-top:6px}
 .teamchip{font-size:12.5px}.teamchip.on{color:var(--good);border-color:var(--good)}
 .vsit.dead span{color:var(--muted)}.vsit.dead b{color:var(--warn)}
 .vnext{margin-top:6px;font:600 15px var(--f-display);letter-spacing:.02em;color:var(--muted)}.vnext b{color:var(--ink);text-transform:uppercase}
+
+/* the bar's right side (05/10): the focus, Update, your account like a signed-in account, the settings */
+.bar-right{display:flex;align-items:center;gap:10px;margin-left:auto}
+.acct{position:relative}
+.acct-btn{display:flex;align-items:center;gap:8px;font:600 13.5px var(--f-body);color:var(--ink);background:transparent;border:1px solid var(--line);border-radius:999px;padding:2px 10px 2px 3px;cursor:pointer;max-width:230px}
+.acct-btn:hover,.acct-btn[aria-expanded="true"]{border-color:var(--ct)}
+.acct-btn .av{width:26px;height:26px;border-radius:50%;object-fit:cover;flex:none}
+.acct-btn .ini{display:grid;place-items:center;background:var(--chip);font:700 14px var(--f-display);color:var(--ink)}
+.acct-btn .an{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.acct-btn .caret{color:var(--muted);font-size:11px}
+.acct-menu{position:absolute;right:0;top:calc(100% + 6px);min-width:230px;background:var(--panel);border:1px solid var(--line);border-radius:6px;box-shadow:0 10px 30px rgba(0,0,0,.35);padding:6px;display:grid;z-index:30}
+.acct-menu[hidden]{display:none}
+.acct-menu a{font:500 14px var(--f-body);color:var(--ink);text-decoration:none;padding:7px 10px;border-radius:4px}
+.acct-menu a:hover,.acct-menu a:focus-visible{background:var(--chip);outline:none}
+@media (max-width:900px){.acct-btn .an,.acct-btn .caret{display:none}.acct-btn{padding:2px}}

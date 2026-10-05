@@ -7,13 +7,16 @@
     <a href="#players" data-view="players" title="Players, pros, your team">Explore</a>
   </nav>
   <span class="whochip" id="whochip"></span>
-  <button type="button" class="focuschip" id="focuschip" hidden></button>
-  <button type="button" class="upd" id="updbtn" hidden title="Fetch your new matches from Steam and analyze them">↻ Update</button>
   <form class="search" id="search" role="search" autocomplete="off">
     <input id="q" name="q" type="search" placeholder="Steam link, SteamID64, name or CSGO-… share code" aria-label="Find a player: Steam profile link, SteamID64 or name">
     <button type="submit" id="qbtn">Analyze</button>
   </form>
-  <a href="#settings" class="gear" data-view="settings" aria-label="Settings" title="Settings: Steam, game detection, microphone">⚙</a>
+  <div class="bar-right">
+    <button type="button" class="focuschip" id="focuschip" hidden></button>
+    <button type="button" class="upd" id="updbtn" hidden title="Fetch your new matches from Steam and analyze them">↻ Update</button>
+    <div class="acct" id="acct" hidden><button type="button" class="acct-btn" id="acctbtn" aria-haspopup="menu" aria-expanded="false"></button><div class="acct-menu" id="acctmenu" role="menu" hidden></div></div>
+    <a href="#settings" class="gear" data-view="settings" aria-label="Settings" title="Settings: Steam, game detection, microphone">⚙</a>
+  </div>
 </div><div class="subnav" id="subnav" hidden></div></div>
 <div class="jobpanel" id="job" hidden><div class="in" role="status" aria-live="polite"></div></div>
 <main>

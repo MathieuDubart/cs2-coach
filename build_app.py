@@ -104,6 +104,7 @@ def index_entry(p):
         rec[m["result"]] += 1
     bench = p["advice"].get("bench") or {}
     return {"steamid": p["steamid"], "name": p["name"], "vanity": p.get("vanity"), "light": p["light"],
+            "avatar": (p["advice"].get("steam") or {}).get("avatar"),   # the bar's account (05/10)
             "minimal": bool(p["advice"].get("minimal")), "n": len(ms),
             "maps": maps, "last": ms[0]["time"] if ms else None, "kd": round(k / d, 2) if d else None,
             "adr": round(sum(m["sum"]["adr"] * m["rounds"] for m in ms) / max(sum(m["rounds"] for m in ms), 1), 1) if ms else None,

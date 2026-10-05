@@ -222,6 +222,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send(200, voice.devices())
             except Exception as e:
                 return self.send(200, {"error": str(e)})
+        if u.path == "/api/account":   # your Steam name and avatar for the bar (05/10)
+            return self.send(200, account())
         if u.path == "/api/gsi/state":
             import gsi
             s = gsi.state()
@@ -419,8 +421,7 @@ class Handler(BaseHTTPRequestHandler):
                 if act == "join":   # the game back on the session's server (it crashed or was closed meanwhile, 04/10)
                     if not replay.status().get("running"):
                         return self.send(409, {"error": "The training server is not running."})
-                    import threading
-                    import train
+                    import train   # threading is the module's (a local import made it local to the whole handler: Update failed, 05/10)
                     threading.Thread(target=train._connect, daemon=True).start()
                     return self.send(200, replay.status())
                 if act == "cmd":   # the plugin's commands: again, next, previous, spec, difficulty
@@ -556,6 +557,33 @@ class Handler(BaseHTTPRequestHandler):
 def refresh_plan(sid):
     cs2coach.attach_plan(sid)
     build_app.write_player(sid)
+
+
+def account():
+    """Your Steam name and avatar for the bar's account (05/10): the public profile (no key, as the analysis reads
+    it), kept a day in out/account.json."""
+    own = str(config.settings().get("own_steamid") or "")
+    if not own.isdigit():
+        return {}
+    f = os.path.join(config.OUT, "account.json")
+    c = config.read_json(f, {}) or {}
+    if c.get("steamid") == own and c.get("avatar") and time.time() - (c.get("at") or 0) < 86400:
+        return c
+    sp = {}
+    try:   # Steam's official API with your key when you gave one (the public profile's avatar can be an old one: 404)
+        import steamlink
+        if steamlink.api_key():
+            x = steamlink.check_key(steamlink.api_key(), own) or {}
+            sp = {"name": x.get("personaname"), "avatar": x.get("avatarfull") or x.get("avatarmedium")}
+    except Exception:
+        sp = {}
+    if not sp.get("avatar"):
+        import csstats
+        sp = csstats.steam_profile(own) or {}
+    if sp.get("avatar"):
+        c = {"steamid": own, "name": sp.get("name"), "avatar": sp.get("avatar"), "at": time.time()}
+        config.write_json(f, c)
+    return c if c.get("steamid") == own else {}
 
 
 def set_focus(sid, card):
