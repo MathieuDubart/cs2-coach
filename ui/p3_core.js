@@ -272,11 +272,15 @@ document.addEventListener("click",e=>{const b=e.target.closest&&e.target.closest
   if(mid&&(S.view!=="matches"||((p.matches[S.match]||{}).id!==mid))){const i=p.matches.findIndex(x=>x.id===mid);if(i<0)return;S.match=i;S.mpin=true;S.goRound=n;go("matches");return}
   const rb=$(`#v-matches .rp-rounds [data-rn="${n}"]`);if(rb){rb.click();rb.closest(".radar-box").scrollIntoView({behavior:"smooth",block:"center"})}else S.goRound=n});
 // ---------- the analyst's brief on top of each tab (04/10): the essentials first, the detail after ----------
-function tabBrief(o){const li=xs=>(xs||[]).filter(Boolean).slice(0,3).map(x=>`<li>${x}</li>`).join(""),w=li(o.works),fx=li(o.fix);
-  return `<section class="brief3 tabbrief" id="${o.id||""}" aria-label="Brief">
-   <article class="card b-good"><span class="eyebrow">What works</span>${w?`<ul>${w}</ul>`:`<p class="note">${o.worksNone||"Nothing stands out above the base yet."}</p>`}</article>
-   <article class="card b-bad"><span class="eyebrow">Fix first</span>${fx?`<ul>${fx}</ul>`:`<p class="note">${o.fixNone||"Nothing slips below the base."}</p>`}</article>
-   <article class="card b-next"><span class="eyebrow">${o.nextLabel||"Next match"}</span>${o.next?`<p class="lead">${o.next}</p>`:`<p class="note">Keep your routine.</p>`}</article></section>`}
+// 05/10: what works here and what costs you here; the page's next step is folded into the second card ("to try
+// here"): the one priority of the app is the focus of the week. BRIEF_CAP collects the briefs for the Profile.
+let BRIEF_CAP=null;
+function tabBrief(o){if(BRIEF_CAP){BRIEF_CAP.push(o);return ""}
+  const li=xs=>(xs||[]).filter(Boolean).slice(0,3).map(x=>`<li>${x}</li>`).join(""),w=li(o.works),fx=li(o.fix);
+  return `<section class="brief3 brief2 tabbrief" id="${o.id||""}" aria-label="Brief">
+   <article class="card b-good"><span class="eyebrow">What works here</span>${w?`<ul>${w}</ul>`:`<p class="note">${o.worksNone||"Nothing stands out above the base yet."}</p>`}</article>
+   <article class="card b-bad"><span class="eyebrow">Costs you here</span>${fx?`<ul>${fx}</ul>`:`<p class="note">${o.fixNone||"Nothing slips below the base."}</p>`}${o.next?`<p class="try"><b>To try here:</b> ${o.next}</p>`:""}</article></section>`}
+function briefOf(fn,...a){BRIEF_CAP=[];try{fn(...a)}catch(e){}const o=BRIEF_CAP[0]||null;BRIEF_CAP=null;return o}
 function secNav(items){items=items.filter(Boolean);return items.length<2?"":`<nav class="tier-nav sec-nav" aria-label="Sections">${items.map(([id,t])=>`<a href="#${id}" data-sec="${id}">${t}</a>`).join("")}</nav>`}
 const anchor=id=>`<span class="sec-anchor" id="${id}"></span>`;
 document.addEventListener("click",e=>{const a=e.target.closest&&e.target.closest("[data-sec]");if(!a)return;e.preventDefault();const t=document.getElementById(a.dataset.sec);if(t)t.scrollIntoView({behavior:"smooth",block:"start"})});   // not a #view link

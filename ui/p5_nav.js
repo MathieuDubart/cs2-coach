@@ -1,8 +1,9 @@
 
 // ---------- navigation: three moments (05/10): Live during the match, Prepare before it, Review after it ----------
-const GROUP={ingame:"ingame",prepare:"prepare",review:"review",matches:"review",maps:"review",midround:"review",progress:"review",analysis:"review",routine:"review",team:"players",players:"players",pros:"players",settings:"settings"};
-const SUB={review:[["review","Summary"],["matches","Matches"],["maps","Maps"],["midround","Mid-round"],["progress","Progress"],["analysis","Full analysis"],["routine","Routine"]],players:[["players","Players"],["pros","Pros"],["team","Team"]]};
-const PLAYER_VIEWS=["ingame","prepare","review","matches","maps","midround","progress","analysis","routine"];
+const GROUP={ingame:"ingame",prepare:"prepare",review:"review",profile:"review",matches:"review",maps:"review",midround:"review",progress:"review",analysis:"review",routine:"review",team:"players",players:"players",pros:"players",settings:"settings"};
+// Review in three levels (05/10): the session, your profile, every match; the detailed pages open from the profile
+const SUB={review:[["review","Session"],["profile","Profile"],["matches","Matches"]],players:[["players","Players"],["pros","Pros"],["team","Team"]]};
+const PLAYER_VIEWS=["ingame","prepare","review","profile","matches","maps","midround","progress","analysis","routine"];
 // old French addresses keep working, and the moments' names
 const ALIAS={partie:"ingame",avant:"prepare",bilan:"review",matchs:"matches",cartes:"maps",mid:"midround",prog:"progress",synthese:"analysis",equipe:"team",joueurs:"players",steam:"settings",live:"ingame",prep:"prepare",warmup:"prepare"};
 // the focus of the week (focus.py: the coach's first axis, kept 7 days); a profile built before it: the first axis
@@ -11,7 +12,8 @@ function focusOf(p){const A=p&&p.advice;if(!A)return null;const F=(A.plan||{}).f
 function navUpdate(view){const g=GROUP[view]||view;
   $$("nav a, .gear").forEach(a=>{if(a.dataset.view===g)a.setAttribute("aria-current","page");else a.removeAttribute("aria-current")});
   const sn=$("#subnav"),items=SUB[g];sn.hidden=!items;
-  if(items)sn.innerHTML=items.map(([k,t])=>`<a href="#${k}" ${k===view?'aria-current="page"':""}>${t}</a>`).join("");
+  if(items)sn.innerHTML=[...items,...(items.some(([k])=>k===view)||!VIEW_LABEL[view]?[]:[[view,VIEW_LABEL[view]]])]   // a detailed page: shown while open
+    .map(([k,t])=>`<a href="#${k}" ${k===view?'aria-current="page"':""}>${t}</a>`).join("");
   const w=$("#whochip"),p=S.player&&D.players[S.player];
   w.innerHTML=p&&PLAYER_VIEWS.includes(view)?`Profile: <b>${esc(p.name)}</b>${D.own&&S.player!==D.own&&IDX()[D.own]?` <button type="button" id="backme">Back to my profile</button>`:""}`:"";
   const bm=$("#backme");if(bm)bm.onclick=()=>setPlayer(D.own);

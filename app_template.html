@@ -720,6 +720,29 @@ table.lc{border-collapse:collapse;font-variant-numeric:tabular-nums;min-width:64
 .slab.ok{color:var(--good)}.slab.no{color:var(--bad)}.slab.nade{color:var(--warn)}
 .prep-ready{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr));gap:12px;margin-bottom:18px}
 .btnlink{display:inline-block;font:600 14px var(--f-body);padding:6px 12px;border:1px solid var(--line);border-radius:4px;color:var(--ink);text-decoration:none}
+
+/* Review in three levels (05/10): two-card briefs, the profile's axes and evidence */
+.brief2{grid-template-columns:repeat(2,minmax(0,1fr))}
+.brief3 .try{margin:10px 0 0;padding-top:8px;border-top:1px dashed var(--line);font-size:14px}
+.prof-top{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin:14px 0 6px}
+.prof-top .card{border-top:3px solid var(--line)}.prof-top .b-good{border-top-color:var(--good)}.prof-top .b-next{border-top-color:var(--warn)}
+.prof-top ul{margin:6px 0 0;padding-left:18px;display:grid;gap:6px}
+.axes-list{display:grid;gap:10px;margin:10px 0 8px}
+.axis{display:grid;grid-template-columns:44px minmax(0,1fr) 210px;gap:14px;align-items:start;background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:12px 14px}
+.axis.is-focus{border-color:var(--warn)}
+.ax-n{font:700 30px/1 var(--f-display);color:var(--muted)}.axis.is-focus .ax-n{color:var(--warn)}
+.ax-b{min-width:0}.ax-b h4{font-size:20px;margin:0 0 2px}.ax-b ul{margin:6px 0;padding-left:18px}.ax-b p{margin:4px 0}
+.ax-s{display:grid;gap:8px;justify-items:start}
+.ax-bar{width:100%;height:8px;background:var(--chip);border-radius:4px;overflow:hidden}.ax-bar i{display:block;height:100%;background:var(--bad);border-radius:4px}
+.axis.is-focus .ax-bar i{background:var(--warn)}
+.evid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,330px),1fr));gap:12px;margin:10px 0}
+.ev{display:grid;align-content:start;gap:4px;min-width:0}
+.ev-h{display:grid;gap:2px;margin-bottom:4px}.ev-h b{font:600 20px var(--f-display)}
+.ev .lab{font:11px var(--f-mono);letter-spacing:.08em;text-transform:uppercase;margin:6px 0 0}.ev .lab.good{color:var(--good)}.ev .lab.bad{color:var(--bad)}
+.ev ul{margin:2px 0;padding-left:18px;display:grid;gap:4px;font-size:14px}
+.ev-go{margin-top:8px;font-weight:600;color:var(--ct);text-decoration:none}
+.mc-prep{margin-top:10px;font:600 13px var(--f-body);background:transparent;color:var(--t);border:1px solid var(--line);border-radius:4px;padding:4px 10px;cursor:pointer}
+@media (max-width:900px){.brief2,.prof-top{grid-template-columns:1fr}.axis{grid-template-columns:36px minmax(0,1fr)}.ax-s{grid-column:2}}
 </style>
 
 <div class="bar"><div class="bar-in">
@@ -744,6 +767,7 @@ table.lc{border-collapse:collapse;font-variant-numeric:tabular-nums;min-width:64
   <section class="view" id="v-ingame"></section>
   <section class="view" id="v-prepare" hidden></section>
   <section class="view" id="v-review" hidden></section>
+  <section class="view" id="v-profile" hidden></section>
   <section class="view" id="v-analysis" hidden></section>
   <section class="view" id="v-routine" hidden></section>
   <section class="view" id="v-midround" hidden></section>
@@ -1031,11 +1055,15 @@ document.addEventListener("click",e=>{const b=e.target.closest&&e.target.closest
   if(mid&&(S.view!=="matches"||((p.matches[S.match]||{}).id!==mid))){const i=p.matches.findIndex(x=>x.id===mid);if(i<0)return;S.match=i;S.mpin=true;S.goRound=n;go("matches");return}
   const rb=$(`#v-matches .rp-rounds [data-rn="${n}"]`);if(rb){rb.click();rb.closest(".radar-box").scrollIntoView({behavior:"smooth",block:"center"})}else S.goRound=n});
 // ---------- the analyst's brief on top of each tab (04/10): the essentials first, the detail after ----------
-function tabBrief(o){const li=xs=>(xs||[]).filter(Boolean).slice(0,3).map(x=>`<li>${x}</li>`).join(""),w=li(o.works),fx=li(o.fix);
-  return `<section class="brief3 tabbrief" id="${o.id||""}" aria-label="Brief">
-   <article class="card b-good"><span class="eyebrow">What works</span>${w?`<ul>${w}</ul>`:`<p class="note">${o.worksNone||"Nothing stands out above the base yet."}</p>`}</article>
-   <article class="card b-bad"><span class="eyebrow">Fix first</span>${fx?`<ul>${fx}</ul>`:`<p class="note">${o.fixNone||"Nothing slips below the base."}</p>`}</article>
-   <article class="card b-next"><span class="eyebrow">${o.nextLabel||"Next match"}</span>${o.next?`<p class="lead">${o.next}</p>`:`<p class="note">Keep your routine.</p>`}</article></section>`}
+// 05/10: what works here and what costs you here; the page's next step is folded into the second card ("to try
+// here"): the one priority of the app is the focus of the week. BRIEF_CAP collects the briefs for the Profile.
+let BRIEF_CAP=null;
+function tabBrief(o){if(BRIEF_CAP){BRIEF_CAP.push(o);return ""}
+  const li=xs=>(xs||[]).filter(Boolean).slice(0,3).map(x=>`<li>${x}</li>`).join(""),w=li(o.works),fx=li(o.fix);
+  return `<section class="brief3 brief2 tabbrief" id="${o.id||""}" aria-label="Brief">
+   <article class="card b-good"><span class="eyebrow">What works here</span>${w?`<ul>${w}</ul>`:`<p class="note">${o.worksNone||"Nothing stands out above the base yet."}</p>`}</article>
+   <article class="card b-bad"><span class="eyebrow">Costs you here</span>${fx?`<ul>${fx}</ul>`:`<p class="note">${o.fixNone||"Nothing slips below the base."}</p>`}${o.next?`<p class="try"><b>To try here:</b> ${o.next}</p>`:""}</article></section>`}
+function briefOf(fn,...a){BRIEF_CAP=[];try{fn(...a)}catch(e){}const o=BRIEF_CAP[0]||null;BRIEF_CAP=null;return o}
 function secNav(items){items=items.filter(Boolean);return items.length<2?"":`<nav class="tier-nav sec-nav" aria-label="Sections">${items.map(([id,t])=>`<a href="#${id}" data-sec="${id}">${t}</a>`).join("")}</nav>`}
 const anchor=id=>`<span class="sec-anchor" id="${id}"></span>`;
 document.addEventListener("click",e=>{const a=e.target.closest&&e.target.closest("[data-sec]");if(!a)return;e.preventDefault();const t=document.getElementById(a.dataset.sec);if(t)t.scrollIntoView({behavior:"smooth",block:"start"})});   // not a #view link
@@ -2032,9 +2060,10 @@ function prepWatch(){clearTimeout(PREP.watch);if(S.view!=="prepare"||!D.local)re
     PREP.watch=setTimeout(prepWatch,3000)}).catch(()=>{PREP.watch=setTimeout(prepWatch,6000)})}
 
 // ---------- navigation: three moments (05/10): Live during the match, Prepare before it, Review after it ----------
-const GROUP={ingame:"ingame",prepare:"prepare",review:"review",matches:"review",maps:"review",midround:"review",progress:"review",analysis:"review",routine:"review",team:"players",players:"players",pros:"players",settings:"settings"};
-const SUB={review:[["review","Summary"],["matches","Matches"],["maps","Maps"],["midround","Mid-round"],["progress","Progress"],["analysis","Full analysis"],["routine","Routine"]],players:[["players","Players"],["pros","Pros"],["team","Team"]]};
-const PLAYER_VIEWS=["ingame","prepare","review","matches","maps","midround","progress","analysis","routine"];
+const GROUP={ingame:"ingame",prepare:"prepare",review:"review",profile:"review",matches:"review",maps:"review",midround:"review",progress:"review",analysis:"review",routine:"review",team:"players",players:"players",pros:"players",settings:"settings"};
+// Review in three levels (05/10): the session, your profile, every match; the detailed pages open from the profile
+const SUB={review:[["review","Session"],["profile","Profile"],["matches","Matches"]],players:[["players","Players"],["pros","Pros"],["team","Team"]]};
+const PLAYER_VIEWS=["ingame","prepare","review","profile","matches","maps","midround","progress","analysis","routine"];
 // old French addresses keep working, and the moments' names
 const ALIAS={partie:"ingame",avant:"prepare",bilan:"review",matchs:"matches",cartes:"maps",mid:"midround",prog:"progress",synthese:"analysis",equipe:"team",joueurs:"players",steam:"settings",live:"ingame",prep:"prepare",warmup:"prepare"};
 // the focus of the week (focus.py: the coach's first axis, kept 7 days); a profile built before it: the first axis
@@ -2043,7 +2072,8 @@ function focusOf(p){const A=p&&p.advice;if(!A)return null;const F=(A.plan||{}).f
 function navUpdate(view){const g=GROUP[view]||view;
   $$("nav a, .gear").forEach(a=>{if(a.dataset.view===g)a.setAttribute("aria-current","page");else a.removeAttribute("aria-current")});
   const sn=$("#subnav"),items=SUB[g];sn.hidden=!items;
-  if(items)sn.innerHTML=items.map(([k,t])=>`<a href="#${k}" ${k===view?'aria-current="page"':""}>${t}</a>`).join("");
+  if(items)sn.innerHTML=[...items,...(items.some(([k])=>k===view)||!VIEW_LABEL[view]?[]:[[view,VIEW_LABEL[view]]])]   // a detailed page: shown while open
+    .map(([k,t])=>`<a href="#${k}" ${k===view?'aria-current="page"':""}>${t}</a>`).join("");
   const w=$("#whochip"),p=S.player&&D.players[S.player];
   w.innerHTML=p&&PLAYER_VIEWS.includes(view)?`Profile: <b>${esc(p.name)}</b>${D.own&&S.player!==D.own&&IDX()[D.own]?` <button type="button" id="backme">Back to my profile</button>`:""}`:"";
   const bm=$("#backme");if(bm)bm.onclick=()=>setPlayer(D.own);
@@ -3869,7 +3899,8 @@ function reviewMaps(R){const M=R.maps||[];if(!M.length)return "";
      ${x.play?`<p class="mc-note"><span class="good">▲</span> ${x.play}</p>`:""}${x.avoid?`<p class="mc-note"><span class="bad">▼</span> ${x.avoid}</p>`:""}`};
   return `<section class="tier" id="tier2"><div class="tier-h"><b>2</b><h3>Map by map</h3><span class="note">this session · round wins per side, what to play and to avoid there</span></div>
    <div class="mapcards">${M.map(m=>`<article class="mapcard"><div class="mc-h"><b>${esc(MAPN(m.map))}</b><span class="res ${m.wins>m.losses?"win":m.wins<m.losses?"loss":"draw"}">${m.wins}-${m.losses}</span>
-     ${rtBadge(m.rating)}<span class="note num">ADR ${m.adr}</span></div>${side(m,"T")}${side(m,"CT")}</article>`).join("")}</div></section>`}
+     ${rtBadge(m.rating)}<span class="note num">ADR ${m.adr}</span></div>${side(m,"T")}${side(m,"CT")}
+     <button type="button" class="mc-prep" data-prepmap="${esc(m.map)}">Prepare this map →</button></article>`).join("")}</div></section>`}
 // 3 · the analyst's reads of the session (from the demos), against the base and the pros
 function reviewInsights(R){const X=R.pro||{},I=X.items||[];if(!X.matches)return "";
   if(!I.length||I[0].ref!==undefined||I[0].title===undefined)return readsSection(P(),X,"Analyst reads",`What a team's analyst points at in the demos of this session's ${X.matches} match${X.matches>1?"es":""}, against the base and the pros.`)||
@@ -3887,7 +3918,7 @@ function renderReview(){const p=P(),v=$("#v-review"),PL=p.advice.plan||{},R=revi
     ${(p.advice.rules||[]).length?`<h3>Your focus areas</h3>${findings(p.advice.rules.slice(0,3).map((r,i)=>({level:i<1?"high":"mid",title:r.title,evidence:r.why,fix:r.do,drills:r.drills,sources:r.sources})))}`:""}`;return}
   const f=(x,u)=>fmtU(x,u),TREND={better:"strong",worse:"weak",mieux:"strong","moins bien":"weak"};
   v.innerHTML=head+`
-   <nav class="tier-nav" aria-label="Review tiers"><a href="#tier1" data-tier="tier1">1 · Quick brief</a><a href="#tier2" data-tier="tier2">2 · Map by map</a><a href="#tier3" data-tier="tier3">3 · Deep dive</a></nav>
+   <nav class="tier-nav" aria-label="Review tiers"><a href="#tier1" data-tier="tier1">1 · The session</a><a href="#tier2" data-tier="tier2">2 · Map by map</a><a href="#tier3" data-tier="tier3">3 · The details</a><a href="#profile">Your profile →</a></nav>
    ${reviewBrief(R,f)}
    ${reviewMaps(R)}
    <section class="tier" id="tier3"><div class="tier-h"><b>3</b><h3>Deep dive</h3><span class="note">every change and its possible reasons, the demos' insights, your matches</span></div>
@@ -3912,17 +3943,68 @@ function renderReview(){const p=P(),v=$("#v-review"),PL=p.advice.plan||{},R=revi
    ${moodBlock(PL)}
    ${factsBlock(PL)}
    ${liveCheckBlock(PL)}
-   <h3>What you're testing, what you could test</h3>
-   ${R.tests.active.length?`<div class="exps">${R.tests.active.map(expCard).join("")}</div>`:`<p class="note">No experiment running.</p>`}
-   ${(X.suggested||[]).length?`<span class="lbl4" style="color:var(--muted)">Worth testing</span><div class="exps">${X.suggested.slice(0,3).map(suggestCard).join("")}</div>`:""}
+   ${R.tests.active.length?`<p class="note">Running test${R.tests.active.length>1?"s":""}: ${R.tests.active.map(e=>esc(e.title)).join(" · ")}. Your tests and the ones worth starting are in <a href="#profile" style="color:var(--ct)">Profile</a>.</p>`:""}
    ${R.tests.done.length?`<details><summary style="cursor:pointer">Finished experiments (${R.tests.done.length})</summary><div class="exps" style="margin-top:10px">${R.tests.done.map(expCard).join("")}</div></details>`:""}
    <p class="note" id="xmsg" role="status"></p>
-   <div class="linkrow"><a href="#analysis">Full analysis</a><a href="#midround">Mid-round</a><a href="#progress">Progress and tracking</a><a href="#matches">Every match</a><a href="#maps">Maps and grenades</a><a href="#routine">Routine</a></div>
+   <div class="linkrow"><a href="#profile">Your profile: strengths, axes, evidence</a><a href="#matches">Every match</a></div>
    </section>`;
   wireExp(v,X,p);wireFocus(v,p,renderReview);
+  $$("[data-prepmap]",v).forEach(b=>b.onclick=()=>{const st=prepState();st.maps=[b.dataset.prepmap];st.step=1;st.done={};st.cur=null;prepSave(st);go("prepare")});   // Prepare with this map
   $$("[data-tier]",v).forEach(a=>a.onclick=e=>{e.preventDefault();const t=$("#"+a.dataset.tier,v);if(t)t.scrollIntoView({behavior:"smooth",block:"start"})});   // not a #view link
   $$("tr[data-mid]",v).forEach(r=>{r.onclick=()=>{const i=p.matches.findIndex(x=>x.id===r.dataset.mid);S.match=i<0?0:i;S.mpin=i>=0;go("matches")};r.onkeydown=e=>{if(e.key==="Enter")r.click()}});
 }
+// ---------- view: profile (05/10): Review's third level, what stays true over weeks. Your focus of the week and your
+// strengths, your axes ranked by the coach's priority score (one list instead of a "Fix first" on every page), the
+// evidence of each part of your game with the way to its detailed page, your tests ----------
+const VIEW_LABEL={maps:"Maps",midround:"Mid-round",progress:"Progress",analysis:"Full analysis",routine:"Routine"};
+function renderProfile(){
+  const p=P(),v=$("#v-profile"),A=p.advice||{},PL=A.plan||{},ms=p.matches||[],own=D.local&&p.steamid===D.own;
+  const rules=(A.rules||[]).slice(0,8),mx=Math.max(1,...rules.map(r=>r.score||0)),F=focusOf(p),X=PL.experiments||null;
+  const act=X?(X.experiments||[]).filter(e=>e.status==="active"):[],sug=X?(X.suggested||[]):[];
+  const win=ms.filter(m=>m.result==="win").length,loss=ms.filter(m=>m.result==="loss").length,draw=ms.length-win-loss;
+  const role=(A.archetype||{}).name||((PL.role||{}).role)||null;
+  const auto=(A.rules||[]).map((r,i)=>({level:i<2?"high":"mid",title:r.title,evidence:r.why,fix:r.do,standing:r.standing,target:r.target,bench:r.bench,drills:r.drills,sources:r.sources}));
+  // each part of your game: the "works" and "costs" of its detailed page, and the way there
+  const topMaps=mapsOf(p).filter(m=>m.n>0).slice(0,2).map(m=>crossMap(p,m.map)).filter(Boolean);
+  const parts=[["analysis","The coach's reads","your duels and reads, against the base and the pros",ms.length?briefOf(analysisBrief,p,auto):null],
+    ["midround","Mid-round decisions","rotations, executes, after the first duel",PL.mid?briefOf(midBrief,PL):null],
+    ...topMaps.map(m=>["maps",MAPN(m.map),`${m.matches} of your matches there`,briefOf(mapBrief,p,m),m.map]),
+    ["progress","Weapons, buys and trends","your weapons, your buys by kind of round, your indicators",PL.kpis||PL.weapons?briefOf(progBrief,PL):null],
+    ["routine","Habits","time of day, session length, group",PL.context?briefOf(routineBrief,PL):null]].filter(x=>x[3]);
+  const li=xs=>(xs||[]).filter(Boolean).slice(0,2).map(x=>`<li>${x}</li>`).join("");
+  const seen=new Set(),plain=h=>String(h).replace(/<[^>]+>/g,"").replace(/\s+/g," ").trim();   // each strength once; a map's with its name
+  const strengths=[...(A.strengths||[]).map(esc),...parts.map(x=>{const w=(x[3].works||[]).filter(Boolean)[0];return w&&x[0]==="maps"?`${esc(x[1])} · ${w}`:w})]
+    .filter(h=>h&&!seen.has(plain(h))&&seen.add(plain(h))).slice(0,5);
+  v.innerHTML=`<div class="head"><div style="display:grid;gap:4px"><span class="eyebrow">${esc(p.name)}${PL.level?` · ${levelLine(PL.level)}`:""}</span><h2>Your profile</h2></div>
+    ${ms.length?`<div class="record"><span>${win}<small>wins</small></span><span>${draw}<small>draws</small></span><span>${loss}<small>losses</small></span></div>`:""}</div>
+   <p class="note">What stays true over weeks${ms.length?`, from ${ms.length} analyzed matches`:""}${role?` · your role: <b>${esc(role)}</b>`:""}. The session's review is in <a href="#review" style="color:var(--ct)">Session</a>.</p>
+   <div class="prof-top">${focusCard(p)}
+    <article class="card b-good"><span class="eyebrow">Your strengths</span>${strengths.length?`<ul>${strengths.map(x=>`<li>${x}</li>`).join("")}</ul>`:`<p class="note">Nothing stands out above the base yet.</p>`}</article></div>
+   <h3>Your axes, ranked</h3>
+   <p class="note">What costs you the most rounds, in the coach's order (its priority score: the bar). One list for the whole app: the first is your focus of the week unless you picked another.</p>
+   ${rules.length?`<div class="axes-list">${rules.map((r,i)=>{const isF=F&&F.id===r.id;return `<article class="axis${isF?" is-focus":""}">
+     <div class="ax-n">${i+1}</div>
+     <div class="ax-b"><h4>${esc(r.short||r.title)}</h4>${r.short&&r.title&&r.short!==r.title?`<p class="note">${esc(r.title)}</p>`:""}
+      ${(r.why||[]).length?`<ul>${r.why.slice(0,2).map(t=>`<li>${esc(t)}</li>`).join("")}</ul>`:""}
+      ${(r.do||[]).length?`<p><b>Fix:</b> ${esc(r.do[0])}</p>`:""}${(r.drills||[]).length?`<p class="note">Drill: ${esc(r.drills[0])}</p>`:""}</div>
+     <div class="ax-s"><div class="ax-bar" title="priority ${Math.round(r.score||0)}"><i style="width:${Math.round(100*(r.score||0)/mx)}%"></i></div>
+      ${isF?`<span class="pill strong">focus of the week</span>`:own?`<button type="button" data-axfocus="${esc(r.id)}">Make it my focus</button>`:""}</div></article>`}).join("")}</div>`
+     :`<p class="note">No axis yet: the coach ranks them once a few of your matches are analyzed with their demo.</p>`}
+   ${parts.length?`<h3>The evidence, part by part</h3><div class="evid">${parts.map(([view,t,sub,o,mp])=>`<article class="card ev">
+     <div class="ev-h"><b>${esc(t)}</b><span class="note">${esc(sub)}</span></div>
+     ${li(o.works)?`<p class="lab good">Works</p><ul>${li(o.works)}</ul>`:""}${li(o.fix)?`<p class="lab bad">Costs</p><ul>${li(o.fix)}</ul>`:""}${o.next?`<p class="note"><b>To try:</b> ${o.next}</p>`:""}
+     <a href="#${view}" class="ev-go"${mp?` data-evmap="${esc(mp)}"`:""}>${esc(VIEW_LABEL[view]||t)} in detail →</a></article>`).join("")}</div>`:""}
+   ${X?`<h3>Your tests</h3><p class="note">You start a test and play normally: the coach compares your next matches with your previous 15 and gives a verdict once there is enough data.${D.local?"":" Starting or ending one happens in the local app."}</p>
+    ${act.length?`<div class="exps">${act.map(expCard).join("")}</div>`:`<p class="note">No test running.</p>`}
+    ${sug.length?`<span class="lbl4" style="color:var(--muted)">Worth testing</span><div class="exps">${sug.slice(0,4).map(suggestCard).join("")}</div>`:""}
+    <p class="note" id="xmsg" role="status"></p>`:""}
+   <div class="linkrow"><a href="#matches">Every match</a><a href="#analysis">Full analysis and pros like you</a><a href="#review">This session</a></div>`;
+  if(X)wireExp(v,X,p);
+  wireFocus(v,p,renderProfile);
+  $$("[data-axfocus]",v).forEach(b=>b.onclick=async()=>{b.disabled=true;
+    try{const j=await api("/api/focus",{sid:p.steamid,id:b.dataset.axfocus});const A_=p.advice;A_.plan=A_.plan||{};A_.plan.focus=j.focus;navUpdate(S.view);renderProfile()}
+    catch(e){b.disabled=false;b.textContent=e.message}});
+  $$("[data-evmap]",v).forEach(a=>a.onclick=()=>{S.cmap=a.dataset.evmap})}
 
 // ---------- data loading (profiles and radars are separate files) ----------
 D.players={};D.radars={};D.viewboxes={};
@@ -4054,11 +4136,11 @@ $("#search").addEventListener("submit",async e=>{e.preventDefault();const q=$("#
     <p class="note">The local app must be running: double-click <code>Coach CS2.bat</code> in the app folder, or turn on its automatic start with <code>autostart.bat</code>.</p>`)});
 
 // ---------- routing ----------
-const RENDER={ingame:renderIngame,prepare:renderPrepare,review:renderReview,analysis:renderAnalysis,routine:renderRoutine,midround:renderMidround,progress:renderProgress,team:renderTeam,matches:renderMatches,maps:renderMaps,players:renderPlayers,pros:renderPros,settings:renderSettings};
+const RENDER={ingame:renderIngame,prepare:renderPrepare,review:renderReview,profile:renderProfile,analysis:renderAnalysis,routine:renderRoutine,midround:renderMidround,progress:renderProgress,team:renderTeam,matches:renderMatches,maps:renderMaps,players:renderPlayers,pros:renderPros,settings:renderSettings};
 // The local app has addresses like csrep's: /player/<steamid> (their first view: In game for you, Analysis for the others),
 // /player/<steamid>/<view>, /match/<share code, or match id when it has none>[?as=<steamid>: seen as someone else than
 // you], /team, /players, /pros, /settings; old links (/#review) still open. The published page (one file) keeps #view.
-const GLOBAL=["team","players","pros","settings"],homeView=sid=>sid&&sid===D.own?"ingame":"analysis";
+const GLOBAL=["team","players","pros","settings"],homeView=sid=>sid&&sid===D.own?"ingame":"profile";
 let navAt=0,navQuiet=0,afterJob=null,CODES={};   // CODES: match id -> share code
 // /live: your In game page, the address to keep open during a match (a second screen, OBS) (04/10)
 function pathNow(){const v=S.view;if(GLOBAL.includes(v))return "/"+v;if(!S.player)return "/";if(v==="ingame"&&S.player===D.own)return "/live";

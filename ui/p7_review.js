@@ -150,7 +150,8 @@ function reviewMaps(R){const M=R.maps||[];if(!M.length)return "";
      ${x.play?`<p class="mc-note"><span class="good">▲</span> ${x.play}</p>`:""}${x.avoid?`<p class="mc-note"><span class="bad">▼</span> ${x.avoid}</p>`:""}`};
   return `<section class="tier" id="tier2"><div class="tier-h"><b>2</b><h3>Map by map</h3><span class="note">this session · round wins per side, what to play and to avoid there</span></div>
    <div class="mapcards">${M.map(m=>`<article class="mapcard"><div class="mc-h"><b>${esc(MAPN(m.map))}</b><span class="res ${m.wins>m.losses?"win":m.wins<m.losses?"loss":"draw"}">${m.wins}-${m.losses}</span>
-     ${rtBadge(m.rating)}<span class="note num">ADR ${m.adr}</span></div>${side(m,"T")}${side(m,"CT")}</article>`).join("")}</div></section>`}
+     ${rtBadge(m.rating)}<span class="note num">ADR ${m.adr}</span></div>${side(m,"T")}${side(m,"CT")}
+     <button type="button" class="mc-prep" data-prepmap="${esc(m.map)}">Prepare this map →</button></article>`).join("")}</div></section>`}
 // 3 · the analyst's reads of the session (from the demos), against the base and the pros
 function reviewInsights(R){const X=R.pro||{},I=X.items||[];if(!X.matches)return "";
   if(!I.length||I[0].ref!==undefined||I[0].title===undefined)return readsSection(P(),X,"Analyst reads",`What a team's analyst points at in the demos of this session's ${X.matches} match${X.matches>1?"es":""}, against the base and the pros.`)||
@@ -168,7 +169,7 @@ function renderReview(){const p=P(),v=$("#v-review"),PL=p.advice.plan||{},R=revi
     ${(p.advice.rules||[]).length?`<h3>Your focus areas</h3>${findings(p.advice.rules.slice(0,3).map((r,i)=>({level:i<1?"high":"mid",title:r.title,evidence:r.why,fix:r.do,drills:r.drills,sources:r.sources})))}`:""}`;return}
   const f=(x,u)=>fmtU(x,u),TREND={better:"strong",worse:"weak",mieux:"strong","moins bien":"weak"};
   v.innerHTML=head+`
-   <nav class="tier-nav" aria-label="Review tiers"><a href="#tier1" data-tier="tier1">1 · Quick brief</a><a href="#tier2" data-tier="tier2">2 · Map by map</a><a href="#tier3" data-tier="tier3">3 · Deep dive</a></nav>
+   <nav class="tier-nav" aria-label="Review tiers"><a href="#tier1" data-tier="tier1">1 · The session</a><a href="#tier2" data-tier="tier2">2 · Map by map</a><a href="#tier3" data-tier="tier3">3 · The details</a><a href="#profile">Your profile →</a></nav>
    ${reviewBrief(R,f)}
    ${reviewMaps(R)}
    <section class="tier" id="tier3"><div class="tier-h"><b>3</b><h3>Deep dive</h3><span class="note">every change and its possible reasons, the demos' insights, your matches</span></div>
@@ -193,14 +194,13 @@ function renderReview(){const p=P(),v=$("#v-review"),PL=p.advice.plan||{},R=revi
    ${moodBlock(PL)}
    ${factsBlock(PL)}
    ${liveCheckBlock(PL)}
-   <h3>What you're testing, what you could test</h3>
-   ${R.tests.active.length?`<div class="exps">${R.tests.active.map(expCard).join("")}</div>`:`<p class="note">No experiment running.</p>`}
-   ${(X.suggested||[]).length?`<span class="lbl4" style="color:var(--muted)">Worth testing</span><div class="exps">${X.suggested.slice(0,3).map(suggestCard).join("")}</div>`:""}
+   ${R.tests.active.length?`<p class="note">Running test${R.tests.active.length>1?"s":""}: ${R.tests.active.map(e=>esc(e.title)).join(" · ")}. Your tests and the ones worth starting are in <a href="#profile" style="color:var(--ct)">Profile</a>.</p>`:""}
    ${R.tests.done.length?`<details><summary style="cursor:pointer">Finished experiments (${R.tests.done.length})</summary><div class="exps" style="margin-top:10px">${R.tests.done.map(expCard).join("")}</div></details>`:""}
    <p class="note" id="xmsg" role="status"></p>
-   <div class="linkrow"><a href="#analysis">Full analysis</a><a href="#midround">Mid-round</a><a href="#progress">Progress and tracking</a><a href="#matches">Every match</a><a href="#maps">Maps and grenades</a><a href="#routine">Routine</a></div>
+   <div class="linkrow"><a href="#profile">Your profile: strengths, axes, evidence</a><a href="#matches">Every match</a></div>
    </section>`;
   wireExp(v,X,p);wireFocus(v,p,renderReview);
+  $$("[data-prepmap]",v).forEach(b=>b.onclick=()=>{const st=prepState();st.maps=[b.dataset.prepmap];st.step=1;st.done={};st.cur=null;prepSave(st);go("prepare")});   // Prepare with this map
   $$("[data-tier]",v).forEach(a=>a.onclick=e=>{e.preventDefault();const t=$("#"+a.dataset.tier,v);if(t)t.scrollIntoView({behavior:"smooth",block:"start"})});   // not a #view link
   $$("tr[data-mid]",v).forEach(r=>{r.onclick=()=>{const i=p.matches.findIndex(x=>x.id===r.dataset.mid);S.match=i<0?0:i;S.mpin=i>=0;go("matches")};r.onkeydown=e=>{if(e.key==="Enter")r.click()}});
 }

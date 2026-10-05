@@ -129,11 +129,11 @@ $("#search").addEventListener("submit",async e=>{e.preventDefault();const q=$("#
     <p class="note">The local app must be running: double-click <code>Coach CS2.bat</code> in the app folder, or turn on its automatic start with <code>autostart.bat</code>.</p>`)});
 
 // ---------- routing ----------
-const RENDER={ingame:renderIngame,prepare:renderPrepare,review:renderReview,analysis:renderAnalysis,routine:renderRoutine,midround:renderMidround,progress:renderProgress,team:renderTeam,matches:renderMatches,maps:renderMaps,players:renderPlayers,pros:renderPros,settings:renderSettings};
+const RENDER={ingame:renderIngame,prepare:renderPrepare,review:renderReview,profile:renderProfile,analysis:renderAnalysis,routine:renderRoutine,midround:renderMidround,progress:renderProgress,team:renderTeam,matches:renderMatches,maps:renderMaps,players:renderPlayers,pros:renderPros,settings:renderSettings};
 // The local app has addresses like csrep's: /player/<steamid> (their first view: In game for you, Analysis for the others),
 // /player/<steamid>/<view>, /match/<share code, or match id when it has none>[?as=<steamid>: seen as someone else than
 // you], /team, /players, /pros, /settings; old links (/#review) still open. The published page (one file) keeps #view.
-const GLOBAL=["team","players","pros","settings"],homeView=sid=>sid&&sid===D.own?"ingame":"analysis";
+const GLOBAL=["team","players","pros","settings"],homeView=sid=>sid&&sid===D.own?"ingame":"profile";
 let navAt=0,navQuiet=0,afterJob=null,CODES={};   // CODES: match id -> share code
 // /live: your In game page, the address to keep open during a match (a second screen, OBS) (04/10)
 function pathNow(){const v=S.view;if(GLOBAL.includes(v))return "/"+v;if(!S.player)return "/";if(v==="ingame"&&S.player===D.own)return "/live";
