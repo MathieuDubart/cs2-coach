@@ -313,7 +313,7 @@ def analyze(mid, sid, live, mine, team=None, team_offset=0.0, map_name=None):
     heard_rows = [x for x in rows if x["you"]]
     mine_rows = [x for x in heard_rows if not x["fight"]]   # what you could call: outside your own fights
     called = [x for x in mine_rows if x["called"]]
-    split = lambda xs: {"n": len(xs), "called": sum(1 for x in xs if x["called"])}
+    split = lambda xs: {"n": len(xs), "called": sum(1 for x in xs if x.get("called"))}
     who = {}
     for m in M:
         for p in m["heard"]:
@@ -335,7 +335,7 @@ def analyze(mid, sid, live, mine, team=None, team_offset=0.0, map_name=None):
            "list": [{k: x[k] for k in ("round", "t", "place", "n", "kind", "who", "called", "react", "right", "why", "team_called", "fight") if k in x}
                     for x in heard_rows][:160]}
     if team is not None:
-        res["team_called"] = split([x for x in rows if x.get("team_called")])["n"]
+        res["team_called"] = sum(1 for x in rows if x.get("team_called"))   # every moment your team could hear (05/10: a KeyError on the ones you didn't)
         res["team_only"] = sum(1 for x in rows if not x["you"] and x.get("team_called"))
     return res
 
