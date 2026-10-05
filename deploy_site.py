@@ -59,6 +59,33 @@ def remote_size(ftp, path):
         return None
 
 
+LOG_F = os.path.join(config.OUT, "deploy.log")
+
+
+def log(msg):
+    """On screen and in out/deploy.log (followed from elsewhere while it runs)."""
+    import time
+    print(msg, flush=True)
+    with open(LOG_F, "a", encoding="utf-8") as f:
+        f.write(f"{time.strftime('%H:%M:%S')} {msg}\n")
+
+
+def site_dir(ftp, rdir):
+    """The site's folder: the one given, else found from where the account starts (an account can start in it)."""
+    for d in (rdir, rdir.lstrip("/"), "."):
+        try:
+            ftp.cwd(d)
+        except ftplib.error_perm:
+            continue
+        here = ftp.pwd()
+        names = {n.rsplit("/", 1)[-1] for n in ftp.nlst()}
+        if d == "." and not ({"index.html", "releases", "api"} & names):
+            break
+        return here
+    raise SystemExit(f"the site's folder {rdir} is not reachable with this account (it starts in {ftp.pwd()}): "
+                     f"python deploy_site.py --dir <folder>")
+
+
 def main():
     sys.stdout.reconfigure(encoding="utf-8")
     if not os.path.isdir(SRC):
@@ -75,31 +102,48 @@ def main():
         for p, r in todo:
             print(f"{os.path.getsize(p) / 2 ** 20:9.2f} MB  {r}")
         return
-    pw = os.environ.get("COACH_FTP_PASSWORD") or getpass.getpass(f"FTP password of {user}@{host} (not stored): ")
-    ftp = ftplib.FTP_TLS(host, timeout=60)
-    ftp.login(user, pw)
+    total = sum(os.path.getsize(p) for p, _ in todo)
+    print(f"Publishing {len(todo)} files ({total / 2 ** 20:.0f} MB) to {user}@{host}:{rdir}")
+    pw = os.environ.get("COACH_FTP_PASSWORD") or getpass.getpass(f"FTP password of {user} (typed here, never stored): ")
+    ftp = ftplib.FTP_TLS(host, timeout=120)
+    try:
+        ftp.login(user, pw)
+    except ftplib.error_perm as e:
+        log(f"login refused: {e}")
+        raise SystemExit("login refused: check the account and its password in Infomaniak's Manager (FTP / SSH)")
+    del pw
     ftp.prot_p()   # the files encrypted too, not only the login
-    ftp.cwd(rdir)
+    where = site_dir(ftp, rdir)
+    log(f"connected over TLS, the site's folder: {where}")
     if (s.get("deploy") or {}) != {"host": host, "user": user, "dir": rdir}:
         s["deploy"] = {"host": host, "user": user, "dir": rdir}
         config.save_settings(s)
-    made, sent, kept = set(), 0, 0
+    made, sent, kept, done = set(), 0, 0, 0
     for p, r in todo:
         size = os.path.getsize(p)
         if r.startswith("releases/") and r.endswith(".zip") and remote_size(ftp, r) == size:
             kept += 1   # a published release never changes
+            done += size
             continue
         ensure_dir(ftp, r, made)
         tmp = r + ".uploading"
+        step = {"n": 0, "next": 0.1}
+
+        def progress(block):
+            step["n"] += len(block)
+            if size > 20 * 2 ** 20 and step["n"] / size >= step["next"]:
+                log(f"  {r}: {int(100 * step['n'] / size)} %")
+                step["next"] += 0.1
         with open(p, "rb") as fh:
-            ftp.storbinary(f"STOR {tmp}", fh, blocksize=1 << 20)
+            ftp.storbinary(f"STOR {tmp}", fh, blocksize=1 << 20, callback=progress)
         try:
             ftp.delete(r)
         except ftplib.error_perm:
             pass
         ftp.rename(tmp, r)
         sent += 1
-        print(f"  {r} ({size / 2 ** 20:.1f} MB)", flush=True)
+        done += size
+        log(f"  {r} ({size / 2 ** 20:.1f} MB) · {100 * done / total:.0f} % of the whole")
     if "--prune" in sys.argv:
         man = json.load(open(os.path.join(SRC, "releases", "latest.json"), encoding="utf-8"))
         keep = {v["file"] for v in man.values() if isinstance(v, dict) and v.get("file")}
@@ -107,9 +151,9 @@ def main():
             b = name.rsplit("/", 1)[-1]
             if b.endswith(".zip") and b not in keep:
                 ftp.delete(f"releases/{b}")
-                print(f"  removed releases/{b}")
+                log(f"  removed releases/{b}")
     ftp.quit()
-    print(f"published: {sent} file(s) sent, {kept} release file(s) already there · https://wily.valentingassend.com")
+    log(f"published: {sent} file(s) sent, {kept} release file(s) already there · https://wily.valentingassend.com")
 
 
 if __name__ == "__main__":

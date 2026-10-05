@@ -256,6 +256,9 @@ ICON = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect widt
 
 HTACCESS = """# Coach CS2's site: no listing, no sniffing, nothing loaded from elsewhere
 Options -Indexes
+<Files ".user.ini">
+Require all denied
+</Files>
 <IfModule mod_headers.c>
 Header always set X-Content-Type-Options "nosniff"
 Header always set Referrer-Policy "no-referrer"
