@@ -10,9 +10,14 @@ if ($c['token_sha256'] === '' || $tok === '' || !hash_equals($c['token_sha256'],
     reply(403, ['ok' => false, 'error' => 'forbidden']);
 }
 $kind = (string)($_GET['kind'] ?? 'contrib');
+$pattern = '/^\d{14}-[0-9a-f]{12}\.%s$/';
 if ($kind === 'reports') {
     $in = data_dir() . '/reports';
     $ext = 'json';
+} elseif ($kind === 'usage') {   // the days' totals of the anonymous usage statistics (usage.php)
+    $in = data_dir() . '/usage';
+    $ext = 'json';
+    $pattern = '/^\d{4}-\d{2}-\d{2}\.%s$/';
 } else {
     $in = data_dir() . '/incoming';
     $ext = 'zip';
@@ -22,7 +27,7 @@ if (!is_dir($in)) {
 }
 $action = (string)($_GET['action'] ?? 'list');
 $file = basename((string)($_GET['f'] ?? ''));
-if ($action !== 'list' && !preg_match('/^\d{14}-[0-9a-f]{12}\.' . $ext . '$/', $file)) {
+if ($action !== 'list' && !preg_match(sprintf($pattern, $ext), $file)) {
     reply(400, ['ok' => false, 'error' => 'bad file name']);
 }
 if ($action === 'list') {

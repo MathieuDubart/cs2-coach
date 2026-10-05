@@ -184,7 +184,7 @@ function go(view){view=ALIAS[view]||view;if(!D.local&&location.hash!=="#"+view)h
 function show(view){view=ALIAS[view]||view;if(!RENDER[view])view="ingame";if(view!=="ingame")document.body.classList.remove("igfull");
   S.view=view;$$("main>.view").forEach(x=>x.hidden=x.id!=="v-"+view);
   if(!D.local||GLOBAL.includes(view)||!S.player||D.players[S.player])syncUrl();   // a profile still loading: its address once it is in
-  navUpdate(view);if(view!=="ingame")clearTimeout(gsiTimer);
+  navUpdate(view);usageView(view);if(view!=="ingame")clearTimeout(gsiTimer);
   if(view==="players"){renderPlayers();return}
   if(view==="pros"){renderPros();window.scrollTo(0,0);return}
   if(view==="settings"){renderSettings();window.scrollTo(0,0);return}
@@ -211,6 +211,7 @@ let updFrom=null;
     try{await api("/api/steam/sync",{sid:D.own});poll()}
     catch(e){if(/already running/i.test(e.message||""))poll();else{ub.disabled=false;updFrom=null;jobPanel(`<b>${esc(e.message||"Update impossible")}</b>`,"err")}}}}}
 if(D.local)fetch("/api/update").then(r=>r.json()).then(gearDot).catch(()=>{});   // a dot on the gear: an update is there
+usageNotice();
 {const at=$("#alphatag");if(at&&D.local&&D.role==="client"){at.hidden=false;at.onclick=()=>openReport("bug")}wireReport()}   // the alpha: a report from any page
 if(D.local){navQuiet++;route().finally(()=>navQuiet--);
   fetch("/api/codes").then(r=>r.json()).then(c=>{CODES={...c,...CODES};if(S.view==="matches"&&S.mpin){navQuiet++;try{syncUrl()}finally{navQuiet--}}}).catch(()=>{})}

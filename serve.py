@@ -289,6 +289,12 @@ class Handler(BaseHTTPRequestHandler):
         if u.path == "/api/update":   # a player's copy: the app's and the base's new versions (Settings, 05/10)
             import updater
             return self.send(200, updater.status())
+        if u.path == "/api/usage":   # anonymous usage statistics: a player's switch and today's counters (05/10)
+            import usage
+            return self.send(200, usage.status())
+        if u.path == "/api/usage/stats":   # the coach's PC: how players use the app
+            import usage
+            return self.send(200, usage.stats(max(1, min(90, int((q.get("days") or ["30"])[0] or 30)))))
         if u.path == "/api/reports":   # the coach's PC: the bug reports players sent (Settings, 05/10)
             import contributions
             return self.send(200, contributions.reports((q.get("id") or [None])[0]))
@@ -475,6 +481,23 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send(200, updater.apply([p for p in parts if p in ("code", "base", "runtime")] if isinstance(parts, list) else None))
             except ValueError as e:
                 return self.send(409, {"error": str(e)})
+        if u.path in ("/api/usage", "/api/usage/set", "/api/usage/pull"):   # anonymous usage statistics (05/10)
+            import usage
+            if u.path == "/api/usage":   # the page's counters of the last minute
+                usage.add(body)
+                return self.send(200, {"ok": True})
+            if u.path.endswith("set"):
+                return self.send(200, usage.set_options(body.get("on"), body.get("noticed")))
+            if config.role() == "client":
+                return self.send(403, {"error": "the coach's PC only"})
+            import contributions
+            try:
+                contributions.pull_usage(days=int(body.get("days") or 10))
+            except (OSError, SystemExit, ValueError) as e:
+                return self.send(400, {"error": str(e) or "failed"})
+            except Exception as e:
+                return self.send(502, {"error": f"the site: {type(e).__name__}"})
+            return self.send(200, usage.stats(int(body.get("days") or 30)))
         if u.path in ("/api/report/preview", "/api/report/send"):   # a player reports a bug (the alpha, 05/10)
             import bugreport
             page = str(body.get("page") or "")[:120]

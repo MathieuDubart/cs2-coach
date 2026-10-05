@@ -317,6 +317,7 @@ def main():
                     import contributions
                     contributions.pull()
                     contributions.pull_reports()   # the players' bug reports (05/10, the alpha)
+                    contributions.pull_usage()   # and their anonymous usage statistics
                     if contributions.ingest(follow=False):
                         st["step"] = int(time.time())
                         save(st)

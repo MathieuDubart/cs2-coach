@@ -597,6 +597,11 @@ table.lc{border-collapse:collapse;font-variant-numeric:tabular-nums;min-width:64
 .bugdlg textarea,.bugdlg input[type=email]{font:14px var(--f-body);background:var(--bg);color:var(--ink);border:1px solid var(--line);border-radius:4px;padding:7px 9px;resize:vertical}
 .bugdlg pre{max-height:180px;overflow:auto;white-space:pre-wrap;font:12px/1.45 var(--f-mono);background:var(--bg);border:1px solid var(--line);border-radius:4px;padding:8px}
 .replist{list-style:none;margin:8px 0;padding:0;display:grid;gap:10px}.replist li{border:1px solid var(--line);border-radius:6px;padding:10px 12px}
+.usage-note{position:fixed;left:16px;right:16px;bottom:16px;max-width:760px;margin:0 auto;z-index:50;background:var(--panel,var(--bg));border:1px solid var(--line);border-radius:8px;padding:14px 16px;display:grid;gap:10px;box-shadow:0 8px 30px rgba(0,0,0,.35)}
+.usage-note p{margin:0}
+.uspre{max-height:220px;overflow:auto;white-space:pre-wrap;font:12px var(--f-mono)}
+.ustab{width:100%;border-collapse:collapse;font-size:13.5px;margin:4px 0 10px}.ustab th,.ustab td{text-align:left;padding:4px 8px;border-bottom:1px solid var(--line)}
+.ustab th{font:600 11px var(--f-mono);text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}.ustab td:not(:first-child),.ustab th:not(:first-child){text-align:right}
 .replist li.done{opacity:.55}.replist p{margin:6px 0}.replist pre{max-height:300px;overflow:auto;white-space:pre-wrap;font:12px var(--f-mono)}
 .tlive>b{color:var(--good,#3ba55d)}
 .tcarte>summary{cursor:pointer;font-weight:600;margin:6px 0}
@@ -813,6 +818,8 @@ details.rlayers .btns{margin-top:6px}
   <p class="note" id="bug-msg" role="status"></p>
   <div class="btns"><button type="button" class="primary" id="bug-send">Send</button><button type="button" id="bug-close">Close</button></div>
 </form></dialog>
+<div class="usage-note" id="usage-note" role="region" aria-label="Usage statistics" hidden><p><b>This alpha counts how it is used, anonymously.</b> Which pages are opened, how long, which buttons are used, the errors met, per day, with no identifier, no SteamID, no name and nothing you write: it decides what to improve and what to remove.</p>
+  <div class="btns"><button type="button" class="primary" id="un-ok">OK</button><button type="button" id="un-off">Turn it off</button><button type="button" id="un-more">What is sent</button></div></div>
 <div class="jobpanel" id="job" hidden><div class="in" role="status" aria-live="polite"></div></div>
 <main>
   <section class="view" id="v-ingame"></section>
@@ -1383,6 +1390,42 @@ function renderMaps(){
     panel();redraw();
   }
 }
+// anonymous usage counters (05/10, the alpha): which views players open and how long (only while the page is seen),
+// which buttons they use (a key made of the view and the element's id or data attribute, never a text nor an id
+// number), the page's errors, the time Live runs during a match. Sent to the local server every minute and when the
+// page closes; it adds them up per day and sends a finished day, anonymous, to the coach's site (usage.py).
+const USE={view:null,views:{},actions:{},errors:0,live:0,seenErrs:0};
+const useOn=()=>D.local&&D.role==="client"&&!!(D.usage&&D.usage.on);
+function usageView(v){if(!useOn()||!v)return;if(v!==USE.view){USE.view=v;const x=USE.views[v]||(USE.views[v]={visits:0,seconds:0});x.visits++}}
+function usageKey(el){
+  let k=el.id&&!/\d{5,}/.test(el.id)?"#"+el.id:"";
+  if(!k)for(const a of el.attributes){if(!a.name.startsWith("data-"))continue;const val=a.value;
+    k=`[${a.name.slice(5)}${/^[a-z0-9_-]{1,24}$/i.test(val)&&!/\d{5,}/.test(val)?"="+val:""}]`;break}
+  if(!k&&el.tagName==="A"){const h=el.getAttribute("href")||"";k=/^https?:/i.test(h)?"a:external":"a:"+h.replace(/\d{5,}/g,"#").replace(/[^A-Za-z0-9_.:#=\/-]/g,"").slice(0,30)}
+  if(!k)k=el.tagName.toLowerCase()+(typeof el.className==="string"&&el.className?"."+el.className.split(/\s+/)[0]:"");
+  return `${USE.view||"?"}:${k}`.replace(/[^A-Za-z0-9_.:#=\[\]\/-]/g,"").slice(0,80)}
+document.addEventListener("click",e=>{if(!useOn())return;const el=e.target.closest("button,a,summary,[role=button],input[type=checkbox],input[type=radio],select");
+  if(!el||el.closest("#bugdlg"))return;const k=usageKey(el);USE.actions[k]=(USE.actions[k]||0)+1},true);
+setInterval(()=>{if(!useOn()||document.visibilityState!=="visible"||!USE.view)return;
+  USE.views[USE.view].seconds+=5;
+  if(USE.view==="ingame"&&typeof gsiFresh==="function"&&gsiFresh())USE.live+=5;
+  if(typeof ERRS!=="undefined"&&ERRS.length!==USE.seenErrs){USE.errors+=Math.max(0,ERRS.length-USE.seenErrs);USE.seenErrs=ERRS.length}},5000);
+function usageScreen(){const w=window.innerWidth;return w<700?"phone":w<1100?"tablet":w<1500?"laptop":w<2200?"desktop":"wide"}
+function usageFlush(beacon){if(!useOn())return;
+  const views={};for(const [k,v] of Object.entries(USE.views))if(v.visits||v.seconds)views[k]={visits:v.visits,seconds:v.seconds};
+  if(!Object.keys(views).length&&!Object.keys(USE.actions).length&&!USE.errors&&!USE.live)return;
+  const body=JSON.stringify({views,actions:USE.actions,errors:USE.errors,live:USE.live,screen:usageScreen()});
+  for(const v of Object.values(USE.views)){v.visits=0;v.seconds=0}USE.actions={};USE.errors=0;USE.live=0;
+  try{if(beacon&&navigator.sendBeacon)navigator.sendBeacon("/api/usage",new Blob([body],{type:"application/json"}));
+    else fetch("/api/usage",{method:"POST",headers:{"Content-Type":"application/json"},body,keepalive:true}).catch(()=>{})}catch(e){}}
+setInterval(()=>usageFlush(false),60000);
+addEventListener("pagehide",()=>usageFlush(true));
+document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="hidden")usageFlush(true)});
+// the first time: what is counted, and the switch (Settings has it too)
+function usageNotice(){const n=$("#usage-note");if(!n||!D.local||D.role!=="client"||!D.usage||!D.usage.on||D.usage.noticed)return;
+  n.hidden=false;
+  const done=async on=>{n.hidden=true;try{const r=await api("/api/usage/set",{noticed:true,...(on===false?{on:false}:{})});D.usage={on:r.on,noticed:true}}catch(e){}};
+  $("#un-ok",n).onclick=()=>done();$("#un-off",n).onclick=()=>done(false);$("#un-more",n).onclick=()=>{done();go("settings")}}
 
 // ---------- shared: sources, local API ----------
 const srcLinks=(l,sm,lab)=>l&&l.length?`<div class="srcs${sm?" sm":""}"><span class="note">${lab||"Sources:"}</span>${l.map(x=>`<a href="${esc(x.url)}" target="_blank" rel="noopener">${esc(x.label)}</a>`).join("")}</div>`:"";
@@ -1782,6 +1825,33 @@ function wireReports(v){
   $$("[data-rdone]",v).forEach(b=>b.onclick=async()=>{b.disabled=true;try{redo(await api("/api/reports/done",{id:b.dataset.rdone,done:b.dataset.v==="1"}))}catch(e){b.disabled=false}});
   $$("[data-rdiag]",v).forEach(b=>b.onclick=async()=>{const pre=b.closest("li").querySelector(".rdiag");if(!pre.hidden){pre.hidden=true;return}
     try{const r=(await (await fetch("/api/reports?id="+encodeURIComponent(b.dataset.rdiag))).json()).find(x=>x.id===b.dataset.rdiag);pre.textContent=JSON.stringify(r&&r.diag,null,1);pre.hidden=false}catch(e){}})}
+// anonymous usage statistics (05/10): a player's switch and today's counters; the coach's ranking of what players use
+function usageCard(u){if(!u||!u.client)return "";
+  const t=u.today||{},nv=Object.keys(t.views||{}).length,na=Object.values(t.actions||{}).reduce((a,b)=>a+b,0);
+  return `<article class="card" id="us-card"><h3>Usage statistics ${u.on?`<span class="pill strong">on</span>`:`<span class="pill">off</span>`}</h3>
+   <p>Anonymous counters, per day: the pages you open and how long, the buttons you use, the errors the page meets, whether Live runs during a match, the app's version and your screen's size class. No identifier, no SteamID, no name, nothing you write. A day once over is sent to the coach, added to that day's totals and thrown away.</p>
+   <p class="note">${u.on?`Today so far: ${nv} page(s), ${na} click(s) counted · ${u.days_sent} day(s) sent`:"Off: nothing is counted or sent."}</p>
+   ${u.on&&u.today?`<details><summary>Today's counters, exactly</summary><pre class="uspre">${esc(JSON.stringify(u.today,null,1))}</pre></details>`:""}
+   <div class="btns"><button type="button" id="us-on">${u.on?"Turn it off":"Turn it on"}</button></div></article>`}
+const VLABEL={ingame:"Live",prepare:"Prepare",review:"Review",profile:"Profile",players:"Explore · players",pros:"Explore · pros",team:"Explore · team",settings:"Settings"};
+function usageStatsCard(st){if(!st||D.role==="client")return "";
+  const T=st.totals||{},pd=T.reports||0,mins=s=>(s/60).toFixed(1);
+  if(!pd)return `<article class="card" id="ust-card"><h3>How players use the app</h3><p class="note">No usage statistics yet: they come from players' apps (0.0.2-alpha and later), one day after use, pulled every hour by the base loop.</p><div class="btns"><button type="button" id="ust-pull">Pull now</button></div></article>`;
+  const row=(c)=>`<tr>${c.map(x=>`<td>${x}</td>`).join("")}</tr>`;
+  const views=(st.views||[]).map(v=>row([esc(VLABEL[v.view]||v.view),`${v.users} <span class="note">(${v.share}%)</span>`,v.visits,mins(v.seconds),v.minutes_per_user])).join("");
+  const acts=(st.actions||[]).slice(0,25).map(a=>row([`<code>${esc(a.action)}</code>`,`${a.users} <span class="note">(${a.share}%)</span>`,a.count])).join("");
+  const rare=(st.rare||[]).map(a=>`<code>${esc(a.action)}</code> ${a.users}`).join(" · ");
+  const dict=o=>Object.entries(o||{}).sort((a,b)=>b[1]-a[1]).map(([k,n])=>`${esc(k)} ${n}`).join(" · ");
+  return `<article class="card" id="ust-card"><h3>How players use the app <span class="pill">last ${st.days} days</span></h3>
+   <p class="note">${pd} player-day(s) over ${T.days} day(s) · Live during a match: ${T.live_users} player-day(s), ${mins(T.live_seconds)} min · days with page errors: ${T.error_reports} (${T.errors} errors) · versions: ${dict(T.apps)} · screens: ${dict(T.screens)}</p>
+   <h4>Pages</h4><table class="ustab"><thead><tr><th>Page</th><th>Player-days</th><th>Visits</th><th>Minutes</th><th>Min / player-day</th></tr></thead><tbody>${views}</tbody></table>
+   <h4>Most used actions</h4><table class="ustab"><thead><tr><th>Action (page:element)</th><th>Player-days</th><th>Clicks</th></tr></thead><tbody>${acts}</tbody></table>
+   ${rare?`<h4>Rarely used</h4><p class="note">${rare}</p>`:""}
+   <p class="note">An element never clicked does not appear at all: compare with the page to find what nobody uses.</p>
+   <div class="btns"><button type="button" id="ust-pull">Pull now</button></div></article>`}
+function wireUsage(v){
+  const on=$("#us-on",v);if(on)on.onclick=async()=>{on.disabled=true;try{const r=await api("/api/usage/set",{on:on.textContent.includes("on")&&!on.textContent.includes("off"),noticed:true});D.usage={on:r.on,noticed:true};const k=$("#us-card",v);if(k){k.outerHTML=usageCard(r);wireUsage(v)}}catch(e){on.disabled=false}};
+  const pl=$("#ust-pull",v);if(pl)pl.onclick=async()=>{pl.disabled=true;try{const r=await api("/api/usage/pull",{days:30});const k=$("#ust-card",v);if(k){k.outerHTML=usageStatsCard(r);wireUsage(v)}}catch(e){pl.disabled=false;pl.insertAdjacentHTML("afterend",`<span class="note">${esc(e.message)}</span>`)}}}
 // the app updated with the base as it grows (04/10: "a button in the settings to update every data of the app with the
 // base that grows"): what every page reads from the base, then the profiles, yours first
 function refreshCard(r){
@@ -1826,6 +1896,7 @@ async function renderSettings(){
   let up=null;try{up=await (await fetch("/api/update")).json()}catch(e){}
   let ct=null;try{ct=await (await fetch("/api/contrib")).json()}catch(e){}
   let rs=null;if(D.role!=="client"){try{rs=await (await fetch("/api/reports")).json()}catch(e){}}
+  let us=null;try{us=await (await fetch(D.role==="client"?"/api/usage":"/api/usage/stats?days=30")).json()}catch(e){}
   const flag=new URLSearchParams(location.search).get("steam");
   const ok=b=>b?`<span class="pill strong">done</span>`:`<span class="pill">to do</span>`;
   const pt=st.playtime,L=st.links||{};
@@ -1896,7 +1967,7 @@ async function renderSettings(){
     <li><b>Your group</b>: your Steam friends on your team are recognized as your group, even after a single match together.</li>
     <li><b>Your experience</b>: your playtime sets the priorities of the Progress tab.</li></ul>
    <p class="note">Your codes stay in <code>out/settings.json</code> on this PC: this file is not versioned and the codes only go to Steam's official API. You can remove everything at any time.</p>
-   <div class="btns"><button type="button" id="st-forget">${steamForget?"Confirm: remove the sign-in and the codes":"Disconnect everything"}</button></div></article>${reportCard()}${updateCard(up)}${shareCard(ct)}${reportsCard(rs)}${growCard(gr)}${refreshCard(rf)}`;
+   <div class="btns"><button type="button" id="st-forget">${steamForget?"Confirm: remove the sign-in and the codes":"Disconnect everything"}</button></div></article>${reportCard()}${updateCard(up)}${shareCard(ct)}${D.role==="client"?usageCard(us):""}${reportsCard(rs)}${D.role!=="client"?usageStatsCard(us):""}${growCard(gr)}${refreshCard(rf)}`;
   wireRefresh(v);if(rf&&rf.running)pollRefresh(v);
   const msg=$("#st-msg",v),sid=st.steamid;
   const vmsg=$("#v-msg",v),vcall=async(path,body)=>{try{await api(path,Object.assign({sid},body||{}));renderSettings()}catch(e){if(vmsg)vmsg.textContent=e.message}};
@@ -1921,7 +1992,7 @@ async function renderSettings(){
   $("#st-sync",v).onclick=async()=>{msg.textContent="";try{await api("/api/steam/sync",{sid});poll()}catch(e){msg.textContent=e.message}};
   const au=$("#st-auto",v);if(au)au.onchange=async()=>{try{await api("/api/steam/options",{sid,auto_sync:au.checked})}catch(e){msg.textContent=e.message}};
   $$("[data-theme-set]",v).forEach(b=>b.onclick=()=>{store("theme",b.dataset.themeSet);applyTheme(b.dataset.themeSet);$$("[data-theme-set]",v).forEach(x=>x.setAttribute("aria-pressed",x===b))});
-  wireUpdate(v);wireShare(v);wireReports(v);
+  wireUpdate(v);wireShare(v);wireReports(v);wireUsage(v);
   const grb=$("#gr-go",v);if(grb)grb.onclick=async()=>{grb.disabled=true;try{await api(gr.on?"/api/grow/stop":"/api/grow/start",{target:+($("#gr-n",v)||{}).value||gr.target})}catch(e){}renderSettings()};
   $("#st-forget",v).onclick=async()=>{if(!steamForget){steamForget=true;renderSettings();return}steamForget=false;
     try{await api("/api/steam/forget",{sid});renderSettings()}catch(e){msg.textContent=e.message}};
@@ -4397,7 +4468,7 @@ function go(view){view=ALIAS[view]||view;if(!D.local&&location.hash!=="#"+view)h
 function show(view){view=ALIAS[view]||view;if(!RENDER[view])view="ingame";if(view!=="ingame")document.body.classList.remove("igfull");
   S.view=view;$$("main>.view").forEach(x=>x.hidden=x.id!=="v-"+view);
   if(!D.local||GLOBAL.includes(view)||!S.player||D.players[S.player])syncUrl();   // a profile still loading: its address once it is in
-  navUpdate(view);if(view!=="ingame")clearTimeout(gsiTimer);
+  navUpdate(view);usageView(view);if(view!=="ingame")clearTimeout(gsiTimer);
   if(view==="players"){renderPlayers();return}
   if(view==="pros"){renderPros();window.scrollTo(0,0);return}
   if(view==="settings"){renderSettings();window.scrollTo(0,0);return}
@@ -4424,6 +4495,7 @@ let updFrom=null;
     try{await api("/api/steam/sync",{sid:D.own});poll()}
     catch(e){if(/already running/i.test(e.message||""))poll();else{ub.disabled=false;updFrom=null;jobPanel(`<b>${esc(e.message||"Update impossible")}</b>`,"err")}}}}}
 if(D.local)fetch("/api/update").then(r=>r.json()).then(gearDot).catch(()=>{});   // a dot on the gear: an update is there
+usageNotice();
 {const at=$("#alphatag");if(at&&D.local&&D.role==="client"){at.hidden=false;at.onclick=()=>openReport("bug")}wireReport()}   // the alpha: a report from any page
 if(D.local){navQuiet++;route().finally(()=>navQuiet--);
   fetch("/api/codes").then(r=>r.json()).then(c=>{CODES={...c,...CODES};if(S.view==="matches"&&S.mpin){navQuiet++;try{syncUrl()}finally{navQuiet--}}}).catch(()=>{})}

@@ -186,4 +186,9 @@ def watch():
             bugreport.retry()
         except Exception as e:
             print("reports:", e, flush=True)
+        try:   # the anonymous usage statistics of the days that are over (off in Settings: nothing)
+            import usage
+            usage.send_pending()
+        except Exception as e:
+            print("usage:", e, flush=True)
         time.sleep(EVERY)

@@ -239,6 +239,22 @@ def pull_reports():
     return n
 
 
+def pull_usage(days=10):
+    """The days' totals of the players' anonymous usage statistics (usage.php): the last days again each time (today's
+    still grows), into out/usage_all/<day>.json."""
+    import datetime as dt
+    import usage
+    os.makedirs(usage.ALL, exist_ok=True)
+    since = (dt.date.today() - dt.timedelta(days=days)).isoformat()
+    n = 0
+    for x in json.loads(_req("list", kind="usage").read()).get("files") or []:
+        if x["f"][:10] < since and os.path.exists(os.path.join(usage.ALL, x["f"])):
+            continue
+        config.write_json(os.path.join(usage.ALL, x["f"]), json.loads(_req("get", x["f"], kind="usage").read()))
+        n += 1
+    return n
+
+
 def reports(with_diag=None):
     """The reports here, the newest first; one with its technical details (with_diag: its id)."""
     out = []

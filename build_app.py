@@ -172,7 +172,10 @@ def shell_html(index, local=False):
     s = config.settings()
     # a player's first launch (05/10): the Steam account signed in on this PC until they analyze or sign in
     own = str(s.get("own_steamid") or (config.logged_in_account()[0] if config.role() == "client" else None) or "")
+    import usage
+    u = usage.settings()
     data = {"index": index, "own": own if own and own != "None" else None, "role": config.role(),
+            "usage": {"on": usage.enabled(), "noticed": bool(u.get("noticed"))},
             "default": own if any(e["steamid"] == own for e in index) else (index[0]["steamid"] if index else None),
             "local": local, "generated": dt.datetime.now().isoformat(timespec="minutes")}
     return open(TEMPLATE, encoding="utf-8").read().replace("__DATA__", json.dumps(data, ensure_ascii=False, separators=(",", ":")))

@@ -397,6 +397,33 @@ function wireReports(v){
   $$("[data-rdone]",v).forEach(b=>b.onclick=async()=>{b.disabled=true;try{redo(await api("/api/reports/done",{id:b.dataset.rdone,done:b.dataset.v==="1"}))}catch(e){b.disabled=false}});
   $$("[data-rdiag]",v).forEach(b=>b.onclick=async()=>{const pre=b.closest("li").querySelector(".rdiag");if(!pre.hidden){pre.hidden=true;return}
     try{const r=(await (await fetch("/api/reports?id="+encodeURIComponent(b.dataset.rdiag))).json()).find(x=>x.id===b.dataset.rdiag);pre.textContent=JSON.stringify(r&&r.diag,null,1);pre.hidden=false}catch(e){}})}
+// anonymous usage statistics (05/10): a player's switch and today's counters; the coach's ranking of what players use
+function usageCard(u){if(!u||!u.client)return "";
+  const t=u.today||{},nv=Object.keys(t.views||{}).length,na=Object.values(t.actions||{}).reduce((a,b)=>a+b,0);
+  return `<article class="card" id="us-card"><h3>Usage statistics ${u.on?`<span class="pill strong">on</span>`:`<span class="pill">off</span>`}</h3>
+   <p>Anonymous counters, per day: the pages you open and how long, the buttons you use, the errors the page meets, whether Live runs during a match, the app's version and your screen's size class. No identifier, no SteamID, no name, nothing you write. A day once over is sent to the coach, added to that day's totals and thrown away.</p>
+   <p class="note">${u.on?`Today so far: ${nv} page(s), ${na} click(s) counted · ${u.days_sent} day(s) sent`:"Off: nothing is counted or sent."}</p>
+   ${u.on&&u.today?`<details><summary>Today's counters, exactly</summary><pre class="uspre">${esc(JSON.stringify(u.today,null,1))}</pre></details>`:""}
+   <div class="btns"><button type="button" id="us-on">${u.on?"Turn it off":"Turn it on"}</button></div></article>`}
+const VLABEL={ingame:"Live",prepare:"Prepare",review:"Review",profile:"Profile",players:"Explore · players",pros:"Explore · pros",team:"Explore · team",settings:"Settings"};
+function usageStatsCard(st){if(!st||D.role==="client")return "";
+  const T=st.totals||{},pd=T.reports||0,mins=s=>(s/60).toFixed(1);
+  if(!pd)return `<article class="card" id="ust-card"><h3>How players use the app</h3><p class="note">No usage statistics yet: they come from players' apps (0.0.2-alpha and later), one day after use, pulled every hour by the base loop.</p><div class="btns"><button type="button" id="ust-pull">Pull now</button></div></article>`;
+  const row=(c)=>`<tr>${c.map(x=>`<td>${x}</td>`).join("")}</tr>`;
+  const views=(st.views||[]).map(v=>row([esc(VLABEL[v.view]||v.view),`${v.users} <span class="note">(${v.share}%)</span>`,v.visits,mins(v.seconds),v.minutes_per_user])).join("");
+  const acts=(st.actions||[]).slice(0,25).map(a=>row([`<code>${esc(a.action)}</code>`,`${a.users} <span class="note">(${a.share}%)</span>`,a.count])).join("");
+  const rare=(st.rare||[]).map(a=>`<code>${esc(a.action)}</code> ${a.users}`).join(" · ");
+  const dict=o=>Object.entries(o||{}).sort((a,b)=>b[1]-a[1]).map(([k,n])=>`${esc(k)} ${n}`).join(" · ");
+  return `<article class="card" id="ust-card"><h3>How players use the app <span class="pill">last ${st.days} days</span></h3>
+   <p class="note">${pd} player-day(s) over ${T.days} day(s) · Live during a match: ${T.live_users} player-day(s), ${mins(T.live_seconds)} min · days with page errors: ${T.error_reports} (${T.errors} errors) · versions: ${dict(T.apps)} · screens: ${dict(T.screens)}</p>
+   <h4>Pages</h4><table class="ustab"><thead><tr><th>Page</th><th>Player-days</th><th>Visits</th><th>Minutes</th><th>Min / player-day</th></tr></thead><tbody>${views}</tbody></table>
+   <h4>Most used actions</h4><table class="ustab"><thead><tr><th>Action (page:element)</th><th>Player-days</th><th>Clicks</th></tr></thead><tbody>${acts}</tbody></table>
+   ${rare?`<h4>Rarely used</h4><p class="note">${rare}</p>`:""}
+   <p class="note">An element never clicked does not appear at all: compare with the page to find what nobody uses.</p>
+   <div class="btns"><button type="button" id="ust-pull">Pull now</button></div></article>`}
+function wireUsage(v){
+  const on=$("#us-on",v);if(on)on.onclick=async()=>{on.disabled=true;try{const r=await api("/api/usage/set",{on:on.textContent.includes("on")&&!on.textContent.includes("off"),noticed:true});D.usage={on:r.on,noticed:true};const k=$("#us-card",v);if(k){k.outerHTML=usageCard(r);wireUsage(v)}}catch(e){on.disabled=false}};
+  const pl=$("#ust-pull",v);if(pl)pl.onclick=async()=>{pl.disabled=true;try{const r=await api("/api/usage/pull",{days:30});const k=$("#ust-card",v);if(k){k.outerHTML=usageStatsCard(r);wireUsage(v)}}catch(e){pl.disabled=false;pl.insertAdjacentHTML("afterend",`<span class="note">${esc(e.message)}</span>`)}}}
 // the app updated with the base as it grows (04/10: "a button in the settings to update every data of the app with the
 // base that grows"): what every page reads from the base, then the profiles, yours first
 function refreshCard(r){
@@ -441,6 +468,7 @@ async function renderSettings(){
   let up=null;try{up=await (await fetch("/api/update")).json()}catch(e){}
   let ct=null;try{ct=await (await fetch("/api/contrib")).json()}catch(e){}
   let rs=null;if(D.role!=="client"){try{rs=await (await fetch("/api/reports")).json()}catch(e){}}
+  let us=null;try{us=await (await fetch(D.role==="client"?"/api/usage":"/api/usage/stats?days=30")).json()}catch(e){}
   const flag=new URLSearchParams(location.search).get("steam");
   const ok=b=>b?`<span class="pill strong">done</span>`:`<span class="pill">to do</span>`;
   const pt=st.playtime,L=st.links||{};
@@ -511,7 +539,7 @@ async function renderSettings(){
     <li><b>Your group</b>: your Steam friends on your team are recognized as your group, even after a single match together.</li>
     <li><b>Your experience</b>: your playtime sets the priorities of the Progress tab.</li></ul>
    <p class="note">Your codes stay in <code>out/settings.json</code> on this PC: this file is not versioned and the codes only go to Steam's official API. You can remove everything at any time.</p>
-   <div class="btns"><button type="button" id="st-forget">${steamForget?"Confirm: remove the sign-in and the codes":"Disconnect everything"}</button></div></article>${reportCard()}${updateCard(up)}${shareCard(ct)}${reportsCard(rs)}${growCard(gr)}${refreshCard(rf)}`;
+   <div class="btns"><button type="button" id="st-forget">${steamForget?"Confirm: remove the sign-in and the codes":"Disconnect everything"}</button></div></article>${reportCard()}${updateCard(up)}${shareCard(ct)}${D.role==="client"?usageCard(us):""}${reportsCard(rs)}${D.role!=="client"?usageStatsCard(us):""}${growCard(gr)}${refreshCard(rf)}`;
   wireRefresh(v);if(rf&&rf.running)pollRefresh(v);
   const msg=$("#st-msg",v),sid=st.steamid;
   const vmsg=$("#v-msg",v),vcall=async(path,body)=>{try{await api(path,Object.assign({sid},body||{}));renderSettings()}catch(e){if(vmsg)vmsg.textContent=e.message}};
@@ -536,7 +564,7 @@ async function renderSettings(){
   $("#st-sync",v).onclick=async()=>{msg.textContent="";try{await api("/api/steam/sync",{sid});poll()}catch(e){msg.textContent=e.message}};
   const au=$("#st-auto",v);if(au)au.onchange=async()=>{try{await api("/api/steam/options",{sid,auto_sync:au.checked})}catch(e){msg.textContent=e.message}};
   $$("[data-theme-set]",v).forEach(b=>b.onclick=()=>{store("theme",b.dataset.themeSet);applyTheme(b.dataset.themeSet);$$("[data-theme-set]",v).forEach(x=>x.setAttribute("aria-pressed",x===b))});
-  wireUpdate(v);wireShare(v);wireReports(v);
+  wireUpdate(v);wireShare(v);wireReports(v);wireUsage(v);
   const grb=$("#gr-go",v);if(grb)grb.onclick=async()=>{grb.disabled=true;try{await api(gr.on?"/api/grow/stop":"/api/grow/start",{target:+($("#gr-n",v)||{}).value||gr.target})}catch(e){}renderSettings()};
   $("#st-forget",v).onclick=async()=>{if(!steamForget){steamForget=true;renderSettings();return}steamForget=false;
     try{await api("/api/steam/forget",{sid});renderSettings()}catch(e){msg.textContent=e.message}};
