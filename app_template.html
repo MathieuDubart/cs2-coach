@@ -743,6 +743,16 @@ table.lc{border-collapse:collapse;font-variant-numeric:tabular-nums;min-width:64
 .ev-go{margin-top:8px;font-weight:600;color:var(--ct);text-decoration:none}
 .mc-prep{margin-top:10px;font:600 13px var(--f-body);background:transparent;color:var(--t);border:1px solid var(--line);border-radius:4px;padding:4px 10px;cursor:pointer}
 @media (max-width:900px){.brief2,.prof-top{grid-template-columns:1fr}.axis{grid-template-columns:36px minmax(0,1fr)}.ax-s{grid-column:2}}
+
+/* Live by phase (05/10): the layers under one control, the team chip, the dead line, the next round */
+details.rlayers{position:relative}
+details.rlayers>summary{cursor:pointer;list-style:none;font:600 13px var(--f-body);border:1px solid var(--line);border-radius:4px;padding:4px 10px;background:var(--panel);display:inline-block}
+details.rlayers>summary::-webkit-details-marker{display:none}
+details.rlayers[open]>summary{border-color:var(--ct)}
+details.rlayers .btns{margin-top:6px}
+.teamchip{font-size:12.5px}.teamchip.on{color:var(--good);border-color:var(--good)}
+.vsit.dead span{color:var(--muted)}.vsit.dead b{color:var(--warn)}
+.vnext{margin-top:6px;font:600 15px var(--f-display);letter-spacing:.02em;color:var(--muted)}.vnext b{color:var(--ink);text-transform:uppercase}
 </style>
 
 <div class="bar"><div class="bar-in">
@@ -2432,9 +2442,9 @@ function nadeTable(p,map,side){const N=(p.advice.plan||{}).nades,E=N&&((N.maps||
 // ---------- live bar, polling ----------
 function micBtn(){const g=gsiLast||{};if(!D.local)return "";
   // what you hear (your teammates' voices, the game): only once every teammate said yes, for this match only (04/10)
-  const team=!g.map||g.practice?"":g.team_rec==="on"?`<span class="pill weak" title="What you hear (your teammates' voices and the game) is recorded for this match: your team agreed">● Team</span><button type="button" class="close" data-team="off">Stop</button>`
-    :g.team_rec==="pending"?`<span class="pill weak" title="Your team agreed: what you hear is recorded with your microphone, from the start of the match">● Team: with the match</span><button type="button" class="close" data-team="off">Cancel</button>`
-    :`<button type="button" class="close" data-team="on" title="Only once every teammate said yes: their voices are recorded too (France, art. 226-1), for this match only, to see after it what you did after their calls. Numpad / in game does the same (exec coach_binds once).">My team agreed: record what I hear</button>`;
+  const team=!g.map||g.practice?"":g.team_rec==="on"?`<button type="button" class="close teamchip on" data-team="off" title="What you hear (your teammates' voices and the game) is recorded for this match: your team agreed. Click to stop.">● Team</button>`
+    :g.team_rec==="pending"?`<button type="button" class="close teamchip" data-team="off" title="Your team agreed: what you hear is recorded with your microphone from the start of the match. Click to cancel.">● Team · at the start</button>`
+    :`<button type="button" class="close teamchip" data-team="on" title="My team agreed: record what I hear. Only once every teammate said yes: their voices are recorded too (France, art. 226-1), for this match only, to see after it what you did after their calls. Numpad / in game does the same (exec coach_binds once).">Team ○</button>`;
   if(g.mic)return `${g.mic_silent?`<span class="pill weak" title="No sound for a minute">● Mic silent: <a href="#settings" style="color:inherit">check the microphone</a></span>`:`<span class="pill weak" title="Your microphone is recorded to analyze your calls">● Mic</span>`}${g.mic_auto?"":`<button type="button" class="close" data-mic="stop">Stop recording</button>`}${team}`;
   return (g.mic_auto?"":`<button type="button" class="close" data-mic="start" title="Records your microphone to analyze your calls after the match">Record my calls</button>`)+team}
 // the focus of the week, small in the live bar: what you work on, never more than one line (05/10)
@@ -2665,7 +2675,9 @@ function renderIngame(){
       const gR=following&&gsiLast&&gsiLast.map_phase==="warmup"&&typeof briefState==="function"?briefState(gsiLast):gsiLast;
       liveRadar(box,p,S.map,S.level,gR,{side:S.side,layers:liveLayers(),following,site:following?(igEv.site||((typeof autoSite==="function"&&autoSite(p,gsiLast))||{}).site||null):null})};
     if(D.viewboxes[S.map])draw();else loadRadar(S.map).then(draw);
-    $$("[data-rlayer]",v).forEach(b=>b.onclick=()=>{const k=b.dataset.rlayer,L=liveLayers();store("rlayers2",L.includes(k)?L.filter(x=>x!==k):[...L,k]);renderIngame()})}
+    $$("[data-rlayer]",v).forEach(b=>b.onclick=()=>{const k=b.dataset.rlayer,L=liveLayers();store("rlayers6",L.includes(k)?L.filter(x=>x!==k):[...L,k]);renderIngame()});   // the key liveLayers reads
+    const ra=$("[data-rlayer-auto]",v);if(ra)ra.onclick=()=>{store("rlayers6",RLAYERS.map(x=>x[0]));renderIngame()};
+    const rd=$("details.rlayers",v);if(rd)rd.ontoggle=()=>{RL_OPEN=rd.open}}
   else if(m){const st={level:S.level,layers:["zones","best","nades"],nades:cols.plan?cols.plan.key_nades:[],sel:null},box=$(".radar-box",v);crossRadar(box,m,S.side,st);
     spotStars(box,((PL.spots||{})[S.map]||{})[S.side],S.level);
     const ps=plantSpots().filter(x=>!x.level||x.level===S.level);if(ps.length){const g_=$("g",box);ps.forEach(it=>{tip(el("rect",{x:it.px[0]-9,y:it.px[1]-9,width:18,height:18,rx:3,style:"fill:var(--bad);stroke:#fff;stroke-width:2"},g_),it.title);el("text",{x:it.px[0],y:it.px[1]-13,"text-anchor":"middle",class:"zlabel"},g_).textContent=it.label})}}
@@ -2861,11 +2873,18 @@ function mkMark(ov,s,mine,dim){const [x,y]=s.px,R=mine?13:9,g=el("g",{class:"mks
   const t=mine?(s.best>=2?`${s.best}K`:""):(s.n>=2?`×${s.n}`:"");
   obstacle(ov,x,y,2*R,2*R);if(t)qLabel(ov,x,y,R,t,"mkt"+(mine?"":" o"),mine?2:1);
   return tip(g,mine?`${s.zone}: you got ${s.best} kills from here in one round${s.n>1?` (${s.n} rounds)`:""}`:`${s.zone}: ${s.n} rounds where a player got 2+ kills from here (best ${s.best})`)}
+// the layers under one control (05/10): with all of them on, the map shows what fits the moment of the round (your
+// paths and their spots during the buy and the first 45 s, the key rounds' spots, the post-plant once the bomb is
+// down, the kill angles of the moment); open it between two rounds to hide some
+let RL_OPEN=false;
 function layerBtns(){const L=liveLayers(),H=typeof isHostage==="function"&&isHostage(S.map),HN={paths:"Your ways",ctpos:"T spots",danger:"T kill angles"};   // hostage maps: the CTs attack
-  return `<div class="btns" role="group" aria-label="What the radar shows">${RLAYERS.filter(([k])=>!H||!["key","post"].includes(k)).map(([k,t])=>`<button type="button" data-rlayer="${k}" aria-pressed="${L.includes(k)}">${H&&HN[k]||t}</button>`).join("")}</div>`}
+  const ks=RLAYERS.filter(([k])=>!H||!["key","post"].includes(k)),all=ks.every(([k])=>L.includes(k));
+  return `<details class="rlayers"${RL_OPEN?" open":""}><summary title="The map shows what fits the moment of the round by itself">Layers · ${all?"auto":`${ks.filter(([k])=>L.includes(k)).length} of ${ks.length}`}</summary>
+   <div class="btns" role="group" aria-label="What the radar shows">${ks.map(([k,t])=>`<button type="button" data-rlayer="${k}" aria-pressed="${L.includes(k)}">${H&&HN[k]||t}</button>`).join("")}${all?"":`<button type="button" data-rlayer-auto>Auto: all, by moment</button>`}</div></details>`}
 
 function liveRadar(box,p,map,level,g,o){
-  const PL=p.advice.plan||{},TS=PL.tside,M=TS&&TS.maps&&TS.maps[map],GEO=M&&M.geo,ct=o.side==="CT",HMAP=isHostage(map),att=HMAP?ct:!ct,on=k=>o.layers.includes(k)&&(att?!["strong","multi","spots"].includes(k):!["paths","ctpos","danger"].includes(k));   // the attack (T, or CT on a hostage map): the enemies, not your own spots
+  const dead=!!(o.following&&g&&typeof deadAgo==="function"&&deadAgo(g)!=null);   // dead (05/10): the enemies' layers stay, your own go
+  const PL=p.advice.plan||{},TS=PL.tside,M=TS&&TS.maps&&TS.maps[map],GEO=M&&M.geo,ct=o.side==="CT",HMAP=isHostage(map),att=HMAP?ct:!ct,on=k=>o.layers.includes(k)&&!(dead&&["paths","key","spots","multi"].includes(k))&&(att?!["strong","multi","spots"].includes(k):!["paths","ctpos","danger"].includes(k));   // the attack (T, or CT on a hostage map): the enemies, not your own spots
   const svg=$("svg",box),img=$("image",svg),ov=$("g",svg),cap=$(".caption",box);
   img.setAttribute("href",D.radars[`${map}:${level}`]||"");svg.setAttribute("viewBox",(D.viewboxes[map]||[0,0,1024,1024]).join(" "));ov.replaceChildren();PLACED.set(ov,[]);
   const here=x=>x&&x.px&&(!x.level||!level||x.level===level),legend=[];
@@ -3312,6 +3331,11 @@ function vPeekTimes(g,el){const H=g.hist||{},Mk=H.marks||{},R=H.rounds||{},hs=ha
     if(best&&(el==null||best.t>el-3))out.push({z,...best})});
   if(!out.length)return "";out.sort((a,b)=>a.t-b.t);
   return `<div class="vchips">${out.slice(0,3).map(o=>`<span class="vchip warn">⏱ ${vShort(o.z)} ~${clock(o.t)} ×${o.n}</span>`).join("")}</div>`}
+// the round after this one, at the round's end: the buy the money calls for (the only look ahead of the panel, 05/10)
+function nextBuy(p,g){if(!g||g.round==null||!g.side||g.practice)return null;const n=g.round+1;
+  if(n===halfStart(n))return "pistol round";
+  const pl=econPlan(p,Object.assign({},g,{round:n,round_phase:"freezetime"}));
+  return pl&&pl.best?({eco:"eco",half:"half buy",force:"force buy",full:"full buy"}[pl.best.k]||esc(pl.best.k)):null}
 function vInfo(g){const a=deadAgo(g);return a!=null&&a>=2.5&&a<=9&&!calledSince(g,a)?`<div class="vbig warn"><b>📣 INFO</b><span>where · how many · how hurt</span></div>`:""}
 function infoOn(){try{return localStorage.getItem("coach_info")!=="off"}catch(e){return true}}
 function coachInfo(g){if(!g||g.practice||!voiceOn()||!infoOn())return;const a=deadAgo(g);if(a==null||a<3||a>6||calledSince(g,a))return;const key=[g.map,g.round,"info"].join("|");   // 3 s after: the time to take your death in
@@ -3349,25 +3373,26 @@ function nowVisual(p,g,following){
     const HM=isHostage(g.map);if(HM)put("focus",ct?(vFocus(p,g)||vHostRoutes(p,g,false)):vHostRoutes(p,g,true));
     if(!ct&&!HM){put("focus",vFocus(p,g)||vPathCurve(p,g)||vTimeline(p,g));put("book",vBook(p,g,null));put("early",vEarlyMatch(g));
       put("play",vPush(p,g));put("hold",vPushAns(p,g,false));put("tchips",vTchips(p,g))}}   // the plays and the grenades are on the map
-  else if(ph==="live"){const el=g.elapsed||0,planted=g.bomb==="planted";put("call",vCall(g));put("info",vInfo(g));
+  else if(ph==="live"){const el=g.elapsed||0,planted=g.bomb==="planted",dead=deadAgo(g)!=null;put("call",vCall(g));   // dead (05/10): what helps to call stays, your own path and spot go
+    put("info",vInfo(g)||(dead&&!planted?`<div class="vsit dead"><span>YOU'RE OUT</span><b>call what your teammate can't see</b></div>`:""));
     if(planted){const left=g.phase_left!=null?g.phase_left:Math.max(0,40-(g.since_plant||0)),as=typeof autoSite==="function"?autoSite(p,g):null;
       put("alert",`<div class="vbig ${ct?"bad":"good"}"><b>💣 ${Math.ceil(left)}s</b><span>${ct?"retake together":"hold the bomb"}${as?` · ${as.site} site, ${as.said?"you said it":`${as.p}% sure`}`:" · numpad 7 A / 9 B"}</span></div>`);
       if(as&&(as.said||as.p>=70))put("focus",ct?vRetake(p,g,as.site):vPostPlant(p,g,as.site))}
     else if(isHostage(g.map))put("focus",ct?(vFocus(p,g)||(el<45?vHostRoutes(p,g,false):"")):(el<45?vHostRoutes(p,g,true):""));
-    else if(ct){put("focus",vMySite(p,g));put("peek",vPeekTimes(g,el));if(r){put("read",vOdds(r));
+    else if(ct){if(!dead)put("focus",vMySite(p,g));put("peek",vPeekTimes(g,el));if(r){put("read",vOdds(r));
         const M=TS&&TS.maps&&TS.maps[g.map];
         put("play",(el<32?vRush(TS,g,r):"")||vFights(M,g,r));
         if(el>=15&&el<=80&&Math.max(r.A,r.B)>=70&&typeof rotationFor==="function"){const X=r.A>r.B?"A":"B",o=X==="A"?"B":"A",R=rotationFor(M,X,`${o} Site`,M.geo),rt=R&&R.routes&&R.routes[0];
           const me=mySite(g);   // where you said you are this round (numpad 7 / 9, or said)
           if(rt&&me!==X)put("alert",`<div class="vbig warn"><b>${o} → ${X}</b><span>${me===o?`you're ${o}: rotate now`:`if you hold ${o}: rotate`} · ${rt.travel!=null?`${Math.round(rt.travel)} s · `:""}${rt.died}% die on the way</span></div>`)}   // the hit leans hard to one site
-        if(el<75)put("hold",vCTline(p,g,r)||(el<60?vHold(p,g,r):""));
+        if(el<75&&!dead)put("hold",vCTline(p,g,r)||(el<60?vHold(p,g,r):""));
         (r.evid||[]).filter(x=>/spot/.test(x)).slice(0,2).forEach(ev=>put("evid",`<span class="vchip ${/fight/.test(ev)?"bad":""}">● ${esc(ev)}</span>`))}}
-    else{put("read",vOpen(g));put("peek",vPeekTimes(g,el));put("focus",vFocus(p,g)||vPathCurve(p,g)||vTimeline(p,g));
-      put("play",(el<45&&vPush(p,g))||vFights(TS&&TS.maps&&TS.maps[g.map],g,null));put("hold",el<50?vPushAns(p,g,true):"");
+    else{put("read",vOpen(g));put("peek",vPeekTimes(g,el));if(!dead)put("focus",vFocus(p,g)||vPathCurve(p,g)||vTimeline(p,g));
+      put("play",(el<45&&!dead&&vPush(p,g))||vFights(TS&&TS.maps&&TS.maps[g.map],g,null));if(!dead)put("hold",el<50?vPushAns(p,g,true):"");
       const left=g.phase_left!=null?g.phase_left:Math.max(0,RLEN()-el);
       if(left<=45)put("alert",`<div class="vbig bad"><b>PLANT ${Math.floor(left/60)}:${String(Math.floor(left%60)).padStart(2,"0")}</b><span>${left>20?"commit now":"plant or save"}</span></div>`);
-      else put("tchips",vTchips(p,g))}}
-  else if(ph==="over")put("call",`<div class="vsit"><span>ROUND ${g.round}</span>${g.win_team?`<b class="${g.win_team===g.side?"good":"bad"}">${g.win_team===g.side?"WON":"LOST"}</b>`:""}</div>`);
+      else if(!dead)put("tchips",vTchips(p,g))}}
+  else if(ph==="over"){const nx=nextBuy(p,g);put("call",`<div class="vsit"><span>ROUND ${g.round}</span>${g.win_team?`<b class="${g.win_team===g.side?"good":"bad"}">${g.win_team===g.side?"WON":"LOST"}</b>`:""}</div>${nx?`<div class="vnext">Next round · <b>${nx}</b></div>`:""}`)}
   const html=slotted(g,P);
   return `<div class="vz">${html||`<div class="vsit"><span>ROUND ${g.round||""}</span></div>`}</div>`}
 // the buy notification of the full-screen view: one compact card, no paragraph, never scrolls
@@ -4209,7 +4234,7 @@ S.map=HOST(store("map"))?null:store("map");S.side=store("side")||"T";
 window.addEventListener("hashchange",()=>{const h=location.hash.slice(1),v=ALIAS[h]||h;if(!D.local)return show(h);if(!RENDER[v])return;navQuiet++;try{show(v)}finally{navQuiet--}});
 window.addEventListener("popstate",()=>{const h=location.hash.slice(1);if(!D.local||RENDER[ALIAS[h]||h])return;navQuiet++;route().finally(()=>navQuiet--)});
 S.view=ALIAS[location.hash.slice(1)]||location.hash.slice(1)||"ingame";if(!RENDER[S.view])S.view="ingame";
-if(store("focus"))document.body.classList.add("focus");
+{const f=store("focus");if(f||(f==null&&location.pathname.replace(/\/+$/,"")==="/live"))document.body.classList.add("focus")}   // /live: 2nd screen mode unless you left it
 // Update: your new matches fetched and analyzed (the same as the automatic sync, now)
 let updFrom=null;
 {const ub=$("#updbtn");if(ub&&D.local&&D.own){ub.hidden=false;

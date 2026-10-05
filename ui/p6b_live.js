@@ -182,11 +182,18 @@ function mkMark(ov,s,mine,dim){const [x,y]=s.px,R=mine?13:9,g=el("g",{class:"mks
   const t=mine?(s.best>=2?`${s.best}K`:""):(s.n>=2?`×${s.n}`:"");
   obstacle(ov,x,y,2*R,2*R);if(t)qLabel(ov,x,y,R,t,"mkt"+(mine?"":" o"),mine?2:1);
   return tip(g,mine?`${s.zone}: you got ${s.best} kills from here in one round${s.n>1?` (${s.n} rounds)`:""}`:`${s.zone}: ${s.n} rounds where a player got 2+ kills from here (best ${s.best})`)}
+// the layers under one control (05/10): with all of them on, the map shows what fits the moment of the round (your
+// paths and their spots during the buy and the first 45 s, the key rounds' spots, the post-plant once the bomb is
+// down, the kill angles of the moment); open it between two rounds to hide some
+let RL_OPEN=false;
 function layerBtns(){const L=liveLayers(),H=typeof isHostage==="function"&&isHostage(S.map),HN={paths:"Your ways",ctpos:"T spots",danger:"T kill angles"};   // hostage maps: the CTs attack
-  return `<div class="btns" role="group" aria-label="What the radar shows">${RLAYERS.filter(([k])=>!H||!["key","post"].includes(k)).map(([k,t])=>`<button type="button" data-rlayer="${k}" aria-pressed="${L.includes(k)}">${H&&HN[k]||t}</button>`).join("")}</div>`}
+  const ks=RLAYERS.filter(([k])=>!H||!["key","post"].includes(k)),all=ks.every(([k])=>L.includes(k));
+  return `<details class="rlayers"${RL_OPEN?" open":""}><summary title="The map shows what fits the moment of the round by itself">Layers · ${all?"auto":`${ks.filter(([k])=>L.includes(k)).length} of ${ks.length}`}</summary>
+   <div class="btns" role="group" aria-label="What the radar shows">${ks.map(([k,t])=>`<button type="button" data-rlayer="${k}" aria-pressed="${L.includes(k)}">${H&&HN[k]||t}</button>`).join("")}${all?"":`<button type="button" data-rlayer-auto>Auto: all, by moment</button>`}</div></details>`}
 
 function liveRadar(box,p,map,level,g,o){
-  const PL=p.advice.plan||{},TS=PL.tside,M=TS&&TS.maps&&TS.maps[map],GEO=M&&M.geo,ct=o.side==="CT",HMAP=isHostage(map),att=HMAP?ct:!ct,on=k=>o.layers.includes(k)&&(att?!["strong","multi","spots"].includes(k):!["paths","ctpos","danger"].includes(k));   // the attack (T, or CT on a hostage map): the enemies, not your own spots
+  const dead=!!(o.following&&g&&typeof deadAgo==="function"&&deadAgo(g)!=null);   // dead (05/10): the enemies' layers stay, your own go
+  const PL=p.advice.plan||{},TS=PL.tside,M=TS&&TS.maps&&TS.maps[map],GEO=M&&M.geo,ct=o.side==="CT",HMAP=isHostage(map),att=HMAP?ct:!ct,on=k=>o.layers.includes(k)&&!(dead&&["paths","key","spots","multi"].includes(k))&&(att?!["strong","multi","spots"].includes(k):!["paths","ctpos","danger"].includes(k));   // the attack (T, or CT on a hostage map): the enemies, not your own spots
   const svg=$("svg",box),img=$("image",svg),ov=$("g",svg),cap=$(".caption",box);
   img.setAttribute("href",D.radars[`${map}:${level}`]||"");svg.setAttribute("viewBox",(D.viewboxes[map]||[0,0,1024,1024]).join(" "));ov.replaceChildren();PLACED.set(ov,[]);
   const here=x=>x&&x.px&&(!x.level||!level||x.level===level),legend=[];

@@ -339,9 +339,9 @@ function nadeTable(p,map,side){const N=(p.advice.plan||{}).nades,E=N&&((N.maps||
 // ---------- live bar, polling ----------
 function micBtn(){const g=gsiLast||{};if(!D.local)return "";
   // what you hear (your teammates' voices, the game): only once every teammate said yes, for this match only (04/10)
-  const team=!g.map||g.practice?"":g.team_rec==="on"?`<span class="pill weak" title="What you hear (your teammates' voices and the game) is recorded for this match: your team agreed">● Team</span><button type="button" class="close" data-team="off">Stop</button>`
-    :g.team_rec==="pending"?`<span class="pill weak" title="Your team agreed: what you hear is recorded with your microphone, from the start of the match">● Team: with the match</span><button type="button" class="close" data-team="off">Cancel</button>`
-    :`<button type="button" class="close" data-team="on" title="Only once every teammate said yes: their voices are recorded too (France, art. 226-1), for this match only, to see after it what you did after their calls. Numpad / in game does the same (exec coach_binds once).">My team agreed: record what I hear</button>`;
+  const team=!g.map||g.practice?"":g.team_rec==="on"?`<button type="button" class="close teamchip on" data-team="off" title="What you hear (your teammates' voices and the game) is recorded for this match: your team agreed. Click to stop.">● Team</button>`
+    :g.team_rec==="pending"?`<button type="button" class="close teamchip" data-team="off" title="Your team agreed: what you hear is recorded with your microphone from the start of the match. Click to cancel.">● Team · at the start</button>`
+    :`<button type="button" class="close teamchip" data-team="on" title="My team agreed: record what I hear. Only once every teammate said yes: their voices are recorded too (France, art. 226-1), for this match only, to see after it what you did after their calls. Numpad / in game does the same (exec coach_binds once).">Team ○</button>`;
   if(g.mic)return `${g.mic_silent?`<span class="pill weak" title="No sound for a minute">● Mic silent: <a href="#settings" style="color:inherit">check the microphone</a></span>`:`<span class="pill weak" title="Your microphone is recorded to analyze your calls">● Mic</span>`}${g.mic_auto?"":`<button type="button" class="close" data-mic="stop">Stop recording</button>`}${team}`;
   return (g.mic_auto?"":`<button type="button" class="close" data-mic="start" title="Records your microphone to analyze your calls after the match">Record my calls</button>`)+team}
 // the focus of the week, small in the live bar: what you work on, never more than one line (05/10)
@@ -572,7 +572,9 @@ function renderIngame(){
       const gR=following&&gsiLast&&gsiLast.map_phase==="warmup"&&typeof briefState==="function"?briefState(gsiLast):gsiLast;
       liveRadar(box,p,S.map,S.level,gR,{side:S.side,layers:liveLayers(),following,site:following?(igEv.site||((typeof autoSite==="function"&&autoSite(p,gsiLast))||{}).site||null):null})};
     if(D.viewboxes[S.map])draw();else loadRadar(S.map).then(draw);
-    $$("[data-rlayer]",v).forEach(b=>b.onclick=()=>{const k=b.dataset.rlayer,L=liveLayers();store("rlayers2",L.includes(k)?L.filter(x=>x!==k):[...L,k]);renderIngame()})}
+    $$("[data-rlayer]",v).forEach(b=>b.onclick=()=>{const k=b.dataset.rlayer,L=liveLayers();store("rlayers6",L.includes(k)?L.filter(x=>x!==k):[...L,k]);renderIngame()});   // the key liveLayers reads
+    const ra=$("[data-rlayer-auto]",v);if(ra)ra.onclick=()=>{store("rlayers6",RLAYERS.map(x=>x[0]));renderIngame()};
+    const rd=$("details.rlayers",v);if(rd)rd.ontoggle=()=>{RL_OPEN=rd.open}}
   else if(m){const st={level:S.level,layers:["zones","best","nades"],nades:cols.plan?cols.plan.key_nades:[],sel:null},box=$(".radar-box",v);crossRadar(box,m,S.side,st);
     spotStars(box,((PL.spots||{})[S.map]||{})[S.side],S.level);
     const ps=plantSpots().filter(x=>!x.level||x.level===S.level);if(ps.length){const g_=$("g",box);ps.forEach(it=>{tip(el("rect",{x:it.px[0]-9,y:it.px[1]-9,width:18,height:18,rx:3,style:"fill:var(--bad);stroke:#fff;stroke-width:2"},g_),it.title);el("text",{x:it.px[0],y:it.px[1]-13,"text-anchor":"middle",class:"zlabel"},g_).textContent=it.label})}}

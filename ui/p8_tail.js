@@ -202,7 +202,7 @@ S.map=HOST(store("map"))?null:store("map");S.side=store("side")||"T";
 window.addEventListener("hashchange",()=>{const h=location.hash.slice(1),v=ALIAS[h]||h;if(!D.local)return show(h);if(!RENDER[v])return;navQuiet++;try{show(v)}finally{navQuiet--}});
 window.addEventListener("popstate",()=>{const h=location.hash.slice(1);if(!D.local||RENDER[ALIAS[h]||h])return;navQuiet++;route().finally(()=>navQuiet--)});
 S.view=ALIAS[location.hash.slice(1)]||location.hash.slice(1)||"ingame";if(!RENDER[S.view])S.view="ingame";
-if(store("focus"))document.body.classList.add("focus");
+{const f=store("focus");if(f||(f==null&&location.pathname.replace(/\/+$/,"")==="/live"))document.body.classList.add("focus")}   // /live: 2nd screen mode unless you left it
 // Update: your new matches fetched and analyzed (the same as the automatic sync, now)
 let updFrom=null;
 {const ub=$("#updbtn");if(ub&&D.local&&D.own){ub.hidden=false;

@@ -401,3 +401,13 @@ table.lc{border-collapse:collapse;font-variant-numeric:tabular-nums;min-width:64
 .ev-go{margin-top:8px;font-weight:600;color:var(--ct);text-decoration:none}
 .mc-prep{margin-top:10px;font:600 13px var(--f-body);background:transparent;color:var(--t);border:1px solid var(--line);border-radius:4px;padding:4px 10px;cursor:pointer}
 @media (max-width:900px){.brief2,.prof-top{grid-template-columns:1fr}.axis{grid-template-columns:36px minmax(0,1fr)}.ax-s{grid-column:2}}
+
+/* Live by phase (05/10): the layers under one control, the team chip, the dead line, the next round */
+details.rlayers{position:relative}
+details.rlayers>summary{cursor:pointer;list-style:none;font:600 13px var(--f-body);border:1px solid var(--line);border-radius:4px;padding:4px 10px;background:var(--panel);display:inline-block}
+details.rlayers>summary::-webkit-details-marker{display:none}
+details.rlayers[open]>summary{border-color:var(--ct)}
+details.rlayers .btns{margin-top:6px}
+.teamchip{font-size:12.5px}.teamchip.on{color:var(--good);border-color:var(--good)}
+.vsit.dead span{color:var(--muted)}.vsit.dead b{color:var(--warn)}
+.vnext{margin-top:6px;font:600 15px var(--f-display);letter-spacing:.02em;color:var(--muted)}.vnext b{color:var(--ink);text-transform:uppercase}
