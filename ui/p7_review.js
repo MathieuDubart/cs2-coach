@@ -119,12 +119,14 @@ function ratingSpark(T){if(!T||T.length<2)return "";const W=640,H=120,pad=12,rs=
 // 1 · the brief: the session in 2 minutes
 function reviewBrief(R,f){const T=R.trend||[],rec=T.filter(x=>x.recent),bef=T.filter(x=>!x.recent),avg=a=>a.length?a.reduce((s,x)=>s+x.rating,0)/a.length:null;
   const ra=avg(rec),rb=avg(bef),M=R.maps||[],ng=M.reduce((s,m)=>s+m.games,0),adr=ng?M.reduce((s,m)=>s+m.adr*m.games,0)/ng:null,PI=(R.pro||{}).items||[];
+  // a read's name: the analyst reads carry an id (named in readsOf().meta, as the deep dive does), the older insights a title (05/10: the bullets were empty)
+  const RM=readsOf().meta||{},rdT=i=>i.title||(i.id==="spot"?`Deaths at ${i.place} (${MAPN(i.map)})`:(RM[i.id]||{}).title||i.id);
   const works=[...R.changes.filter(c=>c.better).slice(0,2).map(c=>`${esc(c.label)}: ${f(c.before,c.unit)} → <b>${f(c.after,c.unit)}</b>`),
-    ...PI.filter(i=>i.severity==="positive").map(i=>`${esc(i.title)} <span class="note">(${i.value} of ${i.of})</span>`),
+    ...PI.filter(i=>i.severity==="positive").map(i=>`${esc(rdT(i))} <span class="note">(${i.value} of ${i.of})</span>`),
     ...(()=>{const top=M.filter(m=>m.rating>=1.2).sort((a,b)=>b.rating-a.rating).slice(0,3);   // the maps you played well
       return top.length?[`Strong on ${top.map(m=>`${esc(MAPN(m.map))} ${rtBadge(m.rating)}`).join(", ")}`]:[]})()].slice(0,3);
   const watch=[...R.changes.filter(c=>!c.better).slice(0,2).map(c=>`${esc(c.label)}: ${f(c.before,c.unit)} → <b>${f(c.after,c.unit)}</b>`),
-    ...PI.filter(i=>i.severity!=="positive").map(i=>`${esc(i.title)} <span class="note">(${i.value} of ${i.of})</span>`)].slice(0,3);
+    ...PI.filter(i=>i.severity!=="positive").map(i=>`${esc(rdT(i))} <span class="note">(${i.value} of ${i.of})</span>`)].slice(0,3);
   const a0=(R.axes||[])[0],li=xs=>xs.length?`<ul>${xs.map(x=>`<li>${x}</li>`).join("")}</ul>`:"";
   return `<section class="tier" id="tier1"><div class="tier-h"><b>1</b><h3>Quick brief</h3><span class="note">the session in 2 minutes</span></div>
    <div class="brief">
