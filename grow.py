@@ -335,9 +335,9 @@ def main():
                     save(st)
                 if once:
                     break
-    except Exception as e:
+    except BaseException as e:   # an interruption too (SystemExit, KeyboardInterrupt): 05/10 02:17 the loop ended mid-step without a word
         import traceback
-        log(f"loop error: {e}\n{traceback.format_exc()[-1500:]}")
+        log(f"loop error: {type(e).__name__}: {e}\n{traceback.format_exc()[-1500:]}")
         raise
     finally:
         st["pid"] = None
