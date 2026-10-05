@@ -141,7 +141,7 @@ function reviewBrief(R,f){const T=R.trend||[],rec=T.filter(x=>x.recent),bef=T.fi
    <div class="brief3">
     <article class="card b-good"><span class="eyebrow">What works</span>${li(works)||`<p class="note">Nothing stands out above your usual level.</p>`}</article>
     <article class="card b-bad"><span class="eyebrow">Watch out</span>${li(watch)||`<p class="note">Nothing slips: your numbers hold.</p>`}</article>
-    <article class="card b-next"><span class="eyebrow">Next session</span>${R.next?`<p class="lead">${esc(R.next)}</p>`:""}${a0&&a0.do.length?`<p>${esc(a0.short||a0.title)}: ${esc(a0.do[0])}</p>`:""}${!R.next&&!a0?`<p class="note">Keep your routine.</p>`:""}</article>
+    ${focusCard(P(),R.next&&/^Fix what is slipping/.test(R.next)?`<p class="note">Also this session: ${esc(R.next)}</p>`:"")}
    </div></section>`}
 // 2 · map by map: each map of the session
 function reviewMaps(R){const M=R.maps||[];if(!M.length)return "";
@@ -200,7 +200,7 @@ function renderReview(){const p=P(),v=$("#v-review"),PL=p.advice.plan||{},R=revi
    <p class="note" id="xmsg" role="status"></p>
    <div class="linkrow"><a href="#analysis">Full analysis</a><a href="#midround">Mid-round</a><a href="#progress">Progress and tracking</a><a href="#matches">Every match</a><a href="#maps">Maps and grenades</a><a href="#routine">Routine</a></div>
    </section>`;
-  wireExp(v,X,p);
+  wireExp(v,X,p);wireFocus(v,p,renderReview);
   $$("[data-tier]",v).forEach(a=>a.onclick=e=>{e.preventDefault();const t=$("#"+a.dataset.tier,v);if(t)t.scrollIntoView({behavior:"smooth",block:"start"})});   // not a #view link
   $$("tr[data-mid]",v).forEach(r=>{r.onclick=()=>{const i=p.matches.findIndex(x=>x.id===r.dataset.mid);S.match=i<0?0:i;S.mpin=i>=0;go("matches")};r.onkeydown=e=>{if(e.key==="Enter")r.click()}});
 }

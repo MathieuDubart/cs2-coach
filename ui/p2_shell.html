@@ -1,12 +1,13 @@
 <div class="bar"><div class="bar-in">
   <span class="brand">CS2 Coach</span>
   <nav aria-label="Views">
-    <a href="#ingame" data-view="ingame">In game</a>
-    <a href="#review" data-view="review">Review</a>
-    <a href="#team" data-view="team">Team</a>
-    <a href="#players" data-view="players">Explore</a>
+    <a href="#ingame" data-view="ingame" title="During your match, on a 2nd screen">Live</a>
+    <a href="#prepare" data-view="prepare" title="Before you play: warm-up, map sheets">Prepare</a>
+    <a href="#review" data-view="review" title="After your matches and the next day">Review</a>
+    <a href="#players" data-view="players" title="Players, pros, your team">Explore</a>
   </nav>
   <span class="whochip" id="whochip"></span>
+  <button type="button" class="focuschip" id="focuschip" hidden></button>
   <button type="button" class="upd" id="updbtn" hidden title="Fetch your new matches from Steam and analyze them">↻ Update</button>
   <form class="search" id="search" role="search" autocomplete="off">
     <input id="q" name="q" type="search" placeholder="Steam link, SteamID64, name or CSGO-… share code" aria-label="Find a player: Steam profile link, SteamID64 or name">
@@ -17,6 +18,7 @@
 <div class="jobpanel" id="job" hidden><div class="in" role="status" aria-live="polite"></div></div>
 <main>
   <section class="view" id="v-ingame"></section>
+  <section class="view" id="v-prepare" hidden></section>
   <section class="view" id="v-review" hidden></section>
   <section class="view" id="v-analysis" hidden></section>
   <section class="view" id="v-routine" hidden></section>

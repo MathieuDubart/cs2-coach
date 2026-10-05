@@ -338,3 +338,43 @@ table.lc{border-collapse:collapse;font-variant-numeric:tabular-nums;min-width:64
 .more-btn{justify-self:start;font:600 13px var(--f-body);padding:6px 12px;border:1px solid var(--line);border-radius:var(--radius);background:var(--panel);color:var(--ink);cursor:pointer}
 .more-btn:hover{border-color:var(--ct)}
 .brief3 .rchips{display:inline-flex;margin-left:6px;vertical-align:middle}
+
+/* the focus of the week (05/10): one line in the bar and in Live, a card in Review and Prepare */
+.focuschip{font:13px var(--f-body);color:var(--warn);border:1px solid var(--warn);background:transparent;border-radius:999px;padding:3px 11px;white-space:nowrap;cursor:pointer;max-width:340px;overflow:hidden;text-overflow:ellipsis}
+@media (max-width:1180px){.bar .focuschip{display:none}}
+.lfocus{font-size:12.5px;color:var(--warn);border:1px solid var(--warn);border-radius:999px;padding:1px 9px;white-space:nowrap;max-width:300px;overflow:hidden;text-overflow:ellipsis}
+.focus-card ul{margin:6px 0;padding-left:18px}
+.focus-pick select{font:13px var(--f-body);background:var(--bg);color:var(--ink);border:1px solid var(--line);border-radius:3px;padding:3px 6px;margin-left:4px;max-width:100%}
+/* Prepare (05/10): steps, the timed program, the 60-second map sheets */
+.prep-steps{display:flex;gap:6px;flex-wrap:wrap;margin:6px 0 18px}
+.prep-steps button{font:600 16px var(--f-display);padding:6px 14px;border:1px solid var(--line);border-radius:999px;background:transparent;color:var(--muted);cursor:pointer;display:flex;gap:8px;align-items:center}
+.prep-steps button b{font-family:var(--f-mono);font-size:12px;color:var(--warn)}
+.prep-steps button[aria-current="step"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.prep-steps button:disabled{opacity:.45;cursor:default}
+.prep-maps button .note{font-size:11px;margin-left:2px}
+.prep-prog{list-style:none;padding:0;margin:0 0 14px;display:grid;gap:10px}
+.pblk{display:grid;grid-template-columns:64px minmax(0,1fr) auto;gap:14px;align-items:start;background:var(--panel);border:1px solid var(--line);border-left:4px solid var(--pc,var(--line));border-radius:5px;padding:12px 14px}
+.pblk.k-aim{--pc:var(--good)}.pblk.k-train{--pc:var(--t)}.pblk.k-nades{--pc:var(--warn)}.pblk.k-dm{--pc:var(--ct)}.pblk.k-sheet{--pc:var(--muted)}
+.pblk.cur{box-shadow:inset 0 0 0 1px var(--pc)}
+.pblk.done{opacity:.55}
+.pmin b{display:block;font:700 30px/1 var(--f-display)}
+.pmin span{font:11px var(--f-mono);color:var(--muted);letter-spacing:.08em;text-transform:uppercase}
+.pbody{min-width:0}.pbody h4{font-size:20px;margin:0 0 2px}.pbody p{margin:0 0 4px}
+.pact{display:grid;gap:6px;justify-items:end}
+.ptime{font:700 26px var(--f-mono);font-variant-numeric:tabular-nums}
+.pnades{display:grid;gap:8px;margin-top:8px}
+.pnade{font-size:14px;min-width:0}
+.pnade .tag{font:11px var(--f-mono);padding:1px 6px;border-radius:3px;margin-right:6px;border:1px solid var(--line)}
+.pnade .tag.t{color:var(--t)}.pnade .tag.ct{color:var(--ct)}
+.psheets{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,520px),1fr));gap:12px}
+.psheet{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:14px;min-width:0}
+.psh{display:flex;justify-content:space-between;align-items:baseline;gap:10px}
+.psh h3{margin:0;text-transform:uppercase}
+.psides{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:8px}
+@media (max-width:700px){.psides{grid-template-columns:1fr}.pblk{grid-template-columns:48px minmax(0,1fr)}.pact{grid-column:2;justify-items:start}}
+.sside{min-width:0}.sside h4{font-size:17px;margin:0 0 4px}.sside h4.t{color:var(--t)}.sside h4.ct{color:var(--ct)}
+.srow{display:grid;grid-template-columns:62px minmax(0,1fr);gap:8px;padding:5px 0;border-top:1px solid var(--line);font-size:14px}
+.slab{font:11px var(--f-mono);letter-spacing:.08em;text-transform:uppercase;color:var(--muted);padding-top:2px}
+.slab.ok{color:var(--good)}.slab.no{color:var(--bad)}.slab.nade{color:var(--warn)}
+.prep-ready{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr));gap:12px;margin-bottom:18px}
+.btnlink{display:inline-block;font:600 14px var(--f-body);padding:6px 12px;border:1px solid var(--line);border-radius:4px;color:var(--ink);text-decoration:none}

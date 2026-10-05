@@ -141,7 +141,7 @@ def publish_partial(sid):
 
 
 # the app's addresses (like csrep's): the page is served there, and reads them
-APP_PAGES = re.compile(r"/(?:player/\d{17}(?:/[a-z]+)?|match/[A-Za-z0-9-]{1,40}|team|players|pros|settings|live)/?")
+APP_PAGES = re.compile(r"/(?:player/\d{17}(?:/[a-z]+)?|match/[A-Za-z0-9-]{1,40}|team|players|pros|settings|live|prepare|review)/?")
 
 
 def match_info(code):
@@ -491,6 +491,14 @@ class Handler(BaseHTTPRequestHandler):
                 context.add_checkin(sid, body)
                 refresh_plan(sid)
                 return self.send(200, {"ok": True, "n": len(context.journal(sid))})
+            if u.path == "/api/focus":   # your focus of the week, picked among the coach's axes (05/10)
+                import focus
+                adv = config.read_json(os.path.join(config.player_dir(sid), "advice.json"), {}) or {}
+                card = focus.choose(sid, str(body.get("id") or ""), adv.get("rules"))
+                if not card:
+                    return self.send(400, {"error": "Unknown axis."})
+                set_focus(sid, card)
+                return self.send(200, {"focus": card})
             if u.path == "/api/experiment":
                 import experiments
                 if body.get("action") == "start":
@@ -548,6 +556,21 @@ class Handler(BaseHTTPRequestHandler):
 def refresh_plan(sid):
     cs2coach.attach_plan(sid)
     build_app.write_player(sid)
+
+
+def set_focus(sid, card):
+    """The focus written into the saved plan and the profile's page as they are (seconds; building the plan again
+    takes minutes): the next build keeps it, focus.json holds it."""
+    for path, keys, kw in ((os.path.join(config.player_dir(sid), "advice.json"), ("plan",), {"indent": 1, "default": str}),
+                           (os.path.join(build_app.SITE, "players", f"{sid}.json"), ("advice", "plan"), {"separators": (",", ":")})):
+        d = config.read_json(path, None)
+        if not isinstance(d, dict):
+            continue
+        x = d
+        for k in keys:
+            x = x.setdefault(k, {})
+        x["focus"] = card
+        config.write_json(path, d, **kw)
 
 
 def voice_status():

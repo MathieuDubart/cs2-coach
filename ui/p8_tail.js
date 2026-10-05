@@ -129,7 +129,7 @@ $("#search").addEventListener("submit",async e=>{e.preventDefault();const q=$("#
     <p class="note">The local app must be running: double-click <code>Coach CS2.bat</code> in the app folder, or turn on its automatic start with <code>autostart.bat</code>.</p>`)});
 
 // ---------- routing ----------
-const RENDER={ingame:renderIngame,review:renderReview,analysis:renderAnalysis,routine:renderRoutine,midround:renderMidround,progress:renderProgress,team:renderTeam,matches:renderMatches,maps:renderMaps,players:renderPlayers,pros:renderPros,settings:renderSettings};
+const RENDER={ingame:renderIngame,prepare:renderPrepare,review:renderReview,analysis:renderAnalysis,routine:renderRoutine,midround:renderMidround,progress:renderProgress,team:renderTeam,matches:renderMatches,maps:renderMaps,players:renderPlayers,pros:renderPros,settings:renderSettings};
 // The local app has addresses like csrep's: /player/<steamid> (their first view: In game for you, Analysis for the others),
 // /player/<steamid>/<view>, /match/<share code, or match id when it has none>[?as=<steamid>: seen as someone else than
 // you], /team, /players, /pros, /settings; old links (/#review) still open. The published page (one file) keeps #view.
@@ -137,6 +137,7 @@ const GLOBAL=["team","players","pros","settings"],homeView=sid=>sid&&sid===D.own
 let navAt=0,navQuiet=0,afterJob=null,CODES={};   // CODES: match id -> share code
 // /live: your In game page, the address to keep open during a match (a second screen, OBS) (04/10)
 function pathNow(){const v=S.view;if(GLOBAL.includes(v))return "/"+v;if(!S.player)return "/";if(v==="ingame"&&S.player===D.own)return "/live";
+  if((v==="prepare"||v==="review")&&S.player===D.own)return "/"+v;   // your three moments: /live, /prepare, /review
   const m=v==="matches"&&S.mpin&&P()?P().matches[S.match]:null;
   return m?`/match/${CODES[m.id]||m.id}${S.player!==D.own?"?as="+S.player:""}`:`/player/${S.player}${v===homeView(S.player)?"":"/"+v}`}
 // the address of what is on screen: a new history entry for each move of yours (back works), the same entry for the
@@ -158,6 +159,7 @@ async function route(){
     if(!IDX()[sid])return notYet(`This player (SteamID ${sid}) isn't analyzed yet.`,sid);
     S.view=hv||(RENDER[v]&&!GLOBAL.includes(v)?v:homeView(sid));return setPlayer(sid)}
   if(path==="/live"&&D.own&&IDX()[D.own]){S.view="ingame";return setPlayer(D.own)}
+  if((path==="/prepare"||path==="/review")&&D.own&&IDX()[D.own]){S.view=hv||path.slice(1);return setPlayer(D.own)}
   m=path.match(/^\/([a-z]+)$/);const g=m&&(ALIAS[m[1]]||m[1]),p=defPlayer();
   S.view=hv||(GLOBAL.includes(g)?g:homeView(p));return setPlayer(p)}
 // /match/<id or share code>: that match, seen as the player of the address (?as=), else you, else an analyzed player in it
@@ -190,6 +192,7 @@ function show(view){view=ALIAS[view]||view;if(!RENDER[view])view="ingame";if(vie
   if(!S.player){if(view==="ingame"||view==="review")welcome($("#v-"+view));else $("#v-"+view).innerHTML=`<div class="empty">Pick a profile first: yours from the home page, or anyone in Explore.</div>`;return}
   if(!D.players[S.player]){$("#v-"+view).innerHTML=`<div class="empty"><span class="spin" aria-hidden="true"></span>Loading the profile…</div>`;return}
   RENDER[view]();navUpdate(view);window.scrollTo(0,0);
+  if(view==="prepare"&&D.local)prepWatch();   // CS2 loads a map: Live takes over
   if(view==="ingame"&&D.local){if(!gsiStatus)fetch("/api/gsi/status").then(r=>r.json()).then(j=>{gsiStatus=j;if(S.view==="ingame"&&D.players[S.player])renderIngame()}).catch(()=>{});gsiPoll()}}
 async function setPlayer(id,force){S.player=id;store("player",id);S.match=0;S.mpin=false;if(!id){show(S.view);return}
   if(!D.players[id]||force){show(S.view);try{await loadPlayer(id,force)}catch(e){$("#v-"+S.view).innerHTML=`<div class="empty">Couldn't load this profile (${esc(e.message)}).</div>`;return}}

@@ -426,6 +426,11 @@ def attach_plan(sid):
         adv["plan_error"] = f"{type(e).__name__}: {e}"[:200]   # the previous plan stays; the page says it is not up to date
         config.write_json(p, adv, indent=1, default=str)
         return
+    try:   # the focus of the week: the first axis, kept 7 days (Live, Prepare and Review show it)
+        import focus
+        adv["plan"]["focus"] = focus.weekly(sid, adv.get("rules"))
+    except Exception as e:
+        log(f"Focus of the week unavailable: {e}")
     try:   # your frequent teammates' usual CT spots: dead, the one you watch tells where the fight is
         import team
         adv["plan"]["mates"] = team.mates_regions(sid)

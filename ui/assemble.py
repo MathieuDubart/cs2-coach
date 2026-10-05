@@ -3,14 +3,14 @@ python ui/assemble.py writes app_template_next.html and runs the In game check o
 copy it over app_template.html (the server reads it on each request, no restart).
 - p0_head.html: the fonts; p0_base.css, p1_extra.css: the styles (the colors are tokens in :root, dark and light);
 - p2_shell.html: the bar and the views' containers; p3..p8: the scripts, in that order (core, plan and settings,
-  nav, in game, live panel, visual panel, economy, review, search and routing)."""
+  prepare, nav, in game, live panel, visual panel, economy, review, search and routing)."""
 import os
 import subprocess
 import sys
 
 UI = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(UI)
-PARTS_JS = ("p3_core.js", "p4_plan.js", "p5_nav.js", "p6_ingame.js", "p6b_live.js", "p6c_visual.js", "p6d_econ.js", "p7_review.js", "p8_tail.js")
+PARTS_JS = ("p3_core.js", "p4_plan.js", "p4b_prepare.js", "p5_nav.js", "p6_ingame.js", "p6b_live.js", "p6c_visual.js", "p6d_econ.js", "p7_review.js", "p8_tail.js")
 
 
 def read(f):

@@ -89,14 +89,17 @@ function renderRoutine(){
    ${anchor("rt-phases")}<div class="phases">${PL.phases.map(phaseCard).join("")}</div>
    ${PL.party?anchor("rt-group"):""}${partyBlock(PL)}
    ${PL.meta&&PL.meta.length?anchor("rt-meta"):""}${metaBlock(PL)}`;
+  wireCheckin(v,p);
+  $$("[data-party]",v).forEach(b=>b.onclick=()=>{partySel=b.dataset.party;renderRoutine()});
+}
+// the journal's controls (Routine and Prepare)
+function wireCheckin(v,p){
   $$("[data-ck]",v).forEach(g=>$$("button",g).forEach(bt=>bt.onclick=()=>{ckState[g.dataset.ck]=bt.dataset.v;press(g,"button",bt)}));
   const sl=$("#ck-sleep",v),nt=$("#ck-note",v);if(sl)sl.oninput=()=>ckState.sleep_h=sl.value;if(nt)nt.oninput=()=>ckState.note=nt.value;
   const sv=$("#ck-save",v);if(sv)sv.onclick=async()=>{sv.disabled=true;const msg=$("#ck-msg",v);
     try{const j=await api("/api/checkin",{sid:p.steamid,...ckState});ckState={};msg.textContent=`Saved: ${j.n} entr${j.n===1?"y":"ies"} in your journal.`;
       $$("[data-ck] button",v).forEach(x=>x.setAttribute("aria-pressed","false"));if(sl)sl.value="";if(nt)nt.value=""}
-    catch(e){msg.textContent="Failed: "+e.message}sv.disabled=false};
-  $$("[data-party]",v).forEach(b=>b.onclick=()=>{partySel=b.dataset.party;renderRoutine()});
-}
+    catch(e){msg.textContent="Failed: "+e.message}sv.disabled=false}}
 
 // ---------- view: mid-round ----------
 let pbSide="me",midMap=null,wpSide=null;
@@ -199,15 +202,13 @@ function renderProgress(){
   const L=PL.level,T=PL.training,X=PL.experiments,Wp=PL.weapons,K=PL.kpis||[];
   const ex=(X&&X.experiments)||[],act=ex.filter(e=>e.status==="active"),old=ex.filter(e=>e.status!=="active");
   v.innerHTML=`<div class="head"><div style="display:grid;gap:4px"><span class="eyebrow">${esc(p.name)}</span><h2>Progress</h2></div></div>
-   ${secNav([["pg-brief","Brief"],["pg-level","Level and role"],T?["pg-warmup","Warm-up"]:null,D.local&&p.steamid===D.own?["pg-train","Training"]:null,X?["pg-exp","Experiments"]:null,Wp?["pg-weapons","Weapons"]:null,PL.buys&&PL.buys.types?["pg-buys","Buys"]:null,K.length?["pg-kpis","Indicators"]:null])}
+   ${secNav([["pg-brief","Brief"],["pg-level","Level and role"],X?["pg-exp","Experiments"]:null,Wp?["pg-weapons","Weapons"]:null,PL.buys&&PL.buys.types?["pg-buys","Buys"]:null,K.length?["pg-kpis","Indicators"]:null])}
    ${progBrief(PL)}${anchor("pg-level")}
    <div class="insights">
     <article class="card"><h3>Your level</h3><p>${levelLine(L)}</p>${L&&L.focus.length?`<div class="fix"><h4>At this level, work on</h4><ol>${L.focus.map(f=>`<li>${esc(f)}</li>`).join("")}</ol></div>`:""}${srcLinks(L&&L.src,true)}</article>
     ${PL.role?`<article class="card"><h3>Your role: ${esc((p.advice.archetype||{}).name||PL.role.role)}</h3><ul>${PL.role.items.map(t=>`<li>${esc(t)}</li>`).join("")}</ul>${srcLinks(PL.role.src,true)}</article>`:""}
    </div>
-   ${T?`${anchor("pg-warmup")}<h3>Today's warm-up · ${T.total_min} min</h3><ol class="warm">${T.warmup.map(w=>`<li><b>${w.min} min · ${esc(w.map)}</b><span>${esc(w.text)}</span><span class="note">Why: ${esc(w.why)}</span>${srcLinks(w.src,true)}</li>`).join("")}</ol>
-    <div class="tech">${T.week.map(w=>`<div><b>${esc(w.title)}</b>${esc(w.text)}</div>`).join("")}</div>`:""}
-   ${D.local&&p.steamid===D.own?`${anchor("pg-train")}<h3>Training</h3><div id="trainbox" class="train"><span class="note">Loading…</span></div>`:""}
+   ${T||D.local&&p.steamid===D.own?`<p class="note">Today's warm-up and the training server are in <a href="#prepare" style="color:var(--ct)">Prepare</a>, with your map sheets.</p>`:""}
    ${X?`${anchor("pg-exp")}<h3>Experiments</h3><p class="note">You start a test and play normally: the coach compares your next matches with your previous 15 and gives a verdict once there is enough data (difference significant at 90%).${D.local?"":" Starting or ending an experiment happens in the local app."}</p>
     ${act.length?`<span class="lbl4" style="color:var(--muted)">Running</span><div class="exps">${act.map(expCard).join("")}</div>`:""}
     ${X.suggested.length?`<span class="lbl4" style="color:var(--muted)">Suggested for you</span><div class="exps">${X.suggested.map(suggestCard).join("")}</div>`:""}
@@ -217,7 +218,6 @@ function renderProgress(){
    ${PL.buys&&PL.buys.types?anchor("pg-buys"):""}${buysBlock(PL.buys)}
    ${K.length?`${anchor("pg-kpis")}<h3>Tracking your indicators</h3><p class="note">Match by match. In color: the trend of your last 3 matches against the previous ones.</p><div class="kpis">${K.map(kpiCard).join("")}</div>`:""}`;
   wireExp(v,X,p);
-  const tb=$("#trainbox",v);if(tb)trainLoad(tb,p.steamid);
 }
 // ---------- training: your situations played again on the local server (bots on the recorded paths) ----------
 const TRAIN={map:null,timer:null};
@@ -282,7 +282,7 @@ async function trainLoad(box,sid){clearTimeout(TRAIN.timer);
       if(!r.humans)try{navigator.clipboard.writeText("connect 127.0.0.1")}catch(e){}
       setTimeout(()=>trainLoad(box,sid),2500)}
     catch(e){msg.textContent="Failed: "+e.message;$$("[data-tplay]",box).forEach(x=>x.disabled=false)}});
-  if(st.running)TRAIN.timer=setTimeout(()=>{if(box.isConnected&&S.view==="progress")trainLoad(box,sid)},4000)}
+  if(st.running)TRAIN.timer=setTimeout(()=>{if(box.isConnected&&S.view==="prepare")trainLoad(box,sid)},4000)}
 function wireExp(v,X,p){const msg=$("#xmsg",v);
   $$("[data-xstart]",v).forEach(b=>b.onclick=async()=>{const s=X.suggested[+b.dataset.xstart];b.disabled=true;
     try{await api("/api/experiment",{sid:p.steamid,action:"start",template:s.template,params:s.params});await reloadPlayer()}catch(e){if(msg)msg.textContent="Failed: "+e.message;b.disabled=false}});

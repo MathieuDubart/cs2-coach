@@ -680,17 +680,58 @@ table.lc{border-collapse:collapse;font-variant-numeric:tabular-nums;min-width:64
 .more-btn{justify-self:start;font:600 13px var(--f-body);padding:6px 12px;border:1px solid var(--line);border-radius:var(--radius);background:var(--panel);color:var(--ink);cursor:pointer}
 .more-btn:hover{border-color:var(--ct)}
 .brief3 .rchips{display:inline-flex;margin-left:6px;vertical-align:middle}
+
+/* the focus of the week (05/10): one line in the bar and in Live, a card in Review and Prepare */
+.focuschip{font:13px var(--f-body);color:var(--warn);border:1px solid var(--warn);background:transparent;border-radius:999px;padding:3px 11px;white-space:nowrap;cursor:pointer;max-width:340px;overflow:hidden;text-overflow:ellipsis}
+@media (max-width:1180px){.bar .focuschip{display:none}}
+.lfocus{font-size:12.5px;color:var(--warn);border:1px solid var(--warn);border-radius:999px;padding:1px 9px;white-space:nowrap;max-width:300px;overflow:hidden;text-overflow:ellipsis}
+.focus-card ul{margin:6px 0;padding-left:18px}
+.focus-pick select{font:13px var(--f-body);background:var(--bg);color:var(--ink);border:1px solid var(--line);border-radius:3px;padding:3px 6px;margin-left:4px;max-width:100%}
+/* Prepare (05/10): steps, the timed program, the 60-second map sheets */
+.prep-steps{display:flex;gap:6px;flex-wrap:wrap;margin:6px 0 18px}
+.prep-steps button{font:600 16px var(--f-display);padding:6px 14px;border:1px solid var(--line);border-radius:999px;background:transparent;color:var(--muted);cursor:pointer;display:flex;gap:8px;align-items:center}
+.prep-steps button b{font-family:var(--f-mono);font-size:12px;color:var(--warn)}
+.prep-steps button[aria-current="step"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.prep-steps button:disabled{opacity:.45;cursor:default}
+.prep-maps button .note{font-size:11px;margin-left:2px}
+.prep-prog{list-style:none;padding:0;margin:0 0 14px;display:grid;gap:10px}
+.pblk{display:grid;grid-template-columns:64px minmax(0,1fr) auto;gap:14px;align-items:start;background:var(--panel);border:1px solid var(--line);border-left:4px solid var(--pc,var(--line));border-radius:5px;padding:12px 14px}
+.pblk.k-aim{--pc:var(--good)}.pblk.k-train{--pc:var(--t)}.pblk.k-nades{--pc:var(--warn)}.pblk.k-dm{--pc:var(--ct)}.pblk.k-sheet{--pc:var(--muted)}
+.pblk.cur{box-shadow:inset 0 0 0 1px var(--pc)}
+.pblk.done{opacity:.55}
+.pmin b{display:block;font:700 30px/1 var(--f-display)}
+.pmin span{font:11px var(--f-mono);color:var(--muted);letter-spacing:.08em;text-transform:uppercase}
+.pbody{min-width:0}.pbody h4{font-size:20px;margin:0 0 2px}.pbody p{margin:0 0 4px}
+.pact{display:grid;gap:6px;justify-items:end}
+.ptime{font:700 26px var(--f-mono);font-variant-numeric:tabular-nums}
+.pnades{display:grid;gap:8px;margin-top:8px}
+.pnade{font-size:14px;min-width:0}
+.pnade .tag{font:11px var(--f-mono);padding:1px 6px;border-radius:3px;margin-right:6px;border:1px solid var(--line)}
+.pnade .tag.t{color:var(--t)}.pnade .tag.ct{color:var(--ct)}
+.psheets{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,520px),1fr));gap:12px}
+.psheet{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:14px;min-width:0}
+.psh{display:flex;justify-content:space-between;align-items:baseline;gap:10px}
+.psh h3{margin:0;text-transform:uppercase}
+.psides{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:8px}
+@media (max-width:700px){.psides{grid-template-columns:1fr}.pblk{grid-template-columns:48px minmax(0,1fr)}.pact{grid-column:2;justify-items:start}}
+.sside{min-width:0}.sside h4{font-size:17px;margin:0 0 4px}.sside h4.t{color:var(--t)}.sside h4.ct{color:var(--ct)}
+.srow{display:grid;grid-template-columns:62px minmax(0,1fr);gap:8px;padding:5px 0;border-top:1px solid var(--line);font-size:14px}
+.slab{font:11px var(--f-mono);letter-spacing:.08em;text-transform:uppercase;color:var(--muted);padding-top:2px}
+.slab.ok{color:var(--good)}.slab.no{color:var(--bad)}.slab.nade{color:var(--warn)}
+.prep-ready{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr));gap:12px;margin-bottom:18px}
+.btnlink{display:inline-block;font:600 14px var(--f-body);padding:6px 12px;border:1px solid var(--line);border-radius:4px;color:var(--ink);text-decoration:none}
 </style>
 
 <div class="bar"><div class="bar-in">
   <span class="brand">CS2 Coach</span>
   <nav aria-label="Views">
-    <a href="#ingame" data-view="ingame">In game</a>
-    <a href="#review" data-view="review">Review</a>
-    <a href="#team" data-view="team">Team</a>
-    <a href="#players" data-view="players">Explore</a>
+    <a href="#ingame" data-view="ingame" title="During your match, on a 2nd screen">Live</a>
+    <a href="#prepare" data-view="prepare" title="Before you play: warm-up, map sheets">Prepare</a>
+    <a href="#review" data-view="review" title="After your matches and the next day">Review</a>
+    <a href="#players" data-view="players" title="Players, pros, your team">Explore</a>
   </nav>
   <span class="whochip" id="whochip"></span>
+  <button type="button" class="focuschip" id="focuschip" hidden></button>
   <button type="button" class="upd" id="updbtn" hidden title="Fetch your new matches from Steam and analyze them">↻ Update</button>
   <form class="search" id="search" role="search" autocomplete="off">
     <input id="q" name="q" type="search" placeholder="Steam link, SteamID64, name or CSGO-… share code" aria-label="Find a player: Steam profile link, SteamID64 or name">
@@ -701,6 +742,7 @@ table.lc{border-collapse:collapse;font-variant-numeric:tabular-nums;min-width:64
 <div class="jobpanel" id="job" hidden><div class="in" role="status" aria-live="polite"></div></div>
 <main>
   <section class="view" id="v-ingame"></section>
+  <section class="view" id="v-prepare" hidden></section>
   <section class="view" id="v-review" hidden></section>
   <section class="view" id="v-analysis" hidden></section>
   <section class="view" id="v-routine" hidden></section>
@@ -1349,14 +1391,17 @@ function renderRoutine(){
    ${anchor("rt-phases")}<div class="phases">${PL.phases.map(phaseCard).join("")}</div>
    ${PL.party?anchor("rt-group"):""}${partyBlock(PL)}
    ${PL.meta&&PL.meta.length?anchor("rt-meta"):""}${metaBlock(PL)}`;
+  wireCheckin(v,p);
+  $$("[data-party]",v).forEach(b=>b.onclick=()=>{partySel=b.dataset.party;renderRoutine()});
+}
+// the journal's controls (Routine and Prepare)
+function wireCheckin(v,p){
   $$("[data-ck]",v).forEach(g=>$$("button",g).forEach(bt=>bt.onclick=()=>{ckState[g.dataset.ck]=bt.dataset.v;press(g,"button",bt)}));
   const sl=$("#ck-sleep",v),nt=$("#ck-note",v);if(sl)sl.oninput=()=>ckState.sleep_h=sl.value;if(nt)nt.oninput=()=>ckState.note=nt.value;
   const sv=$("#ck-save",v);if(sv)sv.onclick=async()=>{sv.disabled=true;const msg=$("#ck-msg",v);
     try{const j=await api("/api/checkin",{sid:p.steamid,...ckState});ckState={};msg.textContent=`Saved: ${j.n} entr${j.n===1?"y":"ies"} in your journal.`;
       $$("[data-ck] button",v).forEach(x=>x.setAttribute("aria-pressed","false"));if(sl)sl.value="";if(nt)nt.value=""}
-    catch(e){msg.textContent="Failed: "+e.message}sv.disabled=false};
-  $$("[data-party]",v).forEach(b=>b.onclick=()=>{partySel=b.dataset.party;renderRoutine()});
-}
+    catch(e){msg.textContent="Failed: "+e.message}sv.disabled=false}}
 
 // ---------- view: mid-round ----------
 let pbSide="me",midMap=null,wpSide=null;
@@ -1459,15 +1504,13 @@ function renderProgress(){
   const L=PL.level,T=PL.training,X=PL.experiments,Wp=PL.weapons,K=PL.kpis||[];
   const ex=(X&&X.experiments)||[],act=ex.filter(e=>e.status==="active"),old=ex.filter(e=>e.status!=="active");
   v.innerHTML=`<div class="head"><div style="display:grid;gap:4px"><span class="eyebrow">${esc(p.name)}</span><h2>Progress</h2></div></div>
-   ${secNav([["pg-brief","Brief"],["pg-level","Level and role"],T?["pg-warmup","Warm-up"]:null,D.local&&p.steamid===D.own?["pg-train","Training"]:null,X?["pg-exp","Experiments"]:null,Wp?["pg-weapons","Weapons"]:null,PL.buys&&PL.buys.types?["pg-buys","Buys"]:null,K.length?["pg-kpis","Indicators"]:null])}
+   ${secNav([["pg-brief","Brief"],["pg-level","Level and role"],X?["pg-exp","Experiments"]:null,Wp?["pg-weapons","Weapons"]:null,PL.buys&&PL.buys.types?["pg-buys","Buys"]:null,K.length?["pg-kpis","Indicators"]:null])}
    ${progBrief(PL)}${anchor("pg-level")}
    <div class="insights">
     <article class="card"><h3>Your level</h3><p>${levelLine(L)}</p>${L&&L.focus.length?`<div class="fix"><h4>At this level, work on</h4><ol>${L.focus.map(f=>`<li>${esc(f)}</li>`).join("")}</ol></div>`:""}${srcLinks(L&&L.src,true)}</article>
     ${PL.role?`<article class="card"><h3>Your role: ${esc((p.advice.archetype||{}).name||PL.role.role)}</h3><ul>${PL.role.items.map(t=>`<li>${esc(t)}</li>`).join("")}</ul>${srcLinks(PL.role.src,true)}</article>`:""}
    </div>
-   ${T?`${anchor("pg-warmup")}<h3>Today's warm-up · ${T.total_min} min</h3><ol class="warm">${T.warmup.map(w=>`<li><b>${w.min} min · ${esc(w.map)}</b><span>${esc(w.text)}</span><span class="note">Why: ${esc(w.why)}</span>${srcLinks(w.src,true)}</li>`).join("")}</ol>
-    <div class="tech">${T.week.map(w=>`<div><b>${esc(w.title)}</b>${esc(w.text)}</div>`).join("")}</div>`:""}
-   ${D.local&&p.steamid===D.own?`${anchor("pg-train")}<h3>Training</h3><div id="trainbox" class="train"><span class="note">Loading…</span></div>`:""}
+   ${T||D.local&&p.steamid===D.own?`<p class="note">Today's warm-up and the training server are in <a href="#prepare" style="color:var(--ct)">Prepare</a>, with your map sheets.</p>`:""}
    ${X?`${anchor("pg-exp")}<h3>Experiments</h3><p class="note">You start a test and play normally: the coach compares your next matches with your previous 15 and gives a verdict once there is enough data (difference significant at 90%).${D.local?"":" Starting or ending an experiment happens in the local app."}</p>
     ${act.length?`<span class="lbl4" style="color:var(--muted)">Running</span><div class="exps">${act.map(expCard).join("")}</div>`:""}
     ${X.suggested.length?`<span class="lbl4" style="color:var(--muted)">Suggested for you</span><div class="exps">${X.suggested.map(suggestCard).join("")}</div>`:""}
@@ -1477,7 +1520,6 @@ function renderProgress(){
    ${PL.buys&&PL.buys.types?anchor("pg-buys"):""}${buysBlock(PL.buys)}
    ${K.length?`${anchor("pg-kpis")}<h3>Tracking your indicators</h3><p class="note">Match by match. In color: the trend of your last 3 matches against the previous ones.</p><div class="kpis">${K.map(kpiCard).join("")}</div>`:""}`;
   wireExp(v,X,p);
-  const tb=$("#trainbox",v);if(tb)trainLoad(tb,p.steamid);
 }
 // ---------- training: your situations played again on the local server (bots on the recorded paths) ----------
 const TRAIN={map:null,timer:null};
@@ -1542,7 +1584,7 @@ async function trainLoad(box,sid){clearTimeout(TRAIN.timer);
       if(!r.humans)try{navigator.clipboard.writeText("connect 127.0.0.1")}catch(e){}
       setTimeout(()=>trainLoad(box,sid),2500)}
     catch(e){msg.textContent="Failed: "+e.message;$$("[data-tplay]",box).forEach(x=>x.disabled=false)}});
-  if(st.running)TRAIN.timer=setTimeout(()=>{if(box.isConnected&&S.view==="progress")trainLoad(box,sid)},4000)}
+  if(st.running)TRAIN.timer=setTimeout(()=>{if(box.isConnected&&S.view==="prepare")trainLoad(box,sid)},4000)}
 function wireExp(v,X,p){const msg=$("#xmsg",v);
   $$("[data-xstart]",v).forEach(b=>b.onclick=async()=>{const s=X.suggested[+b.dataset.xstart];b.disabled=true;
     try{await api("/api/experiment",{sid:p.steamid,action:"start",template:s.template,params:s.params});await reloadPlayer()}catch(e){if(msg)msg.textContent="Failed: "+e.message;b.disabled=false}});
@@ -1871,13 +1913,133 @@ function teamPlanView(host){
     <li><b>Dead</b>: one useful piece of info, then silence.</li></ul></article>
    <article class="card"><h3>Triggers as ${teamSide}</h3><ul>${(T.playbook||[]).filter(x=>x.side===teamSide||isBoth(x)).slice(0,5).map(x=>`<li><b>If ${esc(lc(x.if))}</b> → ${esc(x.then)}</li>`).join("")}</ul>${P.videos&&P.videos.length?`<p class="note"></p>${srcLinks(P.videos,true,`Videos on ${MAPN(teamMap)}:`)}`:""}</article>`;
 }
+// ---------- view: prepare (05/10): before you play. Your maps and a duration (5, 10, 20 or 30 min), a timed warm-up
+// built on your weak points (the training server from 20 min), a 60-second sheet per map and side, your focus of the
+// week; when CS2 loads a map, Live takes over ----------
+const PREP_LEN=[5,10,20,30];
+const PREP_NOTE={5:"Aim, then your map sheets.",10:"Aim, the lineups of your maps, then the sheets.",20:"Aim, the training server on your first map, lineups, deathmatch.",30:"Like 20 min with more time on the training server, the lineups and deathmatch."};
+const PREP={tick:null,watch:null};
+// what you chose today (your browser): the step, the maps, the duration, the blocks done, the one running
+function prepState(){const day=new Date().toDateString();let st=store("prep");
+  if(!st||st.day!==day)st={day,step:1,maps:[],min:20,done:{},cur:null,t0:null};return st}
+function prepSave(st){store("prep",st)}
+// the program: blocks that add up to the duration chosen
+function prepProgram(p,sel,min){const PL=p.advice.plan||{},W=((PL.training||{}).warmup)||[];
+  const pick=(re,d)=>W.find(w=>re.test(w.map||""))||d;
+  const aim=pick(/aim/i,{map:"Aim Botz",text:"Still bots, then strafing bots: first-shot accuracy.",why:"First-shot accuracy."});
+  const dm=pick(/deathmatch/i,{map:"Deathmatch",text:"Your round weapon, aiming at head level only.",why:"Get into rhythm before the game."});
+  const nr=(p.advice.rules||[]).find(r=>r.id==="nades"),M=sel.map(MAPN).join(", ");
+  const B=[],add=(kind,mins,title,text,why)=>{if(mins>0)B.push({kind,mins,title,text,why})};
+  add("aim",min>=30?5:min>=10?4:3,aim.map,aim.text,aim.why);
+  if(min>=20)add("train",min>=30?12:8,`Training server · ${MAPN(sel[0])}`,"Your situations on this map, with bots on the paths the demos recorded: your posts to hold, the routes to push, then the deaths that cost rounds.","The map in your hands before the first round.");
+  if(min>=10)add("nades",min>=30?5:min>=20?3:4,`Lineups · ${M}`,"The key grenades of your positions: paste a position in the console of a practice server (sv_cheats 1), throw each one twice.",nr?`${nr.short}: thrown, your grenades win rounds.`:"The utility of your positions, ready before the round.");
+  if(min>=20)add("dm",min>=30?8:5,dm.map,dm.text,dm.why);
+  if(min<20)add("sheet",2,"Your map sheets","Play, avoid, grenades, timing: each map in 60 seconds, just below.","The plan in your head before the first round.");
+  return B}
+// a bullet's lead: its bold part (and the numbers in brackets after it), else its first sentence
+function sheetLead(h){h=String(h||"").trim();const m=/^<b>([\s\S]*?)<\/b>(\s*\([^)]*\))?/.exec(h);if(m)return `<b>${m[1]}</b>${m[2]||""}`;
+  const t=h.replace(/<[^>]+>/g,""),c=t.search(/\.\s/);return esc(c>0&&c<130?t.slice(0,c+1):t.slice(0,130))}
+// one side of a map in five lines: where you win, where you lose, your grenades, the timing, a reflex
+function sheetSide(p,mp,side){const m=crossMap(p,mp),R0=!m?((p.advice.plan||{}).map_refs||{})[mp]:null,d=planData(p,m,R0,mp,side);
+  const play=[...d.baseGood,...d.cGood,...d.good.map(b=>b.text),...d.tries.slice(0,1).map(b=>b.text)].map(sheetLead).filter(Boolean).slice(0,2);
+  const avoid=[...d.baseBad,...d.cAvoid,...d.bad.map(b=>b.text)].map(sheetLead).filter(Boolean).slice(0,2);
+  const nades=((d.Sd&&d.plan&&d.plan.key_nades)||[]).slice(0,3).map(k=>d.Sd.lineups[k]).filter(Boolean);
+  const timing=d.timesOk[0]?d.timesOk[0].text:"",rf=d.reflex[0];   // short already, and its clock is the point
+  const row=(cls,lab,html)=>html?`<div class="srow"><span class="slab ${cls}">${lab}</span><span>${html}</span></div>`:"";
+  return `<div class="sside"><h4 class="${side==="T"?"t":"ct"}">${side==="T"?"T · attack":"CT · defense"}</h4>
+    ${row("ok","Play",play.join("<br>"))}${row("no","Avoid",avoid.join("<br>"))}
+    ${row("nade","Nades",nades.map(l=>`${TYPE[l.type]||esc(l.type)} ${esc(l.from_zone)} → ${esc(nTo(l,mp)||"?")}${l.t!=null?` <span class="note">${clock(l.t)}</span>`:""}`).join("<br>"))}
+    ${row("","Timing",timing)}${row("","If",rf?`${esc(lc(rf.if))} → ${esc(rf.then)}`:"")}
+    ${!play.length&&!avoid.length&&!nades.length?`<p class="note">Not enough of your rounds here on this side yet.</p>`:""}</div>`}
+function mapSheet(p,mp){return `<article class="psheet"><div class="psh"><h3>${esc(MAPN(mp))}</h3><span class="note">read in 60 s</span></div><div class="psides">${sheetSide(p,mp,"T")}${sheetSide(p,mp,"CT")}</div></article>`}
+// the key grenades of your maps, both sides, with their position for a practice server
+function prepNades(p,sel){const rows=[];
+  for(const mp of sel){const m=crossMap(p,mp),R0=!m?((p.advice.plan||{}).map_refs||{})[mp]:null;
+    for(const side of ["T","CT"]){const d=planData(p,m,R0,mp,side);((d.Sd&&d.plan&&d.plan.key_nades)||[]).slice(0,2).forEach(k=>{const l=d.Sd.lineups[k];if(l&&l.setpos)rows.push({mp,side,l})})}}
+  if(!rows.length)return `<p class="note">No key grenade found yet on these maps: Live's Grenades tab has the pro catalog.</p>`;
+  return `<div class="pnades">${rows.map(({mp,side,l})=>`<div class="pnade"><span class="tag ${side.toLowerCase()}">${side}</span><b>${TYPE[l.type]||esc(l.type)}</b> ${esc(l.from_zone)} → ${esc(nTo(l,mp)||"?")}${l.t!=null?` · ${clock(l.t)}`:""}<span class="note"> · ${esc(MAPN(mp))}${l.how?" · "+esc(l.how):""}</span><div class="cmd"><code>${esc(l.setpos)}</code><button type="button">Copy</button></div></div>`).join("")}</div>`}
+// your focus of the week (focus.py), and its change among the coach's next axes (Review and Prepare)
+function focusCard(p,extra){const F=focusOf(p);
+  if(!F)return `<article class="card b-next"><span class="eyebrow">Focus of the week</span><p class="note">The coach picks it once a few of your matches are analyzed.</p></article>`;
+  const own=D.local&&p.steamid===D.own,u=F.until?new Date(F.until):null;
+  return `<article class="card b-next focus-card"><span class="eyebrow">Focus of the week${u&&!isNaN(u)?` · until ${u.toLocaleDateString("en-US",{weekday:"short",month:"short",day:"numeric"})}`:""}${F.manual?" · your pick":""}</span>
+   <p class="lead">${esc(F.short)}</p>
+   ${(F.do||[]).length?`<ul>${F.do.slice(0,2).map(t=>`<li>${esc(t)}</li>`).join("")}</ul>`:""}
+   ${(F.drills||[]).length?`<p class="note">Drill: ${esc(F.drills[0])}</p>`:""}${extra||""}
+   ${own&&(F.others||[]).length?`<label class="note focus-pick">Change it: <select data-focus-pick><option value="">keep this one</option>${F.others.map(o=>`<option value="${esc(o.id)}">${esc(o.short)}</option>`).join("")}</select></label>`:""}</article>`}
+function wireFocus(v,p,rerender){const sel=$("[data-focus-pick]",v);if(!sel)return;
+  sel.onchange=async()=>{const id=sel.value;if(!id)return;sel.disabled=true;
+    try{const j=await api("/api/focus",{sid:p.steamid,id});const A=p.advice;A.plan=A.plan||{};A.plan.focus=j.focus;navUpdate(S.view);rerender()}
+    catch(e){sel.disabled=false;sel.insertAdjacentHTML("afterend",` <span class="note">${esc(e.message)}</span>`)}}}
+const fmtLeft=s=>`${Math.floor(Math.max(0,s)/60)}:${String(Math.floor(Math.max(0,s)%60)).padStart(2,"0")}`;
+function renderPrepare(){
+  const p=P(),v=$("#v-prepare"),PL=p.advice.plan;if(!PL)return noPlan(v);
+  clearInterval(PREP.tick);
+  const st=prepState(),own=D.local&&p.steamid===D.own,maps=mapsOf(p),sel=(st.maps||[]).filter(m=>maps.some(x=>x.map===m)).slice(0,3);
+  if(st.step>1&&!sel.length)st.step=1;
+  const B=sel.length?prepProgram(p,sel,st.min):[];
+  const steps=[[1,"Maps & time"],[2,`Warm-up · ${st.min} min`],[3,"Ready"]];
+  const step1=()=>`<section class="prep1">
+    <h3>Which maps?</h3><p class="note">One to three: the warm-up and the sheets follow them. Your most played first.</p>
+    <div class="btns prep-maps" role="group" aria-label="Maps">${maps.map(m=>`<button type="button" data-pmap="${esc(m.map)}" aria-pressed="${sel.includes(m.map)}">${esc(MAPN(m.map))} <span class="note">${m.n||0}</span></button>`).join("")}</div>
+    <h3>How long?</h3>
+    <div class="btns" role="group" aria-label="Duration">${PREP_LEN.map(n=>`<button type="button" data-pmin="${n}" aria-pressed="${st.min===n}">${n} min</button>`).join("")}</div>
+    <p class="note">${PREP_NOTE[st.min]||""}</p>
+    <div class="btns"><button type="button" class="primary" data-pgo ${sel.length?"":"disabled"}>Build my warm-up →</button></div>
+    ${own?`<div style="margin-top:18px">${checkinCard((PL.context||{}).journal_n)}</div>`:""}</section>`;
+  const block=(b,i)=>{const done=!!st.done[i],cur=st.cur===i,left=cur&&st.t0?b.mins*60-(Date.now()-st.t0)/1000:b.mins*60;
+    return `<li class="pblk k-${b.kind}${done?" done":""}${cur?" cur":""}">
+      <div class="pmin"><b>${b.mins}</b><span>min</span></div>
+      <div class="pbody"><h4>${esc(b.title)}</h4><p>${esc(b.text)}</p><p class="note">Why: ${esc(b.why)}</p>
+       ${b.kind==="nades"?prepNades(p,sel):""}
+       ${b.kind==="train"&&own?`<div class="btns" style="align-items:center"><button type="button" data-ptrain="${i}">▶ Launch on the training server</button><span class="note" id="ptmsg" role="status"></span></div>`:""}</div>
+      <div class="pact">${done?`<button type="button" data-pundo="${i}" title="Mark it not done">✓ Done</button>`:cur?`<b class="ptime" id="ptime">${fmtLeft(left)}</b><button type="button" data-pdone="${i}">Done</button>`:`<button type="button" class="primary" data-pstart="${i}">Start</button>`}</div></li>`};
+  const step2=()=>`<section class="prep2"><ol class="prep-prog">${B.map(block).join("")}</ol>
+    <div class="btns"><button type="button" data-pstep="3">I'm ready →</button></div>
+    <h3>Your map sheets</h3><div class="psheets">${sel.map(mp=>mapSheet(p,mp)).join("")}</div></section>`;
+  const step3=()=>{const recs=((PL.context||{}).recs||[]).filter(r=>r.kind==="stop"||r.kind==="tilt"),exps=((PL.experiments||{}).experiments||[]).filter(e=>e.status==="active"),nd=B.filter((b,i)=>st.done[i]).length;
+    return `<section class="prep3"><div class="prep-ready">${focusCard(p)}
+      <article class="card"><span class="eyebrow">Session rule</span><p class="lead">${esc(recs.length?recs[0].text:"A 10-15 min break after a loss, stop after 2 losses in a row.")}</p>${exps.map(e=>`<p class="note">Running experiment: ${esc(e.title)}</p>`).join("")}</article>
+      <article class="card"><span class="eyebrow">Warm-up</span><p class="lead">${nd} of ${B.length} done</p><p class="note">${D.local?"When CS2 loads a map, this page hands over to Live by itself.":"Live follows your match in the local app."}</p><div class="btns"><a class="btnlink" href="#ingame">Open Live</a></div></article></div>
+     <h3>Your maps</h3><div class="psheets">${sel.map(mp=>mapSheet(p,mp)).join("")}</div></section>`};
+  v.innerHTML=`<div class="head"><div style="display:grid;gap:4px"><span class="eyebrow">${esc(p.name)} · before you play</span><h2>Prepare</h2></div></div>
+   <nav class="prep-steps" aria-label="Steps">${steps.map(([n,t])=>`<button type="button" data-pstep="${n}"${st.step===n?' aria-current="step"':""}${n>1&&!sel.length?" disabled":""}><b>${n}</b>${esc(t)}</button>`).join("")}</nav>
+   ${st.step===1?step1():st.step===2?step2():step3()}`;
+  const save=()=>{prepSave(st);renderPrepare()};
+  $$("[data-pstep]",v).forEach(b=>b.onclick=()=>{st.step=+b.dataset.pstep;save()});
+  $$("[data-pmap]",v).forEach(b=>b.onclick=()=>{const m=b.dataset.pmap,i=sel.indexOf(m);if(i>=0)sel.splice(i,1);else if(sel.length<3)sel.push(m);else return;
+    st.maps=sel.slice();st.done={};st.cur=null;save()});
+  $$("[data-pmin]",v).forEach(b=>b.onclick=()=>{st.min=+b.dataset.pmin;st.done={};st.cur=null;save()});
+  const gb=$("[data-pgo]",v);if(gb)gb.onclick=()=>{st.step=2;save()};
+  $$("[data-pstart]",v).forEach(b=>b.onclick=()=>{st.cur=+b.dataset.pstart;st.t0=Date.now();save()});
+  const finish=i=>{st.done[i]=true;if(st.cur===i){st.cur=null;st.t0=null}if(B.every((b,k)=>st.done[k]))st.step=3;save()};
+  $$("[data-pdone]",v).forEach(b=>b.onclick=()=>finish(+b.dataset.pdone));
+  $$("[data-pundo]",v).forEach(b=>b.onclick=()=>{delete st.done[+b.dataset.pundo];save()});
+  $$("[data-ptrain]",v).forEach(b=>b.onclick=async()=>{const i=+b.dataset.ptrain,msg=$("#ptmsg",v);b.disabled=true;if(msg)msg.textContent="Preparing the session and starting the server (about 15 s)…";
+    try{const r=await api("/api/train/session",{sid:p.steamid,minutes:B[i].mins,where:sel[0],diff:trainDiff()});
+      if(st.cur!==i){st.cur=i;st.t0=Date.now();prepSave(st)}
+      if(msg)msg.textContent=`${r.blocks.map(x=>`${BLOCK[x.kind]} ${Math.round(x.seconds/60)}′`).join(" → ")}: CS2 joins the server, follow the screen.`;
+      PREP.tick=null;setTimeout(()=>{if(S.view==="prepare")renderPrepare()},6000)}
+    catch(e){if(msg)msg.textContent="Failed: "+e.message;b.disabled=false}});
+  copyBtn(v);wireCheckin(v,p);wireFocus(v,p,renderPrepare);
+  if(st.cur!=null&&st.t0&&B[st.cur]){const b=B[st.cur];   // the block running: its clock, and done when it reaches zero
+    PREP.tick=setInterval(()=>{const t=$("#ptime",v);if(!t||S.view!=="prepare"){clearInterval(PREP.tick);return}
+      const left=b.mins*60-(Date.now()-st.t0)/1000;t.textContent=fmtLeft(left);if(left<=0){clearInterval(PREP.tick);finish(st.cur)}},1000)}}
+// CS2 loads a map (not the training server): Live takes over
+function prepWatch(){clearTimeout(PREP.watch);if(S.view!=="prepare"||!D.local)return;
+  fetch("/api/gsi/state").then(r=>r.json()).then(g=>{if(S.view!=="prepare")return;
+    if(g&&g.map&&!g.practice&&(g.age==null||g.age<30)&&g.map_phase&&g.map_phase!=="gameover"){if(D.own&&S.player!==D.own){S.view="ingame";setPlayer(D.own)}else go("ingame");return}
+    PREP.watch=setTimeout(prepWatch,3000)}).catch(()=>{PREP.watch=setTimeout(prepWatch,6000)})}
 
-// ---------- navigation: two main moments (during the game, cold review) ----------
-const GROUP={ingame:"ingame",review:"review",matches:"review",maps:"review",midround:"review",progress:"review",analysis:"review",routine:"review",team:"team",players:"players",pros:"players",settings:"settings"};
-const SUB={review:[["review","Summary"],["matches","Matches"],["maps","Maps"],["midround","Mid-round"],["progress","Progress"],["analysis","Full analysis"],["routine","Routine"]],players:[["players","Players"],["pros","Pros"]]};
-const PLAYER_VIEWS=["ingame","review","matches","maps","midround","progress","analysis","routine"];
-// old French addresses keep working
-const ALIAS={partie:"ingame",avant:"ingame",bilan:"review",matchs:"matches",cartes:"maps",mid:"midround",prog:"progress",synthese:"analysis",equipe:"team",joueurs:"players",steam:"settings"};
+// ---------- navigation: three moments (05/10): Live during the match, Prepare before it, Review after it ----------
+const GROUP={ingame:"ingame",prepare:"prepare",review:"review",matches:"review",maps:"review",midround:"review",progress:"review",analysis:"review",routine:"review",team:"players",players:"players",pros:"players",settings:"settings"};
+const SUB={review:[["review","Summary"],["matches","Matches"],["maps","Maps"],["midround","Mid-round"],["progress","Progress"],["analysis","Full analysis"],["routine","Routine"]],players:[["players","Players"],["pros","Pros"],["team","Team"]]};
+const PLAYER_VIEWS=["ingame","prepare","review","matches","maps","midround","progress","analysis","routine"];
+// old French addresses keep working, and the moments' names
+const ALIAS={partie:"ingame",avant:"prepare",bilan:"review",matchs:"matches",cartes:"maps",mid:"midround",prog:"progress",synthese:"analysis",equipe:"team",joueurs:"players",steam:"settings",live:"ingame",prep:"prepare",warmup:"prepare"};
+// the focus of the week (focus.py: the coach's first axis, kept 7 days); a profile built before it: the first axis
+function focusOf(p){const A=p&&p.advice;if(!A)return null;const F=(A.plan||{}).focus;if(F&&F.short)return F;
+  const r=(A.rules||[])[0];return r?{id:r.id,title:r.title,short:r.short||r.title,do:(r.do||[]).slice(0,2),drills:(r.drills||[]).slice(0,2),others:(A.rules||[]).slice(1,6).map(x=>({id:x.id,short:x.short||x.title}))}:null}
 function navUpdate(view){const g=GROUP[view]||view;
   $$("nav a, .gear").forEach(a=>{if(a.dataset.view===g)a.setAttribute("aria-current","page");else a.removeAttribute("aria-current")});
   const sn=$("#subnav"),items=SUB[g];sn.hidden=!items;
@@ -1885,12 +2047,15 @@ function navUpdate(view){const g=GROUP[view]||view;
   const w=$("#whochip"),p=S.player&&D.players[S.player];
   w.innerHTML=p&&PLAYER_VIEWS.includes(view)?`Profile: <b>${esc(p.name)}</b>${D.own&&S.player!==D.own&&IDX()[D.own]?` <button type="button" id="backme">Back to my profile</button>`:""}`:"";
   const bm=$("#backme");if(bm)bm.onclick=()=>setPlayer(D.own);
+  const fc=$("#focuschip"),me=D.own&&D.players[D.own],F=me?focusOf(me):null;   // yours, whatever profile is on screen
+  if(fc){fc.hidden=!F;if(F){fc.textContent="Focus · "+F.short;fc.title="Your focus of the week: see it in Review";fc.onclick=()=>{if(S.player!==D.own){S.view="review";setPlayer(D.own)}else go("review")}}}
   document.body.classList.toggle("ingame",view==="ingame")}
 function welcome(v){const own=D.own;
   v.innerHTML=`<div class="welcome"><h2>Welcome to CS2 Coach</h2>
-   <p class="lede">The coach analyzes your CS2 matches and gives you two things:</p>
-   <ul style="font-size:15px"><li><b>In game</b>: a sheet to keep on a 2nd screen that follows your match (what to buy, where the Ts are likely to go, your strengths on the map, what to avoid, your reflexes, your rotations).</li>
-     <li><b>Review</b>: after your session or the next day, what changed, why, what you're testing and what you could test.</li></ul>
+   <p class="lede">The coach analyzes your CS2 matches and follows you at three moments:</p>
+   <ul style="font-size:15px"><li><b>Live</b>: a sheet to keep on a 2nd screen that follows your match (what to buy, where the Ts are likely to go, your paths, your rotations).</li>
+     <li><b>Prepare</b>: before you play, a timed warm-up built on your weak points and a 60-second sheet for each map.</li>
+     <li><b>Review</b>: after your session or the next day, what changed, why, your focus of the week and what you could test.</li></ul>
    ${D.local&&own?`<p><button type="button" class="primary" id="w-own">Analyze this PC's Steam account</button></p>`:""}
    <form class="search" id="w-form" autocomplete="off"><input id="w-q" type="search" placeholder="Your Steam profile link or SteamID64" aria-label="Your Steam profile link"><button type="submit">Analyze</button></form>
    <p class="note">${D.local?"The analysis runs on this PC (Steam open, CS2 closed to fetch your latest matches): a first preview in seconds, the full profile in a few minutes.":"The analysis runs in the local app: double-click Coach CS2.bat."} You can also look at any player in <a href="#players" style="color:var(--ct)">Explore</a>.</p></div>`;
@@ -2242,10 +2407,12 @@ function micBtn(){const g=gsiLast||{};if(!D.local)return "";
     :`<button type="button" class="close" data-team="on" title="Only once every teammate said yes: their voices are recorded too (France, art. 226-1), for this match only, to see after it what you did after their calls. Numpad / in game does the same (exec coach_binds once).">My team agreed: record what I hear</button>`;
   if(g.mic)return `${g.mic_silent?`<span class="pill weak" title="No sound for a minute">● Mic silent: <a href="#settings" style="color:inherit">check the microphone</a></span>`:`<span class="pill weak" title="Your microphone is recorded to analyze your calls">● Mic</span>`}${g.mic_auto?"":`<button type="button" class="close" data-mic="stop">Stop recording</button>`}${team}`;
   return (g.mic_auto?"":`<button type="button" class="close" data-mic="start" title="Records your microphone to analyze your calls after the match">Record my calls</button>`)+team}
+// the focus of the week, small in the live bar: what you work on, never more than one line (05/10)
+function liveFocus(){const F=S.player===D.own?focusOf(P()):null;return F?`<span class="lfocus" title="Your focus of the week">Focus · ${esc(F.short)}</span>`:""}
 function liveBar(){if(!D.local)return "";const g=gsiLast,focus=document.body.classList.contains("focus");
   const fb=`<button type="button" class="close" id="focus">${focus?"Exit 2nd screen":"2nd screen mode"}</button>`;
   if(gsiFresh())return `<div class="live on" role="status"><span class="dot" aria-hidden="true"></span><b>${MAPN(g.map)}</b><span>${g.side?`${g.side} · ${roleOf(g.map,g.side)}`:"spectating"}</span>
-    <span>Round ${g.round??"—"}${g.score_ct!=null?` · CT ${g.score_ct} - ${g.score_t} T`:""}</span>${g.money!=null?`<span>${money(g.money)}</span>`:""}
+    <span>Round ${g.round??"—"}${g.score_ct!=null?` · CT ${g.score_ct} - ${g.score_t} T`:""}</span>${g.money!=null?`<span>${money(g.money)}</span>`:""}${liveFocus()}
     ${g.round_phase==="over"?`<span class="tip">5 s: why did this round go that way? Then one long exhale.</span>`:""}<span class="sp">${igManual?`<button type="button" class="close" id="follow">Follow the game</button>`:""}${micBtn()}${fb}</span></div>`;
   const st=gsiStatus;
   return `<div class="live"><span class="dot" aria-hidden="true"></span>${st&&st.installed?"<span>Detection is on: this page follows your match as soon as you're in game.</span>"
@@ -2261,8 +2428,10 @@ async function gsiPoll(){clearTimeout(gsiTimer);if(!D.local||S.view!=="ingame")r
   gsiTimer=setTimeout(gsiPoll,1000)}   // the game sends every 0.25 s
 
 // ---------- the page ----------
-function planColumns(p,m,R0){const PL=p.advice.plan||{};
-  const plan=((p.advice.maps||{})[S.map]||{})[S.side],coach=((p.cross_notes||{})[S.map]||{})[S.side],bl=plan?plan.bullets:[];
+// a map plan's material for any map and side (the In game page: the map and side on screen; Prepare's map sheets: each
+// map you picked, both sides)
+function planData(p,m,R0,MAP=S.map,SIDE=S.side){const PL=p.advice.plan||{};
+  const plan=((p.advice.maps||{})[MAP]||{})[SIDE],coach=((p.cross_notes||{})[MAP]||{})[SIDE],bl=plan?plan.bullets:[];
   const isAv=(c,t,i)=>c.kinds?c.kinds[i]==="avoid":/[ée]vite|avoid/i.test(t),cAvoid=coach?coach.plan.filter((t,i)=>isAv(coach,t,i)):[],cGood=coach?coach.plan.filter((t,i)=>!isAv(coach,t,i)):[];
   // a zone already covered by a coach note: its generic bullet is not repeated
   const zkey=x=>{let s=String(x).replace(/<[^>]+>/g,"").trim().toLowerCase();s=s.replace(/^(worth a try|à essayer) ?: /,"").replace(/^(play|joue plus) (souvent )?/,"");
@@ -2270,21 +2439,23 @@ function planColumns(p,m,R0){const PL=p.advice.plan||{};
   const good=bl.filter(b=>b.kind==="exploit"&&!coachZ.has(zkey(b.text))),bad=bl.filter(b=>b.kind==="avoid"&&!coachZ.has(zkey(b.text))),tries=bl.filter(b=>b.kind==="try"&&!coachZ.has(zkey(b.text))),times=bl.filter(b=>b.kind==="timing");
   const avZ=new Set([...bad.map(b=>zkey(b.text)),...cAvoid.map(zkey)]),timesOk=times.filter(b=>!avZ.has(zkey(b.text)));
   const strong=((PL.mid||{}).strong||[]).slice(0,2),rules=(p.advice.rules||[]).slice(0,2);
-  const reflex=(PL.playbook||[]).filter(x=>x.side===S.side||x.side==="both"||x.side==="tous").slice().sort((a,b)=>(b.prio||0)-(a.prio||0)).slice(0,3);
-  const rot=S.side==="CT"?Object.entries((PL.routes||{})[S.map]||{}).sort().map(([s,r])=>{const b=[r.pro.best,r.base.best].find(x=>x&&x.travel>=3);return b?{site:s,route:b.route,travel:b.travel,died:b.died,who:r.pro.best?"pros":"players of the base"}:null}).filter(Boolean):[];
+  const reflex=(PL.playbook||[]).filter(x=>x.side===SIDE||x.side==="both"||x.side==="tous").slice().sort((a,b)=>(b.prio||0)-(a.prio||0)).slice(0,3);
+  const rot=SIDE==="CT"?Object.entries((PL.routes||{})[MAP]||{}).sort().map(([s,r])=>{const b=[r.pro.best,r.base.best].find(x=>x&&x.travel>=3);return b?{site:s,route:b.route,travel:b.travel,died:b.died,who:r.pro.best?"pros":"players of the base"}:null}).filter(Boolean):[];
   const exps=((PL.experiments||{}).experiments||[]).filter(e=>e.status==="active"),recs=((PL.context||{}).recs||[]).filter(r=>r.kind==="stop"||r.kind==="tilt");
-  const pos=R0?((R0.positions||{})[S.side]||{}):{},rifle=((pos.rifle||{}).zones||[]).filter(z=>z.duel_win!=null&&z.share>=4);
+  const pos=R0?((R0.positions||{})[SIDE]||{}):{},rifle=((pos.rifle||{}).zones||[]).filter(z=>z.duel_win!=null&&z.share>=4);
   const goodZ=rifle.filter(z=>z.duel_win>=53).sort((a,b)=>b.duel_win-a.duel_win).slice(0,3),badZ=rifle.filter(z=>z.duel_win<=47).sort((a,b)=>a.duel_win-b.duel_win).slice(0,2);
   const awpZ=((pos.awp||{}).zones||[]).filter(z=>z.duel_win!=null&&(z.duels||0)>=15).sort((a,b)=>b.duel_win-a.duel_win)[0],proAwp=((pos.pro_awp||{}).zones||[]).slice(0,2);
   const pl=(R0&&R0.plants)||{},baseGood=[],baseBad=[];
   if(R0){
     if(pl.A&&pl.B){const hi=pl.A.t_win>=pl.B.t_win?"A":"B",lo=hi==="A"?"B":"A",most=pl.A.share>=pl.B.share?"A":"B";
-      baseGood.push(S.side==="T"?`<b>Plant ${hi} rather</b>: Ts win ${pl[hi].t_win}% of the rounds where they plant ${hi}, ${pl[lo].t_win}% on ${lo}. Median plant around ${clock(pl[hi].plant_t)}.`
+      baseGood.push(SIDE==="T"?`<b>Plant ${hi} rather</b>: Ts win ${pl[hi].t_win}% of the rounds where they plant ${hi}, ${pl[lo].t_win}% on ${lo}. Median plant around ${clock(pl[hi].plant_t)}.`
         :`<b>Most attacked site: ${most}</b> (${pl[most].share}% of plants in the base): the extra player goes there.`)}
-    goodZ.forEach(z=>baseGood.push(`<b>${esc(z.name)}</b>: ${z.duel_win}% of duels won by ${S.side}s of the base (${z.share}% of them play there).`));
+    goodZ.forEach(z=>baseGood.push(`<b>${esc(z.name)}</b>: ${z.duel_win}% of duels won by ${SIDE}s of the base (${z.share}% of them play there).`));
     if(awpZ)baseGood.push(`<b>With the AWP: ${esc(awpZ.name)}</b> (${awpZ.duel_win}% of duels won)${proAwp.length?`. Pro AWPers: ${proAwp.map(z=>esc(z.name)).join(", ")}`:""}.`);
-    badZ.forEach(z=>baseBad.push(`<b>${esc(z.name)}</b>: only ${z.duel_win}% of duels won in the base (${z.share}% of ${S.side}s play there). Not dry: with a flash or in pairs.`))}
-  const Sd=m?m.sides[S.side]:null;
+    badZ.forEach(z=>baseBad.push(`<b>${esc(z.name)}</b>: only ${z.duel_win}% of duels won in the base (${z.share}% of ${SIDE}s play there). Not dry: with a flash or in pairs.`))}
+  const Sd=m?m.sides[SIDE]:null;
+  return {PL,plan,coach,good,bad,tries,times,timesOk,cGood,cAvoid,strong,rules,reflex,rot,exps,recs,rifle,proAwp,baseGood,baseBad,Sd}}
+function planColumns(p,m,R0){const {plan,good,bad,tries,timesOk,cGood,cAvoid,strong,rules,reflex,rot,exps,recs,rifle,proAwp,baseGood,baseBad,Sd}=planData(p,m,R0);
   return {rifle,proAwp,plan,Sd,html:`${R0?`<p class="note">No match of yours on ${MAPN(S.map)} yet: this sheet comes from ${R0.rounds||"—"} rounds of the base and pro demos. It becomes personal after your first matches here.</p>`:""}
    <div class="cols3 guide">
     <div class="igcol"><h3 class="good">Your strengths here</h3>
@@ -2302,7 +2473,7 @@ function planColumns(p,m,R0){const PL=p.advice.plan||{};
     ${exps.map(e=>`<div><b>Running experiment</b>${esc(e.title)}</div>`).join("")}
     <div><b>Session rule</b>${recs.length?esc(recs[0].text):"A 10-15 min break after a loss, stop after 2 losses in a row."}</div>
     <div><b>Economy</b>We buy together. Force only if everyone can still full buy next round ($3,700 T, $3,900 CT).</div>
-    ${D.local?`<div><b>Before the 1st game</b><a href="#routine" style="color:var(--flash)">journal (20 s)</a> · <a href="#progress" style="color:var(--flash)">today's warm-up</a></div>`:""}
+    ${D.local?`<div><b>Before the 1st game</b><a href="#prepare" style="color:var(--flash)">Prepare: warm-up, journal, map sheets</a></div>`:""}
    </div>`}}
 // T side: what to run (the plays that win on this map for your kind of round, small samples pulled toward the map's
 // average) early in the round, and the clock when no bomb is down (commit, plant, save)
@@ -3689,7 +3860,7 @@ function reviewBrief(R,f){const T=R.trend||[],rec=T.filter(x=>x.recent),bef=T.fi
    <div class="brief3">
     <article class="card b-good"><span class="eyebrow">What works</span>${li(works)||`<p class="note">Nothing stands out above your usual level.</p>`}</article>
     <article class="card b-bad"><span class="eyebrow">Watch out</span>${li(watch)||`<p class="note">Nothing slips: your numbers hold.</p>`}</article>
-    <article class="card b-next"><span class="eyebrow">Next session</span>${R.next?`<p class="lead">${esc(R.next)}</p>`:""}${a0&&a0.do.length?`<p>${esc(a0.short||a0.title)}: ${esc(a0.do[0])}</p>`:""}${!R.next&&!a0?`<p class="note">Keep your routine.</p>`:""}</article>
+    ${focusCard(P(),R.next&&/^Fix what is slipping/.test(R.next)?`<p class="note">Also this session: ${esc(R.next)}</p>`:"")}
    </div></section>`}
 // 2 · map by map: each map of the session
 function reviewMaps(R){const M=R.maps||[];if(!M.length)return "";
@@ -3748,7 +3919,7 @@ function renderReview(){const p=P(),v=$("#v-review"),PL=p.advice.plan||{},R=revi
    <p class="note" id="xmsg" role="status"></p>
    <div class="linkrow"><a href="#analysis">Full analysis</a><a href="#midround">Mid-round</a><a href="#progress">Progress and tracking</a><a href="#matches">Every match</a><a href="#maps">Maps and grenades</a><a href="#routine">Routine</a></div>
    </section>`;
-  wireExp(v,X,p);
+  wireExp(v,X,p);wireFocus(v,p,renderReview);
   $$("[data-tier]",v).forEach(a=>a.onclick=e=>{e.preventDefault();const t=$("#"+a.dataset.tier,v);if(t)t.scrollIntoView({behavior:"smooth",block:"start"})});   // not a #view link
   $$("tr[data-mid]",v).forEach(r=>{r.onclick=()=>{const i=p.matches.findIndex(x=>x.id===r.dataset.mid);S.match=i<0?0:i;S.mpin=i>=0;go("matches")};r.onkeydown=e=>{if(e.key==="Enter")r.click()}});
 }
@@ -3883,7 +4054,7 @@ $("#search").addEventListener("submit",async e=>{e.preventDefault();const q=$("#
     <p class="note">The local app must be running: double-click <code>Coach CS2.bat</code> in the app folder, or turn on its automatic start with <code>autostart.bat</code>.</p>`)});
 
 // ---------- routing ----------
-const RENDER={ingame:renderIngame,review:renderReview,analysis:renderAnalysis,routine:renderRoutine,midround:renderMidround,progress:renderProgress,team:renderTeam,matches:renderMatches,maps:renderMaps,players:renderPlayers,pros:renderPros,settings:renderSettings};
+const RENDER={ingame:renderIngame,prepare:renderPrepare,review:renderReview,analysis:renderAnalysis,routine:renderRoutine,midround:renderMidround,progress:renderProgress,team:renderTeam,matches:renderMatches,maps:renderMaps,players:renderPlayers,pros:renderPros,settings:renderSettings};
 // The local app has addresses like csrep's: /player/<steamid> (their first view: In game for you, Analysis for the others),
 // /player/<steamid>/<view>, /match/<share code, or match id when it has none>[?as=<steamid>: seen as someone else than
 // you], /team, /players, /pros, /settings; old links (/#review) still open. The published page (one file) keeps #view.
@@ -3891,6 +4062,7 @@ const GLOBAL=["team","players","pros","settings"],homeView=sid=>sid&&sid===D.own
 let navAt=0,navQuiet=0,afterJob=null,CODES={};   // CODES: match id -> share code
 // /live: your In game page, the address to keep open during a match (a second screen, OBS) (04/10)
 function pathNow(){const v=S.view;if(GLOBAL.includes(v))return "/"+v;if(!S.player)return "/";if(v==="ingame"&&S.player===D.own)return "/live";
+  if((v==="prepare"||v==="review")&&S.player===D.own)return "/"+v;   // your three moments: /live, /prepare, /review
   const m=v==="matches"&&S.mpin&&P()?P().matches[S.match]:null;
   return m?`/match/${CODES[m.id]||m.id}${S.player!==D.own?"?as="+S.player:""}`:`/player/${S.player}${v===homeView(S.player)?"":"/"+v}`}
 // the address of what is on screen: a new history entry for each move of yours (back works), the same entry for the
@@ -3912,6 +4084,7 @@ async function route(){
     if(!IDX()[sid])return notYet(`This player (SteamID ${sid}) isn't analyzed yet.`,sid);
     S.view=hv||(RENDER[v]&&!GLOBAL.includes(v)?v:homeView(sid));return setPlayer(sid)}
   if(path==="/live"&&D.own&&IDX()[D.own]){S.view="ingame";return setPlayer(D.own)}
+  if((path==="/prepare"||path==="/review")&&D.own&&IDX()[D.own]){S.view=hv||path.slice(1);return setPlayer(D.own)}
   m=path.match(/^\/([a-z]+)$/);const g=m&&(ALIAS[m[1]]||m[1]),p=defPlayer();
   S.view=hv||(GLOBAL.includes(g)?g:homeView(p));return setPlayer(p)}
 // /match/<id or share code>: that match, seen as the player of the address (?as=), else you, else an analyzed player in it
@@ -3944,6 +4117,7 @@ function show(view){view=ALIAS[view]||view;if(!RENDER[view])view="ingame";if(vie
   if(!S.player){if(view==="ingame"||view==="review")welcome($("#v-"+view));else $("#v-"+view).innerHTML=`<div class="empty">Pick a profile first: yours from the home page, or anyone in Explore.</div>`;return}
   if(!D.players[S.player]){$("#v-"+view).innerHTML=`<div class="empty"><span class="spin" aria-hidden="true"></span>Loading the profile…</div>`;return}
   RENDER[view]();navUpdate(view);window.scrollTo(0,0);
+  if(view==="prepare"&&D.local)prepWatch();   // CS2 loads a map: Live takes over
   if(view==="ingame"&&D.local){if(!gsiStatus)fetch("/api/gsi/status").then(r=>r.json()).then(j=>{gsiStatus=j;if(S.view==="ingame"&&D.players[S.player])renderIngame()}).catch(()=>{});gsiPoll()}}
 async function setPlayer(id,force){S.player=id;store("player",id);S.match=0;S.mpin=false;if(!id){show(S.view);return}
   if(!D.players[id]||force){show(S.view);try{await loadPlayer(id,force)}catch(e){$("#v-"+S.view).innerHTML=`<div class="empty">Couldn't load this profile (${esc(e.message)}).</div>`;return}}

@@ -344,10 +344,12 @@ function micBtn(){const g=gsiLast||{};if(!D.local)return "";
     :`<button type="button" class="close" data-team="on" title="Only once every teammate said yes: their voices are recorded too (France, art. 226-1), for this match only, to see after it what you did after their calls. Numpad / in game does the same (exec coach_binds once).">My team agreed: record what I hear</button>`;
   if(g.mic)return `${g.mic_silent?`<span class="pill weak" title="No sound for a minute">● Mic silent: <a href="#settings" style="color:inherit">check the microphone</a></span>`:`<span class="pill weak" title="Your microphone is recorded to analyze your calls">● Mic</span>`}${g.mic_auto?"":`<button type="button" class="close" data-mic="stop">Stop recording</button>`}${team}`;
   return (g.mic_auto?"":`<button type="button" class="close" data-mic="start" title="Records your microphone to analyze your calls after the match">Record my calls</button>`)+team}
+// the focus of the week, small in the live bar: what you work on, never more than one line (05/10)
+function liveFocus(){const F=S.player===D.own?focusOf(P()):null;return F?`<span class="lfocus" title="Your focus of the week">Focus · ${esc(F.short)}</span>`:""}
 function liveBar(){if(!D.local)return "";const g=gsiLast,focus=document.body.classList.contains("focus");
   const fb=`<button type="button" class="close" id="focus">${focus?"Exit 2nd screen":"2nd screen mode"}</button>`;
   if(gsiFresh())return `<div class="live on" role="status"><span class="dot" aria-hidden="true"></span><b>${MAPN(g.map)}</b><span>${g.side?`${g.side} · ${roleOf(g.map,g.side)}`:"spectating"}</span>
-    <span>Round ${g.round??"—"}${g.score_ct!=null?` · CT ${g.score_ct} - ${g.score_t} T`:""}</span>${g.money!=null?`<span>${money(g.money)}</span>`:""}
+    <span>Round ${g.round??"—"}${g.score_ct!=null?` · CT ${g.score_ct} - ${g.score_t} T`:""}</span>${g.money!=null?`<span>${money(g.money)}</span>`:""}${liveFocus()}
     ${g.round_phase==="over"?`<span class="tip">5 s: why did this round go that way? Then one long exhale.</span>`:""}<span class="sp">${igManual?`<button type="button" class="close" id="follow">Follow the game</button>`:""}${micBtn()}${fb}</span></div>`;
   const st=gsiStatus;
   return `<div class="live"><span class="dot" aria-hidden="true"></span>${st&&st.installed?"<span>Detection is on: this page follows your match as soon as you're in game.</span>"
@@ -363,8 +365,10 @@ async function gsiPoll(){clearTimeout(gsiTimer);if(!D.local||S.view!=="ingame")r
   gsiTimer=setTimeout(gsiPoll,1000)}   // the game sends every 0.25 s
 
 // ---------- the page ----------
-function planColumns(p,m,R0){const PL=p.advice.plan||{};
-  const plan=((p.advice.maps||{})[S.map]||{})[S.side],coach=((p.cross_notes||{})[S.map]||{})[S.side],bl=plan?plan.bullets:[];
+// a map plan's material for any map and side (the In game page: the map and side on screen; Prepare's map sheets: each
+// map you picked, both sides)
+function planData(p,m,R0,MAP=S.map,SIDE=S.side){const PL=p.advice.plan||{};
+  const plan=((p.advice.maps||{})[MAP]||{})[SIDE],coach=((p.cross_notes||{})[MAP]||{})[SIDE],bl=plan?plan.bullets:[];
   const isAv=(c,t,i)=>c.kinds?c.kinds[i]==="avoid":/[ée]vite|avoid/i.test(t),cAvoid=coach?coach.plan.filter((t,i)=>isAv(coach,t,i)):[],cGood=coach?coach.plan.filter((t,i)=>!isAv(coach,t,i)):[];
   // a zone already covered by a coach note: its generic bullet is not repeated
   const zkey=x=>{let s=String(x).replace(/<[^>]+>/g,"").trim().toLowerCase();s=s.replace(/^(worth a try|à essayer) ?: /,"").replace(/^(play|joue plus) (souvent )?/,"");
@@ -372,21 +376,23 @@ function planColumns(p,m,R0){const PL=p.advice.plan||{};
   const good=bl.filter(b=>b.kind==="exploit"&&!coachZ.has(zkey(b.text))),bad=bl.filter(b=>b.kind==="avoid"&&!coachZ.has(zkey(b.text))),tries=bl.filter(b=>b.kind==="try"&&!coachZ.has(zkey(b.text))),times=bl.filter(b=>b.kind==="timing");
   const avZ=new Set([...bad.map(b=>zkey(b.text)),...cAvoid.map(zkey)]),timesOk=times.filter(b=>!avZ.has(zkey(b.text)));
   const strong=((PL.mid||{}).strong||[]).slice(0,2),rules=(p.advice.rules||[]).slice(0,2);
-  const reflex=(PL.playbook||[]).filter(x=>x.side===S.side||x.side==="both"||x.side==="tous").slice().sort((a,b)=>(b.prio||0)-(a.prio||0)).slice(0,3);
-  const rot=S.side==="CT"?Object.entries((PL.routes||{})[S.map]||{}).sort().map(([s,r])=>{const b=[r.pro.best,r.base.best].find(x=>x&&x.travel>=3);return b?{site:s,route:b.route,travel:b.travel,died:b.died,who:r.pro.best?"pros":"players of the base"}:null}).filter(Boolean):[];
+  const reflex=(PL.playbook||[]).filter(x=>x.side===SIDE||x.side==="both"||x.side==="tous").slice().sort((a,b)=>(b.prio||0)-(a.prio||0)).slice(0,3);
+  const rot=SIDE==="CT"?Object.entries((PL.routes||{})[MAP]||{}).sort().map(([s,r])=>{const b=[r.pro.best,r.base.best].find(x=>x&&x.travel>=3);return b?{site:s,route:b.route,travel:b.travel,died:b.died,who:r.pro.best?"pros":"players of the base"}:null}).filter(Boolean):[];
   const exps=((PL.experiments||{}).experiments||[]).filter(e=>e.status==="active"),recs=((PL.context||{}).recs||[]).filter(r=>r.kind==="stop"||r.kind==="tilt");
-  const pos=R0?((R0.positions||{})[S.side]||{}):{},rifle=((pos.rifle||{}).zones||[]).filter(z=>z.duel_win!=null&&z.share>=4);
+  const pos=R0?((R0.positions||{})[SIDE]||{}):{},rifle=((pos.rifle||{}).zones||[]).filter(z=>z.duel_win!=null&&z.share>=4);
   const goodZ=rifle.filter(z=>z.duel_win>=53).sort((a,b)=>b.duel_win-a.duel_win).slice(0,3),badZ=rifle.filter(z=>z.duel_win<=47).sort((a,b)=>a.duel_win-b.duel_win).slice(0,2);
   const awpZ=((pos.awp||{}).zones||[]).filter(z=>z.duel_win!=null&&(z.duels||0)>=15).sort((a,b)=>b.duel_win-a.duel_win)[0],proAwp=((pos.pro_awp||{}).zones||[]).slice(0,2);
   const pl=(R0&&R0.plants)||{},baseGood=[],baseBad=[];
   if(R0){
     if(pl.A&&pl.B){const hi=pl.A.t_win>=pl.B.t_win?"A":"B",lo=hi==="A"?"B":"A",most=pl.A.share>=pl.B.share?"A":"B";
-      baseGood.push(S.side==="T"?`<b>Plant ${hi} rather</b>: Ts win ${pl[hi].t_win}% of the rounds where they plant ${hi}, ${pl[lo].t_win}% on ${lo}. Median plant around ${clock(pl[hi].plant_t)}.`
+      baseGood.push(SIDE==="T"?`<b>Plant ${hi} rather</b>: Ts win ${pl[hi].t_win}% of the rounds where they plant ${hi}, ${pl[lo].t_win}% on ${lo}. Median plant around ${clock(pl[hi].plant_t)}.`
         :`<b>Most attacked site: ${most}</b> (${pl[most].share}% of plants in the base): the extra player goes there.`)}
-    goodZ.forEach(z=>baseGood.push(`<b>${esc(z.name)}</b>: ${z.duel_win}% of duels won by ${S.side}s of the base (${z.share}% of them play there).`));
+    goodZ.forEach(z=>baseGood.push(`<b>${esc(z.name)}</b>: ${z.duel_win}% of duels won by ${SIDE}s of the base (${z.share}% of them play there).`));
     if(awpZ)baseGood.push(`<b>With the AWP: ${esc(awpZ.name)}</b> (${awpZ.duel_win}% of duels won)${proAwp.length?`. Pro AWPers: ${proAwp.map(z=>esc(z.name)).join(", ")}`:""}.`);
-    badZ.forEach(z=>baseBad.push(`<b>${esc(z.name)}</b>: only ${z.duel_win}% of duels won in the base (${z.share}% of ${S.side}s play there). Not dry: with a flash or in pairs.`))}
-  const Sd=m?m.sides[S.side]:null;
+    badZ.forEach(z=>baseBad.push(`<b>${esc(z.name)}</b>: only ${z.duel_win}% of duels won in the base (${z.share}% of ${SIDE}s play there). Not dry: with a flash or in pairs.`))}
+  const Sd=m?m.sides[SIDE]:null;
+  return {PL,plan,coach,good,bad,tries,times,timesOk,cGood,cAvoid,strong,rules,reflex,rot,exps,recs,rifle,proAwp,baseGood,baseBad,Sd}}
+function planColumns(p,m,R0){const {plan,good,bad,tries,timesOk,cGood,cAvoid,strong,rules,reflex,rot,exps,recs,rifle,proAwp,baseGood,baseBad,Sd}=planData(p,m,R0);
   return {rifle,proAwp,plan,Sd,html:`${R0?`<p class="note">No match of yours on ${MAPN(S.map)} yet: this sheet comes from ${R0.rounds||"—"} rounds of the base and pro demos. It becomes personal after your first matches here.</p>`:""}
    <div class="cols3 guide">
     <div class="igcol"><h3 class="good">Your strengths here</h3>
@@ -404,7 +410,7 @@ function planColumns(p,m,R0){const PL=p.advice.plan||{};
     ${exps.map(e=>`<div><b>Running experiment</b>${esc(e.title)}</div>`).join("")}
     <div><b>Session rule</b>${recs.length?esc(recs[0].text):"A 10-15 min break after a loss, stop after 2 losses in a row."}</div>
     <div><b>Economy</b>We buy together. Force only if everyone can still full buy next round ($3,700 T, $3,900 CT).</div>
-    ${D.local?`<div><b>Before the 1st game</b><a href="#routine" style="color:var(--flash)">journal (20 s)</a> · <a href="#progress" style="color:var(--flash)">today's warm-up</a></div>`:""}
+    ${D.local?`<div><b>Before the 1st game</b><a href="#prepare" style="color:var(--flash)">Prepare: warm-up, journal, map sheets</a></div>`:""}
    </div>`}}
 // T side: what to run (the plays that win on this map for your kind of round, small samples pulled toward the map's
 // average) early in the round, and the clock when no bomb is down (commit, plant, save)
