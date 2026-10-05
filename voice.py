@@ -1155,4 +1155,5 @@ if __name__ == "__main__":
     if len(sys.argv) > 1 and sys.argv[1] == "live":
         live_loop()
     elif len(sys.argv) > 2 and sys.argv[1] == "transcribe":
+        config.full_speed()   # after a match only (a match stops it): every core at full clock
         print(transcribe(sys.argv[2]), "phrases")

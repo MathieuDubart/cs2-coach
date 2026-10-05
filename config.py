@@ -180,6 +180,34 @@ def wait_for_match_end(log=None, what="analysis"):
 _BG = {"on": None}
 
 
+def full_speed(pid=None):
+    """Windows 11's efficiency mode (EcoQoS) off for this process or `pid`: a windowless process at low priority runs
+    on the efficiency cores at a low clock (05/10 at night: the update's 6 workers and a transcription shared 8
+    cores, the processor at 39 %; with it off, 81 %)."""
+    if os.name != "nt":
+        return False
+    try:
+        import ctypes
+        from ctypes import wintypes
+
+        class _State(ctypes.Structure):
+            _fields_ = [("Version", wintypes.ULONG), ("ControlMask", wintypes.ULONG), ("StateMask", wintypes.ULONG)]
+        k = ctypes.WinDLL("kernel32", use_last_error=True)
+        k.OpenProcess.restype = wintypes.HANDLE
+        k.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
+        k.GetCurrentProcess.restype = wintypes.HANDLE
+        k.SetProcessInformation.argtypes = [wintypes.HANDLE, ctypes.c_int, ctypes.c_void_p, wintypes.DWORD]
+        k.SetProcessInformation.restype = wintypes.BOOL
+        h = k.OpenProcess(0x0200, False, pid) if pid else k.GetCurrentProcess()   # PROCESS_SET_INFORMATION
+        st = _State(1, 0x1, 0)   # execution speed: never throttled
+        ok = bool(h) and bool(k.SetProcessInformation(h, 4, ctypes.byref(st), ctypes.sizeof(st)))   # ProcessPowerThrottling
+        if pid and h:
+            k.CloseHandle(h)
+        return ok
+    except Exception:
+        return False
+
+
 def background(on):
     """Windows' background mode for this process (lower processor, disk and memory priority: the game keeps its own)
     while on; back to its priority class when off. Changed only when it changes."""
@@ -192,6 +220,8 @@ def background(on):
         k.GetCurrentProcess.restype = wintypes.HANDLE
         k.SetPriorityClass.argtypes = [wintypes.HANDLE, wintypes.DWORD]
         k.SetPriorityClass(k.GetCurrentProcess(), 0x00100000 if on else 0x00200000)   # PROCESS_MODE_BACKGROUND_BEGIN / END
+        if not on:
+            full_speed()   # no match: every core at full clock
         _BG["on"] = on
     except Exception:
         pass
