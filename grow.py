@@ -316,6 +316,7 @@ def main():
                 try:
                     import contributions
                     contributions.pull()
+                    contributions.pull_reports()   # the players' bug reports (05/10, the alpha)
                     if contributions.ingest(follow=False):
                         st["step"] = int(time.time())
                         save(st)

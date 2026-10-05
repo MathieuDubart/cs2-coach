@@ -137,7 +137,7 @@ HOME = {
 <div class="grid">
  <article class="card"><h3>Only what Valve provides</h3><p>Game State Integration (the game's official feature for HUDs and RGB keyboards), the console log CS2 writes, the Steam Web API with your own key, the demos of your matches. The app never reads the game's memory or network traffic and never plays for you. The training server is a local copy of the game that only you join.</p></article>
  <article class="card"><h3>Your data stays on your PC</h3><p>Your matches, profile, keys and voice stay on your PC. The base that comes with the app is anonymized. If you choose to, your new matches can join the base anonymized: no SteamID, no name, no match id. <a href="privacy.html">Privacy policy</a></p></article>
- <article class="card"><h3>Free alpha</h3><p>Free while it is tested. It is the first version open to all players: tell us what breaks. Updates are signed by the coach and checked by the app before they are installed. Questions or bugs: <a href="mailto:{CONTACT}">{CONTACT}</a>.</p></article>
+ <article class="card"><h3>Free alpha</h3><p>Free while it is tested. It is the first version open to all players: tell us what breaks with the <b>alpha · report</b> tag at the top of the app (you see what is sent), or by email. Updates are signed by the coach and checked by the app before they are installed. Questions or bugs: <a href="mailto:{CONTACT}">{CONTACT}</a>.</p></article>
 </div>
 """,
 "fr": lambda rel: f"""
@@ -162,7 +162,7 @@ HOME = {
 <div class="grid">
  <article class="card"><h3>Seulement ce que Valve fournit</h3><p>Le Game State Integration (la fonction officielle du jeu pour les HUD et les claviers RGB), le journal de console que CS2 écrit, l'API Steam avec ta propre clé, les démos de tes matchs. L'app ne lit jamais la mémoire du jeu ni son trafic réseau et ne joue jamais à ta place. Le serveur d'entraînement est une copie locale du jeu que toi seul rejoins.</p></article>
  <article class="card"><h3>Tes données restent sur ton PC</h3><p>Tes matchs, ton profil, tes clés et ta voix restent sur ton PC. La base fournie avec l'app est anonymisée. Si tu le choisis, tes nouveaux matchs peuvent rejoindre la base anonymisés : sans SteamID, sans pseudo, sans identifiant de match. <a href="confidentialite.html">Politique de confidentialité</a></p></article>
- <article class="card"><h3>Alpha gratuite</h3><p>Gratuite pendant les tests. C'est la première version ouverte à tous les joueurs : dis-nous ce qui casse. Les mises à jour sont signées par le coach et vérifiées par l'app avant d'être installées. Questions ou bugs : <a href="mailto:{CONTACT}">{CONTACT}</a>.</p></article>
+ <article class="card"><h3>Alpha gratuite</h3><p>Gratuite pendant les tests. C'est la première version ouverte à tous les joueurs : dis-nous ce qui casse avec l'étiquette <b>alpha · report</b> en haut de l'app (tu vois ce qui est envoyé), ou par e-mail. Les mises à jour sont signées par le coach et vérifiées par l'app avant d'être installées. Questions ou bugs : <a href="mailto:{CONTACT}">{CONTACT}</a>.</p></article>
 </div>
 """,
 }
@@ -170,7 +170,7 @@ HOME = {
 PRIVACY = {
 "en": f"""<div class="doc"><h1>Privacy policy</h1><p class="note">Last updated: {UPDATED['en']}</p>
 <p><b>Who we are.</b> Coach CS2 is a free app published by {PUBLISHER} (France), contact: <a href="mailto:{CONTACT}">{CONTACT}</a>. This website is hosted by Infomaniak Network SA (Switzerland).</p>
-<p><b>In short.</b> The app runs on your PC: your matches, your profile, your voice recordings and your Steam keys stay there. There are no accounts. Only two things reach this website: the app's update checks, and your matches, anonymized, if you choose to share them. This website sets no cookies and has no analytics, advertising or tracking.</p>
+<p><b>In short.</b> The app runs on your PC: your matches, your profile, your voice recordings and your Steam keys stay there. There are no accounts. Only three things reach this website: the app's update checks, the bug reports you choose to send, and your matches, anonymized, if you choose to share them. This website sets no cookies and has no analytics, advertising or tracking.</p>
 <h2>1. This website</h2>
 <p>When you visit it or download the app, the host's servers record technical logs (IP address, date and time, page or file requested, browser) for security and operation. The host keeps them for a limited time; we do not use them for anything else. The site loads nothing from other servers.</p>
 <h2>2. Update checks</h2>
@@ -185,21 +185,26 @@ PRIVACY = {
 <li><b>On the server:</b> the upload script does not store your IP address. It keeps, for two days at most, a hash of it with a daily salt, to limit uploads per day. The files wait on the host until the publisher's computer retrieves them (usually within an hour), then they are deleted from the host.</li>
 <li><b>In the base:</b> the matches are then anonymous data. They cannot be linked to you or to the other players, and are kept as long as the base exists.</li>
 <li><b>Before that:</b> you can ask us to delete what your installation sent, with your installation identifier (Settings → Share my matches).</li></ul>
-<h2>4. What the app does on your PC (not sent to us)</h2>
+<h2>4. Bug reports (only when you send one)</h2>
+<p>The <i>alpha · report</i> button of the app sends what you write, your email address only if you give it (to answer you), the app's version, your installation identifier, and, if you leave the box ticked, technical details: versions, Windows version, the page you were on and its last errors, and the end of the app's log with SteamIDs, email addresses, in-game names it knows and your Windows user name removed. You see all of it before sending.</p>
+<ul><li><b>Purpose:</b> fixing the app. <b>Legal basis:</b> your consent, given by sending.</li>
+<li><b>Retention:</b> the report waits on the host until the publisher's computer retrieves it (usually within an hour), then is deleted there; the publisher keeps it until the problem is solved, at most one year.</li>
+<li>To have a report deleted, or to know what we keep: write to us.</li></ul>
+<h2>5. What the app does on your PC (not sent to us)</h2>
 <ul><li><b>Steam Web API key and match history code:</b> stored in <code>out/settings.json</code> on your PC and sent only to Valve's Steam Web API, to list your matches.</li>
 <li><b>Your matches' demos</b> (downloaded from Valve's servers through your Steam client) and what the app extracts from them, including the other players of your matches (their SteamIDs and in-game names, as in any demo): processed on your PC to coach you, kept on your PC.</li>
 <li><b>Voice (optional, off by default):</b> the app can record your microphone during matches and transcribe it on your PC. Recording your teammates (your PC's sound output) needs their agreement for each match; the app starts it only after you confirm it in game. Recordings never leave your PC.</li>
 <li><b>Services the app contacts from your PC</b> when you use the related feature, under their own privacy policies: Valve (Steam Web API, Steam Community, the game coordinator through your Steam client, demo servers), Leetify's public API (statistics of the players you analyze), GitHub (map radars, a lineup book), Hugging Face (the speech recognition model, if you use voice).</li></ul>
-<h2>5. The base that comes with the app</h2>
+<h2>6. The base that comes with the app</h2>
 <p>The app ships reference tables computed from Counter-Strike 2 matchmaking demos. Every player in them has a made-up identifier and no name. Professional matches (from public demos published by HLTV.org) keep the players' public names; if you are one of them and want a data point removed, contact us.</p>
-<h2>6. Your rights</h2>
+<h2>7. Your rights</h2>
 <p>Under the GDPR you have the right to access, rectify and erase your personal data, to restrict or object to its processing, to data portability and to withdraw your consent. Contact: <a href="mailto:{CONTACT}">{CONTACT}</a>. You can also lodge a complaint with the CNIL (<a href="https://www.cnil.fr">www.cnil.fr</a>) or the supervisory authority of your country.</p>
-<h2>7. Where the data is</h2>
+<h2>8. Where the data is</h2>
 <p>The host is in Switzerland, which the European Commission recognizes as providing adequate protection. The publisher's computer is in France.</p>
-<h2>8. Changes</h2><p>This page changes when the app's use of data changes; the date at the top is the last update.</p></div>""",
+<h2>9. Changes</h2><p>This page changes when the app's use of data changes; the date at the top is the last update.</p></div>""",
 "fr": f"""<div class="doc"><h1>Politique de confidentialité</h1><p class="note">Dernière mise à jour : {UPDATED['fr']}</p>
 <p><b>Qui sommes-nous.</b> Coach CS2 est une application gratuite éditée par {PUBLISHER} (France), contact : <a href="mailto:{CONTACT}">{CONTACT}</a>. Ce site est hébergé par Infomaniak Network SA (Suisse).</p>
-<p><b>En bref.</b> L'application tourne sur ton PC : tes matchs, ton profil, tes enregistrements de voix et tes clés Steam y restent. Il n'y a pas de compte. Seules deux choses arrivent sur ce site : les vérifications de mise à jour de l'application, et tes matchs, anonymisés, si tu choisis de les partager. Ce site ne dépose aucun cookie et n'a ni statistiques de visite, ni publicité, ni pistage.</p>
+<p><b>En bref.</b> L'application tourne sur ton PC : tes matchs, ton profil, tes enregistrements de voix et tes clés Steam y restent. Il n'y a pas de compte. Seules trois choses arrivent sur ce site : les vérifications de mise à jour de l'application, les signalements de bug que tu choisis d'envoyer, et tes matchs, anonymisés, si tu choisis de les partager. Ce site ne dépose aucun cookie et n'a ni statistiques de visite, ni publicité, ni pistage.</p>
 <h2>1. Ce site</h2>
 <p>Quand tu le visites ou télécharges l'application, les serveurs de l'hébergeur enregistrent des journaux techniques (adresse IP, date et heure, page ou fichier demandé, navigateur) pour la sécurité et le fonctionnement. L'hébergeur les conserve une durée limitée ; nous ne les utilisons pas à d'autres fins. Le site ne charge rien depuis d'autres serveurs.</p>
 <h2>2. Vérifications de mise à jour</h2>
@@ -214,18 +219,23 @@ PRIVACY = {
 <li><b>Sur le serveur :</b> le script de réception ne conserve pas ton adresse IP. Il garde, deux jours au plus, une empreinte de celle-ci avec un sel du jour, pour limiter les envois par jour. Les fichiers attendent chez l'hébergeur que l'ordinateur de l'éditeur les récupère (en général dans l'heure), puis ils y sont supprimés.</li>
 <li><b>Dans la base :</b> les matchs sont alors des données anonymes. Ils ne peuvent être reliés ni à toi ni aux autres joueurs, et sont conservés tant que la base existe.</li>
 <li><b>Avant cela :</b> tu peux nous demander de supprimer ce que ton installation a envoyé, avec son identifiant (Settings → Share my matches).</li></ul>
-<h2>4. Ce que l'application fait sur ton PC (rien ne nous est envoyé)</h2>
+<h2>4. Signalements de bug (seulement quand tu en envoies un)</h2>
+<p>Le bouton <i>alpha · report</i> de l'application envoie ce que tu écris, ton adresse e-mail seulement si tu la donnes (pour te répondre), la version de l'application, l'identifiant de ton installation et, si tu laisses la case cochée, des détails techniques : versions, version de Windows, la page où tu étais et ses dernières erreurs, et la fin du journal de l'application dont sont retirés les SteamID, les adresses e-mail, les pseudos qu'elle connaît et ton nom d'utilisateur Windows. Tu vois tout avant d'envoyer.</p>
+<ul><li><b>Finalité :</b> corriger l'application. <b>Base légale :</b> ton consentement, donné en envoyant.</li>
+<li><b>Conservation :</b> le signalement attend chez l'hébergeur que l'ordinateur de l'éditeur le récupère (en général dans l'heure), puis y est supprimé ; l'éditeur le garde jusqu'à ce que le problème soit réglé, un an au plus.</li>
+<li>Pour faire supprimer un signalement ou savoir ce que nous gardons : écris-nous.</li></ul>
+<h2>5. Ce que l'application fait sur ton PC (rien ne nous est envoyé)</h2>
 <ul><li><b>Clé Steam Web API et code d'historique des matchs :</b> enregistrés dans <code>out/settings.json</code> sur ton PC et envoyés uniquement à l'API Steam de Valve, pour lister tes matchs.</li>
 <li><b>Les démos de tes matchs</b> (téléchargées depuis les serveurs de Valve via ton client Steam) et ce que l'application en extrait, y compris les autres joueurs de tes matchs (leurs SteamID et pseudos, comme dans toute démo) : traités sur ton PC pour te coacher, conservés sur ton PC.</li>
 <li><b>Voix (facultatif, désactivé par défaut) :</b> l'application peut enregistrer ton micro pendant tes matchs et le transcrire sur ton PC. Enregistrer tes coéquipiers (la sortie son de ton PC) demande leur accord à chaque match ; l'application ne le démarre qu'après ta confirmation en jeu. Les enregistrements ne quittent jamais ton PC. En France, enregistrer la parole d'autrui sans son consentement est puni par l'article 226-1 du Code pénal.</li>
 <li><b>Services contactés depuis ton PC</b> quand tu utilises la fonction concernée, selon leurs propres politiques : Valve (API Steam, Steam Community, le coordinateur de jeu via ton client Steam, serveurs de démos), l'API publique de Leetify (statistiques des joueurs que tu analyses), GitHub (radars des maps, un livre de lineups), Hugging Face (le modèle de reconnaissance vocale, si tu utilises la voix).</li></ul>
-<h2>5. La base fournie avec l'application</h2>
+<h2>6. La base fournie avec l'application</h2>
 <p>L'application contient des tables de référence calculées à partir de démos de matchmaking de Counter-Strike 2. Chaque joueur y a un identifiant inventé et aucun pseudo. Les matchs professionnels (issus des démos publiques publiées par HLTV.org) gardent les noms publics des joueurs ; si tu es l'un d'eux et veux qu'une donnée soit retirée, contacte-nous.</p>
-<h2>6. Tes droits</h2>
+<h2>7. Tes droits</h2>
 <p>Le RGPD te donne un droit d'accès, de rectification et d'effacement de tes données personnelles, de limitation et d'opposition à leur traitement, de portabilité et de retrait de ton consentement. Contact : <a href="mailto:{CONTACT}">{CONTACT}</a>. Tu peux aussi adresser une réclamation à la CNIL (<a href="https://www.cnil.fr">www.cnil.fr</a>).</p>
-<h2>7. Où sont les données</h2>
+<h2>8. Où sont les données</h2>
 <p>L'hébergeur est en Suisse, pays reconnu par la Commission européenne comme offrant une protection adéquate. L'ordinateur de l'éditeur est en France.</p>
-<h2>8. Modifications</h2><p>Cette page change quand l'usage des données par l'application change ; la date en haut indique la dernière mise à jour.</p></div>""",
+<h2>9. Modifications</h2><p>Cette page change quand l'usage des données par l'application change ; la date en haut indique la dernière mise à jour.</p></div>""",
 }
 
 TERMS = {

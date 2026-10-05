@@ -181,4 +181,9 @@ def watch():
                 send()
         except Exception as e:
             print("share:", e, flush=True)
+        try:   # the bug reports kept while the site could not be reached
+            import bugreport
+            bugreport.retry()
+        except Exception as e:
+            print("reports:", e, flush=True)
         time.sleep(EVERY)

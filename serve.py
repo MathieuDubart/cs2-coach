@@ -289,6 +289,9 @@ class Handler(BaseHTTPRequestHandler):
         if u.path == "/api/update":   # a player's copy: the app's and the base's new versions (Settings, 05/10)
             import updater
             return self.send(200, updater.status())
+        if u.path == "/api/reports":   # the coach's PC: the bug reports players sent (Settings, 05/10)
+            import contributions
+            return self.send(200, contributions.reports((q.get("id") or [None])[0]))
         if u.path == "/api/contrib":   # the matches shared with the base: a player's switch, or what the coach received
             if config.role() == "client":
                 import contrib
@@ -472,6 +475,31 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send(200, updater.apply([p for p in parts if p in ("code", "base", "runtime")] if isinstance(parts, list) else None))
             except ValueError as e:
                 return self.send(409, {"error": str(e)})
+        if u.path in ("/api/report/preview", "/api/report/send"):   # a player reports a bug (the alpha, 05/10)
+            import bugreport
+            page = str(body.get("page") or "")[:120]
+            errors = [str(e)[:500] for e in (body.get("errors") or [])[:20]] if isinstance(body.get("errors"), list) else []
+            if u.path.endswith("preview"):
+                return self.send(200, bugreport.diagnostics(page, errors))
+            try:
+                return self.send(200, bugreport.send(body.get("text"), body.get("expected"), body.get("email"), bool(body.get("include", True)),
+                                                     page, errors, body.get("kind") or "bug"))
+            except ValueError as e:
+                return self.send(400, {"error": str(e)})
+        if u.path in ("/api/reports/pull", "/api/reports/done"):   # the coach's PC: the bug reports
+            if config.role() == "client":
+                return self.send(403, {"error": "the coach's PC only"})
+            import contributions
+            try:
+                if u.path.endswith("pull"):
+                    contributions.pull_reports()
+                else:
+                    contributions.report_done(str(body.get("id") or ""), bool(body.get("done", True)))
+            except (ValueError, OSError, SystemExit) as e:
+                return self.send(400, {"error": str(e) or "failed"})
+            except Exception as e:
+                return self.send(502, {"error": f"the site: {type(e).__name__}"})
+            return self.send(200, contributions.reports())
         if u.path in ("/api/contrib/set", "/api/contrib/send", "/api/contrib/pull"):   # the matches shared with the base
             if u.path.endswith("pull"):   # the coach's PC: what players shared, now
                 if config.role() == "client":

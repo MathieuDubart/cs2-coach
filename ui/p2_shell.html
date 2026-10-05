@@ -1,5 +1,5 @@
 <div class="bar"><div class="bar-in">
-  <span class="brand">CS2 Coach</span>
+  <span class="brand">CS2 Coach</span><button type="button" class="alphatag" id="alphatag" hidden title="This is an alpha: report a bug or an idea">alpha · report</button>
   <nav aria-label="Views">
     <a href="#ingame" data-view="ingame" title="During your match, on a 2nd screen">Live</a>
     <a href="#prepare" data-view="prepare" title="Before you play: warm-up, map sheets">Prepare</a>
@@ -18,6 +18,18 @@
     <a href="#settings" class="gear" data-view="settings" aria-label="Settings" title="Settings: Steam, game detection, microphone">⚙</a>
   </div>
 </div><div class="subnav" id="subnav" hidden></div></div>
+<dialog class="bugdlg" id="bugdlg" aria-labelledby="bug-h"><form method="dialog" id="bugform">
+  <h3 id="bug-h">Report a bug</h3>
+  <p class="note">It's an alpha: thank you. Your report goes to the coach with only what you see here.</p>
+  <div class="btns" role="group" aria-label="Kind"><label><input type="radio" name="kind" value="bug" checked> A bug</label><label><input type="radio" name="kind" value="idea"> An idea</label></div>
+  <label><span>What happened? What were you doing?</span><textarea id="bug-text" rows="5" required maxlength="15000"></textarea></label>
+  <label><span>What did you expect? <span class="note">(optional)</span></span><textarea id="bug-exp" rows="2" maxlength="6000"></textarea></label>
+  <label><span>Your email, only if you want an answer <span class="note">(optional)</span></span><input id="bug-email" type="email" maxlength="200" autocomplete="email"></label>
+  <label class="chk"><input type="checkbox" id="bug-diag" checked> Include the technical details (versions, Windows, this page's errors, the end of the app's log without SteamIDs, emails or names)</label>
+  <details id="bug-prev"><summary>See exactly what is sent</summary><pre id="bug-pre">…</pre></details>
+  <p class="note" id="bug-msg" role="status"></p>
+  <div class="btns"><button type="button" class="primary" id="bug-send">Send</button><button type="button" id="bug-close">Close</button></div>
+</form></dialog>
 <div class="jobpanel" id="job" hidden><div class="in" role="status" aria-live="polite"></div></div>
 <main>
   <section class="view" id="v-ingame"></section>

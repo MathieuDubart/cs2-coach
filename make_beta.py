@@ -409,6 +409,8 @@ DAILY USE
 - Update (top bar): downloads and analyzes your new matches.
 - Live during a match on your 2nd screen, Prepare before playing, Review after.
 - Settings > App updates: new versions of the app and of the base, checked against the coach's signature.
+- Something wrong, or an idea? The "alpha · report" tag at the top of the app sends a report from any page
+  (you see exactly what is sent first).
 
 PRIVACY
 - Your matches, your profile and your voice stay on this PC.

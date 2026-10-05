@@ -360,6 +360,43 @@ function wireShare(v){
   if(on)on.onclick=async()=>{on.disabled=true;try{await api("/api/contrib/set",{on:!on.textContent.startsWith("Stop")})}catch(e){}redo()};
   if(sd)sd.onclick=async()=>{sd.disabled=true;try{await api("/api/contrib/send",{})}catch(e){}setTimeout(redo,3000)};
   if(pl)pl.onclick=async()=>{pl.disabled=true;try{await api("/api/contrib/pull",{})}catch(e){}setTimeout(redo,5000)}}
+// a bug report (05/10, the alpha): the player writes, sees what is sent, sends; kept and sent later when offline
+function bugPage(){return `${S.view||"?"}${S.player&&S.player===D.own?" (own profile)":S.player?" (another profile)":""} ${location.pathname}${location.hash}`.slice(0,120)}
+function openReport(kind){const d=$("#bugdlg");if(!d)return;$("#bug-msg").textContent="";$("#bug-send").disabled=false;
+  $$("input[name=kind]",d).forEach(r=>r.checked=r.value===(kind||"bug"));$("#bug-pre").textContent="…";$("#bug-prev").open=false;
+  if(typeof d.showModal==="function")d.showModal();else d.setAttribute("open","");$("#bug-text").focus()}
+function wireReport(){const d=$("#bugdlg");if(!d||d.dataset.wired)return;d.dataset.wired="1";
+  $("#bug-close").onclick=()=>d.close();
+  $("#bug-prev").ontoggle=async()=>{if(!$("#bug-prev").open)return;$("#bug-pre").textContent="Reading…";
+    if(!$("#bug-diag").checked){$("#bug-pre").textContent="No technical details: only what you wrote.";return}
+    try{const r=await api("/api/report/preview",{page:bugPage(),errors:ERRS});$("#bug-pre").textContent=JSON.stringify(r,null,1)}catch(e){$("#bug-pre").textContent=e.message}};
+  $("#bug-diag").onchange=()=>{if($("#bug-prev").open)$("#bug-prev").ontoggle()};
+  $("#bug-send").onclick=async()=>{const t=$("#bug-text").value.trim(),m=$("#bug-msg");if(!t){m.textContent="Describe what happened first.";$("#bug-text").focus();return}
+    const b=$("#bug-send");b.disabled=true;m.textContent="Sending…";
+    try{const r=await api("/api/report/send",{text:t,expected:$("#bug-exp").value,email:$("#bug-email").value,include:$("#bug-diag").checked,
+        page:bugPage(),errors:ERRS,kind:($("input[name=kind]:checked",d)||{}).value||"bug"});
+      if(r.ok){m.textContent=`Sent, thank you (report ${r.id}).`;$("#bug-text").value="";$("#bug-exp").value="";setTimeout(()=>d.close(),2500)}
+      else{m.textContent="The site can't be reached right now: your report is kept on this PC and sent as soon as it can.";b.disabled=false}}
+    catch(e){m.textContent=e.message;b.disabled=false}}}
+function reportCard(){if(D.role!=="client")return "";
+  return `<article class="card"><h3>Alpha <span class="pill">0.0.x</span></h3><p>The app is open to every player for the first time: things will break. Tell the coach what happened, or an idea: the "alpha · report" tag at the top does it from any page.</p>
+   <div class="btns"><button type="button" class="primary" data-report="bug">Report a bug</button><button type="button" data-report="idea">Suggest an idea</button></div></article>`}
+// the coach's PC: what players reported, the newest first
+function reportsCard(rs){if(D.role==="client"||!Array.isArray(rs))return "";
+  const open=rs.filter(r=>!r.done),one=r=>`<li class="rep${r.done?" done":""}"><div><b>${r.kind==="idea"?"💡 Idea":"🐞 Bug"}</b> · ${when(r.at)} · ${esc(r.app||"?")}${r.email?` · <a href="mailto:${esc(r.email)}">${esc(r.email)}</a>`:""}</div>
+     <p>${esc(r.text||"")}</p>${r.expected?`<p class="note">Expected: ${esc(r.expected)}</p>`:""}<p class="note">${esc(r.page||"")}</p>
+     <div class="btns">${r.has_diag?`<button type="button" data-rdiag="${esc(r.id)}">Technical details</button>`:""}<button type="button" data-rdone="${esc(r.id)}" data-v="${r.done?0:1}">${r.done?"Reopen":"Done"}</button></div><pre class="rdiag" hidden></pre></li>`;
+  return `<article class="card" id="rp-card"><h3>Bug reports ${open.length?`<span class="pill strong">${open.length} open</span>`:""}</h3>
+   <p class="note">Sent by players from their app (the "alpha · report" tag), pulled every hour by the base loop while it runs.</p>
+   ${rs.length?`<ul class="replist">${rs.slice(0,30).map(one).join("")}</ul>`:`<p class="note">None yet.</p>`}
+   <div class="btns"><button type="button" id="rp-pull">Pull now</button></div></article>`}
+function wireReports(v){
+  $$("[data-report]",v).forEach(b=>b.onclick=()=>openReport(b.dataset.report));
+  const redo=rs=>{const k=$("#rp-card",v);if(k&&k.isConnected){k.outerHTML=reportsCard(rs);wireReports(v)}};
+  const pl=$("#rp-pull",v);if(pl)pl.onclick=async()=>{pl.disabled=true;try{redo(await api("/api/reports/pull",{}))}catch(e){pl.disabled=false;pl.insertAdjacentHTML("afterend",`<span class="note">${esc(e.message)}</span>`)}};
+  $$("[data-rdone]",v).forEach(b=>b.onclick=async()=>{b.disabled=true;try{redo(await api("/api/reports/done",{id:b.dataset.rdone,done:b.dataset.v==="1"}))}catch(e){b.disabled=false}});
+  $$("[data-rdiag]",v).forEach(b=>b.onclick=async()=>{const pre=b.closest("li").querySelector(".rdiag");if(!pre.hidden){pre.hidden=true;return}
+    try{const r=(await (await fetch("/api/reports?id="+encodeURIComponent(b.dataset.rdiag))).json()).find(x=>x.id===b.dataset.rdiag);pre.textContent=JSON.stringify(r&&r.diag,null,1);pre.hidden=false}catch(e){}})}
 // the app updated with the base as it grows (04/10: "a button in the settings to update every data of the app with the
 // base that grows"): what every page reads from the base, then the profiles, yours first
 function refreshCard(r){
@@ -403,6 +440,7 @@ async function renderSettings(){
   let rf=null;try{rf=await (await fetch("/api/refresh")).json()}catch(e){}
   let up=null;try{up=await (await fetch("/api/update")).json()}catch(e){}
   let ct=null;try{ct=await (await fetch("/api/contrib")).json()}catch(e){}
+  let rs=null;if(D.role!=="client"){try{rs=await (await fetch("/api/reports")).json()}catch(e){}}
   const flag=new URLSearchParams(location.search).get("steam");
   const ok=b=>b?`<span class="pill strong">done</span>`:`<span class="pill">to do</span>`;
   const pt=st.playtime,L=st.links||{};
@@ -473,7 +511,7 @@ async function renderSettings(){
     <li><b>Your group</b>: your Steam friends on your team are recognized as your group, even after a single match together.</li>
     <li><b>Your experience</b>: your playtime sets the priorities of the Progress tab.</li></ul>
    <p class="note">Your codes stay in <code>out/settings.json</code> on this PC: this file is not versioned and the codes only go to Steam's official API. You can remove everything at any time.</p>
-   <div class="btns"><button type="button" id="st-forget">${steamForget?"Confirm: remove the sign-in and the codes":"Disconnect everything"}</button></div></article>${updateCard(up)}${shareCard(ct)}${growCard(gr)}${refreshCard(rf)}`;
+   <div class="btns"><button type="button" id="st-forget">${steamForget?"Confirm: remove the sign-in and the codes":"Disconnect everything"}</button></div></article>${reportCard()}${updateCard(up)}${shareCard(ct)}${reportsCard(rs)}${growCard(gr)}${refreshCard(rf)}`;
   wireRefresh(v);if(rf&&rf.running)pollRefresh(v);
   const msg=$("#st-msg",v),sid=st.steamid;
   const vmsg=$("#v-msg",v),vcall=async(path,body)=>{try{await api(path,Object.assign({sid},body||{}));renderSettings()}catch(e){if(vmsg)vmsg.textContent=e.message}};
@@ -498,7 +536,7 @@ async function renderSettings(){
   $("#st-sync",v).onclick=async()=>{msg.textContent="";try{await api("/api/steam/sync",{sid});poll()}catch(e){msg.textContent=e.message}};
   const au=$("#st-auto",v);if(au)au.onchange=async()=>{try{await api("/api/steam/options",{sid,auto_sync:au.checked})}catch(e){msg.textContent=e.message}};
   $$("[data-theme-set]",v).forEach(b=>b.onclick=()=>{store("theme",b.dataset.themeSet);applyTheme(b.dataset.themeSet);$$("[data-theme-set]",v).forEach(x=>x.setAttribute("aria-pressed",x===b))});
-  wireUpdate(v);wireShare(v);
+  wireUpdate(v);wireShare(v);wireReports(v);
   const grb=$("#gr-go",v);if(grb)grb.onclick=async()=>{grb.disabled=true;try{await api(gr.on?"/api/grow/stop":"/api/grow/start",{target:+($("#gr-n",v)||{}).value||gr.target})}catch(e){}renderSettings()};
   $("#st-forget",v).onclick=async()=>{if(!steamForget){steamForget=true;renderSettings();return}steamForget=false;
     try{await api("/api/steam/forget",{sid});renderSettings()}catch(e){msg.textContent=e.message}};

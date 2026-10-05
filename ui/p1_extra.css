@@ -246,6 +246,17 @@ table.lc{border-collapse:collapse;font-variant-numeric:tabular-nums;min-width:64
 .tbig:disabled{opacity:.5}
 .tlive{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:8px 12px;border-radius:var(--radius);background:color-mix(in srgb,var(--good,#3ba55d) 14%,transparent);font:600 14px var(--f-body)}
 .tinstall{display:grid;gap:8px;max-width:72ch}.tinstall p{margin:0}
+.alphatag{margin-left:8px;font:600 11px var(--f-mono);text-transform:uppercase;letter-spacing:.06em;color:var(--t,#f0b23a);background:transparent;border:1px solid currentColor;border-radius:999px;padding:2px 9px;cursor:pointer;align-self:center}
+.alphatag:hover{background:color-mix(in srgb,var(--t,#f0b23a) 14%,transparent)}
+.bugdlg{max-width:620px;width:calc(100% - 32px);background:var(--panel,var(--bg));color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:20px 22px}
+.bugdlg::backdrop{background:rgba(0,0,0,.55)}
+.bugdlg form{display:grid;gap:12px}.bugdlg h3{margin:0}.bugdlg p{margin:0}
+.bugdlg label{display:grid;gap:4px;font-weight:500}.bugdlg label.chk{display:flex;gap:8px;align-items:flex-start;font-weight:400}
+.bugdlg .btns label{display:flex;gap:6px;align-items:center;font-weight:400}
+.bugdlg textarea,.bugdlg input[type=email]{font:14px var(--f-body);background:var(--bg);color:var(--ink);border:1px solid var(--line);border-radius:4px;padding:7px 9px;resize:vertical}
+.bugdlg pre{max-height:180px;overflow:auto;white-space:pre-wrap;font:12px/1.45 var(--f-mono);background:var(--bg);border:1px solid var(--line);border-radius:4px;padding:8px}
+.replist{list-style:none;margin:8px 0;padding:0;display:grid;gap:10px}.replist li{border:1px solid var(--line);border-radius:6px;padding:10px 12px}
+.replist li.done{opacity:.55}.replist p{margin:6px 0}.replist pre{max-height:300px;overflow:auto;white-space:pre-wrap;font:12px var(--f-mono)}
 .tlive>b{color:var(--good,#3ba55d)}
 .tcarte>summary{cursor:pointer;font-weight:600;margin:6px 0}
 .tcarte{display:grid;gap:8px}

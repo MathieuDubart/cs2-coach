@@ -53,11 +53,11 @@ def init():
     log(f"token written in out/settings.json, its hash in {CONFIG_PHP}: publish the site (deploy_site.py) for it to work")
 
 
-def _req(action, f=None, post=False):
+def _req(action, f=None, post=False, kind="contrib"):
     tok = config.settings().get("contrib_token")
     if not tok:
         raise SystemExit("no token yet: python contributions.py init, then publish the site")
-    url = API + "pull.php?action=" + action + (f"&f={f}" if f else "")
+    url = API + "pull.php?action=" + action + (f"&f={f}" if f else "") + (f"&kind={kind}" if kind != "contrib" else "")
     req = urllib.request.Request(url, data=b"" if post else None, method="POST" if post else "GET",
                                  headers={"X-Coach-Token": tok, "User-Agent": "CoachCS2-coach"})
     return urllib.request.urlopen(req, timeout=120)
@@ -218,16 +218,70 @@ def ingest(dest=None, follow=True):
     return added
 
 
+REPORTS = os.path.join(config.OUT, "reports")
+
+
+def pull_reports():
+    """The bug reports players sent (05/10, the alpha): into out/reports/<id>.json, then deleted on the site."""
+    import hashlib
+    os.makedirs(REPORTS, exist_ok=True)
+    files = json.loads(_req("list", kind="reports").read()).get("files") or []
+    n = 0
+    for x in files:
+        data = _req("get", x["f"], kind="reports").read()
+        if hashlib.sha256(data).hexdigest() != x.get("sha256"):
+            continue
+        config.write_json(os.path.join(REPORTS, x["f"]), json.loads(data), indent=1)
+        _req("delete", x["f"], post=True, kind="reports")
+        n += 1
+    if n:
+        log(f"{n} bug report(s) pulled into out/reports")
+    return n
+
+
+def reports(with_diag=None):
+    """The reports here, the newest first; one with its technical details (with_diag: its id)."""
+    out = []
+    for sub in ("", "done"):
+        d = os.path.join(REPORTS, sub)
+        for f in os.listdir(d) if os.path.isdir(d) else []:
+            if not f.endswith(".json"):
+                continue
+            r = config.read_json(os.path.join(d, f), {}) or {}
+            r["done"] = bool(sub)
+            r["has_diag"] = bool(r.get("diag"))
+            if r.get("id") != with_diag:
+                r.pop("diag", None)
+            out.append(r)
+    return sorted(out, key=lambda r: -(r.get("at") or 0))
+
+
+def report_done(rid, done=True):
+    import re
+    if not re.fullmatch(r"\d{14}-[0-9a-f]{12}", rid or ""):
+        raise ValueError("unknown report")
+    src, dst = (REPORTS, os.path.join(REPORTS, "done")) if done else (os.path.join(REPORTS, "done"), REPORTS)
+    os.makedirs(dst, exist_ok=True)
+    os.replace(os.path.join(src, rid + ".json"), os.path.join(dst, rid + ".json"))
+
+
 def status():
     s = config.read_json(SEEN_F, {}) or {}
     waiting = len([f for f in os.listdir(INBOX) if f.endswith(".zip")]) if os.path.isdir(INBOX) else 0
-    return {"token": bool(config.settings().get("contrib_token")), "stats": s.get("stats") or {}, "last": s.get("last"), "waiting": waiting}
+    new_reports = len([f for f in os.listdir(REPORTS) if f.endswith(".json")]) if os.path.isdir(REPORTS) else 0
+    return {"token": bool(config.settings().get("contrib_token")), "stats": s.get("stats") or {}, "last": s.get("last"), "waiting": waiting,
+            "reports": new_reports}
 
 
 if __name__ == "__main__":
     sys.stdout.reconfigure(encoding="utf-8")
     if "init" in sys.argv:
         init()
+    elif "reports" in sys.argv:
+        pull_reports()
+        for r in reports():
+            print(time.strftime("%d/%m %H:%M", time.localtime(r.get("at") or 0)), r.get("app"), "|", (r.get("text") or "")[:100].replace("\n", " "),
+                  "| done" if r["done"] else "")
     else:
         if "ingest" not in sys.argv:
             pull()

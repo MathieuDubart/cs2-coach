@@ -102,6 +102,10 @@ function nTo(x,map){const from=x.from??x.from_zone,to=x.to??x.to_zone,px=x.to_px
   return best&&bd<140?`${to}, near ${best}`:to}
 // the pro catalog (Daily CS Nades) lineups found in the base's real throws: exact aim and technique (04/10)
 const NCAT={};
+// the page's own errors, the last 20: a bug report can include them (05/10, the alpha)
+const ERRS=[];
+window.addEventListener("error",e=>{ERRS.push(`${e.message||"error"} @ ${(e.filename||"").split("/").pop()}:${e.lineno||0}`);if(ERRS.length>20)ERRS.shift()});
+window.addEventListener("unhandledrejection",e=>{ERRS.push("promise: "+String((e.reason&&e.reason.message)||e.reason||"").slice(0,300));if(ERRS.length>20)ERRS.shift()});
 async function nadeCat(mp){if(mp in NCAT)return NCAT[mp];try{const r=await fetch(`nadecat/${mp}.json`);NCAT[mp]=r.ok?await r.json():null}catch(e){NCAT[mp]=null}return NCAT[mp]}
 function drawCat(box,l,level){const ov=$("g",$("svg",box));if((l.level||level)!==level&&(l.land_level||level)!==level)return;
   const col=l.type==="smoke"?"var(--smoke)":l.type==="flash"?"var(--flash)":l.type==="molotov"?"var(--molotov)":"var(--he)";
