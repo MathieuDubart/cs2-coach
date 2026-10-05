@@ -45,7 +45,7 @@ def current():
     v = config.read_json(VER_F, {}) or {}
     rt = os.path.join(config.HERE, "python", ".runtime")
     base = config.read_json(os.path.join(config.OUT, "base_pack.json"), {}) or {}
-    return {"app": v.get("app"), "runtime": open(rt).read().strip() if os.path.exists(rt) else v.get("runtime"),
+    return {"app": v.get("app"), "build": v.get("build"), "runtime": open(rt).read().strip() if os.path.exists(rt) else v.get("runtime"),
             "base": base.get("version"), "matches": base.get("matches")}
 
 
@@ -67,8 +67,9 @@ def verify(raw, sig):
 
 def _available(man, cur):
     out = []
-    if man.get("code") and man.get("app") != cur["app"]:
-        out.append({"part": "code", "version": man["app"], "size": man["code"]["size"]})
+    pub = (man.get("code") or {}).get("build")   # a new publication of the same version has a new build
+    if man.get("code") and ((pub and pub != cur.get("build")) or (not pub and man.get("app") != cur["app"])):
+        out.append({"part": "code", "version": man["app"] + (f" · build {pub}" if pub else ""), "size": man["code"]["size"]})
     if man.get("runtime") and man["runtime"].get("key") != cur["runtime"]:
         out.append({"part": "runtime", "version": man["runtime"]["key"], "size": man["runtime"]["size"]})
     if man.get("base") and str(man["base"].get("version") or "") > str(cur["base"] or ""):   # YYYYMMDD-HHMM: only a newer base

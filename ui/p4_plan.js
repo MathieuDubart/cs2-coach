@@ -321,7 +321,7 @@ function updateCard(u){
   const c=u.current||{},av=u.available||[],pr=u.progress||{},busy=pr.busy||pr.restarting,pct=pr.total?Math.round(100*pr.done/pr.total):0;
   const list=av.map(a=>`<li>${UPW[a.part]||esc(a.part)} ${esc(a.version||"")}${a.matches?` · ${Number(a.matches).toLocaleString()} matches`:""} · ${fmtMB(a.size)}</li>`).join("");
   return `<article class="card" id="up-card"><h3>App updates ${av.length?`<span class="pill strong">available</span>`:""}</h3>
-   <p class="note">This version: ${esc(c.app||"?")} · base ${esc(c.base||"?")}${c.matches?` (${Number(c.matches).toLocaleString()} matches)`:""}${u.checked?` · checked ${when(u.checked)}`:""}</p>
+   <p class="note">This version: ${esc(c.app||"?")}${c.build?` · build ${esc(c.build)}`:""} · base ${esc(c.base||"?")}${c.matches?` (${Number(c.matches).toLocaleString()} matches)`:""}${u.checked?` · checked ${when(u.checked)}`:""}</p>
    ${av.length?`<ul class="note">${list}</ul>${u.latest&&u.latest.notes?`<p>${esc(u.latest.notes)}</p>`:""}`:`<p class="note">${u.error?`Check failed: ${esc(u.error)}`:"Up to date."}</p>`}
    ${busy?`<div style="height:8px;background:var(--line);border-radius:4px;overflow:hidden;margin:6px 0"><div style="width:${pct}%;height:100%;background:var(--ct)"></div></div><p class="note">${pr.restarting?"Restarting the app…":pr.part==="installing"?"Installing…":`Downloading ${UPW[pr.part]||""}…`}</p>`:""}
    ${pr.error?`<p class="note">Failed: ${esc(pr.error)}</p>`:""}

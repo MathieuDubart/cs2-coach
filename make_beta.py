@@ -183,7 +183,9 @@ def copy_code(dst, version):
     shutil.copy2(os.path.join(config.HERE, "legal", "THIRD_PARTY_NOTICES.txt"), dst)
     open(os.path.join(dst, "requirements.txt"), "w", encoding="utf-8").write("".join(f"{k}=={v}\n" for k, v in REQS.items()))
     open(os.path.join(dst, "release_key.pub"), "w").write(public_key_hex())
-    config.write_json(os.path.join(dst, "VERSION.json"), {"app": version, "runtime": runtime_key(), "built": int(time.time())}, indent=1)
+    # the build: what tells two publications of one version apart (the version only changes when the coach says so)
+    config.write_json(os.path.join(dst, "VERSION.json"), {"app": version, "build": time.strftime("%Y%m%d-%H%M"), "runtime": runtime_key(),
+                                                          "built": int(time.time())}, indent=1)
     log(f"code {version}: {len(ms)} modules")
 
 
@@ -476,8 +478,9 @@ def release(dst, version, base, notes):
     zip_dir(os.path.join(dst, "out"), base_z, top=False, skip={"settings.json"})
     setup_z = os.path.join(RELEASES, f"CoachCS2-{version}.zip")
     zip_dir(dst, setup_z, top=True)
-    man = {"app": version, "released": int(time.time()), "notes": notes,
-           "code": _entry(code_z), "runtime": dict(_entry(rt_z), key=rt),
+    build = (config.read_json(os.path.join(dst, "VERSION.json"), {}) or {}).get("build")
+    man = {"app": version, "build": build, "released": int(time.time()), "notes": notes,
+           "code": dict(_entry(code_z), build=build), "runtime": dict(_entry(rt_z), key=rt),
            "base": dict(_entry(base_z), version=base["version"], matches=base["matches"]), "setup": _entry(setup_z)}
     raw = json.dumps(man, indent=1).encode()
     open(os.path.join(RELEASES, "latest.json"), "wb").write(raw)
