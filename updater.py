@@ -71,7 +71,7 @@ def _available(man, cur):
         out.append({"part": "code", "version": man["app"], "size": man["code"]["size"]})
     if man.get("runtime") and man["runtime"].get("key") != cur["runtime"]:
         out.append({"part": "runtime", "version": man["runtime"]["key"], "size": man["runtime"]["size"]})
-    if man.get("base") and man["base"].get("version") != cur["base"]:
+    if man.get("base") and str(man["base"].get("version") or "") > str(cur["base"] or ""):   # YYYYMMDD-HHMM: only a newer base
         out.append({"part": "base", "version": man["base"]["version"], "size": man["base"]["size"], "matches": man["base"].get("matches")})
     return out
 
