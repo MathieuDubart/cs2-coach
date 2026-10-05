@@ -159,7 +159,7 @@ def modules():
     return sorted(seen | {m for m in local if m.startswith("zones_")})
 
 
-def copy_code(dst, version):
+def copy_code(dst, version, build=None):
     ms = modules()
     for m in ms:
         shutil.copy2(os.path.join(config.HERE, m + ".py"), dst)
@@ -184,7 +184,7 @@ def copy_code(dst, version):
     open(os.path.join(dst, "requirements.txt"), "w", encoding="utf-8").write("".join(f"{k}=={v}\n" for k, v in REQS.items()))
     open(os.path.join(dst, "release_key.pub"), "w").write(public_key_hex())
     # the build: what tells two publications of one version apart (the version only changes when the coach says so)
-    config.write_json(os.path.join(dst, "VERSION.json"), {"app": version, "build": time.strftime("%Y%m%d-%H%M"), "runtime": runtime_key(),
+    config.write_json(os.path.join(dst, "VERSION.json"), {"app": version, "build": build or time.strftime("%Y%m%d-%H%M"), "runtime": runtime_key(),
                                                           "built": int(time.time())}, indent=1)
     log(f"code {version}: {len(ms)} modules")
 
@@ -504,14 +504,16 @@ def main():
         raise SystemExit(f"no profile for {sid} here: analyze them first")
     update = "--update" in sys.argv and not generic
     # a player's package carries the published version it is built with: their app then offers only what is newer
-    published = (config.read_json(os.path.join(RELEASES, "latest.json"), {}) or {}).get("app")
-    version = version or published or "dev-" + time.strftime("%Y%m%d-%H%M")
+    pub = config.read_json(os.path.join(RELEASES, "latest.json"), {}) or {}
+    version = version or pub.get("app") or "dev-" + time.strftime("%Y%m%d-%H%M")
+    # a player's package built from the published code carries its build: their app offers no update to the same code
+    build = None if arg("--release") else pub.get("build")
     dst = os.path.join(DIST, "CoachCS2")
     if os.path.exists(dst):
         shutil.rmtree(dst)
     os.makedirs(os.path.join(dst, "out", "site"))
     t0 = time.time()
-    copy_code(dst, version)
+    copy_code(dst, version, build)
     mine = set()
     if sid and not generic:
         mine = copy_player(dst, sid, update)
