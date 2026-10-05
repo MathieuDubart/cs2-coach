@@ -310,6 +310,22 @@ def main():
                 status(st, f"paused: {why}")
                 time.sleep(30)
                 continue
+            if time.time() - st.get("contrib_at", 0) > 3600 and config.settings().get("contrib_token"):
+                st["contrib_at"] = time.time()   # the matches players shared (05/10), every hour
+                save(st)
+                try:
+                    import contributions
+                    contributions.pull()
+                    if contributions.ingest(follow=False):
+                        st["step"] = int(time.time())
+                        save(st)
+                        try:
+                            follow_ups()
+                        finally:
+                            st.pop("step", None)
+                            save(st)
+                except Exception as e:
+                    log(f"shared matches: {type(e).__name__}: {str(e)[:160]}")
             reg = cs2coach.registry()
             if not st.get("codes") and not refill(st, reg):
                 status(st, "waiting: no new match of the players yet (looked up again in 1 h)")

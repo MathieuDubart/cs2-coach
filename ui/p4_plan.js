@@ -313,6 +313,53 @@ function growCard(g){
    <p class="note">${esc(g.status||"not started")}${g.on||ok?` · ${ok} new match(es) · ${g.codes} waiting · ${g.looked} player(s) looked up`:""} · ${g.free_gb} GB free on the disk</p>
    <p class="note">One match from Valve every 30 s at most, through your Steam session (Steam may show you in game a few seconds). It pauses while CS2 is open, during an analysis, a recording or a transcription, at the lowest priority otherwise. The demos stay (the practice part uses them); it stops at the target or when the disk has 150 GB left.</p>
    <div class="btns" style="align-items:center">${g.on?"":`<label class="note">Target <input id="gr-n" type="number" min="100" max="20000" step="100" value="${t}" style="width:90px;font:14px var(--f-body);background:var(--bg);color:var(--ink);border:1px solid var(--line);border-radius:3px;padding:4px 6px"> matches</label>`}<button type="button" id="gr-go"${g.on?"":` class="primary"`}>${g.on?"Stop":"Grow the base"}</button></div></article>`}
+// a player's copy (05/10): the coach's new versions of the app and of the base, signed by him, installed on a click
+const fmtMB=b=>`${Math.max(1,Math.round((b||0)/1048576))} MB`,UPW={code:"the app",base:"the base",runtime:"Python and its libraries"};
+const when=t=>new Date(t*1000).toLocaleString([], {dateStyle:"short",timeStyle:"short"});
+function updateCard(u){
+  if(!u||!u.enabled)return "";
+  const c=u.current||{},av=u.available||[],pr=u.progress||{},busy=pr.busy||pr.restarting,pct=pr.total?Math.round(100*pr.done/pr.total):0;
+  const list=av.map(a=>`<li>${UPW[a.part]||esc(a.part)} ${esc(a.version||"")}${a.matches?` · ${Number(a.matches).toLocaleString()} matches`:""} · ${fmtMB(a.size)}</li>`).join("");
+  return `<article class="card" id="up-card"><h3>App updates ${av.length?`<span class="pill strong">available</span>`:""}</h3>
+   <p class="note">This version: ${esc(c.app||"?")} · base ${esc(c.base||"?")}${c.matches?` (${Number(c.matches).toLocaleString()} matches)`:""}${u.checked?` · checked ${when(u.checked)}`:""}</p>
+   ${av.length?`<ul class="note">${list}</ul>${u.latest&&u.latest.notes?`<p>${esc(u.latest.notes)}</p>`:""}`:`<p class="note">${u.error?`Check failed: ${esc(u.error)}`:"Up to date."}</p>`}
+   ${busy?`<div style="height:8px;background:var(--line);border-radius:4px;overflow:hidden;margin:6px 0"><div style="width:${pct}%;height:100%;background:var(--ct)"></div></div><p class="note">${pr.restarting?"Restarting the app…":pr.part==="installing"?"Installing…":`Downloading ${UPW[pr.part]||""}…`}</p>`:""}
+   ${pr.error?`<p class="note">Failed: ${esc(pr.error)}</p>`:""}
+   <p class="note">Every update is signed by the coach and checked on this PC before it is installed. Your settings, matches, profile and voice stay as they are.</p>
+   <div class="btns">${av.length&&!busy?`<button type="button" class="primary" id="up-go">Install the update</button>`:""}<button type="button" id="up-check"${busy?" disabled":""}>Check now</button></div></article>`}
+function wireUpdate(v){
+  const go=$("#up-go",v),ck=$("#up-check",v);
+  if(ck)ck.onclick=async()=>{ck.disabled=true;try{await api("/api/update/check",{})}catch(e){}pollUpdate(v)};
+  if(go)go.onclick=async()=>{go.disabled=true;try{await api("/api/update/apply",{})}catch(e){go.disabled=false;go.insertAdjacentHTML("afterend",`<span class="note">${esc(e.message)}</span>`);return}pollUpdate(v)}}
+async function pollUpdate(v){clearTimeout(S.upTimer);
+  let u=null;try{u=await (await fetch("/api/update")).json()}catch(e){S.upTimer=setTimeout(()=>pollUpdate(v),2000);return}   // restarting: back when it answers
+  const pr=u.progress||{};
+  if(S.upRestart&&!pr.restarting){location.reload();return}
+  if(pr.restarting)S.upRestart=true;
+  gearDot(u);const c=$("#up-card",v);if(!c||!c.isConnected)return;
+  c.outerHTML=updateCard(u);wireUpdate(v);
+  if(pr.busy||pr.restarting)S.upTimer=setTimeout(()=>{if(S.view==="settings")pollUpdate(v)},1500)}
+function gearDot(u){const g=$(".gear");if(!g)return;const n=((u||{}).available||[]).length;g.classList.toggle("has-update",!!n);
+  g.title=n?"Settings: an update of the app is available":"Settings: Steam, game detection, microphone"}
+// the base grows with the players (05/10): a player's switch (off until they turn it on), or what the coach received
+function shareCard(c){
+  if(!c)return "";
+  if(!c.client){const st=c.stats||{};
+    return `<article class="card" id="ct-card"><h3>Matches shared by players</h3>
+     <p class="note">${c.token?`${st.joined||0} joined the base · ${st.duplicates||0} already there · ${st.refused||0} refused${c.waiting?` · ${c.waiting} waiting here`:""}${c.last?` · last pull ${when(c.last)}`:""}`:"Not set up yet: python contributions.py init, then publish the site (deploy_site.py)."}</p>
+     <p class="note">The base loop pulls them every hour while it runs; each match is checked again here (the app's own tables, no real SteamID, no name) and kept once.</p>
+     ${c.token?`<div class="btns"><button type="button" id="ct-pull">Pull now</button></div>`:""}</article>`}
+  return `<article class="card" id="ct-card"><h3>Share my matches with the base ${c.on?`<span class="pill strong">on</span>`:`<span class="pill">off</span>`}</h3>
+   <p>The base you are compared with grows with the players who use the app. When this is on, your new matches go to the coach anonymized: what the app extracted from each demo (positions, duels, grenades, buys, rounds), where every SteamID becomes a random id used for that match only, every name is blank and the match id is random. Never your demos, your voice, your settings or your profile.</p>
+   <p class="note">${c.on?`${c.sent} match(es) shared${c.waiting?` · ${c.waiting} waiting`:""}${c.last?` · last ${when(c.last)}`:""}`:"Off: nothing leaves this PC."}${c.error?` · last try failed: ${esc(c.error)}`:""}</p>
+   <p class="note">You can turn it off at any time. To have what this PC sent deleted before it joins the base, write to the coach with this installation's id: <code>${esc(c.install||"")}</code>. <a href="https://wily.valentingassend.com/privacy.html" target="_blank" rel="noopener" style="color:var(--ct)">Privacy policy</a></p>
+   <div class="btns"><button type="button"${c.on?"":` class="primary"`} id="ct-on">${c.on?"Stop sharing":"Share my matches"}</button>${c.on&&c.waiting?`<button type="button" id="ct-send"${c.sending?" disabled":""}>Send now</button>`:""}</div></article>`}
+function wireShare(v){
+  const on=$("#ct-on",v),sd=$("#ct-send",v),pl=$("#ct-pull",v);
+  const redo=async()=>{let c=null;try{c=await (await fetch("/api/contrib")).json()}catch(e){return}const k=$("#ct-card",v);if(k&&k.isConnected){k.outerHTML=shareCard(c);wireShare(v)}};
+  if(on)on.onclick=async()=>{on.disabled=true;try{await api("/api/contrib/set",{on:!on.textContent.startsWith("Stop")})}catch(e){}redo()};
+  if(sd)sd.onclick=async()=>{sd.disabled=true;try{await api("/api/contrib/send",{})}catch(e){}setTimeout(redo,3000)};
+  if(pl)pl.onclick=async()=>{pl.disabled=true;try{await api("/api/contrib/pull",{})}catch(e){}setTimeout(redo,5000)}}
 // the app updated with the base as it grows (04/10: "a button in the settings to update every data of the app with the
 // base that grows"): what every page reads from the base, then the profiles, yours first
 function refreshCard(r){
@@ -354,6 +401,8 @@ async function renderSettings(){
   let cc=null;try{cc=await (await fetch("/api/coach/status")).json()}catch(e){}
   let gr=null;try{gr=await (await fetch("/api/grow")).json()}catch(e){}
   let rf=null;try{rf=await (await fetch("/api/refresh")).json()}catch(e){}
+  let up=null;try{up=await (await fetch("/api/update")).json()}catch(e){}
+  let ct=null;try{ct=await (await fetch("/api/contrib")).json()}catch(e){}
   const flag=new URLSearchParams(location.search).get("steam");
   const ok=b=>b?`<span class="pill strong">done</span>`:`<span class="pill">to do</span>`;
   const pt=st.playtime,L=st.links||{};
@@ -424,7 +473,7 @@ async function renderSettings(){
     <li><b>Your group</b>: your Steam friends on your team are recognized as your group, even after a single match together.</li>
     <li><b>Your experience</b>: your playtime sets the priorities of the Progress tab.</li></ul>
    <p class="note">Your codes stay in <code>out/settings.json</code> on this PC: this file is not versioned and the codes only go to Steam's official API. You can remove everything at any time.</p>
-   <div class="btns"><button type="button" id="st-forget">${steamForget?"Confirm: remove the sign-in and the codes":"Disconnect everything"}</button></div></article>${growCard(gr)}${refreshCard(rf)}`;
+   <div class="btns"><button type="button" id="st-forget">${steamForget?"Confirm: remove the sign-in and the codes":"Disconnect everything"}</button></div></article>${updateCard(up)}${shareCard(ct)}${growCard(gr)}${refreshCard(rf)}`;
   wireRefresh(v);if(rf&&rf.running)pollRefresh(v);
   const msg=$("#st-msg",v),sid=st.steamid;
   const vmsg=$("#v-msg",v),vcall=async(path,body)=>{try{await api(path,Object.assign({sid},body||{}));renderSettings()}catch(e){if(vmsg)vmsg.textContent=e.message}};
@@ -449,6 +498,7 @@ async function renderSettings(){
   $("#st-sync",v).onclick=async()=>{msg.textContent="";try{await api("/api/steam/sync",{sid});poll()}catch(e){msg.textContent=e.message}};
   const au=$("#st-auto",v);if(au)au.onchange=async()=>{try{await api("/api/steam/options",{sid,auto_sync:au.checked})}catch(e){msg.textContent=e.message}};
   $$("[data-theme-set]",v).forEach(b=>b.onclick=()=>{store("theme",b.dataset.themeSet);applyTheme(b.dataset.themeSet);$$("[data-theme-set]",v).forEach(x=>x.setAttribute("aria-pressed",x===b))});
+  wireUpdate(v);wireShare(v);
   const grb=$("#gr-go",v);if(grb)grb.onclick=async()=>{grb.disabled=true;try{await api(gr.on?"/api/grow/stop":"/api/grow/start",{target:+($("#gr-n",v)||{}).value||gr.target})}catch(e){}renderSettings()};
   $("#st-forget",v).onclick=async()=>{if(!steamForget){steamForget=true;renderSettings();return}steamForget=false;
     try{await api("/api/steam/forget",{sid});renderSettings()}catch(e){msg.textContent=e.message}};

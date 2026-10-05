@@ -1,0 +1,70 @@
+COACH CS2 - THIRD-PARTY NOTICES
+===============================
+
+Coach CS2 is free software made by Valentin Gassend (https://wily.valentingassend.com). It is not affiliated with,
+endorsed or sponsored by Valve Corporation. Counter-Strike, Counter-Strike 2, CS2 and Steam are trademarks of Valve
+Corporation.
+
+The app uses only what Valve provides for that: Game State Integration (the game's official feature for HUDs and
+RGB keyboards), the console log the game writes when launched with -condebug, the Steam Web API with your own key,
+and the demos of your own matches. It never reads the game's memory or network traffic, and the training server is a
+separate local copy of the game that only you join.
+
+
+SOFTWARE SHIPPED WITH THE APP
+-----------------------------
+
+Python 3.11.9 (embeddable build)                       PSF License            python/LICENSE.txt
+  https://www.python.org
+Python libraries (python/Lib/site-packages; each one's license is in its *.dist-info folder):
+  demoparser2 (MIT), pandas (BSD-3-Clause), numpy (BSD-3-Clause), pyarrow (Apache-2.0), polars (MIT),
+  scikit-learn (BSD-3-Clause), scipy (BSD-3-Clause), pillow (MIT-CMU), psutil (BSD-3-Clause), soundfile (BSD-3-Clause),
+  sounddevice (MIT), soundcard (BSD-3-Clause), faster-whisper (MIT), ctranslate2 (MIT), onnxruntime (MIT),
+  tokenizers (Apache-2.0), huggingface_hub (Apache-2.0), av / PyAV (BSD-3-Clause, with FFmpeg libraries under
+  LGPL-2.1-or-later: see av's dist-info), cryptography (Apache-2.0 or BSD-3-Clause), and their dependencies.
+
+Metamod:Source 2.0                                     zlib/libpng            LICENSES/MetamodSource-LICENSE.txt
+  Copyright (C) 2004-2008, Metamod:Source Development Team. https://www.sourcemm.net
+  Source: https://github.com/alliedmodders/metamod-source
+  Shipped unmodified in plugin/mmsource.zip; installed only in the training server's copy of the game.
+
+CounterStrikeSharp 1.0.376 (with its .NET runtime)     GPL-3.0                LICENSES/CounterStrikeSharp-LICENSE.txt
+  https://github.com/roflmuffin/CounterStrikeSharp                            LICENSES/GPL-3.0.txt
+  Corresponding source: https://github.com/roflmuffin/CounterStrikeSharp/tree/v1.0.376
+  Shipped unmodified in plugin/css-runtime.zip; installed only in the training server's copy of the game.
+  The .NET runtime inside it is under the MIT license (addons/counterstrikesharp/dotnet/LICENSE.txt in the zip).
+
+CoachReplay (the coach's training plugin)               MIT                    plugin/CoachReplay/LICENSE.txt
+  Copyright (c) 2026 Valentin Gassend. Licensed under MIT as CounterStrikeSharp's license permits for its plugins.
+
+boiler-writter 1.7.0                                    MIT                    LICENSES/boiler-writter-LICENSE.txt
+  Copyright (c) 2016-present AkiVer. https://github.com/akiver/boiler-writter
+  Shipped in tools/boiler with Valve's Steamworks redistributable steam_api64.dll it needs.
+
+
+DATA AND IMAGES
+---------------
+
+Map radar images: Valve's radars as published by CS Demo Manager (https://github.com/akiver/cs-demo-manager,
+  MIT, LICENSES/cs-demo-manager-LICENSE.txt). The images are Valve's.
+
+The base (out/population, out/style, train_*): computed by the coach from matchmaking demos. Every player in it has a
+  made-up SteamID and no name, except your own matches and the public pro matches.
+
+Pro matches (out/deep_pro, out/style_pro, out/population/*_pro, pros.json): extracted from the public demos of
+  professional matches hosted by HLTV.org (https://www.hltv.org). Player and team names as published there.
+
+Lineup book of Fachwerk: by gronnmann (https://github.com/gronnmann/de-fachwerk-smokes). Not shipped: the app
+  downloads it from its author's repository and shows it with its author's name and a link.
+
+Lineup catalog of Daily CS Nades (https://dailycsnades.com/data/cs2-pro-utility-dataset): not shipped until its
+  authors agree. Daily CS Nades (2026). Daily CS Nades Professional CS2 Utility Dataset.
+
+
+DOWNLOADED BY THE APP ON YOUR PC, WHEN YOU USE THE FEATURE
+---------------------------------------------------------
+
+Your matches' demos: from Valve's servers, through your Steam client.
+Speech recognition model (optional, your calls): Systran's faster-whisper models on Hugging Face (MIT).
+Player statistics: Leetify's public API (https://leetify.com), for your own profile and the players you search.
+Your Steam profile (name, avatar): Steam Community.

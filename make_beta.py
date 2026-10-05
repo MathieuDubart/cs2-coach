@@ -1,30 +1,32 @@
-"""The app for another player's PC (05/10, the beta: "any player gets the same as me: the training server, the live
-advice, everything"): one folder to unzip, with Python and its libraries inside, the code, the base's references, and
-the player's own matches from the base.
+"""The app for any player's PC (05/10: "any player gets the same as me, the training server, the live advice,
+everything, like any client"): one folder to unzip, with Python and its libraries inside, the code, the base's
+references, and for a known player their own matches from the base.
 
-    python make_beta.py --player <steamid64>            a player's first install: all of it, their matches from the base
-    python make_beta.py --player <steamid64> --update   an update: the code, the base's references and their matches
-                                                        from the base (their settings and profile stay: unzipped over
-                                                        the old folder)
-
-Always for one player: their own matches stay real in the base's tables (an update for nobody would turn them into
-made-up ids on their PC).
-
-Out: dist/CoachCS2/ and dist/CoachCS2-<date>[-<player>].zip.
+    python make_beta.py --generic                        a first install for any player (no history: their PC
+                                                         downloads and analyzes their matches)
+    python make_beta.py --player <steamid64> [--update]  a player's package with their matches from the base (the
+                                                         beta); --update leaves their settings and profile alone
+    python make_beta.py --release <version> [--notes "…"] the website's release (wily.valentingassend.com/releases):
+                                                         the code, the runtime, the base and the full install as
+                                                         zips, and latest.json signed with the coach's release key
+    options: --with-dailycsnades (once Daily CS Nades agreed), --no-python, --no-zip
 
 What never leaves this PC: the settings (keys, codes, tokens), the voice, the other players' profiles, the raw demos,
-the logs, the base loop's state. The base's tables are pseudonymized: the players of its matches get a stable made-up
-SteamID (a keyed hash, in a range no Steam account uses; the key stays in out/pack_key.txt) and no name, except in the
-player's own matches (theirs, as in their own demos) and in the pro matches (public). A last check refuses the package
-when a real SteamID is left anywhere else."""
+the logs, the base loop's state, the keys (out/pack_key.txt, out/release_key.pem). The base's tables are pseudonymized
+(anon.py): the players of its matches get a stable made-up SteamID and no name, except in a known player's own
+matches (theirs, as in their own demos) and in the pro matches (public). A last check refuses the package when a real
+SteamID or a name is left anywhere else.
+
+Third-party content: Daily CS Nades' lineup catalog has no license (05/10): out of the package until they agree
+(--with-dailycsnades). The Fachwerk lineup book (gronnmann on GitHub, no license) is downloaded by the player's own
+app from its author's repository. The licenses of what the package carries are in LICENSES/."""
 import ast
+import base64
 import glob
 import hashlib
-import hmac
 import json
 import os
 import re
-import secrets
 import shutil
 import subprocess
 import sys
@@ -33,35 +35,39 @@ import urllib.request
 import zipfile
 
 import numpy as np
-import pyarrow as pa
 import pyarrow.parquet as pq
 
+import anon
 import config
 
 DIST = os.path.join(config.HERE, "dist")
 DL = os.path.join(DIST, "cache")
+SITE = os.path.join(DIST, "site_wily")
+RELEASES = os.path.join(SITE, "releases")
 PY_URL = "https://www.python.org/ftp/python/3.11.9/python-3.11.9-embed-amd64.zip"
 PIP_URL = "https://bootstrap.pypa.io/get-pip.py"
-# the versions this app runs with here: the players' copy behaves the same
+# the versions this app runs with here: the players' copy behaves the same (cryptography: the updates' signature)
 REQS = {"demoparser2": "0.42.0", "pandas": "2.3.3", "numpy": "2.3.4", "pyarrow": "25.0.1", "pillow": "12.0.0", "psutil": "7.2.2",
-        "scikit-learn": "1.7.2", "soundfile": "0.13.1", "sounddevice": "0.5.6", "soundcard": "0.4.6", "faster-whisper": "1.2.1"}
-ENTRIES = ["serve", "refresh_all", "grow", "voice", "replay", "train", "build_app", "chatcalls", "focus", "heard", "cs2coach"]
+        "scikit-learn": "1.7.2", "soundfile": "0.13.1", "sounddevice": "0.5.6", "soundcard": "0.4.6", "faster-whisper": "1.2.1",
+        "cryptography": "50.0.1"}
+ENTRIES = ["serve", "refresh_all", "grow", "voice", "replay", "train", "build_app", "chatcalls", "focus", "heard", "cs2coach",
+           "updater", "contrib"]
 FILES = ["app_template.html", "report_template.html"]
 DIRS = ["maps", os.path.join("tools", "boiler")]
 SERVER_ZIPS = ["mmsource.zip", "css-runtime.zip"]   # Metamod:Source and CounterStrikeSharp for the training server
+KEY_F = os.path.join(config.OUT, "release_key.pem")   # Ed25519: signs latest.json; its public half ships in the code
 
-LO, HI = 76561197960265728, 76561202255233023   # every Steam account (account ids up to 2^32)
-FAKE_LO, FAKE_N = 76561190000000000, LO - 76561190000000000   # just below: no Steam account has one of these
-NAME_COLS = {"name", "killer_name", "victim_name", "thrower_name", "attacker_name", "assister_name", "player_name"}
-SID_RE = re.compile(r"(?<!\d)765611(?:979[6-9]|98\d\d|99\d\d|2[0-2]\d\d)\d{9}(?!\d)")
 PER_MATCH = [os.path.join("population"), os.path.join("population", "buys"), os.path.join("population", "midround"),
              os.path.join("population", "routes"), os.path.join("population", "tside"), "style"]
 # the pro matches (public, from HLTV): as they are; the pro references of a profile read their positions (proref)
 PUBLIC = [os.path.join("population", "midround_pro"), os.path.join("population", "routes_pro"), "style_pro", "deep_pro"]
 BASE_FILES = ["train_sites.json", "train_spots.json", "hostage.json", "cross.json", "cross_notes.json", os.path.join("pro", "matches.json")]
-BASE_DIRS = ["lineups", "train_entries", os.path.join("site", "nadecat"), os.path.join("site", "radars")]
+BASE_DIRS = ["train_entries", os.path.join("site", "radars")]
+DAILYCSNADES = [os.path.join("site", "nadecat")]   # + out/lineups/*_dailycsnades.json
 FRESH = 120   # a file the base loop wrote in the last 2 minutes may be half-written: left for the next package
 SITUATIONS = 20   # situations to replay built per map of the player
+NEVER = {"settings.json", "pack_key.txt", "release_key.pem", "account.json", "train.json", "train_progress.json",
+         "contrib.json", "update.json"}
 
 
 def log(*a):
@@ -78,14 +84,21 @@ def fetch(url):
     return p
 
 
+def runtime_key():
+    return hashlib.sha1(json.dumps([PY_URL, REQS], sort_keys=True).encode()).hexdigest()[:10]
+
+
 # ---------------------------------------------------------------- Python and its libraries
 
 def runtime(dst):
     """python.org's embeddable Python 3.11 with the app's libraries: made once in dist/cache, copied into the package.
     Its ._pth puts the app's folder on the path (an embedded Python ignores the script's folder)."""
-    key = hashlib.sha1(json.dumps([PY_URL, REQS], sort_keys=True).encode()).hexdigest()[:10]
+    key = runtime_key()
     built = os.path.join(DL, f"python-{key}")
     py = os.path.join(built, "python.exe")
+    # pip sees only the embedded Python: this PC's own libraries (the user site) made it skip packages (05/10)
+    env = dict(os.environ, PYTHONNOUSERSITE="1")
+    env.pop("PYTHONPATH", None)
     if not os.path.exists(os.path.join(built, ".done")):
         shutil.rmtree(built, ignore_errors=True)
         zipfile.ZipFile(fetch(PY_URL)).extractall(built)
@@ -93,15 +106,38 @@ def runtime(dst):
         zname = os.path.basename(pth).replace("._pth", ".zip")
         open(pth, "w", encoding="utf-8").write(f"{zname}\n.\n..\nimport site\n")
         log("pip into the embedded Python…")
-        subprocess.run([py, fetch(PIP_URL), "--no-warn-script-location"], check=True)
+        subprocess.run([py, "-s", fetch(PIP_URL), "--no-warn-script-location"], check=True, env=env)
         log("the libraries…")
-        subprocess.run([py, "-m", "pip", "install", "--no-warn-script-location", "--disable-pip-version-check",
-                        *[f"{k}=={v}" for k, v in REQS.items()]], check=True)
-        subprocess.run([py, "-c", "import pandas, pyarrow, demoparser2, sklearn, psutil, PIL, soundfile, sounddevice, faster_whisper; print('libraries ok')"], check=True)
+        subprocess.run([py, "-s", "-m", "pip", "install", "--no-warn-script-location", "--disable-pip-version-check",
+                        *[f"{k}=={v}" for k, v in REQS.items()]], check=True, env=env)
+        subprocess.run([py, "-s", "-m", "pip", "check"], check=True, env=env)   # every dependency there, in versions that fit
+        subprocess.run([py, "-s", "-c", "import pandas, pyarrow, demoparser2, sklearn, scipy, psutil, PIL, soundfile, sounddevice, "
+                                        "soundcard, faster_whisper, ctranslate2, av, cryptography; print('libraries ok')"], check=True, env=env)
         open(os.path.join(built, ".done"), "w").write(key)
     if dst:
         # the libraries' own test suites (109 MB) stay out
         shutil.copytree(built, dst, dirs_exist_ok=True, ignore=shutil.ignore_patterns(".done", "__pycache__", "tests"))
+        open(os.path.join(dst, ".runtime"), "w").write(key)
+
+
+# ---------------------------------------------------------------- the release key
+
+def release_key():
+    """The coach's Ed25519 key: created once in out/release_key.pem, never shipped. A player's app installs only what
+    it signed (a hosting account broken into could not push code to every player)."""
+    from cryptography.hazmat.primitives import serialization
+    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+    if not os.path.exists(KEY_F):
+        k = Ed25519PrivateKey.generate()
+        open(KEY_F, "wb").write(k.private_bytes(serialization.Encoding.PEM, serialization.PrivateFormat.PKCS8,
+                                                serialization.NoEncryption()))
+        log(f"release key created: {KEY_F} (keep it: without it no update can reach the players)")
+    return serialization.load_pem_private_key(open(KEY_F, "rb").read(), password=None)
+
+
+def public_key_hex():
+    from cryptography.hazmat.primitives import serialization
+    return release_key().public_key().public_bytes(serialization.Encoding.Raw, serialization.PublicFormat.Raw).hex()
 
 
 # ---------------------------------------------------------------- the code
@@ -123,7 +159,7 @@ def modules():
     return sorted(seen | {m for m in local if m.startswith("zones_")})
 
 
-def copy_code(dst):
+def copy_code(dst, version):
     ms = modules()
     for m in ms:
         shutil.copy2(os.path.join(config.HERE, m + ".py"), dst)
@@ -132,91 +168,26 @@ def copy_code(dst):
             shutil.copy2(os.path.join(config.HERE, f), dst)
     for d in DIRS:
         shutil.copytree(os.path.join(config.HERE, d), os.path.join(dst, d), dirs_exist_ok=True,
-                        ignore=shutil.ignore_patterns("__pycache__", "*.ts"))
+                        ignore=shutil.ignore_patterns("__pycache__", "*.ts", "bw.zip"))
     pl = os.path.join(dst, "plugin")
     os.makedirs(os.path.join(pl, "CoachReplay", "bin", "out"), exist_ok=True)
     shutil.copy2(os.path.join(config.HERE, "plugin", "make_server.py"), pl)
     for f in ("CoachReplay.dll", "CoachReplay.pdb"):
         shutil.copy2(os.path.join(config.HERE, "plugin", "CoachReplay", "bin", "out", f), os.path.join(pl, "CoachReplay", "bin", "out"))
+    shutil.copy2(os.path.join(config.HERE, "plugin", "CoachReplay", "LICENSE.txt"), os.path.join(pl, "CoachReplay"))
     sys.path.insert(0, os.path.join(config.HERE, "plugin"))
     import make_server
     for z in SERVER_ZIPS:
         shutil.copy2(make_server._zip(z), pl)
+    shutil.copytree(os.path.join(config.HERE, "legal", "licenses"), os.path.join(dst, "LICENSES"), dirs_exist_ok=True)
+    shutil.copy2(os.path.join(config.HERE, "legal", "THIRD_PARTY_NOTICES.txt"), dst)
     open(os.path.join(dst, "requirements.txt"), "w", encoding="utf-8").write("".join(f"{k}=={v}\n" for k, v in REQS.items()))
-    log(f"code: {len(ms)} modules")
+    open(os.path.join(dst, "release_key.pub"), "w").write(public_key_hex())
+    config.write_json(os.path.join(dst, "VERSION.json"), {"app": version, "runtime": runtime_key(), "built": int(time.time())}, indent=1)
+    log(f"code {version}: {len(ms)} modules")
 
 
 # ---------------------------------------------------------------- the base, pseudonymized
-
-class Pseudo:
-    """Real SteamID -> a stable made-up one (HMAC-SHA256 with the server's key): the same player keeps one id across
-    the base's tables (their matches still add up), and nobody without the key can go back to the account."""
-    def __init__(self):
-        f = os.path.join(config.OUT, "pack_key.txt")
-        if not os.path.exists(f):
-            open(f, "w").write(secrets.token_hex(32))
-        self.key = bytes.fromhex(open(f).read().strip())
-        self.memo = {}
-
-    def __call__(self, sid):
-        sid = int(sid)
-        if sid not in self.memo:
-            h = hmac.new(self.key, str(sid).encode(), hashlib.sha256).digest()
-            self.memo[sid] = FAKE_LO + int.from_bytes(h[:8], "big") % FAKE_N
-        return self.memo[sid]
-
-
-def _ids_column(col, pseudo, keep=None):
-    """A column with SteamIDs in it, every one replaced (keep: a mask of rows left as they are). None when it has none."""
-    t = col.type
-    if pa.types.is_dictionary(t):
-        raise ValueError(f"dictionary column {t}: not handled")   # none in the base (05/10); refused rather than missed
-    if pa.types.is_integer(t) or pa.types.is_floating(t):
-        null = col.is_null().to_numpy(zero_copy_only=False) if col.null_count else None
-        v = (col.fill_null(0) if col.null_count else col).to_numpy(zero_copy_only=False)
-        with np.errstate(invalid="ignore"):
-            real = (v >= LO) & (v <= HI)
-        if null is not None:
-            real &= ~null
-        if keep is not None:
-            real &= ~keep
-        if not real.any():
-            return None
-        new = v.copy()
-        new[real] = np.array([pseudo(x) for x in v[real].astype(np.int64)], dtype=v.dtype)
-        return pa.array(new, type=t, mask=null)
-    if pa.types.is_string(t) or pa.types.is_large_string(t):
-        vals = col.to_pylist()
-        out, hit = [], False
-        for i, x in enumerate(vals):
-            if x is not None and x.isdigit() and LO <= int(x) <= HI and not (keep is not None and keep[i]):
-                out.append(str(pseudo(x)))
-                hit = True
-            else:
-                out.append(x)
-        return pa.array(out, type=t) if hit else None
-    return None
-
-
-def pseudonymize(src, dst, pseudo, keep_match=None):
-    """One table of the base: SteamIDs made up, names blank. keep_match: the match ids whose rows stay real (the
-    player's own matches, in a table of every match)."""
-    tb = pq.read_table(src)
-    keep = None
-    if keep_match and "match" in tb.column_names:
-        keep = np.isin(np.array([str(x) for x in tb.column("match").to_pylist()]), list(keep_match))
-    cols = []
-    for name in tb.column_names:
-        col = tb.column(name).combine_chunks()
-        if name in NAME_COLS:
-            v = col.to_pylist()
-            new = pa.array([x if (keep is not None and keep[i]) or x is None else "" for i, x in enumerate(v)], type=col.type)
-        else:
-            new = _ids_column(col, pseudo, keep)
-        cols.append(new if new is not None else col)
-    os.makedirs(os.path.dirname(dst), exist_ok=True)
-    pq.write_table(pa.Table.from_arrays(cols, schema=tb.schema), dst)
-
 
 def lands(path):
     """Where each throw of the base landed in the world (x, y, z), from its match's demo extraction: the training's
@@ -247,9 +218,9 @@ def _settled(p):
     return time.time() - os.path.getmtime(p) > FRESH
 
 
-def copy_base(dst, pseudo, mine):
+def copy_base(dst, pseudo, mine, dailycsnades=False):
     """The base's references: the summaries as they are (no player in them), the per-match tables pseudonymized
-    (the player's own matches real), the pro tables and the lineup catalog as they are."""
+    (a known player's own matches real), the pro tables as they are."""
     out = os.path.join(dst, "out")
     n = {"tables": 0, "skipped": 0}
     for d in PER_MATCH:
@@ -266,27 +237,35 @@ def copy_base(dst, pseudo, mine):
                     os.makedirs(os.path.dirname(t), exist_ok=True)
                     shutil.copy2(s, t)
                 else:
-                    pseudonymize(s, t, pseudo)
+                    anon.pseudonymize(s, t, pseudo)
                 n["tables"] += 1
             except Exception as e:
                 n["skipped"] += 1
                 print("  skipped", os.path.join(d, f), type(e).__name__, str(e)[:80])
-    pseudonymize(os.path.join(config.OUT, "population", "nades.parquet"), os.path.join(out, "population", "nades.parquet"), pseudo, keep_match=mine)
+    anon.pseudonymize(os.path.join(config.OUT, "population", "nades.parquet"), os.path.join(out, "population", "nades.parquet"), pseudo, keep_match=mine)
     lands(os.path.join(out, "population", "nades.parquet"))
     for f in glob.glob(os.path.join(config.OUT, "population", "*.json")):
         shutil.copy2(f, os.path.join(out, "population"))
-    for d in PUBLIC + BASE_DIRS:
+    for d in PUBLIC + BASE_DIRS + (DAILYCSNADES if dailycsnades else []):
         shutil.copytree(os.path.join(config.OUT, d), os.path.join(out, d), dirs_exist_ok=True)
+    if dailycsnades:
+        os.makedirs(os.path.join(out, "lineups"), exist_ok=True)
+        for f in glob.glob(os.path.join(config.OUT, "lineups", "*_dailycsnades.json")):
+            shutil.copy2(f, os.path.join(out, "lineups"))
     for f in BASE_FILES:
         if os.path.exists(os.path.join(config.OUT, f)):
             os.makedirs(os.path.dirname(os.path.join(out, f)), exist_ok=True)
             shutil.copy2(os.path.join(config.OUT, f), os.path.join(out, f))
     shutil.copy2(os.path.join(config.OUT, "site", "pros.json"), os.path.join(out, "site"))
     matches = len([f for f in os.listdir(os.path.join(out, "population")) if f.endswith(".parquet") and f[:-8].isdigit()])
-    config.write_json(os.path.join(out, "base_pack.json"), {"built": int(time.time()), "matches": matches,
-                                                            "players": len(pseudo.memo), "version": time.strftime("%Y%m%d")})
-    log(f"base: {n['tables']} tables ({n['skipped']} left for the next package), {matches} matches, {len(pseudo.memo)} players pseudonymized")
-    return matches
+    info = {"built": int(time.time()), "matches": matches, "players": len(pseudo.memo), "version": time.strftime("%Y%m%d-%H%M"),
+            "dailycsnades": bool(dailycsnades)}
+    if mine:   # a known player's matches came from the base: never shared back as theirs (contrib.py)
+        info["player_matches"] = sorted(mine)
+    config.write_json(os.path.join(out, "base_pack.json"), info)
+    log(f"base {info['version']}: {n['tables']} tables ({n['skipped']} left for the next package), {matches} matches, "
+        f"{len(pseudo.memo)} players pseudonymized")
+    return info
 
 
 def copy_player(dst, sid, update):
@@ -350,11 +329,11 @@ def situations(dst, sid, per_map=SITUATIONS):
 # ---------------------------------------------------------------- the last check
 
 def check(dst, mine, sid):
-    """No real SteamID in the package outside the player's own matches, their profile and team, and the pro data."""
+    """No real SteamID or name in the package outside a known player's own matches, profile and team, and the pro
+    data; none of the coach's keys, settings or state."""
     out = os.path.join(dst, "out")
-    ok_dirs = [os.path.join(out, d) for d in ["deep", "scenarios", os.path.join("players", sid), "teams"] + PUBLIC]
-    ok_files = {os.path.join(out, "site", "pros.json"), os.path.join(out, "pro", "matches.json"),
-                os.path.join(out, "settings.json")}   # settings: their own id
+    ok_dirs = [os.path.join(out, d) for d in ["deep", "scenarios", "teams"] + PUBLIC + ([os.path.join("players", sid)] if sid else [])]
+    ok_files = {os.path.join(out, "site", "pros.json"), os.path.join(out, "pro", "matches.json")}
     bad = []
     for root, _, fs in os.walk(out):
         if any(root == d or root.startswith(d + os.sep) for d in ok_dirs):
@@ -363,46 +342,53 @@ def check(dst, mine, sid):
             p = os.path.join(root, f)
             if p in ok_files or f[:-8] in mine:
                 continue
-            if f.endswith(".parquet"):
+            if root == out and f in NEVER and f != "settings.json":
+                bad.append(f"{f} must stay on the coach's PC")
+            elif f.endswith(".parquet"):
                 tb = pq.read_table(p)
                 keep = (np.isin(np.array([str(x) for x in tb.column("match").to_pylist()]), list(mine))
                         if mine and "match" in tb.column_names else None)   # a table of every match: their own rows
-                for c in tb.column_names:
-                    if c in NAME_COLS:
-                        if any(x for i, x in enumerate(tb.column(c).to_pylist()) if keep is None or not keep[i]):
-                            bad.append(f"{p}: names in {c}")
-                    elif _ids_column(tb.column(c).combine_chunks(), lambda x: 0, keep) is not None:
-                        bad.append(f"{p}: SteamIDs in {c}")
+                bad += [f"{p}: {b}" for b in anon.leftovers(tb, keep)]
             elif f.endswith((".json", ".jsonl", ".txt", ".csv")):
-                if SID_RE.search(open(p, encoding="utf-8", errors="replace").read()):
+                t = open(p, encoding="utf-8", errors="replace").read()
+                if p == os.path.join(out, "settings.json"):
+                    extra = set(json.loads(t)) - {"role", "own_steamid"}
+                    if extra:
+                        bad.append(f"settings.json: {sorted(extra)}")
+                elif anon.SID_RE.search(t):
                     bad.append(f"{p}: a SteamID")
-    for f in ("settings.json", "pack_key.txt", "account.json", "train.json", "train_progress.json"):
-        if os.path.exists(os.path.join(out, f)) and f != "settings.json":
-            bad.append(f"{f} must stay on the coach's PC")
+    for f in glob.glob(os.path.join(dst, "**", "*.pem"), recursive=True):
+        bad.append(f"{f}: a private key")
     if bad:
         raise SystemExit("REFUSED, personal data left:\n  " + "\n  ".join(bad[:20]))
-    log("check: no real SteamID or name outside the player's own matches and the pro data")
+    log("check: no real SteamID or name outside a player's own matches and the pro data, no key, no coach settings")
 
 
 # ---------------------------------------------------------------- the rest
 
 LAUNCHER = r"""@echo off
 rem Coach CS2: the app on this PC (http://127.0.0.1:8765). Its window stays hidden; the page opens in your browser.
+rem Its own Python only: never the libraries another Python installed on this PC.
 cd /d "%~dp0"
-start "" "%~dp0python\pythonw.exe" serve.py
+set PYTHONNOUSERSITE=1
+start "" "%~dp0python\pythonw.exe" -s serve.py
 """
 AUTOSTART = r"""@echo off
 rem Starts Coach CS2 in the background each time you sign in to Windows (Win+R, shell:startup to remove it).
 set "STARTUP=%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup"
-powershell -NoProfile -Command "$s=(New-Object -ComObject WScript.Shell).CreateShortcut('%STARTUP%\Coach CS2.lnk'); $s.TargetPath='%~dp0python\pythonw.exe'; $s.Arguments='serve.py --no-browser'; $s.WorkingDirectory='%~dp0'; $s.WindowStyle=7; $s.Save()"
+powershell -NoProfile -Command "$s=(New-Object -ComObject WScript.Shell).CreateShortcut('%STARTUP%\Coach CS2.lnk'); $s.TargetPath='%~dp0python\pythonw.exe'; $s.Arguments='-s serve.py --no-browser'; $s.WorkingDirectory='%~dp0'; $s.WindowStyle=7; $s.Save()"
 echo Coach CS2 now starts with Windows: http://127.0.0.1:8765
 pause
 """
-README = """COACH CS2 (beta)
-================
+README = """COACH CS2 (alpha)
+=================
+
+This is an alpha: the first version open to other players. Things will break; tell the coach
+(contact@valentingassend.com) and the next version fixes it.
 
 Your coach for CS2: the live guide on your second screen, the warm-up before you play (map sheets and the training
 server with bots), and the review after your matches. Everything runs on this PC.
+Website, updates, privacy policy and terms: https://wily.valentingassend.com
 
 INSTALL
 1. Unzip this folder where you want to keep it, on a drive with a few GB free (not in Program Files).
@@ -415,12 +401,14 @@ INSTALL
    - Microphone (optional): your calls, recorded and transcribed on this PC.
 4. The numpad keys of the live guide: in Steam, CS2 > Properties > Launch options, add  -condebug
    (CS2 then writes the console log the app reads), and in CS2's console, once:  exec coach_binds
-5. Prepare > Training: "Install the training server" (a few minutes, no extra space: its files are links to the game's).
+5. Update (top bar): your matches are downloaded and analyzed on this PC (a few minutes each).
+6. Prepare > Training: "Install the training server" (a few minutes, no extra space: its files are links to the game's).
 
 DAILY USE
 - "Coach CS2.bat" (or "Start with Windows.bat" once, to have it always running).
 - Update (top bar): downloads and analyzes your new matches.
 - Live during a match on your 2nd screen, Prepare before playing, Review after.
+- Settings > App updates: new versions of the app and of the base, checked against the coach's signature.
 
 PRIVACY
 - Your matches, your profile and your voice stay on this PC.
@@ -428,9 +416,11 @@ PRIVACY
   The app records the team's sound only after you confirm it in game (numpad /).
 - The base's matches that come with the app are anonymized (no name, no real SteamID), except your own matches
   (as in your own demos) and the public pro matches.
+- Settings > Share my matches (off unless you turn it on): your new matches go to the base anonymized, without any
+  SteamID, name or match id. Details: https://wily.valentingassend.com/privacy.html
 
-UPDATES
-Unzip the new version over this folder: your settings, matches and profile are kept.
+LICENSES
+THIRD_PARTY_NOTICES.txt and the LICENSES folder.
 """
 
 
@@ -439,46 +429,101 @@ def extras(dst, sid, update):
     open(os.path.join(dst, "Start with Windows.bat"), "w", encoding="utf-8", newline="\r\n").write(AUTOSTART)
     open(os.path.join(dst, "README.txt"), "w", encoding="utf-8", newline="\r\n").write(README)
     os.makedirs(os.path.join(dst, "cache"), exist_ok=True)
-    if not update:   # a first install: this player's copy (an update leaves their settings alone)
-        config.write_json(os.path.join(dst, "out", "settings.json"), {"role": "client", "own_steamid": sid}, indent=1)
+    if not update:   # a first install: a player's copy (an update leaves their settings alone)
+        config.write_json(os.path.join(dst, "out", "settings.json"), {"role": "client", **({"own_steamid": sid} if sid else {})}, indent=1)
 
 
-def zip_dir(src, zpath):
+def zip_dir(src, zpath, top=True, only=None, skip=()):
+    """src as a zip: under its own folder name (top), or its content at the root (an update over an install).
+    only/skip: first-level names kept or left out."""
     with zipfile.ZipFile(zpath + ".part", "w", zipfile.ZIP_DEFLATED, compresslevel=6) as z:
         for root, dirs, fs in os.walk(src):
             dirs.sort()
-            rel = os.path.relpath(root, os.path.dirname(src))
-            if not fs and not dirs:
+            rel_src = os.path.relpath(root, src)
+            first = rel_src.split(os.sep)[0]
+            if rel_src == ".":
+                dirs[:] = [d for d in dirs if (only is None or d in only) and d not in skip]
+                fs = [f for f in fs if (only is None or f in only) and f not in skip]
+            rel = os.path.relpath(root, os.path.dirname(src)) if top else ("" if rel_src == "." else rel_src)
+            if not fs and not dirs and rel:
                 z.writestr(rel.replace(os.sep, "/") + "/", "")
             for f in sorted(fs):
-                z.write(os.path.join(root, f), os.path.join(rel, f))
+                z.write(os.path.join(root, f), os.path.join(rel, f) if rel else f)
     os.replace(zpath + ".part", zpath)
+
+
+def _entry(path):
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        for b in iter(lambda: f.read(1 << 20), b""):
+            h.update(b)
+    return {"file": os.path.basename(path), "size": os.path.getsize(path), "sha256": h.hexdigest()}
+
+
+def release(dst, version, base, notes):
+    """The website's release folder: the full install, and the parts an installed app updates (code, runtime, base),
+    with latest.json signed. A runtime or base already published is not zipped again."""
+    os.makedirs(RELEASES, exist_ok=True)
+    code_z = os.path.join(RELEASES, f"code-{version}.zip")
+    zip_dir(dst, code_z, top=False, skip={"python", "out", "cache"})
+    rt = runtime_key()
+    rt_z = os.path.join(RELEASES, f"runtime-{rt}.zip")
+    if not os.path.exists(rt_z):
+        zip_dir(dst, rt_z, top=False, only={"python"})
+    base_z = os.path.join(RELEASES, f"base-{base['version']}.zip")
+    zip_dir(os.path.join(dst, "out"), base_z, top=False, skip={"settings.json"})
+    setup_z = os.path.join(RELEASES, f"CoachCS2-{version}.zip")
+    zip_dir(dst, setup_z, top=True)
+    man = {"app": version, "released": int(time.time()), "notes": notes,
+           "code": _entry(code_z), "runtime": dict(_entry(rt_z), key=rt),
+           "base": dict(_entry(base_z), version=base["version"], matches=base["matches"]), "setup": _entry(setup_z)}
+    raw = json.dumps(man, indent=1).encode()
+    open(os.path.join(RELEASES, "latest.json"), "wb").write(raw)
+    open(os.path.join(RELEASES, "latest.json.sig"), "w").write(base64.b64encode(release_key().sign(raw)).decode())
+    keep = {v["file"] for v in man.values() if isinstance(v, dict) and v.get("file")}
+    for f in os.listdir(RELEASES):   # an app only ever fetches what latest.json names: the older zips are not published
+        if f.endswith(".zip") and f not in keep:
+            os.remove(os.path.join(RELEASES, f))
+    log(f"release {version}: " + ", ".join(f"{k} {v['size'] / 2 ** 20:.0f} MB" for k, v in man.items() if isinstance(v, dict)))
+    return man
 
 
 def main():
     sys.stdout.reconfigure(encoding="utf-8")
-    if "--player" not in sys.argv:
+    arg = lambda k: sys.argv[sys.argv.index(k) + 1] if k in sys.argv else None
+    sid, version = arg("--player"), arg("--release")
+    generic = "--generic" in sys.argv or bool(version)
+    if not sid and not generic:
         raise SystemExit(__doc__)
-    sid, update = sys.argv[sys.argv.index("--player") + 1], "--update" in sys.argv
-    if not os.path.exists(os.path.join(config.player_dir(sid), "advice.json")):
+    if sid and not os.path.exists(os.path.join(config.player_dir(sid), "advice.json")):
         raise SystemExit(f"no profile for {sid} here: analyze them first")
+    update = "--update" in sys.argv and not generic
+    # a player's package carries the published version it is built with: their app then offers only what is newer
+    published = (config.read_json(os.path.join(RELEASES, "latest.json"), {}) or {}).get("app")
+    version = version or published or "dev-" + time.strftime("%Y%m%d-%H%M")
     dst = os.path.join(DIST, "CoachCS2")
     if os.path.exists(dst):
         shutil.rmtree(dst)
     os.makedirs(os.path.join(dst, "out", "site"))
     t0 = time.time()
-    copy_code(dst)
-    mine = copy_player(dst, sid, update)
-    situations(dst, sid)
-    copy_base(dst, Pseudo(), mine)
-    extras(dst, sid, update)
-    check(dst, mine, sid)
+    copy_code(dst, version)
+    mine = set()
+    if sid and not generic:
+        mine = copy_player(dst, sid, update)
+        situations(dst, sid)
+    base = copy_base(dst, anon.Pseudo.from_file(os.path.join(config.OUT, "pack_key.txt")), mine, "--with-dailycsnades" in sys.argv)
+    extras(dst, None if generic else sid, update)
+    check(dst, mine, None if generic else sid)
     if "--no-python" not in sys.argv:
         runtime(os.path.join(dst, "python"))
     size = sum(os.path.getsize(os.path.join(r, f)) for r, _, fs in os.walk(dst) for f in fs)
     log(f"folder: {dst} ({size / 2 ** 20:.0f} MB, {round(time.time() - t0)} s)")
-    if "--no-zip" not in sys.argv:
-        who = re.sub(r"[^\w-]", "", config.display_name(sid)) or sid
+    if arg("--release"):
+        release(dst, version, base, arg("--notes") or "")
+        import site_wily
+        site_wily.build()
+    elif "--no-zip" not in sys.argv:
+        who = "any-player" if generic else (re.sub(r"[^\w-]", "", config.display_name(sid)) or sid)
         z = os.path.join(DIST, f"CoachCS2-{time.strftime('%Y%m%d')}-{who}{'-update' if update else ''}.zip")
         zip_dir(dst, z)
         log(f"zip: {z} ({os.path.getsize(z) / 2 ** 20:.0f} MB)")

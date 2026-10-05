@@ -15,3 +15,5 @@ __pycache__/
 *.part
 # The players' packages (make_beta.py)
 dist/
+# the hash of the coach's contributions token, written by contributions.py init
+web/api/config.php

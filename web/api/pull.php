@@ -1,0 +1,41 @@
+<?php
+// The coach's PC pulls the shared matches (contributions.py pull): its token in the X-Coach-Token header, compared
+// with the hash in config.php. list -> the waiting zips; get&f= -> one zip; delete&f= (POST) -> removed once pulled.
+require __DIR__ . '/_lib.php';
+
+$c = cfg();
+$tok = (string)($_SERVER['HTTP_X_COACH_TOKEN'] ?? '');
+if ($c['token_sha256'] === '' || $tok === '' || !hash_equals($c['token_sha256'], hash('sha256', $tok))) {
+    reply(403, ['ok' => false, 'error' => 'forbidden']);
+}
+$in = data_dir() . '/incoming';
+$action = (string)($_GET['action'] ?? 'list');
+$file = basename((string)($_GET['f'] ?? ''));
+if ($action !== 'list' && !preg_match('/^\d{14}-[0-9a-f]{12}\.zip$/', $file)) {
+    reply(400, ['ok' => false, 'error' => 'bad file name']);
+}
+if ($action === 'list') {
+    $out = [];
+    foreach (glob("$in/*.zip") ?: [] as $p) {
+        $meta = json_decode((string)@file_get_contents(substr($p, 0, -4) . '.json'), true) ?: [];
+        $out[] = ['f' => basename($p), 'size' => filesize($p), 'sha256' => hash_file('sha256', $p), 'meta' => $meta];
+    }
+    reply(200, ['ok' => true, 'files' => $out]);
+}
+if ($action === 'get') {
+    $p = "$in/$file";
+    if (!is_file($p)) {
+        reply(404, ['ok' => false, 'error' => 'not found']);
+    }
+    header('Content-Type: application/zip');
+    header('Content-Length: ' . filesize($p));
+    header('Cache-Control: no-store');
+    readfile($p);
+    exit;
+}
+if ($action === 'delete' && ($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
+    @unlink("$in/$file");
+    @unlink(substr("$in/$file", 0, -4) . '.json');
+    reply(200, ['ok' => true]);
+}
+reply(400, ['ok' => false, 'error' => 'unknown action']);

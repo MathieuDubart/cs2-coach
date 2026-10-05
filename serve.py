@@ -286,6 +286,15 @@ class Handler(BaseHTTPRequestHandler):
             return self.send(200, m) if m else self.send(404, {"error": "not a match id or share code"})
         if u.path == "/api/grow":   # the base-growing loop: its state (Settings)
             return self.send(200, grow_status())
+        if u.path == "/api/update":   # a player's copy: the app's and the base's new versions (Settings, 05/10)
+            import updater
+            return self.send(200, updater.status())
+        if u.path == "/api/contrib":   # the matches shared with the base: a player's switch, or what the coach received
+            if config.role() == "client":
+                import contrib
+                return self.send(200, dict(contrib.status(), client=True))
+            import contributions
+            return self.send(200, dict(contributions.status(), client=False))
         if u.path == "/api/refresh":   # everything the app shows computed again from the base (Settings)
             return self.send(200, refresh_status())
         if u.path == "/api/codes":   # the share code of each match (the addresses /match/<share code>)
@@ -454,6 +463,36 @@ class Handler(BaseHTTPRequestHandler):
                                  creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0) | getattr(subprocess, "BELOW_NORMAL_PRIORITY_CLASS", 0))
                 time.sleep(1)
             return self.send(200, refresh_status())
+        if u.path in ("/api/update/check", "/api/update/apply"):   # a player's copy: updates signed by the coach (05/10)
+            import updater
+            try:
+                if u.path.endswith("check"):
+                    return self.send(200, updater.check(force=True))
+                parts = body.get("parts")
+                return self.send(200, updater.apply([p for p in parts if p in ("code", "base", "runtime")] if isinstance(parts, list) else None))
+            except ValueError as e:
+                return self.send(409, {"error": str(e)})
+        if u.path in ("/api/contrib/set", "/api/contrib/send", "/api/contrib/pull"):   # the matches shared with the base
+            if u.path.endswith("pull"):   # the coach's PC: what players shared, now
+                if config.role() == "client":
+                    return self.send(403, {"error": "the coach's PC only"})
+                import contributions
+
+                def pull_now():
+                    try:
+                        contributions.pull()
+                        contributions.ingest()
+                    except BaseException as e:
+                        print("shared matches:", e, flush=True)
+                threading.Thread(target=pull_now, daemon=True).start()
+                return self.send(200, dict(contributions.status(), client=False))
+            if config.role() != "client":
+                return self.send(403, {"error": "a player's copy only"})
+            import contrib
+            if u.path.endswith("set"):
+                return self.send(200, dict(contrib.set_on(bool(body.get("on"))), client=True))
+            threading.Thread(target=contrib.send, daemon=True).start()
+            return self.send(200, dict(contrib.status(), client=True))
         if u.path in ("/api/grow/start", "/api/grow/stop"):   # the base-growing loop: on until the target, or off
             on = u.path.endswith("start")
             try:
@@ -710,6 +749,11 @@ if __name__ == "__main__":
         threading.Thread(target=chatcalls.watch, daemon=True).start()   # numpad keys of the paths: the focus
         if config.role() != "client" and (config.read_json(GROW_CTL, {}) or {}).get("on"):   # the base was growing: it goes on
             threading.Timer(60, grow_start).start()
+        if config.role() == "client":   # a player's copy: updates from the coach, and the matches they chose to share
+            import contrib
+            import updater
+            threading.Thread(target=updater.watch, daemon=True).start()
+            threading.Thread(target=contrib.watch, daemon=True).start()
     if "--no-browser" not in sys.argv:
         webbrowser.open(url)
     srv.serve_forever()

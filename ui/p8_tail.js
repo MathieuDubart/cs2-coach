@@ -189,7 +189,8 @@ function show(view){view=ALIAS[view]||view;if(!RENDER[view])view="ingame";if(vie
   if(view==="pros"){renderPros();window.scrollTo(0,0);return}
   if(view==="settings"){renderSettings();window.scrollTo(0,0);return}
   if(view==="team"){renderTeam();window.scrollTo(0,0);return}
-  if(!S.player){if(view==="ingame"||view==="review")welcome($("#v-"+view));else $("#v-"+view).innerHTML=`<div class="empty">Pick a profile first: yours from the home page, or anyone in Explore.</div>`;return}
+  // no profile: the welcome (and on a new install, 05/10, everywhere until a first profile)
+  if(!S.player){if(view==="ingame"||view==="review"||!Object.keys(IDX()).length)welcome($("#v-"+view));else $("#v-"+view).innerHTML=`<div class="empty">Pick a profile first: yours from the home page, or anyone in Explore.</div>`;return}
   if(!D.players[S.player]){$("#v-"+view).innerHTML=`<div class="empty"><span class="spin" aria-hidden="true"></span>Loading the profile…</div>`;return}
   RENDER[view]();navUpdate(view);window.scrollTo(0,0);
   if(view==="prepare"&&D.local)prepWatch();   // CS2 loads a map: Live takes over
@@ -209,6 +210,7 @@ let updFrom=null;
   ub.onclick=async()=>{ub.disabled=true;updFrom=S.view;jobFrom=S.view;
     try{await api("/api/steam/sync",{sid:D.own});poll()}
     catch(e){if(/already running/i.test(e.message||""))poll();else{ub.disabled=false;updFrom=null;jobPanel(`<b>${esc(e.message||"Update impossible")}</b>`,"err")}}}}}
+if(D.local)fetch("/api/update").then(r=>r.json()).then(gearDot).catch(()=>{});   // a dot on the gear: an update is there
 if(D.local){navQuiet++;route().finally(()=>navQuiet--);
   fetch("/api/codes").then(r=>r.json()).then(c=>{CODES={...c,...CODES};if(S.view==="matches"&&S.mpin){navQuiet++;try{syncUrl()}finally{navQuiet--}}}).catch(()=>{})}
 else setPlayer(defPlayer());

@@ -10,6 +10,25 @@ import time
 NO_WINDOW = getattr(__import__("subprocess"), "CREATE_NO_WINDOW", 0)
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+
+
+def _own_libraries_only():
+    """A player's copy runs on its own embedded Python (python/ next to the app): the libraries a Python user
+    installed on that PC (%APPDATA%\\Python, the "user site") must not mix with the app's own (05/10: the first
+    package found psutil there on the coach's PC and lacked it). This process drops them, its children never add them."""
+    import sys
+    if not os.path.normcase(os.path.abspath(sys.prefix)).startswith(os.path.normcase(os.path.join(HERE, "python"))):
+        return
+    os.environ["PYTHONNOUSERSITE"] = "1"
+    try:
+        import site
+        user = os.path.normcase(site.getuserbase())
+        sys.path[:] = [p for p in sys.path if not os.path.normcase(p).startswith(user)]
+    except Exception:
+        pass
+
+
+_own_libraries_only()
 OUT = os.path.join(HERE, "out")
 CACHE = os.path.join(HERE, "cache")
 DEEP = os.path.join(OUT, "deep")
