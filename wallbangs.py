@@ -64,10 +64,12 @@ def analyze_map(mp, log=print):
     f = cfg.get("px_factor", 1.0)
     px = lambda X, Y: [round((X - cfg["pos_x"]) / cfg["scale"] * f), round((cfg["pos_y"] - Y) / cfg["scale"] * f)]
     cl = []   # [x, y, z, yaw, [rows]]
+    wide = len(ds) < 60   # few demos (Overpass: 29): a wider spot and aim, or nothing groups
+    sr, ad = (STAND_R * 1.8, AIM_DEG * 1.7) if wide else (STAND_R, AIM_DEG)
     for i, b in zip(K.index, K.itertuples()):
         for c in cl:
             dy = abs(((c[3] - b.attacker_yaw) + 180) % 360 - 180)
-            if abs(c[0] - b.attacker_X) < STAND_R and abs(c[1] - b.attacker_Y) < STAND_R and abs(c[2] - b.attacker_Z) < STAND_Z and dy < AIM_DEG:
+            if abs(c[0] - b.attacker_X) < sr and abs(c[1] - b.attacker_Y) < sr and abs(c[2] - b.attacker_Z) < STAND_Z and dy < ad:
                 c[4].append(i)
                 n = len(c[4])
                 c[0] += (b.attacker_X - c[0]) / n
