@@ -25,7 +25,8 @@ TEMPO_STATE = {"rush": "rush", "slow": "slow", "ctrl": "control"}
 FOCUS_OFF = "KP_MINUS"   # numpad minus: drop the focus on a path
 EXTRA = {"eco": "KP_DEL", "sit": "KP_0"}   # numpad ".": the economy plan; numpad 0: the situation, recent and global
 SITE_KEYS = {"A": "KP_7", "B": "KP_9"}   # numpad 7 / 9: A / B (CT: the site you play; once planted, both sides: the bomb's site)
-TEAM_KEY = "KP_SLASH"   # numpad /: your team agreed to be recorded (what you hear, for this match: 04/10)
+TEAM_KEY = "KP_SLASH"
+LINEUP_KEY = "KP_PLUS"   # numpad +: the next lineup's photo, in a photo session on the training server (lineshots.py, 06/10)   # numpad /: your team agreed to be recorded (what you hear, for this match: 04/10)
 OLD_KEYS = {"KP_MULTIPLY": "exec coach_team"}   # numpad *, the team key of 04/10 21:40: already used for something else
                                                 # of yours; unbound by exec coach_binds while it still runs the coach's file
 BINDS = "coach_binds.cfg"
@@ -65,6 +66,7 @@ def binds_text():
     lines += [f'bind "{k}" "exec coach_{name}"' for name, k in EXTRA.items()]
     lines += [f'bind "{k}" "exec coach_site{site}"' for site, k in SITE_KEYS.items()]
     lines += [f'bind "{TEAM_KEY}" "exec coach_team"']
+    lines += [f'bind "{LINEUP_KEY}" "exec coach_lineup"']
     lines += ['echo "Wily: numpad 1-2-3 = A / mid / B, 4-5-6 = rush / slow / map control, minus drops them, / your team agreed to be recorded"']
     return "\n".join(lines) + "\n"
 
@@ -120,6 +122,9 @@ def _site_files(d):
     tf = os.path.join(d, "coach_team.cfg")   # numpad /: only a line in the console, the app reads it
     if not os.path.exists(tf):
         open(tf, "w", encoding="utf-8").write('echo "Coach CS2: team agreed"\n')
+    lf = os.path.join(d, "coach_lineup.cfg")   # numpad +: rewritten during a photo session (lineshots.py)
+    if not os.path.exists(lf):
+        open(lf, "w", encoding="utf-8").write('echo "Wily: no lineup photo session (Prepare: Photos of the lineups)"\n')
     for site in SITE_KEYS:   # only a line in the console: the app reads it (CT: your site; planted: the bomb's site)
         sf = os.path.join(d, f"coach_site{site}.cfg")
         if not os.path.exists(sf):
@@ -165,7 +170,7 @@ def console_file():
     return os.path.join(os.path.dirname(d), "console.log") if d else None
 
 
-KEY_RE = re.compile(r"execing coach_(?:path([123])|focus0|site([AB])|(team)|(rush|slow|ctrl))\b")
+KEY_RE = re.compile(r"execing coach_(?:path([123])|focus0|site([AB])|(team)|(rush|slow|ctrl)|(lineup))\b")
 
 
 def watch():
@@ -197,6 +202,12 @@ def watch():
                             print("team sound:", e, flush=True)
                     elif m and m.group(2):
                         gsi.set_site_key(m.group(2))
+                    elif m and m.group(5):   # numpad +: a lineup's photo (a photo session on the training server)
+                        try:
+                            import lineshots
+                            lineshots.on_key()
+                        except Exception as e:
+                            print("lineup photo:", e, flush=True)
                     elif m and m.group(4):   # numpad 4-5-6: the tempo
                         gsi.set_tdir(TEMPO_STATE[m.group(4)])
                     elif m and m.group(1):   # numpad 1-2-3: the way (A, mid, B); hostage maps keep their routes 1-2-3

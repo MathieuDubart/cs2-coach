@@ -221,7 +221,25 @@ class Handler(BaseHTTPRequestHandler):
         if u.path.startswith("/api/tdirs/"):   # the T side's ways in on a map (tdirs.py): Live's directions, odds and grenades
             import tdirs
             mp = u.path.rsplit("/", 1)[-1]
-            return self.send(200, tdirs.load_map(mp) or {})
+            return self.send(200, tdirs.for_page(mp) or {})
+        if u.path.startswith("/lineshot/"):   # a lineup's photo, taken on the training server (lineshots.py)
+            m = re.fullmatch(r"/lineshot/((?:de|cs|ar)_\w+)/([A-Za-z0-9_-]+\.webp)", u.path)
+            import lineshots
+            f = os.path.join(lineshots.DIR, m.group(1), m.group(2)) if m else None
+            if not f or not os.path.exists(f):
+                return self.send(404, {"error": "not found"})
+            data = open(f, "rb").read()
+            self.send_response(200)
+            self.send_header("Content-Type", "image/webp")
+            self.send_header("Content-Length", str(len(data)))
+            self.send_header("Cache-Control", "max-age=86400")
+            self.end_headers()
+            self.wfile.write(data)
+            return
+        if u.path == "/api/lineshots/status":
+            import lineshots
+            mp = (parse_qs(u.query).get("map") or [None])[0]
+            return self.send(200, lineshots.status(mp if mp and re.fullmatch(r"(de|cs|ar)_\w+", mp) else None))
         if u.path == "/api/voice/devices":
             try:
                 import voice
@@ -420,6 +438,19 @@ class Handler(BaseHTTPRequestHandler):
         if u.path == "/api/coach/paths":   # the page's plan this round: numpad 1-2-3 (A, mid, B) and 4-5-6 (tempo) say it in the team chat
             import chatcalls
             return self.send(200 if chatcalls.write(body.get("paths"), body.get("extra"), body.get("tempo")) else 400, {})
+        if u.path in ("/api/lineshots/start", "/api/lineshots/stop"):   # the photo session of a map's lineups (training server)
+            import lineshots
+            if u.path.endswith("stop"):
+                return self.send(200, lineshots.stop())
+            if config.in_match():
+                return self.send(409, {"error": "A match is running: the photos after it."})
+            mp = str(body.get("map") or "")
+            if not re.fullmatch(r"(de|cs|ar)_\w+", mp):
+                return self.send(400, {"error": "invalid map"})
+            try:
+                return self.send(200, lineshots.start(mp))
+            except (OSError, RuntimeError, ValueError) as e:
+                return self.send(400, {"error": str(e) or "training server error"})
         if u.path.startswith("/api/train/"):   # the training server (separate copy of the game, 127.0.0.1 only)
             import replay
             act = u.path.rsplit("/", 1)[-1]

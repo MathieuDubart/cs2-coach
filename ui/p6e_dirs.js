@@ -50,10 +50,15 @@ function vDirCurve(p,g,r){const T_=r.timing||{},TM=(g.round===halfStart(g.round)
     <div class="vdtimes">${el!=null&&at(el)!=null?`<span class="now">now <b>${at(el)}%</b></span>`:""}${reads.map(([t,w])=>`<span${Math.abs(t-best[0])<=8?' class="best"':""}>${clock(t)} <b>${w}%</b></span>`).join("")}${reads.some(([t])=>Math.abs(t-best[0])<=8)?"":`<span class="best">${clock(best[0])} <b>${best[1]}%</b></span>`}</div>`}
 // the grenades of the way, by stack: thrown from one spot (the smoke, then the flash over it), the most used first
 const NADE_L={smoke:"S",flash:"F",molotov:"M",he:"H"},HOW_S=h=>String(h||"").replace("standing still","").replace("jumpthrow","jump").replace("running","run").replace("walking","walk").replace("crouching","crouch").replace(/ \+ /g,"+");
-function vDirUtil(p,g,r,max){const U=(r.util||[]).filter(u=>u.share>=3);if(!U.length)return "";const by=new Map();
+// a lineup's keys: the training's (practiced) and the photo's (lineshots.py lid())
+const pracKey=(side,u)=>`${side}:${u.type}:${u.from_key}>${u.to_key}`;
+const shotId=(side,u)=>`${side}_${u.type}_${u.from_key||u.from||""}_${u.to_key||u.to||""}`.replace(/[^A-Za-z0-9_>-]/g,"").replace(/>/g,"-");
+function vDirUtil(p,g,r,max){const U=(r.util||[]).filter(u=>u.share>=3);if(!U.length)return "";const by=new Map(),TD=tdirsOf(g.map)||{},PR=new Set(TD.practiced||[]),SH=TD.shots||{};
+  const prac=u=>PR.has(pracKey("T",u));
   U.forEach(u=>{if(!by.has(u.stack))by.set(u.stack,[]);by.get(u.stack).push(u)});
-  const stacks=[...by.values()].sort((a,b)=>b.length-a.length||b[0].n-a[0].n).slice(0,max||3);
-  return `<div class="vhead">STUFF · ${esc(r.label)}</div><div class="vstacks">${stacks.map(st=>`<div class="vstack"><span class="from">${esc(vShort(st[0].from||"?"))}${st.length>1?` <small>×${st.length}</small>`:""}</span>${st.slice(0,3).sort((a,b)=>a.t_med-b.t_med).map(u=>`<span class="vnd"><i style="background:${NADE_C[u.type]||"#ccc"}">${NADE_L[u.type]||"?"}</i>${esc(vShort(u.to||"?"))}${HOW_S(u.how)?`<small>${esc(HOW_S(u.how))}</small>`:""}</span>`).join("")}</div>`).join("")}</div>`}
+  const stacks=[...by.values()].sort((a,b)=>(b.some(prac)-a.some(prac))||b.length-a.length||b[0].n-a[0].n).slice(0,max||3);
+  return `<div class="vhead">STUFF · ${esc(r.label)}</div><div class="vstacks">${stacks.map(st=>{const sh=st.map(u=>SH[shotId("T",u)]).find(Boolean);
+    return `<div class="vstack${sh?" shot":""}">${sh?`<img class="vshot" src="${esc(sh)}" alt="Where to aim" loading="lazy">`:""}<div class="vst-in"><span class="from">${esc(vShort(st[0].from||"?"))}${st.length>1?` <small>×${st.length}</small>`:""}</span>${st.slice(0,3).sort((a,b)=>(prac(b)-prac(a))||a.t_med-b.t_med).map(u=>`<span class="vnd${prac(u)?" prac":""}"><i style="background:${NADE_C[u.type]||"#ccc"}">${NADE_L[u.type]||"?"}</i>${esc(vShort(u.to||"?"))}${prac(u)?`<b title="practiced in training">✓</b>`:""}${HOW_S(u.how)?`<small>${esc(HOW_S(u.how))}</small>`:""}</span>`).join("")}</div></div>`}).join("")}</div>`}
 // the panel's way card: the plan picked (or Wily's pick), the ways with their odds this round, then the timeline and the stuff of the top one
 function vDir(p,g,opt){if(g.side!=="T"||isHostage(g.map))return "";const more=opt&&opt.stuff;const TD=tdirsOf(g.map),R=dirRank(p,g,TD);if(!R||!R.rows.length)return "";
   const sel=R.sel,top=R.rows[0],dead=typeof deadAgo==="function"&&deadAgo(g)!=null;
@@ -101,6 +106,13 @@ function pingMark(ov,g,R,level,TD){const P_=pingNow(g);if(!P_)return;let pt=null
 // the map's way lines: the ways of the panel, each with its odds this round, no times (06/10: the times stay in the panel's timeline)
 function dirPaths(Lrot,Ltop,R,level){R.rows.slice().reverse().forEach(r=>(r.routes||[]).forEach((rt,j)=>{if(!rt.pts||rt.pts.length<2)return;
   tPathLabel(Lrot,Ltop,rt.pts,r.col,level,j===0?`${r.rank===1?"★ ":""}${r.label} · ${r.wr}%`:null)}))}
+// the picked way's stuff on the map (06/10: "où je dois me mettre"): an arc from where you stand to where it lands, the
+// first of each stack (the practiced ones first), five at most
+function dirNades(Lnades,Ltop,R,level,TD){const r=R.rows[0];if(!r||!R.sel.dir)return 0;const PR=new Set((TD||{}).practiced||[]),seen=new Set();let n=0;
+  (r.util||[]).filter(u=>u.share>=3).sort((a,b)=>(PR.has(pracKey("T",b))-PR.has(pracKey("T",a)))||b.n-a.n).forEach(u=>{
+    if(n>=5||!u.from_px||!u.to_px||(u.level&&level&&u.level!==level))return;const k=u.type+"|"+u.to;if(seen.has(k))return;seen.add(k);n++;
+    nadeArc(Lnades,u.from_px[0],u.from_px[1],u.to_px[0],u.to_px[1],u.type);nadeIcon(Ltop,u.type,u.to_px[0],u.to_px[1],`${u.type} from ${u.from} onto ${u.to}${u.how&&u.how!=="standing still"?" ("+u.how+")":""}`)});
+  return n}
 function tPathLabel(lay,top,pts,col,level,text){const on=q=>!q[2]||!level||q[2]===level;let seg=[];const segs=[];
   pts.forEach(q=>{if(on(q))seg.push(q);else{if(seg.length>1)segs.push(seg);seg=[]}});if(seg.length>1)segs.push(seg);
   segs.forEach(sg=>{const s=sg.map(q=>q[0]+","+q[1]).join(" ");

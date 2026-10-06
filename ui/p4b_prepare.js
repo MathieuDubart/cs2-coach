@@ -76,7 +76,7 @@ function renderPrepare(){
     return `<li class="pblk k-${b.kind}${done?" done":""}${cur?" cur":""}">
       <div class="pmin"><b>${b.mins}</b><span>min</span></div>
       <div class="pbody"><h4>${esc(b.title)}</h4><p>${esc(b.text)}</p><p class="note">Why: ${esc(b.why)}</p>
-       ${b.kind==="nades"?prepNades(p,sel):""}
+       ${b.kind==="nades"?prepNades(p,sel):""}${b.kind==="nades"&&own?`<div class="pshots" data-pshots></div>`:""}
        ${b.kind==="train"&&own?`<div class="btns" data-ptrainbox style="align-items:center"><button type="button" data-ptrain="${i}">▶ Launch on the training server</button><span class="note" id="ptmsg" role="status"></span></div>`:""}</div>
       <div class="pact">${done?`<button type="button" data-pundo="${i}" title="Mark it not done">✓ Done</button>`:cur?`<b class="ptime" id="ptime">${fmtLeft(left)}</b><button type="button" data-pdone="${i}">Done</button>`:`<button type="button" class="primary" data-pstart="${i}">Start</button>`}</div></li>`};
   const step2=()=>`<section class="prep2"><ol class="prep-prog">${B.map(block).join("")}</ol>
@@ -106,7 +106,7 @@ function renderPrepare(){
       if(msg)msg.textContent=`${r.blocks.map(x=>`${BLOCK[x.kind]} ${Math.round(x.seconds/60)}′`).join(" → ")}: CS2 joins the server, follow the screen.`;
       PREP.tick=null;setTimeout(()=>{if(S.view==="prepare")renderPrepare()},6000)}
     catch(e){if(msg)msg.textContent="Failed: "+e.message;b.disabled=false}});
-  copyBtn(v);wireCheckin(v,p);wireFocus(v,p,renderPrepare);prepTrainCheck(v);
+  copyBtn(v);wireCheckin(v,p);wireFocus(v,p,renderPrepare);prepTrainCheck(v);prepShots(v,sel);
   if(st.cur!=null&&st.t0&&B[st.cur]){const b=B[st.cur];   // the block running: its clock, and done when it reaches zero
     PREP.tick=setInterval(()=>{const t=$("#ptime",v);if(!t||S.view!=="prepare"){clearInterval(PREP.tick);return}
       const left=b.mins*60-(Date.now()-st.t0)/1000;t.textContent=fmtLeft(left);if(left<=0){clearInterval(PREP.tick);finish(st.cur)}},1000)}}
@@ -118,6 +118,20 @@ function prepWatch(){clearTimeout(PREP.watch);if(S.view!=="prepare"||!D.local)re
 
 // the training server not on this PC yet (a player's copy of the app, 05/10): installed from the warm-up's block, which
 // then launches it
+// the photos of your maps' lineups (06/10: "les images de là où je dois viser"): taken in your game on the training
+// server, numpad + from one lineup to the next; Live shows them with the way's stuff
+async function prepShots(v,sel){const box=$("[data-pshots]",v);if(!box||!D.local)return;let st;
+  try{st=await api("/api/lineshots/status")}catch(e){return}
+  const per=await Promise.all(sel.map(mp=>api("/api/lineshots/status?map="+encodeURIComponent(mp)).catch(()=>null)));
+  box.innerHTML=`<p class="note"><b>📷 Where to aim:</b> I photograph each lineup in your game (training server: numpad + puts you on the spot, aimed; keep still a second). Live then shows the photo with the way's stuff.</p>
+   <div class="btns">${sel.map((mp,i)=>{const s=per[i]||{};const on=st.on&&st.map===mp;
+     return on?`<span class="note">${esc(MAPN(mp))}: ${s.done||0}/${s.total||0} · <b>numpad +</b> for the next${st.next?` (${esc(st.next.type)} → ${esc(st.next.to||"")})`:""}</span><button type="button" data-pshotstop>Stop</button>`
+       :`<button type="button" data-pshot="${esc(mp)}" ${s.total&&s.done>=s.total?"disabled":""}>📷 ${esc(MAPN(mp))} · ${s.done||0}/${s.total||0}</button>`}).join("")}<span class="note" role="status" data-pshotmsg></span></div>`;
+  $$("[data-pshot]",box).forEach(b=>b.onclick=async()=>{const m=$("[data-pshotmsg]",box);b.disabled=true;if(m)m.textContent="Starting the training server and sending the game (about 20 s)…";
+    try{await api("/api/lineshots/start",{map:b.dataset.pshot});if(m)m.textContent="In the game: numpad + for each lineup (exec coach_binds once if it does nothing).";setTimeout(()=>{if(S.view==="prepare")prepShots(v,sel)},4000)}
+    catch(e){if(m)m.textContent="Failed: "+e.message;b.disabled=false}});
+  const sb=$("[data-pshotstop]",box);if(sb)sb.onclick=async()=>{try{await api("/api/lineshots/stop",{})}catch(e){}prepShots(v,sel)};
+  if(st.on&&S.view==="prepare")setTimeout(()=>{if(S.view==="prepare")prepShots(v,sel)},5000)}
 async function prepTrainCheck(v){const box=$("[data-ptrainbox]",v);if(!box||!D.local)return;
   let st;try{const r=await fetch("/api/train/status");if(!r.ok)return;st=await r.json()}catch(e){return}
   if(typeof st.installed!=="boolean"||!box.isConnected||S.view!=="prepare")return;   // an older local server: the launch button stays

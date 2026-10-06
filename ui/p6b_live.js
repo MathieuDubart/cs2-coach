@@ -221,6 +221,7 @@ function liveRadar(box,p,map,level,g,o){
   const FN=o.following&&g?focusN(g):0;   // the path you pressed: the only one drawn
   const TDR=!HMAP&&att&&o.following&&g&&typeof tdirsOf==="function"&&tdirsOf(map)?dirRank(p,g,tdirsOf(map)):null;   // 06/10: the ways in (A via Ramp...)
   if(TDR&&on("paths")&&!planted&&(g.round_phase==="freezetime"||(live&&(g.elapsed||0)<45))&&TDR.rows.length){dirPaths(Lrot,Ltop,TDR,level);
+    if(!dead&&dirNades(Lnades,Ltop,TDR,level,tdirsOf(map)))legend.push(`<span>the way's stuff: thrown from the white dot, lands on the icon</span>`);
     legend.push(`<span>${SW.tpath}the way in from the spawn, % = rounds won by it this round (your buy and theirs${TDR.sel.tempo?`, ${TEMPO_EN[TDR.sel.tempo].toLowerCase()}`:""}); numpad 1-2-3 = A / mid / B, 4-5-6 = rush / slow / map control, minus drops them</span>`)}
   const TDx=!HMAP&&o.following&&g&&typeof tdirsOf==="function"?tdirsOf(map):null;if(TDx)pingMark(Ltop,g,TDR,level,TDx);   // A, B or mid pressed or said: a ping
   if(TDx&&typeof wilyRadar==="function")wilyRadar(p,g,level,Lnades,Ltop,legend);   // what you asked Wily, on the map

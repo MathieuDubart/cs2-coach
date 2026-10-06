@@ -269,7 +269,8 @@ def _lineups(N, rounds, min_n=None):
         close = ((np.abs(P[:, None] - P[None, :]) < 1.5) & (dy < 1.5)).sum(1)
         b = rep.iloc[int(np.argmax(close))]
         won = rr.won.mean()
-        out.append({"type": c[0], "from": b.zone_h, "to": b.land_zone_h, "from_px": [round(float(rep.px.median())), round(float(rep.py.median()))],
+        out.append({"type": c[0], "from": b.zone_h, "to": b.land_zone_h, "from_key": b.zone if isinstance(b.zone, str) else None,
+                    "to_key": b.land_zone if isinstance(b.land_zone, str) else None, "from_px": [round(float(rep.px.median())), round(float(rep.py.median()))],
                     "to_px": [round(float(x.land_px.median())), round(float(x.land_py.median()))], "level": b.level, "land_level": b.land_level,
                     "X": round(float(b.X), 1), "Y": round(float(b.Y), 1), "Z": round(float(b.Z), 1),
                     "n": int(len(rr)), "share": round(100 * len(rr) / nr), "win": round(100 * float(won)),
@@ -512,6 +513,26 @@ def load():
 
 
 _MEM = {"mtime": None, "maps": {}}
+
+
+def for_page(mp):
+    """What Live gets for a map: its ways, plus the lineups you practiced in training (their keys) and the photos taken."""
+    M = load_map(mp)
+    if not M:
+        return {}
+    out = dict(M)
+    try:
+        import train
+        out["practiced"] = sorted(k.split(":", 2)[2] for k, v in (train.progress().get("items") or {}).items()
+                                  if k.startswith(f"nade:{mp}:") and (v.get("ok") or 0) > 0)
+    except Exception:
+        out["practiced"] = []
+    try:
+        import lineshots
+        out["shots"] = lineshots.shots(mp)
+    except Exception:
+        out["shots"] = {}
+    return out
 
 
 def load_map(mp):

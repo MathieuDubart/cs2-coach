@@ -473,3 +473,9 @@ svg.radar .ping .ping-t{font:800 15px var(--f-mono);fill:#ffd34d;paint-order:str
 .vask .vchip small{font:800 11px var(--f-mono);color:var(--t)}
 .vstack .edge{font:700 12px var(--f-mono);color:var(--good);margin-left:auto}
 .vdir-h small{font:600 12px var(--f-mono);color:var(--muted)}
+/* the way's stuff with the aim's photo, the practiced lineups, the photo session (06/10) */
+.vstack.shot{display:grid;grid-template-columns:112px minmax(0,1fr);align-items:center;gap:8px;padding:5px}
+.vstack .vst-in{display:flex;flex-wrap:wrap;align-items:center;gap:6px}
+.vshot{width:112px;height:auto;aspect-ratio:16/10;object-fit:cover;border-radius:4px;display:block;background:var(--chip)}
+.vnd.prac{color:var(--good)}.vnd b{font:800 12px var(--f-mono);color:var(--good)}
+.pshots{display:grid;gap:6px;margin-top:8px}

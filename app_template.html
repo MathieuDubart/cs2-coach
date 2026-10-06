@@ -814,6 +814,12 @@ svg.radar .ping .ping-t{font:800 15px var(--f-mono);fill:#ffd34d;paint-order:str
 .vask .vchip small{font:800 11px var(--f-mono);color:var(--t)}
 .vstack .edge{font:700 12px var(--f-mono);color:var(--good);margin-left:auto}
 .vdir-h small{font:600 12px var(--f-mono);color:var(--muted)}
+/* the way's stuff with the aim's photo, the practiced lineups, the photo session (06/10) */
+.vstack.shot{display:grid;grid-template-columns:112px minmax(0,1fr);align-items:center;gap:8px;padding:5px}
+.vstack .vst-in{display:flex;flex-wrap:wrap;align-items:center;gap:6px}
+.vshot{width:112px;height:auto;aspect-ratio:16/10;object-fit:cover;border-radius:4px;display:block;background:var(--chip)}
+.vnd.prac{color:var(--good)}.vnd b{font:800 12px var(--f-mono);color:var(--good)}
+.pshots{display:grid;gap:6px;margin-top:8px}
 </style>
 
 <div class="bar"><div class="bar-in">
@@ -1943,7 +1949,7 @@ async function renderSettings(){
    <p>Numpad <b>1</b> = A, <b>2</b> = mid, <b>3</b> = B; <b>4</b> = rush, <b>5</b> = slow, <b>6</b> = map control; <b>minus</b> drops them. On T, the key says it in the team chat ("Rush A via Ramp", with CS2's own "Go A" / "Go B" of the chat wheel, the order bots follow) and tells me: Live then shows that way, its odds this round, when to be on the site and the stuff of that way, with a ping on the map. On CT, the keys only tell me: 1-2-3 where you play, 4-5-6 what the Ts do. I rewrite the lines whenever the plan changes; you press the key.</p>
    ${cc&&!cc.console?`<p class="note">I read the keys in CS2's console log (game/csgo/console.log, written when CS2 starts with <code>-condebug</code> in its launch options): not found or old.</p>`:""}
    ${cc&&cc.bound&&!cc.tempo_bound?`<p>Numpad 4-5-6 are new: run <code>exec coach_binds</code> once more in CS2's console. Your numpad 5 ran <code>bot_crouch 1</code>: it becomes slow (bind it elsewhere if you still use it on a practice server).</p>`:""}
-   <p>Numpad <b>7</b> = A, <b>9</b> = B still work: on CT, the site you play; once the bomb is down, on both sides, the site it went down on.</p>
+   <p>Numpad <b>7</b> = A, <b>9</b> = B still work: on CT, the site you play; once the bomb is down, on both sides, the site it went down on. Numpad <b>+</b>: the next lineup's photo, in a photo session (Prepare, the lineups' block).</p>
    ${cc&&cc.bound&&cc.tempo_bound?`<p class="note">The keys are set.</p>`:cc&&cc.bound?"":`<p>One time only, in CS2's console: <code>exec coach_binds</code> (the keys then stay in your CS2 settings).</p>`}
    <p class="note">The In game page must be open during the match (it writes the lines). A key's file only says its line and the chat wheel's order, never another command.</p></article>
   <article class="card"><h3>My voice at the buy time</h3>
@@ -2279,7 +2285,7 @@ function renderPrepare(){
     return `<li class="pblk k-${b.kind}${done?" done":""}${cur?" cur":""}">
       <div class="pmin"><b>${b.mins}</b><span>min</span></div>
       <div class="pbody"><h4>${esc(b.title)}</h4><p>${esc(b.text)}</p><p class="note">Why: ${esc(b.why)}</p>
-       ${b.kind==="nades"?prepNades(p,sel):""}
+       ${b.kind==="nades"?prepNades(p,sel):""}${b.kind==="nades"&&own?`<div class="pshots" data-pshots></div>`:""}
        ${b.kind==="train"&&own?`<div class="btns" data-ptrainbox style="align-items:center"><button type="button" data-ptrain="${i}">▶ Launch on the training server</button><span class="note" id="ptmsg" role="status"></span></div>`:""}</div>
       <div class="pact">${done?`<button type="button" data-pundo="${i}" title="Mark it not done">✓ Done</button>`:cur?`<b class="ptime" id="ptime">${fmtLeft(left)}</b><button type="button" data-pdone="${i}">Done</button>`:`<button type="button" class="primary" data-pstart="${i}">Start</button>`}</div></li>`};
   const step2=()=>`<section class="prep2"><ol class="prep-prog">${B.map(block).join("")}</ol>
@@ -2309,7 +2315,7 @@ function renderPrepare(){
       if(msg)msg.textContent=`${r.blocks.map(x=>`${BLOCK[x.kind]} ${Math.round(x.seconds/60)}′`).join(" → ")}: CS2 joins the server, follow the screen.`;
       PREP.tick=null;setTimeout(()=>{if(S.view==="prepare")renderPrepare()},6000)}
     catch(e){if(msg)msg.textContent="Failed: "+e.message;b.disabled=false}});
-  copyBtn(v);wireCheckin(v,p);wireFocus(v,p,renderPrepare);prepTrainCheck(v);
+  copyBtn(v);wireCheckin(v,p);wireFocus(v,p,renderPrepare);prepTrainCheck(v);prepShots(v,sel);
   if(st.cur!=null&&st.t0&&B[st.cur]){const b=B[st.cur];   // the block running: its clock, and done when it reaches zero
     PREP.tick=setInterval(()=>{const t=$("#ptime",v);if(!t||S.view!=="prepare"){clearInterval(PREP.tick);return}
       const left=b.mins*60-(Date.now()-st.t0)/1000;t.textContent=fmtLeft(left);if(left<=0){clearInterval(PREP.tick);finish(st.cur)}},1000)}}
@@ -2321,6 +2327,20 @@ function prepWatch(){clearTimeout(PREP.watch);if(S.view!=="prepare"||!D.local)re
 
 // the training server not on this PC yet (a player's copy of the app, 05/10): installed from the warm-up's block, which
 // then launches it
+// the photos of your maps' lineups (06/10: "les images de là où je dois viser"): taken in your game on the training
+// server, numpad + from one lineup to the next; Live shows them with the way's stuff
+async function prepShots(v,sel){const box=$("[data-pshots]",v);if(!box||!D.local)return;let st;
+  try{st=await api("/api/lineshots/status")}catch(e){return}
+  const per=await Promise.all(sel.map(mp=>api("/api/lineshots/status?map="+encodeURIComponent(mp)).catch(()=>null)));
+  box.innerHTML=`<p class="note"><b>📷 Where to aim:</b> I photograph each lineup in your game (training server: numpad + puts you on the spot, aimed; keep still a second). Live then shows the photo with the way's stuff.</p>
+   <div class="btns">${sel.map((mp,i)=>{const s=per[i]||{};const on=st.on&&st.map===mp;
+     return on?`<span class="note">${esc(MAPN(mp))}: ${s.done||0}/${s.total||0} · <b>numpad +</b> for the next${st.next?` (${esc(st.next.type)} → ${esc(st.next.to||"")})`:""}</span><button type="button" data-pshotstop>Stop</button>`
+       :`<button type="button" data-pshot="${esc(mp)}" ${s.total&&s.done>=s.total?"disabled":""}>📷 ${esc(MAPN(mp))} · ${s.done||0}/${s.total||0}</button>`}).join("")}<span class="note" role="status" data-pshotmsg></span></div>`;
+  $$("[data-pshot]",box).forEach(b=>b.onclick=async()=>{const m=$("[data-pshotmsg]",box);b.disabled=true;if(m)m.textContent="Starting the training server and sending the game (about 20 s)…";
+    try{await api("/api/lineshots/start",{map:b.dataset.pshot});if(m)m.textContent="In the game: numpad + for each lineup (exec coach_binds once if it does nothing).";setTimeout(()=>{if(S.view==="prepare")prepShots(v,sel)},4000)}
+    catch(e){if(m)m.textContent="Failed: "+e.message;b.disabled=false}});
+  const sb=$("[data-pshotstop]",box);if(sb)sb.onclick=async()=>{try{await api("/api/lineshots/stop",{})}catch(e){}prepShots(v,sel)};
+  if(st.on&&S.view==="prepare")setTimeout(()=>{if(S.view==="prepare")prepShots(v,sel)},5000)}
 async function prepTrainCheck(v){const box=$("[data-ptrainbox]",v);if(!box||!D.local)return;
   let st;try{const r=await fetch("/api/train/status");if(!r.ok)return;st=await r.json()}catch(e){return}
   if(typeof st.installed!=="boolean"||!box.isConnected||S.view!=="prepare")return;   // an older local server: the launch button stays
@@ -3194,6 +3214,7 @@ function liveRadar(box,p,map,level,g,o){
   const FN=o.following&&g?focusN(g):0;   // the path you pressed: the only one drawn
   const TDR=!HMAP&&att&&o.following&&g&&typeof tdirsOf==="function"&&tdirsOf(map)?dirRank(p,g,tdirsOf(map)):null;   // 06/10: the ways in (A via Ramp...)
   if(TDR&&on("paths")&&!planted&&(g.round_phase==="freezetime"||(live&&(g.elapsed||0)<45))&&TDR.rows.length){dirPaths(Lrot,Ltop,TDR,level);
+    if(!dead&&dirNades(Lnades,Ltop,TDR,level,tdirsOf(map)))legend.push(`<span>the way's stuff: thrown from the white dot, lands on the icon</span>`);
     legend.push(`<span>${SW.tpath}the way in from the spawn, % = rounds won by it this round (your buy and theirs${TDR.sel.tempo?`, ${TEMPO_EN[TDR.sel.tempo].toLowerCase()}`:""}); numpad 1-2-3 = A / mid / B, 4-5-6 = rush / slow / map control, minus drops them</span>`)}
   const TDx=!HMAP&&o.following&&g&&typeof tdirsOf==="function"?tdirsOf(map):null;if(TDx)pingMark(Ltop,g,TDR,level,TDx);   // A, B or mid pressed or said: a ping
   if(TDx&&typeof wilyRadar==="function")wilyRadar(p,g,level,Lnades,Ltop,legend);   // what you asked Wily, on the map
@@ -4119,10 +4140,15 @@ function vDirCurve(p,g,r){const T_=r.timing||{},TM=(g.round===halfStart(g.round)
     <div class="vdtimes">${el!=null&&at(el)!=null?`<span class="now">now <b>${at(el)}%</b></span>`:""}${reads.map(([t,w])=>`<span${Math.abs(t-best[0])<=8?' class="best"':""}>${clock(t)} <b>${w}%</b></span>`).join("")}${reads.some(([t])=>Math.abs(t-best[0])<=8)?"":`<span class="best">${clock(best[0])} <b>${best[1]}%</b></span>`}</div>`}
 // the grenades of the way, by stack: thrown from one spot (the smoke, then the flash over it), the most used first
 const NADE_L={smoke:"S",flash:"F",molotov:"M",he:"H"},HOW_S=h=>String(h||"").replace("standing still","").replace("jumpthrow","jump").replace("running","run").replace("walking","walk").replace("crouching","crouch").replace(/ \+ /g,"+");
-function vDirUtil(p,g,r,max){const U=(r.util||[]).filter(u=>u.share>=3);if(!U.length)return "";const by=new Map();
+// a lineup's keys: the training's (practiced) and the photo's (lineshots.py lid())
+const pracKey=(side,u)=>`${side}:${u.type}:${u.from_key}>${u.to_key}`;
+const shotId=(side,u)=>`${side}_${u.type}_${u.from_key||u.from||""}_${u.to_key||u.to||""}`.replace(/[^A-Za-z0-9_>-]/g,"").replace(/>/g,"-");
+function vDirUtil(p,g,r,max){const U=(r.util||[]).filter(u=>u.share>=3);if(!U.length)return "";const by=new Map(),TD=tdirsOf(g.map)||{},PR=new Set(TD.practiced||[]),SH=TD.shots||{};
+  const prac=u=>PR.has(pracKey("T",u));
   U.forEach(u=>{if(!by.has(u.stack))by.set(u.stack,[]);by.get(u.stack).push(u)});
-  const stacks=[...by.values()].sort((a,b)=>b.length-a.length||b[0].n-a[0].n).slice(0,max||3);
-  return `<div class="vhead">STUFF · ${esc(r.label)}</div><div class="vstacks">${stacks.map(st=>`<div class="vstack"><span class="from">${esc(vShort(st[0].from||"?"))}${st.length>1?` <small>×${st.length}</small>`:""}</span>${st.slice(0,3).sort((a,b)=>a.t_med-b.t_med).map(u=>`<span class="vnd"><i style="background:${NADE_C[u.type]||"#ccc"}">${NADE_L[u.type]||"?"}</i>${esc(vShort(u.to||"?"))}${HOW_S(u.how)?`<small>${esc(HOW_S(u.how))}</small>`:""}</span>`).join("")}</div>`).join("")}</div>`}
+  const stacks=[...by.values()].sort((a,b)=>(b.some(prac)-a.some(prac))||b.length-a.length||b[0].n-a[0].n).slice(0,max||3);
+  return `<div class="vhead">STUFF · ${esc(r.label)}</div><div class="vstacks">${stacks.map(st=>{const sh=st.map(u=>SH[shotId("T",u)]).find(Boolean);
+    return `<div class="vstack${sh?" shot":""}">${sh?`<img class="vshot" src="${esc(sh)}" alt="Where to aim" loading="lazy">`:""}<div class="vst-in"><span class="from">${esc(vShort(st[0].from||"?"))}${st.length>1?` <small>×${st.length}</small>`:""}</span>${st.slice(0,3).sort((a,b)=>(prac(b)-prac(a))||a.t_med-b.t_med).map(u=>`<span class="vnd${prac(u)?" prac":""}"><i style="background:${NADE_C[u.type]||"#ccc"}">${NADE_L[u.type]||"?"}</i>${esc(vShort(u.to||"?"))}${prac(u)?`<b title="practiced in training">✓</b>`:""}${HOW_S(u.how)?`<small>${esc(HOW_S(u.how))}</small>`:""}</span>`).join("")}</div></div>`}).join("")}</div>`}
 // the panel's way card: the plan picked (or Wily's pick), the ways with their odds this round, then the timeline and the stuff of the top one
 function vDir(p,g,opt){if(g.side!=="T"||isHostage(g.map))return "";const more=opt&&opt.stuff;const TD=tdirsOf(g.map),R=dirRank(p,g,TD);if(!R||!R.rows.length)return "";
   const sel=R.sel,top=R.rows[0],dead=typeof deadAgo==="function"&&deadAgo(g)!=null;
@@ -4170,6 +4196,13 @@ function pingMark(ov,g,R,level,TD){const P_=pingNow(g);if(!P_)return;let pt=null
 // the map's way lines: the ways of the panel, each with its odds this round, no times (06/10: the times stay in the panel's timeline)
 function dirPaths(Lrot,Ltop,R,level){R.rows.slice().reverse().forEach(r=>(r.routes||[]).forEach((rt,j)=>{if(!rt.pts||rt.pts.length<2)return;
   tPathLabel(Lrot,Ltop,rt.pts,r.col,level,j===0?`${r.rank===1?"★ ":""}${r.label} · ${r.wr}%`:null)}))}
+// the picked way's stuff on the map (06/10: "où je dois me mettre"): an arc from where you stand to where it lands, the
+// first of each stack (the practiced ones first), five at most
+function dirNades(Lnades,Ltop,R,level,TD){const r=R.rows[0];if(!r||!R.sel.dir)return 0;const PR=new Set((TD||{}).practiced||[]),seen=new Set();let n=0;
+  (r.util||[]).filter(u=>u.share>=3).sort((a,b)=>(PR.has(pracKey("T",b))-PR.has(pracKey("T",a)))||b.n-a.n).forEach(u=>{
+    if(n>=5||!u.from_px||!u.to_px||(u.level&&level&&u.level!==level))return;const k=u.type+"|"+u.to;if(seen.has(k))return;seen.add(k);n++;
+    nadeArc(Lnades,u.from_px[0],u.from_px[1],u.to_px[0],u.to_px[1],u.type);nadeIcon(Ltop,u.type,u.to_px[0],u.to_px[1],`${u.type} from ${u.from} onto ${u.to}${u.how&&u.how!=="standing still"?" ("+u.how+")":""}`)});
+  return n}
 function tPathLabel(lay,top,pts,col,level,text){const on=q=>!q[2]||!level||q[2]===level;let seg=[];const segs=[];
   pts.forEach(q=>{if(on(q))seg.push(q);else{if(seg.length>1)segs.push(seg);seg=[]}});if(seg.length>1)segs.push(seg);
   segs.forEach(sg=>{const s=sg.map(q=>q[0]+","+q[1]).join(" ");
