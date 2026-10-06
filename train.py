@@ -1004,6 +1004,27 @@ def _victims(mp, team, typ, land, me, side=None, t_med=None):
     ones beyond it from where you throw); a molotov: in its fire, turned to where it came from."""
     if not land or len(land) < 3:
         return []
+    key = f"{mp}|{typ}|{team}|{round(me[0])}|{round(me[1])}|{round(land[0])}|{round(land[1])}"
+    try:
+        VC = json.load(open(VICTIMS_F, encoding="utf-8"))
+    except (OSError, ValueError):
+        VC = {}
+    hit = VC.get(key)
+    if hit and time.time() - hit.get("t", 0) < 7 * 86400:   # a week: the base changes slowly
+        return hit["v"]
+    v = _victims_of(mp, team, typ, land, me)
+    VC[key] = {"t": time.time(), "v": v}
+    try:
+        config.write_json(VICTIMS_F, VC)
+    except OSError:
+        pass
+    return v
+
+
+VICTIMS_F = os.path.join(config.OUT, "train_victims.json")
+
+
+def _victims_of(mp, team, typ, land, me):
     lx, ly, lz = land[:3]
     reach = {"he": 350, "molotov": 220, "flash": 650, "smoke": 900}.get(typ, 500)
     foe = "CT" if team == 2 else "T"
@@ -1499,24 +1520,57 @@ def _menu_since(start_size):
     return b"-> CSGO_GAME_UI_STATE_MAINMENU" in t and b"Connected to 'loopback" in t
 
 
+def _connected_since(start_size):
+    """The game reached the training server since that point of its console log: it is loading the map now."""
+    f = _console()
+    if not f:
+        return False
+    size = os.path.getsize(f)
+    with open(f, "rb") as fh:
+        fh.seek(0 if size < start_size else start_size)
+        t = fh.read()
+    return f"Connected to '127.0.0.1:{replay.PORT}'".encode() in t
+
+
+_LAUNCH = {}
+
+
+def _launch_game():
+    """CS2 started, not connected yet: its menu comes up while the session is built (06/10: the build took 4 minutes
+    on a busy disk and the game only started after it)."""
+    f = _console()
+    _LAUNCH.update(start=os.path.getsize(f) if f else 0, t=time.time())
+    os.startfile("steam://run/730")
+
+
+def _wait_menu(start):
+    for _ in range(180):
+        if _menu_since(start):
+            break
+        time.sleep(1)
+    time.sleep(8)   # the menu settles
+
+
 def _connect():
     """The game sent to the server. A connect given while CS2 starts is lost (it runs before the menu is ready): a
     closed game is started first, the connect waits for its menu. First the game's own connect (Steam passes it to the
     running game), then Steam's: Steam's opens its "game info" window, whose check of the local server fails ("the app
-    ID given by the server is invalid", 06/10) while its "Join" button works."""
+    ID given by the server is invalid", 06/10) while its "Join" button works. Once the game has reached the server it is
+    loading the map: no other connect then, it would cut the load (06/10 19:57: aim_map took more than 30 s, the second
+    connect dropped the game at SIGNONSTATE_SPAWN)."""
     urls = [f"steam://rungame/730/76561202255233023/+connect%20127.0.0.1:{replay.PORT}", f"steam://connect/127.0.0.1:{replay.PORT}"]
-    if not _game_running():
-        f = _console()
-        start = os.path.getsize(f) if f else 0
-        os.startfile("steam://run/730")
-        for _ in range(180):
-            time.sleep(1)
-            if _menu_since(start):
-                break
-        time.sleep(8)   # the menu settles
+    recent = _LAUNCH and time.time() - _LAUNCH.get("t", 0) < 240
+    if not _game_running() and not (recent and time.time() - _LAUNCH["t"] < 60):
+        _launch_game()
+        _wait_menu(_LAUNCH["start"])
+    elif recent and not _menu_since(_LAUNCH["start"]):
+        _wait_menu(_LAUNCH["start"])   # started a moment ago (play()): its menu first
+    f = _console()
     for url in urls:
+        start = os.path.getsize(f) if f else 0
         os.startfile(url)
-        for _ in range(30 if url.startswith("steam://rungame") else 60):
+        t0, wait, loading = time.time(), (30 if url.startswith("steam://rungame") else 60), False
+        while time.time() - t0 < wait:
             time.sleep(1)
             h = replay.heartbeat()
             if h and h.get("humans"):
@@ -1524,6 +1578,10 @@ def _connect():
                 h = replay.heartbeat()
                 if h and h.get("humans"):
                     return True
+            if not loading and _connected_since(start):
+                loading, wait = True, time.time() - t0 + 150   # on the server, the map loading: wait for it, nothing else
+        if loading:
+            return False   # it got to the server but not in the game: no second connect (Prepare's Rejoin is there)
     return False
 
 
@@ -1539,6 +1597,8 @@ def play(sid, minutes=20, where="random", difficulty=2):
     (started first if it is closed). You only follow what the game shows."""
     import threading
     first = AIM_MAP if splits(minutes).get("aim") else next((m for m in str(where).split(",") if m in maps(sid)), None)
+    if not _game_running():   # CS2 comes up while the session is built (its menu is needed before a connect)
+        _launch_game()
     pre = threading.Thread(target=lambda: _quiet_start(first), daemon=True) if first else None
     if pre:   # the server starts while the session is built (06/10: a minute and a half before anything happened)
         pre.start()

@@ -100,7 +100,7 @@ async function prepWarm(v,p,sel,st){const box=$("[data-pwarm]",v);if(!box||!D.lo
     <p class="note">One button: the server starts, the session is built on your maps, CS2 joins it (started first if it is closed). In game: <b>!n</b> skips a drill, <b>!r</b> again, <b>!stop</b> ends.</p>`;
   const msg=$("[data-pwmsg]",box);
   $$("[data-pwdiff]",box).forEach(b=>b.onclick=()=>{try{localStorage.setItem("coach_diff",b.dataset.pwdiff)}catch(e){}tSet("at",Date.now());prepWarm(v,p,sel,st)});   // your pick wins for 12 h
-  const go=$("[data-pwgo]",box);if(go)go.onclick=async()=>{go.disabled=true;msg.textContent=T.running?"Preparing the session…":"Starting the server and preparing the session (about 30 s)…";
+  const go=$("[data-pwgo]",box);if(go)go.onclick=async()=>{go.disabled=true;msg.textContent=T.running?"Preparing the session (30 s, a few minutes the first time) · CS2 starts meanwhile…":"Starting the server and preparing the session (30 s, a few minutes the first time) · CS2 starts meanwhile…";
     try{const r=await api("/api/train/session",{sid:p.steamid,minutes:st.min,where,diff:df});
       msg.textContent=`${r.blocks.map(b=>`${WBLOCK[b.kind]||b.kind} ${Math.max(1,Math.round(b.seconds/60))}′`).join(" → ")} — CS2 joins the server. If Steam opens its "game info" window instead, click "Join game" (Rejoindre la partie).`;
       PREP.warm=setTimeout(()=>prepWarm(v,p,sel,st),5000)}
