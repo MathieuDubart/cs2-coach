@@ -466,3 +466,10 @@ svg.radar .ping .ping-c{fill:#ffd34d;stroke:#0b0f14;stroke-width:2}
 svg.radar .ping .ping-t{font:800 15px var(--f-mono);fill:#ffd34d;paint-order:stroke;stroke:#0b0f14;stroke-width:4px}
 @keyframes pingr{0%{opacity:1;transform:scale(.4)}100%{opacity:0;transform:scale(2.4)}}
 @media (prefers-reduced-motion:reduce){svg.radar .ping .ping-r0,svg.radar .ping .ping-r1{animation:none;opacity:.8}}
+/* Wily, said out loud (06/10): what it understood, its question, the order's cards */
+.vwily{display:flex;flex-wrap:wrap;align-items:baseline;gap:6px 10px;padding:8px 10px;border-radius:var(--radius);border:1px solid color-mix(in srgb,var(--t) 55%,var(--line));background:color-mix(in srgb,var(--t) 10%,var(--panel))}
+.vwily b{font:800 13px var(--f-mono);letter-spacing:.08em;color:var(--t)}.vwily span{font:700 17px var(--f-display)}
+.vask{display:flex;flex-wrap:wrap;align-items:center;gap:6px;width:100%}.vask em{font:700 15px var(--f-body);font-style:normal}
+.vask .vchip small{font:800 11px var(--f-mono);color:var(--t)}
+.vstack .edge{font:700 12px var(--f-mono);color:var(--good);margin-left:auto}
+.vdir-h small{font:600 12px var(--f-mono);color:var(--muted)}

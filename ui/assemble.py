@@ -12,7 +12,7 @@ import sys
 
 UI = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(UI)
-PARTS_JS = ("p3_core.js", "p3b_usage.js", "p4_plan.js", "p4b_prepare.js", "p5_nav.js", "p6_ingame.js", "p6b_live.js", "p6c_visual.js", "p6d_econ.js", "p6e_dirs.js", "p7_review.js", "p7b_profile.js", "p8_tail.js")
+PARTS_JS = ("p3_core.js", "p3b_usage.js", "p4_plan.js", "p4b_prepare.js", "p5_nav.js", "p6_ingame.js", "p6b_live.js", "p6c_visual.js", "p6d_econ.js", "p6e_dirs.js", "p6f_wily.js", "p7_review.js", "p7b_profile.js", "p8_tail.js")
 
 
 def read(f):

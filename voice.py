@@ -546,6 +546,12 @@ def classify(text, pos_re):
 # otherwise read from the words: frustration (with the team, with yourself, or plain), doubt, suspicion, positive
 COACH_RE = re.compile(r"^\W*(?:coach|coache|coatch|couch|koch|kosh|coch|coche)\b[\s,.:;!-]*(.*)$", re.I)
 COACH_ANY = re.compile(r"\b(?:coach|coache|coatch)\b", re.I)   # anywhere: "round coach plutôt satisfait", "coach premier round ok, coach deuxième mitigé"
+# an order to Wily (06/10, "Wily exec B stuff", "Jarvis contre rush B 5 stack"): wily.WAKE, read again in French with
+# the orders' words so "post-plant B" doesn't come out "post plain blade"
+WILY_ANY = re.compile(r"\b(?:wh?[iy]l+(?:y|ie|i|ey|ier|is|ee)|wylie|wiley|wili|jarv[iy]s|jerv[iy]s|jarvi)", re.I)
+WILY_PROMPT = ("Wily, rush A. Wily, exec B stuff. Wily, post-plant B. Wily, fake A go B. Wily, force-buy A. Wily, anti-éco B. "
+               "Wily, pistol round. Wily, contre rush B five stack. Wily, fake défense A. Wily, reprise jungle. "
+               "Wily, j'ai vu trois rounds en B. Wily, tendance à fake. Wily, trois A sans bombe. Wily, cover mid. Wily, contrôle map.")
 COACH_WORDS = {
     "frustration": ["énervé", "énervée", "enervé", "tilt", "tilté", "frustré", "rage", "saoulé", "soûlé", "agacé", "dégoûté", "nul", "bloqué",
                     "déçu", "mauvais", "raté", "pas content", "pas satisfait",
@@ -988,6 +994,22 @@ class LiveCalls:
                 r = json.loads(line.decode("utf-8"))
             except Exception:
                 continue
+            orders = []
+            if r.get("wily_text") or (r.get("text") and WILY_ANY.search(r.get("text"))):   # said to Wily (06/10): an order, not a call
+                try:
+                    import wily
+                    zones = sorted({n for n, _ in _zone_vocab(r.get("map")).values()})
+                    orders = wily.parse(r.get("wily_text") or "", zones) or wily.parse(r.get("text") or "", zones)
+                except Exception as e:
+                    print("wily:", e, flush=True)
+            if orders:
+                self.last = {"text": r.get("wily_text") or r.get("text"), "s": r.get("s"), "parsed": None, "mood": None, "wily": orders}
+                try:
+                    import gsi
+                    gsi.wily(orders, r.get("wily_text") or r.get("text"), r.get("t"))
+                except Exception as e:
+                    print("wily order:", e, flush=True)
+                continue
             p = parse_call(r.get("text") or "", r.get("map"))
             mo = mood_of(r.get("mood_text") or "") if r.get("mood_text") else None
             self.last = {"text": r.get("text"), "s": r.get("s"), "parsed": p, "mood": mo}
@@ -1010,7 +1032,7 @@ LIVE = LiveCalls()
 
 
 def _live_prompt(map_name):
-    words = ["A", "B", "mid", "one", "two", "three", "un", "deux", "trois", "rush", "bomb", "full"]
+    words = ["Wily", "A", "B", "mid", "one", "two", "three", "un", "deux", "trois", "rush", "bomb", "full"]
     try:
         import plan
         words += [x["name"] for x in (plan.zone_refs().get(map_name or "") or {}).get("zones", [])][:30]
@@ -1049,8 +1071,17 @@ def live_loop():
             print("live transcription:", e, file=sys.stderr, flush=True)
         if HALLUCINATIONS.search(text):
             text = ""
-        mood_text = None
-        if COACH_ANY.search(text):   # "coach, perdu": the word said in French, read again in French
+        mood_text, wily_text = None, None
+        if WILY_ANY.search(text):   # "Wily, fake défense A": an order to Wily, read again in French with its words (06/10)
+            try:
+                segs, _ = model.transcribe(a, language="fr", beam_size=1, condition_on_previous_text=False, vad_filter=False,
+                                           initial_prompt=WILY_PROMPT, without_timestamps=True, max_new_tokens=32, temperature=0.0)
+                wily_text = " ".join(x.text for x in segs).strip()
+                if not WILY_ANY.search(wily_text):
+                    wily_text = "Wily " + wily_text
+            except Exception as e:
+                print("live wily transcription:", e, file=sys.stderr, flush=True)
+        elif COACH_ANY.search(text):   # "coach, perdu": the word said in French, read again in French
             try:
                 segs, _ = model.transcribe(a, language="fr", beam_size=1, condition_on_previous_text=False, vad_filter=False,
                                            initial_prompt="Coach, perdu. Coach, confiant. Coach, énervé. Coach, bloqué. Coach, stressé. Coach, fatigué. Coach, cheat.",
@@ -1069,7 +1100,7 @@ def live_loop():
                 mood_text = fr_ if fr_ and mood_of(fr_) else None
             except Exception as e:
                 print("live mood transcription:", e, file=sys.stderr, flush=True)
-        sys.stdout.write(json.dumps({"id": h.get("id"), "t": h.get("t"), "map": mp, "text": text, "mood_text": mood_text,
+        sys.stdout.write(json.dumps({"id": h.get("id"), "t": h.get("t"), "map": mp, "text": text, "mood_text": mood_text, "wily_text": wily_text,
                                      "s": round(time.time() - t, 2)}, ensure_ascii=False) + "\n")
         sys.stdout.flush()
 

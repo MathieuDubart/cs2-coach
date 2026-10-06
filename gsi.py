@@ -306,7 +306,7 @@ def set_focus(n):
     return True
 
 
-def set_tdir(what, src="key"):
+def set_tdir(what, src="key", toggle=True):
     """Your team's plan for the round (06/10, the user: a key for A, one for mid, one for B, one for rush, slow and
     map control): numpad 1-2-3 the way (A, MID, B), 4-5-6 the tempo (rush, slow, control), or the same said to Wily.
     T: the page shows that way, its odds and its grenades; CT: 1-2-3 is where you play, 4-5-6 what you see the Ts do.
@@ -326,7 +326,7 @@ def set_tdir(what, src="key"):
             cur["dir"] = what
             STATE["ping"] = {"what": what, "t": now, "round": rnd}
         elif what in ("rush", "slow", "control"):
-            cur["tempo"] = None if cur.get("tempo") == what else what
+            cur["tempo"] = None if toggle and cur.get("tempo") == what else what
         else:
             return False
         cur.update(t=now, src=src)
@@ -335,6 +335,111 @@ def set_tdir(what, src="key"):
     log_event({"map": mp, "round": int(rnd), "tdir": {k: cur.get(k) for k in ("dir", "tempo", "src")}})
     if what in ("A", "B"):   # CT: the site you play; bomb down: its site (what numpad 7 / 9 say)
         set_site_key(what)
+    return True
+
+
+def wily(orders, text=None, said=None):
+    """What you asked Wily out loud (wily.parse, 06/10): the plan of the round (a way, a tempo), what to show (the
+    stuff, a fake, the post-plant, a cover, a counter to a rush, a fake defense, a retake), your buy or theirs for the
+    round, and what you saw (rounds on a site, a habit, Ts on a site without the bomb). Kept on the round being played
+    (after its end: the next one); the habits stay for the match. When a piece is missing, Wily asks (on the page)."""
+    if not orders:
+        return False
+    with LOCK:
+        rnd, ph, side, bomb = STATE.get("round"), STATE.get("round_phase"), STATE.get("side"), STATE.get("bomb")
+        if not rnd:
+            return False
+        if ph == "over":
+            rnd, bomb = rnd + 1, None
+        mk = dict((HIST.get("marks") or {}).get(str(rnd)) or {}) if HIST else {}
+        cur = dict(STATE.get("wily") or {})
+        if cur.get("round") != rnd:
+            cur = {"round": rnd}
+        mtch = dict(STATE.get("wily_match") or {})
+    O = {o["k"]: o for o in orders}
+    if "cancel" in O:
+        with LOCK:
+            STATE.pop("wily", None)
+            STATE.pop("tdir", None)
+        return True
+    for o in orders:
+        k = o["k"]
+        if k == "dir":
+            set_tdir(o["v"], src="voice")
+        elif k == "tempo":
+            set_tdir(o["v"], src="voice", toggle=False)
+        elif k in ("exec", "stuff", "split"):
+            cur["focus"] = {"k": "stuff", **({"site": o["site"]} if o.get("site") else {})}
+        elif k == "fake":
+            cur["focus"] = {"k": "fake", "site": o["site"], "then": o.get("then")}
+        elif k in ("plant", "post"):
+            site = o.get("site") or mk.get("bomb_site")
+            if site and bomb == "planted":
+                set_mark(rnd, {"bomb_site": site})
+            cur["focus"] = {"k": "post", **({"site": site} if site else {})}
+            if not site:
+                cur["ask"] = {"q": "Which site?", "opts": ["A", "B"], "for": "post"}
+        elif k == "cover":
+            cur["focus"] = {"k": "cover", "where": o["where"]}
+        elif k == "buy":
+            cur["buy"] = o["v"]
+        elif k == "their":
+            cur["their"] = o["v"]
+        elif k == "counter":
+            cur["focus"] = {"k": "counter", "what": o.get("what", "rush"), "site": o.get("site"), "n": o.get("n")}
+        elif k == "fakedef":
+            frm = o.get("frm") or (mk.get("me_site") if mk.get("me_site") in ("A", "B") else None)
+            cur["focus"] = {"k": "fakedef", "site": o.get("site"), **({"frm": frm} if frm else {})}
+            if not frm:
+                cur["ask"] = {"q": "From where?", "opts": [x for x in ("A", "B", "MID") if x != o.get("site")], "for": "fakedef"}
+        elif k == "retake":
+            site = o.get("site") or (mk.get("bomb_site") if bomb == "planted" else None)
+            cur["focus"] = {"k": "retake", **({"site": site} if site else {}), **({"via": o["via"]} if o.get("via") else {})}
+            if not site:
+                cur["ask"] = {"q": "Which site?", "opts": ["A", "B"], "for": "retake"}
+        elif k == "seen" and side == "CT":   # the last rounds of the half without a site said: that site
+            n, done = int(o.get("rounds") or 3), 0
+            sites = dict((HIST or {}).get("sites") or {})
+            hs = 1 if rnd <= 12 else 13 if rnd <= 24 else rnd - (rnd - 25) % 3
+            for r in range(rnd - 1, hs - 1, -1):
+                if done >= n:
+                    break
+                if str(r) not in sites:
+                    set_site(r, o["site"])
+                done += 1
+        elif k == "tendency":
+            mtch[o["v"]] = True
+        elif k == "call":
+            voice_call({"site": o["site"], "n": o.get("n"), "nobomb": True}, said)
+    if "ask" in cur and cur.get("ask", {}).get("for") not in [f.get("k") for f in [cur.get("focus") or {}]]:
+        cur.pop("ask", None)
+    import wily as W
+    cur.update(t=time.time(), text=str(text or "")[:120], ack=W.ack(orders), orders=orders)
+    with LOCK:
+        STATE["wily"] = cur
+        if mtch:
+            STATE["wily_match"] = mtch
+        mp = STATE.get("map")
+    log_event({"map": mp, "round": int(rnd), "wily": orders, "text": str(text or "")[:120]})
+    return True
+
+
+def wily_answer(opt):
+    """An answer to Wily's question (said, or numpad 1-2-3 while it asks): it completes the order waiting."""
+    with LOCK:
+        cur = dict(STATE.get("wily") or {})
+        ask = cur.get("ask")
+        if not ask or opt not in ask.get("opts", []):
+            return False
+        f = dict(cur.get("focus") or {})
+        if ask["for"] == "fakedef":
+            f["frm"] = opt
+        elif ask["for"] in ("post", "retake"):
+            f["site"] = opt
+        cur["focus"] = f
+        cur.pop("ask", None)
+        cur["t"] = time.time()
+        STATE["wily"] = cur
     return True
 
 
@@ -613,6 +718,8 @@ def update(payload):
             STATE.pop("focus", None)
             STATE.pop("tdir", None)   # a new match: no plan, no ping left from the last one
             STATE.pop("ping", None)
+            STATE.pop("wily", None)
+            STATE.pop("wily_match", None)   # their habits said to Wily: this match only
         el = now - STATE["live_since"] if STATE.get("round_phase") == "live" and STATE.get("live_since") else 0
         if STATE.get("map") and ((own and (st.get("money") or 0) > 16000) or el > 240 or _training()):
             STATE["practice"] = True

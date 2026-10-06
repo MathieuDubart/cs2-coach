@@ -234,7 +234,7 @@ def _round_dirs(E, gates):
     return keys, labels
 
 
-def _lineups(N, rounds):
+def _lineups(N, rounds, min_n=None):
     """The grenades of a way's rounds, grouped: thrown from the same spot and landing at the same place. Each: how many
     of the way's rounds use it, won when used, the usual moment, and the exact throw (the most common aim of the
     throws you can repeat from a spot: standing, crouching or a jumpthrow without running)."""
@@ -260,7 +260,7 @@ def _lineups(N, rounds):
     for c in cl:
         x = N.loc[c[6]]
         rr = x.drop_duplicates(["match", "round"])
-        if len(rr) < max(4, 0.02 * nr):
+        if len(rr) < (min_n if min_n is not None else max(4, 0.02 * nr)):
             continue
         rep = x[x.speed < 20] if (x.speed < 20).any() else x
         # the most common aim: the throw with the most others within 1.5 degrees
@@ -340,9 +340,14 @@ def analyze_map(mp, dirs, log=print):
     h["control"] = [len(a) >= 2 and t >= 35 for a, t in zip(h.spread, h.hit_t)]
     h["play"] = h.key
     timing = tside._play_timing(h) or {}
-    # the grenades of the hit rounds, thrown by the Ts before the step on the site (2 s after the hit at the latest)
+    # the grenades: the Ts' of the hit rounds before the step on the site (2 s after the hit at the latest); the CTs' of
+    # the first 45 s of every round (what they throw onto each site's ways in); the CTs' kills in the Ts' rushes
     want = {(m, int(r)): (t, w) for m, r, t, w in zip(h.match, h["round"], h.hit_t, h.T_won)}
-    NN = []
+    won_of = {(m, int(r)): bool(w) for m, r, w in zip(g.match, g["round"], g.T_won)}
+    rush_r = {(m, int(r)): (float(t), st) for m, r, t, st, ne in zip(hits.match, hits["round"], hits.hit_t, hits.site, hits.n_exec)
+              if t < RUSH and (ne or 0) >= 3}
+    ct_buy = {(m, int(r)): b for m, r, b in zip(g.match, g["round"], g.CT_buy)}
+    NN, CC, KK = [], [], []
     for d in dirs:
         mid = os.path.basename(d)
         f = os.path.join(d, "grenades.parquet")
@@ -353,20 +358,40 @@ def analyze_map(mp, dirs, log=print):
                                             "crouch", "walk", "click", "land_X", "land_Y", "land_px", "land_py", "land_level", "land_zone"])
         except Exception:
             continue
-        n = n[(n.side == "T") & n.land_X.notna()]
-        if not len(n):
-            continue
-        hit = [want.get((mid, int(r))) for r in n["round"]]
-        keep = [w is not None and tt <= w[0] + 2 for w, tt in zip(hit, n.t)]
-        n = n[keep]
-        if len(n):
-            NN.append(n.assign(match=mid, won=[want[(mid, int(r))][1] for r in n["round"]]))
-    N = pd.concat(NN, ignore_index=True) if NN else pd.DataFrame()
+        n = n[n.land_X.notna()]
+        nt = n[n.side == "T"]
+        if len(nt):
+            hit = [want.get((mid, int(r))) for r in nt["round"]]
+            nt = nt[[w is not None and tt <= w[0] + 2 for w, tt in zip(hit, nt.t)]]
+            if len(nt):
+                NN.append(nt.assign(match=mid, won=[want[(mid, int(r))][1] for r in nt["round"]]))
+        nc = n[(n.side == "CT") & (n.t <= 45)]
+        if len(nc):
+            CC.append(nc.assign(match=mid, won=[not won_of.get((mid, int(r)), True) for r in nc["round"]]))
+        fd = os.path.join(d, "duels.parquet")
+        rr = {r for (m, r) in rush_r if m == mid}
+        if rr and os.path.exists(fd):
+            try:
+                k = pd.read_parquet(fd, columns=["round", "t", "killer_side", "victim_side", "weapon", "killer_px", "killer_py", "killer_level", "killer_zone"])
+            except Exception:
+                k = pd.DataFrame()
+            if len(k):
+                k = k[(k.killer_side == "CT") & (k.victim_side == "T") & k["round"].isin(list(rr))]
+                k = k[[tt <= rush_r[(mid, int(r))][0] + 12 for r, tt in zip(k["round"], k.t)]]
+                if len(k):
+                    KK.append(k.assign(match=mid, site=[rush_r[(mid, int(r))][1] for r in k["round"]],
+                                       won=[not won_of.get((mid, int(r)), True) for r in k["round"]]))
+
+    def nades_frame(L):
+        x = pd.concat(L, ignore_index=True) if L else pd.DataFrame()
+        if len(x):
+            x["type"] = x["type"].replace({"incendiary": "molotov"})
+            x = x[x["type"].isin(["smoke", "flash", "molotov", "he"])].copy()
+            x["zone_h"] = [hum(z, mp) for z in x.zone]
+            x["land_zone_h"] = [hum(z, mp) for z in x.land_zone]
+        return x
+    N, C = nades_frame(NN), nades_frame(CC)
     if len(N):
-        N["type"] = N["type"].replace({"incendiary": "molotov"})
-        N = N[N["type"].isin(["smoke", "flash", "molotov", "he"])]
-        N["zone_h"] = [hum(z, mp) for z in N.zone]
-        N["land_zone_h"] = [hum(z, mp) for z in N.land_zone]
         N["key"] = [keys.get((m, int(r))) for m, r in zip(N.match, N["round"])]
     G = {x["id"]: x for x in gates}
     out_dirs = []
@@ -400,6 +425,54 @@ def analyze_map(mp, dirs, log=print):
         then = Counter(keys.get((m, int(r)), "none") for m, r in zip(mc.match, mc["round"]))
         res["mid"] = {"n": int(len(mc)), "win": round(100 * float(mc.T_won.mean())),
                       "then": {k: v for k, v in then.most_common(6)}}
+    # CT side (06/10, "Wily contre rush B 5 stack", "Wily fake défense A"): against the Ts' rushes of each site (three
+    # Ts or more on it in the first 30 s), how often the CTs hold, the grenades they throw before the hit, the spots
+    # they kill from and with what; and the CTs' grenades onto each site's ways in (to show a site you don't hold)
+    K = pd.concat(KK, ignore_index=True) if KK else pd.DataFrame()
+    res["defense"], res["ct_util"] = {}, {}
+    for site in ("A", "B"):
+        R = [(m, r) for (m, r), (t, st) in rush_r.items() if st == site]
+        if len(R) >= 20:
+            rr = pd.DataFrame(R, columns=["match", "round"])
+            rr["won"] = [not won_of.get(x, True) for x in R]
+            Rs = set(R)
+            gs = [x for x in gates if x["site"] == site]
+            Cs = C[[(m, int(r)) in Rs and tt <= rush_r[(m, int(r))][0] + 3 for m, r, tt in zip(C.match, C["round"], C.t)]] if len(C) else C
+            if len(Cs) and gs:   # onto the rushed site's ways in only
+                near = np.zeros(len(Cs), dtype=bool)
+                for x in gs:
+                    near |= np.hypot(Cs.land_px.to_numpy(float) - x["px"][0], Cs.land_py.to_numpy(float) - x["px"][1]) < 70
+                Cs = Cs[near]
+            base = float(rr.won.mean())
+            util = _lineups(Cs, rr, min_n=4) if len(Cs) else []
+            for u in util:   # what holds the rush: rounds held when it's thrown, pulled toward the usual when few
+                u["edge"] = round((u["win"] / 100 * u["n"] + 10 * base) / (u["n"] + 10) * 100 - 100 * base)
+            util.sort(key=lambda u: -(u["edge"] + 0.02 * u["n"]))
+            spots, weapons = [], []
+            Ks = K[K.site == site] if len(K) else K
+            if len(Ks):   # the pistol rounds apart: their weapons say nothing of a bought round
+                Ks = Ks[[ct_buy.get((m, int(r))) != "pistol" for m, r in zip(Ks.match, Ks["round"])]]
+            if len(Ks):
+                cell = Ks.assign(cx=(Ks.killer_px // 26).astype(int), cy=(Ks.killer_py // 26).astype(int))
+                for (cx, cy, lv), x in cell.groupby(["cx", "cy", "killer_level"]):
+                    if len(x) >= 4:
+                        spots.append({"px": [round(float(x.killer_px.median())), round(float(x.killer_py.median()))], "level": lv,
+                                      "kills": int(len(x)),
+                                      "zone": hum(Counter(x.killer_zone.dropna()).most_common(1)[0][0], mp) if x.killer_zone.notna().any() else None,
+                                      "weapon": Counter(x.weapon.dropna()).most_common(1)[0][0] if x.weapon.notna().any() else None})
+                spots = sorted(spots, key=lambda q: -q["kills"])[:6]
+                wc = Counter(Ks.weapon.dropna())
+                tot = sum(wc.values())
+                weapons = [{"w": w, "share": round(100 * c / tot)} for w, c in wc.most_common(6)] if tot else []
+            res["defense"][site] = {"n": len(R), "ct_win": round(100 * float(rr.won.mean())), "util": util, "spots": spots, "weapons": weapons}
+        gs = [x for x in gates if x["site"] == site]
+        if len(C) and gs:
+            near = np.zeros(len(C), dtype=bool)
+            for x in gs:
+                near |= np.hypot(C.land_px.to_numpy(float) - x["px"][0], C.land_py.to_numpy(float) - x["px"][1]) < 70
+            Cw = C[near]
+            if len(Cw):
+                res["ct_util"][site] = _lineups(Cw, Cw.drop_duplicates(["match", "round"]), min_n=6)
     log(f"{mp}: {len(out_dirs)} ways in, {len(gates)} doorways, {len(h)} hits ({time.time() - t0:.0f} s)")
     return res
 

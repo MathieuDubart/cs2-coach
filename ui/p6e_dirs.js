@@ -16,11 +16,11 @@ const DIR_EN={A:"A",MID:"MID",B:"B"};
 const lgt=p=>Math.log(p/(1-p)),sgm=x=>1/(1+Math.exp(-x)),clp=p=>Math.min(.97,Math.max(.03,p));
 const shrinkTo=(nw,p0,k)=>nw&&nw[0]?(nw[1]+k*p0)/(nw[0]+k):p0;   // few rounds: closer to the way's own mean
 // your buy this round in the base's words (the T table: pistol, eco, force, full)
-function myBuyKey(g){if(g.round===halfStart(g.round))return "pistol";const rt=advisedType(g);return rt==="anti-eco"?"full":rt||"full"}
+function myBuyKey(g){const wb=typeof wilyBuy==="function"?wilyBuy(g):null;if(wb)return wb;if(g.round===halfStart(g.round))return "pistol";const rt=advisedType(g);return rt==="anti-eco"?"full":rt||"full"}
 // a way's chance this round: its rounds won, moved by the two buys (theirs: the likely ones, weighted) and by the tempo
 function dirOdds(p,g,d,tempo){const p0=clp(d.win/100),tb=myBuyKey(g);let pE=p0;
   if(tb==="pistol")pE=shrinkTo((d.econ||{})["pistol|pistol"],p0,15);
-  else{const eb=enemyBuy(p,g)||{},W=[["eco",eb.eco||0],["force",eb.force||0],["full",eb.full||0]].filter(x=>x[1]>0),s=W.reduce((a,x)=>a+x[1],0);
+  else{const eb=(typeof enemyBuyW==="function"?enemyBuyW(p,g):enemyBuy(p,g))||{},W=[["eco",eb.eco||0],["force",eb.force||0],["full",eb.full||0]].filter(x=>x[1]>0),s=W.reduce((a,x)=>a+x[1],0);
     if(s)pE=W.reduce((a,[b,w])=>a+w*shrinkTo((d.econ||{})[`${tb}|${b}`],p0,15),0)/s}
   const pT=tempo?shrinkTo((d.tempo||{})[tempo],p0,15):p0,sh=(lgt(clp(pE))-lgt(p0))+(lgt(clp(pT))-lgt(p0));
   return {wr:Math.round(100*sgm(lgt(p0)+sh)),shift:sh,n:tempo&&(d.tempo||{})[tempo]?d.tempo[tempo][0]:d.n}}
@@ -55,12 +55,12 @@ function vDirUtil(p,g,r,max){const U=(r.util||[]).filter(u=>u.share>=3);if(!U.le
   const stacks=[...by.values()].sort((a,b)=>b.length-a.length||b[0].n-a[0].n).slice(0,max||3);
   return `<div class="vhead">STUFF · ${esc(r.label)}</div><div class="vstacks">${stacks.map(st=>`<div class="vstack"><span class="from">${esc(vShort(st[0].from||"?"))}${st.length>1?` <small>×${st.length}</small>`:""}</span>${st.slice(0,3).sort((a,b)=>a.t_med-b.t_med).map(u=>`<span class="vnd"><i style="background:${NADE_C[u.type]||"#ccc"}">${NADE_L[u.type]||"?"}</i>${esc(vShort(u.to||"?"))}${HOW_S(u.how)?`<small>${esc(HOW_S(u.how))}</small>`:""}</span>`).join("")}</div>`).join("")}</div>`}
 // the panel's way card: the plan picked (or Wily's pick), the ways with their odds this round, then the timeline and the stuff of the top one
-function vDir(p,g){if(g.side!=="T"||isHostage(g.map))return "";const TD=tdirsOf(g.map),R=dirRank(p,g,TD);if(!R||!R.rows.length)return "";
+function vDir(p,g,opt){if(g.side!=="T"||isHostage(g.map))return "";const more=opt&&opt.stuff;const TD=tdirsOf(g.map),R=dirRank(p,g,TD);if(!R||!R.rows.length)return "";
   const sel=R.sel,top=R.rows[0],dead=typeof deadAgo==="function"&&deadAgo(g)!=null;
   const head=sel.dir?`<b>${DIR_EN[sel.dir]}</b>${sel.tempo?` · ${TEMPO_EN[sel.tempo]}`:""}`:sel.tempo?`<b>${TEMPO_EN[sel.tempo]}</b> · pick a way: 1&nbsp;A · 2&nbsp;mid · 3&nbsp;B`:`<b>WILY'S PICK</b> · 1&nbsp;A · 2&nbsp;mid · 3&nbsp;B · 4&nbsp;rush · 5&nbsp;slow · 6&nbsp;control`;
   const mx=Math.max(...R.rows.map(r=>r.wr),1);
   return `<div class="vdir"><div class="vdir-h">${head}</div><div class="vrows">${R.rows.map((r,i)=>`<div class="vrow" style="--c:${r.col}${i?`;opacity:${[1,.82,.68][i]}`:""}"><span>${i===0?"★ ":""}${esc(r.label)}</span><i><u style="width:${Math.max(4,Math.round(100*r.wr/mx))}%"></u></i><b>${r.wr}%</b></div>`).join("")}</div>
-    ${dead?"":vDirCurve(p,g,top)}${dead||g.round_phase==="live"&&(g.elapsed||0)>(sel.tempo==="slow"||sel.tempo==="control"?95:Math.max(50,(top.hit_med||35)+15))?"":vDirUtil(p,g,top,g.round_phase==="live"?2:3)}</div>`}   // the stuff stays until the way's usual hit (a slow round: until 0:20)
+    ${dead?"":vDirCurve(p,g,top)}${dead||!more&&g.round_phase==="live"&&(g.elapsed||0)>(sel.tempo==="slow"||sel.tempo==="control"?95:Math.max(50,(top.hit_med||35)+15))?"":vDirUtil(p,g,top,more||(g.round_phase==="live"?2:3))}</div>`}   // the stuff stays until the way's usual hit (a slow round: until 0:20)
 // the team chat lines of numpad 1-6 for this round (T): the best way onto A, mid, B for the tempo picked, the tempo with the way picked
 function dirTexts(p,g){const TD=tdirsOf(g.map);if(!TD||g.side!=="T"||isHostage(g.map))return null;const sel=tdirSel(g);
   const best=f=>{const ds=TD.dirs.filter(d=>d.n>=25&&f(d)).map(d=>({...d,wr:dirOdds(p,g,d,sel.tempo).wr})).sort((a,b)=>b.wr-a.wr);return ds[0]||null};

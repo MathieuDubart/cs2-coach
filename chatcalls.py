@@ -200,6 +200,8 @@ def watch():
                     elif m and m.group(4):   # numpad 4-5-6: the tempo
                         gsi.set_tdir(TEMPO_STATE[m.group(4)])
                     elif m and m.group(1):   # numpad 1-2-3: the way (A, mid, B); hostage maps keep their routes 1-2-3
+                        if gsi.wily_answer(WAYS[int(m.group(1))]):   # Wily asked "from A or B?": the key answers
+                            continue
                         gsi.set_focus(int(m.group(1)))
                         gsi.set_tdir(WAYS[int(m.group(1))])
                     elif m:   # numpad minus: no focus, no plan

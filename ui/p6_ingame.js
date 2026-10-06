@@ -355,12 +355,13 @@ function liveBar(){if(!D.local)return "";const g=gsiLast,focus=document.body.cla
   return `<div class="live"><span class="dot" aria-hidden="true"></span>${st&&st.installed?"<span>I'm ready. Launch your match: I'll follow it from here.</span>"
     :`<span>Pick your map and side, or <a href="#settings" style="color:var(--ct)">turn on game detection</a> and I'll follow your match by myself.</span>`}<span class="sp">${micBtn()}${fb}</span></div>`}
 async function gsiPoll(){clearTimeout(gsiTimer);if(!D.local||S.view!=="ingame")return;
-  try{const g=await (await fetch("/api/gsi/state")).json();const sig=x=>x?[x.map,x.side,x.round,x.round_phase,x.money,x.bomb,x.age!=null&&x.age<75,JSON.stringify(x.hist||{}),JSON.stringify(x.nades||{}),x.health===0,x.elapsed==null?"":Math.floor(x.elapsed/5),x.pos?x.pos.map(c=>Math.round(c/100)).join(","):"",x.call?x.call.t:"",x.tdir?[x.tdir.round,x.tdir.dir,x.tdir.tempo].join(","):"",x.ping?x.ping.t:""].join("|"):"";
+  try{const g=await (await fetch("/api/gsi/state")).json();const sig=x=>x?[x.map,x.side,x.round,x.round_phase,x.money,x.bomb,x.age!=null&&x.age<75,JSON.stringify(x.hist||{}),JSON.stringify(x.nades||{}),x.health===0,x.elapsed==null?"":Math.floor(x.elapsed/5),x.pos?x.pos.map(c=>Math.round(c/100)).join(","):"",x.call?x.call.t:"",x.tdir?[x.tdir.round,x.tdir.dir,x.tdir.tempo].join(","):"",x.ping?x.ping.t:"",x.wily?x.wily.t:"",JSON.stringify(x.wily_match||{})].join("|"):"";
     const before=sig(gsiLast)+(gsiLast&&gsiLast.mic);gsiLast=g&&Object.keys(g).length?g:null;
     if(gsiLast&&S.player&&D.players[S.player]&&typeof liveLog==="function")liveLog(D.players[S.player],gsiLast);   // checked after the match
     if(gsiLast&&S.player===D.own&&D.players[S.player]&&typeof pathCalls==="function")pathCalls(D.players[S.player],gsiLast);   // numpad 1-2-3
     if(gsiLast&&S.player===D.own&&D.players[S.player]&&typeof coachVoice==="function")coachVoice(D.players[S.player],gsiLast);   // the coach's voice at the buy time
     if(gsiLast&&S.player===D.own&&typeof coachInfo==="function")coachInfo(gsiLast);   // "l'info !" when you die
+    if(gsiLast&&S.player===D.own&&typeof wilyVoice==="function")wilyVoice(gsiLast);   // Wily answers what you asked it (06/10)
     if(sig(gsiLast)+(gsiLast&&gsiLast.mic)!==before&&S.view==="ingame"&&S.player&&D.players[S.player])renderIngame()}catch(e){}
   gsiTimer=setTimeout(gsiPoll,1000)}   // the game sends every 0.25 s
 

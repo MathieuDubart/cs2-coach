@@ -355,22 +355,26 @@ function nowVisual(p,g,following){
   if(g.map_phase==="warmup"&&typeof briefVisual==="function")return briefVisual(p,g);   // the map loads: the 60-second brief
   const ph=g.round_phase,ct=g.side==="CT",P={},put=(s,...h)=>{(P[s]=P[s]||[]).push(...h)};
   const TS=(p.advice.plan||{}).tside,r=ct?tsidePredict(TS,g.map,g,evFor(g)):null;
+  put("call",vWily(g));   // what Wily understood (06/10)
+  const WF=vWilyFocus(p,g);   // the order's card (stuff, fake, post-plant, cover, counter, fake defense, retake): the round's main card
   if(ph==="freezetime"){put("reset",vReset(p,g));put("key",vKey(p,g));
     if(voiceOn()&&navigator.userActivation&&!navigator.userActivation.hasBeenActive)put("call",`<span class="vchip">🔊 click this page once so I can talk</span>`);
     if(typeof antiEco==="function"&&antiEco(p,g))put("eco",`<span class="vchip bad">! eco kill spots on the map: clear them, no close duel</span>`);
-    if(ct)put("focus",vMySite(p,g));
+    if(ct)put("focus",WF||vMySite(p,g));
     put("peek",vPeekTimes(g,null));
     if(ct&&r){put("read",vOdds(r));put("play",vRush(TS,g,r)||vEntries(TS,g,r));put("hold",vCTline(p,g,r)||vHold(p,g,r));put("book",vBook(p,g,r))}
     const HM=isHostage(g.map);if(HM)put("focus",ct?(vFocus(p,g)||vHostRoutes(p,g,false)):vHostRoutes(p,g,true));
-    if(!ct&&!HM&&!tdirsLoading(g.map)){put("focus",vDir(p,g)||vFocus(p,g)||vPathCurve(p,g)||vTimeline(p,g));put("book",vBook(p,g,null));put("early",vEarlyMatch(g));
+    if(!ct&&!HM&&!tdirsLoading(g.map)){put("focus",WF||vDir(p,g)||vFocus(p,g)||vPathCurve(p,g)||vTimeline(p,g));put("book",vBook(p,g,null));put("early",vEarlyMatch(g));
       if(!tdirsOf(g.map)){put("play",vPush(p,g));put("hold",vPushAns(p,g,false));put("tchips",vTchips(p,g))}}}   // the ways' grenades in the card; the CT pushes on the map only (06/10)
   else if(ph==="live"){const el=g.elapsed||0,planted=g.bomb==="planted",dead=deadAgo(g)!=null;put("call",vCall(g));   // dead (05/10): what helps to call stays, your own path and spot go
     put("info",vInfo(g)||(dead&&!planted?`<div class="vsit dead"><span>YOU'RE OUT</span><b>call what your teammate can't see</b></div>`:""));
     if(planted){const left=g.phase_left!=null?g.phase_left:Math.max(0,40-(g.since_plant||0)),as=typeof autoSite==="function"?autoSite(p,g):null;
       put("alert",`<div class="vbig ${ct?"bad":"good"}"><b>💣 ${Math.ceil(left)}s</b><span>${ct?"retake together":"hold the bomb"}${as?` · ${as.site} site, ${as.said?"you said it":`${as.p}% sure`}`:" · numpad 7 A / 9 B"}</span></div>`);
-      if(as&&(as.said||as.p>=70))put("focus",ct?vRetake(p,g,as.site):vPostPlant(p,g,as.site))}
+      if(WF)put("focus",WF);else if(as&&(as.said||as.p>=70))put("focus",ct?vRetake(p,g,as.site):vPostPlant(p,g,as.site))}
     else if(isHostage(g.map))put("focus",ct?(vFocus(p,g)||(el<45?vHostRoutes(p,g,false):"")):(el<45?vHostRoutes(p,g,true):""));
-    else if(ct){if(!dead)put("focus",vMySite(p,g));put("peek",vPeekTimes(g,el));if(r){put("read",vOdds(r));
+    else if(ct){if(!dead)put("focus",WF||vMySite(p,g));
+      const WM=g.wily_match||{};if(WM.fake||WM.rush||WM.slow)put("evid",`<span class="vchip warn">🎙 they ${[WM.fake?"fake":"",WM.rush?"rush":"",WM.slow?"play slow":""].filter(Boolean).join(", ")} · you said</span>`);
+      if(g.call&&g.call.round===g.round&&g.call.nobomb&&g.call.site)put("alert",`<div class="vbig warn"><b>${g.call.n||""} ${esc(g.call.site)} · NO BOMB</b><span>likely a fake: hold ${g.call.site==="A"?"B":"A"}, don't rotate yet</span></div>`);put("peek",vPeekTimes(g,el));if(r){put("read",vOdds(r));
         const M=TS&&TS.maps&&TS.maps[g.map];
         put("play",(el<32?vRush(TS,g,r):"")||vFights(M,g,r));
         if(el>=15&&el<=80&&Math.max(r.A,r.B)>=70&&typeof rotationFor==="function"){const X=r.A>r.B?"A":"B",o=X==="A"?"B":"A",R=rotationFor(M,X,`${o} Site`,M.geo),rt=R&&R.routes&&R.routes[0];
@@ -378,7 +382,7 @@ function nowVisual(p,g,following){
           if(rt&&me!==X)put("alert",`<div class="vbig warn"><b>${o} → ${X}</b><span>${me===o?`you're ${o}: rotate now`:`if you hold ${o}: rotate`} · ${rt.travel!=null?`${Math.round(rt.travel)} s · `:""}${rt.died}% die on the way</span></div>`)}   // the hit leans hard to one site
         if(el<75&&!dead)put("hold",vCTline(p,g,r)||(el<60?vHold(p,g,r):""));
         (r.evid||[]).filter(x=>/spot/.test(x)).slice(0,2).forEach(ev=>put("evid",`<span class="vchip ${/fight/.test(ev)?"bad":""}">● ${esc(ev)}</span>`))}}
-    else{const TDm=tdirsOf(g.map)||tdirsLoading(g.map);put("read",vOpen(g));put("peek",vPeekTimes(g,el));if(!dead&&!tdirsLoading(g.map))put("focus",vDir(p,g)||vFocus(p,g)||vPathCurve(p,g)||vTimeline(p,g));
+    else{const TDm=tdirsOf(g.map)||tdirsLoading(g.map);put("read",vOpen(g));put("peek",vPeekTimes(g,el));if(!dead&&!tdirsLoading(g.map))put("focus",WF||vDir(p,g)||vFocus(p,g)||vPathCurve(p,g)||vTimeline(p,g));
       put("play",(el<45&&!dead&&!TDm&&vPush(p,g))||vFights(TS&&TS.maps&&TS.maps[g.map],g,null));if(!dead&&!TDm)put("hold",el<50?vPushAns(p,g,true):"");
       const left=g.phase_left!=null?g.phase_left:Math.max(0,RLEN()-el);
       if(left<=45)put("alert",`<div class="vbig bad"><b>PLANT ${Math.floor(left/60)}:${String(Math.floor(left%60)).padStart(2,"0")}</b><span>${left>20?"commit now":"plant or save"}</span></div>`);
@@ -404,7 +408,8 @@ function buyVisual(p,g){if(g.money==null||!g.side||g.practice)return "";const rt
   const haveRifle=g.primary&&FULL_W.has(g.primary),tags=[];
   const plan=typeof econPlan==="function"?econPlan(p,g):null,bk=plan&&plan.best?plan.best.k:null;
   const ae=typeof antiEco==="function"&&antiEco(p,g);
-  const RT=ae&&bk!=="eco"?"ANTI-ECO":(bk?{eco:"ECO · SAVE",half:"HALF BUY",force:"FORCE",full:"FULL BUY"}[bk]:{pistol:"PISTOL",eco:"ECO · SAVE",force:"FORCE",full:"FULL BUY"}[rt])||"BUY";
+  const wb=typeof wilyBuy==="function"?wilyBuy(g):null;
+  const RT=wb?({force:"FORCE",eco:"ECO · SAVE",full:"FULL BUY",pistol:"PISTOL"}[wb]+" 🎙"):ae&&bk!=="eco"?"ANTI-ECO":(bk?{eco:"ECO · SAVE",half:"HALF BUY",force:"FORCE",full:"FULL BUY"}[bk]:{pistol:"PISTOL",eco:"ECO · SAVE",force:"FORCE",full:"FULL BUY"}[rt])||"BUY";
   // a key round: the card's weapon (the same as the key-round card of the panel), never another one
   const ks=typeof keySit==="function"?keySit(p,g):null,kw=ks?keyWeapons(p,g,ks):null,kp=kw&&kw.list.find(w=>!DEF_PISTOL.has(w.w)&&(W_PRICE[w.w]??99999)<=(ks==="force_full"?g.money:kw.budget));
   if(ks==="pistol"){const top=kw&&kw.list[0];tags.push(top&&!DEF_PISTOL.has(top.w)?`<span class="vtag">🔑 ${esc(W_SHORT[top.w]||top.w.toUpperCase())}</span>`:`<span class="vtag">kevlar</span>`)}
@@ -421,7 +426,7 @@ function buyVisual(p,g){if(g.money==null||!g.side||g.practice)return "";const rt
   const next=(rt==="eco"?g.money:left)+bonus,okNext=next>=full;
   const T_=g.side==="T",spot=!T_&&kit.zone?`<span class="vchip">📍 ${vShort(kit.zone.key)}</span>`:"",avoid=!T_&&kit.avoid?`<span class="vchip bad">✕ ${vShort(kit.avoid.key)}</span>`:"";
   const awp=sk&&sk.endsWith("anti_eco")?`<span class="vchip bad">✕ AWP</span>`:"";
-  const tc=typeof theirCash==="function"?theirCash(g):null,eb=enemyBuy(p,g)||{},ebk=["full","force","eco"].filter(k=>(eb[k]||0)>=.5)[0]||(tc&&tc.buy);
+  const tc=typeof theirCash==="function"?theirCash(g):null,eb=(typeof enemyBuyW==="function"?enemyBuyW(p,g):enemyBuy(p,g))||{},ebk=["full","force","eco"].filter(k=>(eb[k]||0)>=.5)[0]||(tc&&tc.buy);
   const them=tc?`<div class="vthem"><span>THEM</span><b>~${money(tc.cash)}</b>${ebk&&ebk!=="pistol"?`<em class="${ebk==="full"?"bad":ebk==="eco"?"good":"warn"}">${{full:"FULL BUY",force:"FORCE",eco:"ECO"}[ebk]}</em>`:""}</div>`:"";
   return `<div class="vbuy"><div class="vbuy-h"><b>${RT}</b><span>${money(g.money)}</span></div>
     ${them}${tags.length?`<div class="vtags">${tags.join("")}</div>`:""}${nd}${spot||avoid||awp?`<div class="vchips">${spot}${avoid}${awp}</div>`:""}</div>`}
