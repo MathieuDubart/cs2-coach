@@ -254,6 +254,7 @@ function liveLog(p,g){if(!D.local||!g||!g.map||g.round==null||g.practice||!g.sid
   try{
     if(g.side==="CT"&&b!=="plant"){const r=tsidePredict(TS,g.map,g,evFor(g));if(r){const PLs=r.live?tsidePlays(TS,g.map,g,evFor(g),r):null;const R0=r.raw||r;body.read={A:R0.A,B:R0.B,none:R0.none,rush:PLs?Math.round(100*PLs.rush):R0.rush}}}
     if(g.side==="T"&&b==="fz"){const W=winsRank(p,g);if(W)body.paths=W.rows.slice(0,3).map(x=>({k:x.k,wr:x.wr0??x.wr}))}
+    if(g.side==="T"&&typeof dirRank==="function"&&tdirsOf(g.map)){const DR=dirRank(p,g,tdirsOf(g.map));if(DR){body.dirs=DR.rows.map(x=>({k:x.k,wr:x.wr}));if(DR.sel.dir||DR.sel.tempo)body.sel={dir:DR.sel.dir,tempo:DR.sel.tempo}}}   // 06/10: the ways shown
     if(b==="fz"){const pl=econPlan(p,g);body.buy=pl&&pl.best?pl.best.k:advisedType(g);body.key=keySit(p,g)}
     if(b==="plant"){const as=autoSite(p,g);if(as){body.site=as.site;if(!as.said)body.p_site=as.p0??as.p}}
   }catch(e){}
@@ -294,9 +295,11 @@ function pathCalls(p,g){if(!D.local||!g||!g.map||g.round==null||g.practice)retur
     const W=isHostage(g.map)?null:winsRank(p,g),L=(((((p.advice.plan||{}).tside||{}).maps||{})[g.map]||{}).plays||{}).label||{};
     if(W)paths=W.rows.slice(0,3).map(r=>{const ps=pathShort(p,g,r),pts=(r.route||{}).pts,end=pts&&pts[pts.length-1],os_=onSite(r.timing,end);
       return {rank:r.rank,site:ps.site,text:`${ps.head}${ps.via?` via ${ps.via}`:""}${os_?` - ${os_}`:""}`}})}
+  const DT=!isHostage(g.map)&&g.side===attackSide(g.map)&&typeof dirTexts==="function"?dirTexts(p,g):null,tempo=DT?DT.tempo:{};
+  if(DT)paths=DT.paths;   // 06/10: numpad 1-2-3 = A / mid / B (the best way onto each this round), 4-5-6 = the tempo
   const extra=g.map_phase!=="warmup"&&(g.round_phase==="freezetime"||g.round_phase==="live")?{eco:ecoText(p,g),sit:sitText(p,g)}:{};
-  const key=JSON.stringify([g.map,g.round,g.side,paths.map(x=>x.text),extra]);if(CALL_SENT.k===key)return;CALL_SENT.k=key;
-  fetch("/api/coach/paths",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({paths,extra})}).catch(()=>{})}
+  const key=JSON.stringify([g.map,g.round,g.side,paths.map(x=>x.text),extra,tempo]);if(CALL_SENT.k===key)return;CALL_SENT.k=key;
+  fetch("/api/coach/paths",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({paths,extra,tempo})}).catch(()=>{})}
 // numpad ".": the economy plan of the round for the team chat (the buy that wins most over the next rounds, their buy)
 function ecoText(p,g){if(!g.side||g.round==null)return null;if(g.round===halfStart(g.round))return "Pistol round";
   const pl=typeof econPlan==="function"?econPlan(p,g):null,k=pl&&pl.best?pl.best.k:advisedType(g),eb=enemyBuy(p,g)||{},ae=typeof antiEco==="function"&&antiEco(p,g);

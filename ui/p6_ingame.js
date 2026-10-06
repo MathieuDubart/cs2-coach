@@ -355,7 +355,7 @@ function liveBar(){if(!D.local)return "";const g=gsiLast,focus=document.body.cla
   return `<div class="live"><span class="dot" aria-hidden="true"></span>${st&&st.installed?"<span>I'm ready. Launch your match: I'll follow it from here.</span>"
     :`<span>Pick your map and side, or <a href="#settings" style="color:var(--ct)">turn on game detection</a> and I'll follow your match by myself.</span>`}<span class="sp">${micBtn()}${fb}</span></div>`}
 async function gsiPoll(){clearTimeout(gsiTimer);if(!D.local||S.view!=="ingame")return;
-  try{const g=await (await fetch("/api/gsi/state")).json();const sig=x=>x?[x.map,x.side,x.round,x.round_phase,x.money,x.bomb,x.age!=null&&x.age<75,JSON.stringify(x.hist||{}),JSON.stringify(x.nades||{}),x.health===0,x.elapsed==null?"":Math.floor(x.elapsed/5),x.pos?x.pos.map(c=>Math.round(c/100)).join(","):"",x.call?x.call.t:""].join("|"):"";
+  try{const g=await (await fetch("/api/gsi/state")).json();const sig=x=>x?[x.map,x.side,x.round,x.round_phase,x.money,x.bomb,x.age!=null&&x.age<75,JSON.stringify(x.hist||{}),JSON.stringify(x.nades||{}),x.health===0,x.elapsed==null?"":Math.floor(x.elapsed/5),x.pos?x.pos.map(c=>Math.round(c/100)).join(","):"",x.call?x.call.t:"",x.tdir?[x.tdir.round,x.tdir.dir,x.tdir.tempo].join(","):"",x.ping?x.ping.t:""].join("|"):"";
     const before=sig(gsiLast)+(gsiLast&&gsiLast.mic);gsiLast=g&&Object.keys(g).length?g:null;
     if(gsiLast&&S.player&&D.players[S.player]&&typeof liveLog==="function")liveLog(D.players[S.player],gsiLast);   // checked after the match
     if(gsiLast&&S.player===D.own&&D.players[S.player]&&typeof pathCalls==="function")pathCalls(D.players[S.player],gsiLast);   // numpad 1-2-3
@@ -490,13 +490,13 @@ function nowPanel(p,g,following,opt){const noBuy=opt&&opt.noBuy;
      ${M?`<span class="mini">Ts on ${MAPN(S.map)}: pistol round A ${(M.ctx.pistol||M.all).A}% / B ${(M.ctx.pistol||M.all).B}%, full buys A ${(M.ctx.full||M.all).A}% / B ${(M.ctx.full||M.all).B}%. More in the "T habits" tab.</span>`:""}</div>`}
   const ph=g.round_phase,ct=g.side==="CT",ev=evFor(g),out=[];
   if(g.practice)return `<div class="now-empty"><b>Practice server</b><span class="mini">More money or a longer round than a real match allows: the live advice (buys, T read) and the automatic recording are off here. The radar, your positions and grenades still work: pick them below.</span></div>`;
-  if(ph==="freezetime"){if(!noBuy)out.push(buyCard(p,g));if(ct&&(g.round===1||g.round===13))out.push(pistolCT(p,g));out.push(situationCard(p,g));if(ct)out.push(tsideLive(p,g));else out.push(tPlanLive(p,g))}
+  if(ph==="freezetime"){if(!noBuy)out.push(buyCard(p,g));if(ct&&(g.round===1||g.round===13))out.push(pistolCT(p,g));out.push(situationCard(p,g));if(ct)out.push(tsideLive(p,g));else out.push(vDir(p,g)||tPlanLive(p,g))}
   else if(ph==="live"){
     if(g.bomb==="planted"){const site=ev.site||((typeof autoSite==="function"&&autoSite(p,g))||{}).site||null;
       if(site)out.push(retakeCard(p,g,site));
       else out.push(`<div class="tread" style="border-left-color:var(--bad)"><h3><span>Bomb planted</span></h3><div class="ev" role="group" aria-label="Site"><span class="l">On</span>${["A","B"].map(s=>`<button type="button" class="site-${s}" data-evsite="${s}" aria-pressed="false">${s} site</button>`).join("")}</div><p class="mini">Pick the site: plant spots, ${ct?"retake":"post-plant"} odds and danger zones show up.</p></div>`);
       out.push(nadeLive(p,g))}
-    else{if(ct)out.push(tsideLive(p,g));else{out.push(tPlanLive(p,g));const TS=(p.advice.plan||{}).tside,M=TS&&TS.maps&&TS.maps[g.map];if(M)out.push(`<div class="tread" style="border-left-color:var(--t)"><h3><span>Round ${g.round}</span><small>${g.elapsed!=null?clock(g.elapsed):""}</small></h3>${dangerNow(M.evidence,"T",null,g.elapsed)||'<p class="mini">Play your role; the danger zones show up when there is enough data.</p>'}</div>`)}
+    else{if(ct)out.push(tsideLive(p,g));else{out.push(vDir(p,g)||tPlanLive(p,g));const TS=(p.advice.plan||{}).tside,M=TS&&TS.maps&&TS.maps[g.map];if(M)out.push(`<div class="tread" style="border-left-color:var(--t)"><h3><span>Round ${g.round}</span><small>${g.elapsed!=null?clock(g.elapsed):""}</small></h3>${dangerNow(M.evidence,"T",null,g.elapsed)||'<p class="mini">Play your role; the danger zones show up when there is enough data.</p>'}</div>`)}
       out.push(nadeLive(p,g))}}
   else if(ph==="over"&&ct)out.push(tsideLive(p,g));
   return out.filter(Boolean).join("")||`<div class="now-empty"><b>Round ${g.round}</b><span class="mini">${ph==="over"?"5 s: why did this round go that way? Then one long exhale.":"Nothing to flag right now."}</span></div>`}

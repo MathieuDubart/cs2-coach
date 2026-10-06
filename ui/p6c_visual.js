@@ -362,8 +362,8 @@ function nowVisual(p,g,following){
     put("peek",vPeekTimes(g,null));
     if(ct&&r){put("read",vOdds(r));put("play",vRush(TS,g,r)||vEntries(TS,g,r));put("hold",vCTline(p,g,r)||vHold(p,g,r));put("book",vBook(p,g,r))}
     const HM=isHostage(g.map);if(HM)put("focus",ct?(vFocus(p,g)||vHostRoutes(p,g,false)):vHostRoutes(p,g,true));
-    if(!ct&&!HM){put("focus",vFocus(p,g)||vPathCurve(p,g)||vTimeline(p,g));put("book",vBook(p,g,null));put("early",vEarlyMatch(g));
-      put("play",vPush(p,g));put("hold",vPushAns(p,g,false));put("tchips",vTchips(p,g))}}   // the plays and the grenades are on the map
+    if(!ct&&!HM&&!tdirsLoading(g.map)){put("focus",vDir(p,g)||vFocus(p,g)||vPathCurve(p,g)||vTimeline(p,g));put("book",vBook(p,g,null));put("early",vEarlyMatch(g));
+      if(!tdirsOf(g.map)){put("play",vPush(p,g));put("hold",vPushAns(p,g,false));put("tchips",vTchips(p,g))}}}   // the ways' grenades in the card; the CT pushes on the map only (06/10)
   else if(ph==="live"){const el=g.elapsed||0,planted=g.bomb==="planted",dead=deadAgo(g)!=null;put("call",vCall(g));   // dead (05/10): what helps to call stays, your own path and spot go
     put("info",vInfo(g)||(dead&&!planted?`<div class="vsit dead"><span>YOU'RE OUT</span><b>call what your teammate can't see</b></div>`:""));
     if(planted){const left=g.phase_left!=null?g.phase_left:Math.max(0,40-(g.since_plant||0)),as=typeof autoSite==="function"?autoSite(p,g):null;
@@ -378,11 +378,11 @@ function nowVisual(p,g,following){
           if(rt&&me!==X)put("alert",`<div class="vbig warn"><b>${o} → ${X}</b><span>${me===o?`you're ${o}: rotate now`:`if you hold ${o}: rotate`} · ${rt.travel!=null?`${Math.round(rt.travel)} s · `:""}${rt.died}% die on the way</span></div>`)}   // the hit leans hard to one site
         if(el<75&&!dead)put("hold",vCTline(p,g,r)||(el<60?vHold(p,g,r):""));
         (r.evid||[]).filter(x=>/spot/.test(x)).slice(0,2).forEach(ev=>put("evid",`<span class="vchip ${/fight/.test(ev)?"bad":""}">● ${esc(ev)}</span>`))}}
-    else{put("read",vOpen(g));put("peek",vPeekTimes(g,el));if(!dead)put("focus",vFocus(p,g)||vPathCurve(p,g)||vTimeline(p,g));
-      put("play",(el<45&&!dead&&vPush(p,g))||vFights(TS&&TS.maps&&TS.maps[g.map],g,null));if(!dead)put("hold",el<50?vPushAns(p,g,true):"");
+    else{const TDm=tdirsOf(g.map)||tdirsLoading(g.map);put("read",vOpen(g));put("peek",vPeekTimes(g,el));if(!dead&&!tdirsLoading(g.map))put("focus",vDir(p,g)||vFocus(p,g)||vPathCurve(p,g)||vTimeline(p,g));
+      put("play",(el<45&&!dead&&!TDm&&vPush(p,g))||vFights(TS&&TS.maps&&TS.maps[g.map],g,null));if(!dead&&!TDm)put("hold",el<50?vPushAns(p,g,true):"");
       const left=g.phase_left!=null?g.phase_left:Math.max(0,RLEN()-el);
       if(left<=45)put("alert",`<div class="vbig bad"><b>PLANT ${Math.floor(left/60)}:${String(Math.floor(left%60)).padStart(2,"0")}</b><span>${left>20?"commit now":"plant or save"}</span></div>`);
-      else if(!dead)put("tchips",vTchips(p,g))}}
+      else if(!dead&&!TDm)put("tchips",vTchips(p,g))}}
   else if(ph==="over"){const nx=nextBuy(p,g);put("call",`<div class="vsit"><span>ROUND ${g.round}</span>${g.win_team?`<b class="${g.win_team===g.side?"good":"bad"}">${g.win_team===g.side?"WON":"LOST"}</b>`:""}</div>${nx?`<div class="vnext">Next round · <b>${nx}</b></div>`:""}`)}
   const html=slotted(g,P);
   return `<div class="vz">${html||`<div class="vsit"><span>ROUND ${g.round||""}</span></div>`}</div>`}
@@ -421,7 +421,7 @@ function buyVisual(p,g){if(g.money==null||!g.side||g.practice)return "";const rt
   const next=(rt==="eco"?g.money:left)+bonus,okNext=next>=full;
   const T_=g.side==="T",spot=!T_&&kit.zone?`<span class="vchip">📍 ${vShort(kit.zone.key)}</span>`:"",avoid=!T_&&kit.avoid?`<span class="vchip bad">✕ ${vShort(kit.avoid.key)}</span>`:"";
   const awp=sk&&sk.endsWith("anti_eco")?`<span class="vchip bad">✕ AWP</span>`:"";
-  const rows=econRows(plan);   // the plan already says what a loss leaves: no separate chip then
+  const tc=typeof theirCash==="function"?theirCash(g):null,eb=enemyBuy(p,g)||{},ebk=["full","force","eco"].filter(k=>(eb[k]||0)>=.5)[0]||(tc&&tc.buy);
+  const them=tc?`<div class="vthem"><span>THEM</span><b>~${money(tc.cash)}</b>${ebk&&ebk!=="pistol"?`<em class="${ebk==="full"?"bad":ebk==="eco"?"good":"warn"}">${{full:"FULL BUY",force:"FORCE",eco:"ECO"}[ebk]}</em>`:""}</div>`:"";
   return `<div class="vbuy"><div class="vbuy-h"><b>${RT}</b><span>${money(g.money)}</span></div>
-    ${rows}${tags.length?`<div class="vtags">${tags.join("")}</div>`:""}${nd}
-    <div class="vchips">${nd?NC.chip:""}${vMates(g)}${spot}${avoid}${awp}${rows?"":`<span class="vchip ${okNext?"good":"bad"}">lost → ${money(next)} ${okNext?"✓ full":"✕ no full"}</span>`}</div></div>`}
+    ${them}${tags.length?`<div class="vtags">${tags.join("")}</div>`:""}${nd}${spot||avoid||awp?`<div class="vchips">${spot}${avoid}${awp}</div>`:""}</div>`}

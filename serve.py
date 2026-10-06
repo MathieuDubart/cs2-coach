@@ -218,6 +218,10 @@ class Handler(BaseHTTPRequestHandler):
         if u.path == "/api/coach/status":
             import chatcalls
             return self.send(200, chatcalls.status())
+        if u.path.startswith("/api/tdirs/"):   # the T side's ways in on a map (tdirs.py): Live's directions, odds and grenades
+            import tdirs
+            mp = u.path.rsplit("/", 1)[-1]
+            return self.send(200, tdirs.load_map(mp) or {})
         if u.path == "/api/voice/devices":
             try:
                 import voice
@@ -413,9 +417,9 @@ class Handler(BaseHTTPRequestHandler):
             except Exception as e:
                 return self.send(400, {"error": f"Microphone: {e}"})
             return self.send(200, voice_status())
-        if u.path == "/api/coach/paths":   # the page's paths this round: numpad 1-2-3 say them in the team chat
+        if u.path == "/api/coach/paths":   # the page's plan this round: numpad 1-2-3 (A, mid, B) and 4-5-6 (tempo) say it in the team chat
             import chatcalls
-            return self.send(200 if chatcalls.write(body.get("paths"), body.get("extra")) else 400, {})
+            return self.send(200 if chatcalls.write(body.get("paths"), body.get("extra"), body.get("tempo")) else 400, {})
         if u.path.startswith("/api/train/"):   # the training server (separate copy of the game, 127.0.0.1 only)
             import replay
             act = u.path.rsplit("/", 1)[-1]

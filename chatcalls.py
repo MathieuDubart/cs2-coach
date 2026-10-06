@@ -1,8 +1,12 @@
-"""Your team's way in the team chat with one key: numpad 1, 2 or 3 says path 1, 2 or 3 of the In game page.
+"""Your team's plan with one key (06/10, the user: "un bind pour A, un bind pour mid, un bind pour B, un bind pour rush,
+un bind pour slow, un bind pour contrôle map"): numpad 1, 2, 3 say the way (A, mid, B: the way in Live picks for this
+round, "A via Ramp"), 4, 5, 6 the tempo (rush, slow, map control) in the team chat, and tell Wily: Live then shows that
+way, its odds and its grenades, with a ping. On CT the same keys only tell Wily (1-2-3 where you play, 4-5-6 what the
+Ts do): nothing in the chat.
 
 CS2 runs a config file each time a key bound to `exec` is pressed, and reads it from the disk again: the app rewrites
-three small files in CS2's cfg folder (coach_path1.cfg, coach_path2.cfg, coach_path3.cfg) every round with the paths
-the page shows, and the keys run them. Nothing is sent by the app itself: you press the key. One time only, in CS2's
+small files in CS2's cfg folder (coach_path1.cfg to coach_path3.cfg for the ways, kept from the time they said three
+paths, coach_rush.cfg, coach_slow.cfg, coach_ctrl.cfg) whenever the page's plan changes, and the keys run them. Nothing is sent by the app itself: you press the key. One time only, in CS2's
 console: `exec coach_binds` (the binds then stay in your CS2 settings).
 
 The text written is cleaned (no quote, semicolon or line break, plain characters, 120 at most): a file can only ever
@@ -15,6 +19,9 @@ import time
 import gsi
 
 KEYS = {1: "KP_1", 2: "KP_2", 3: "KP_3"}   # numpad 1, 2, 3: CS2's names (the physical key, num lock on or off); KP_END etc. were CS:GO's
+WAYS = {1: "A", 2: "MID", 3: "B"}          # what numpad 1, 2, 3 say since 06/10 (they were paths 1, 2, 3 of the page)
+TEMPO = {"rush": "KP_4", "slow": "KP_5", "ctrl": "KP_6"}   # numpad 4, 5, 6: rush, slow, map control
+TEMPO_STATE = {"rush": "rush", "slow": "slow", "ctrl": "control"}
 FOCUS_OFF = "KP_MINUS"   # numpad minus: drop the focus on a path
 EXTRA = {"eco": "KP_DEL", "sit": "KP_0"}   # numpad ".": the economy plan; numpad 0: the situation, recent and global
 SITE_KEYS = {"A": "KP_7", "B": "KP_9"}   # numpad 7 / 9: A / B (CT: the site you play; once planted, both sides: the bomb's site)
@@ -50,20 +57,23 @@ def _stale():
 
 
 def binds_text():
-    lines = ["// Coach CS2: numpad 1, 2 and 3 say path 1, 2 and 3 of the In game page in the team chat"]
+    lines = ["// Wily: numpad 1, 2, 3 = A, mid, B; 4, 5, 6 = rush, slow, map control (T: said in the team chat too)"]
     lines += [f'unbind "{k}"' for k in _stale()]
     lines += [f'bind "{k}" "exec coach_path{i}"' for i, k in KEYS.items()]
+    lines += [f'bind "{k}" "exec coach_{name}"' for name, k in TEMPO.items()]
     lines += [f'bind "{FOCUS_OFF}" "exec coach_focus0"']
     lines += [f'bind "{k}" "exec coach_{name}"' for name, k in EXTRA.items()]
     lines += [f'bind "{k}" "exec coach_site{site}"' for site, k in SITE_KEYS.items()]
     lines += [f'bind "{TEAM_KEY}" "exec coach_team"']
-    lines += ['echo "Coach CS2: numpad 1-2-3 say the paths in the team chat, 7 / 9 tell the coach A / B, / your team agreed to be recorded"']
+    lines += ['echo "Wily: numpad 1-2-3 = A / mid / B, 4-5-6 = rush / slow / map control, minus drops them, / your team agreed to be recorded"']
     return "\n".join(lines) + "\n"
 
 
-def write(paths, extra=None):
-    """paths: [{"rank": 1, "text": "..."}, ...] from the page; a rank without a path only prints a note in the console.
-    extra: {"eco": "...", "sit": "..."}, the economy plan and the situation, for numpad "." and 0 (one line each)."""
+def write(paths, extra=None, tempo=None):
+    """paths: [{"rank": 1, "text": "...", "site": "A"}, ...] from the page (rank 1, 2, 3: numpad 1, 2, 3: the ways A, mid,
+    B since 06/10); a rank without a text only prints a note in the console.
+    extra: {"eco": "...", "sit": "..."}, the economy plan and the situation, for numpad "." and 0 (one line each).
+    tempo: {"rush": "...", "slow": "...", "ctrl": "..."}, the lines of numpad 4, 5, 6 (empty: Wily only)."""
     d = gsi.cfg_dir()
     if not d:
         return False
@@ -86,7 +96,7 @@ def write(paths, extra=None):
             if p.get("site") in WHEEL:
                 site[r] = p["site"]
     for i in KEYS:
-        body = (f'say_team "{by[i]}"\n' + (WHEEL[site[i]] + "\n" if i in site else "")) if i in by else 'echo "Coach CS2: no path for this key this round"\n'
+        body = (f'say_team "{by[i]}"\n' + (WHEEL[site[i]] + "\n" if i in site else "")) if i in by else f'echo "Wily: {WAYS[i]}"\n'
         if _LAST.get(i) != body:
             open(os.path.join(d, f"coach_path{i}.cfg"), "w", encoding="utf-8").write(body)
             _LAST[i] = body
@@ -95,6 +105,13 @@ def write(paths, extra=None):
         body = f'say_team "{t}"\n' if t else f'echo "Coach CS2: nothing to say for this key now"\n'
         if _LAST.get(name) != body:
             open(os.path.join(d, f"coach_{name}.cfg"), "w", encoding="utf-8").write(body)
+            _LAST[name] = body
+    for name in TEMPO:   # always a file: the key must reach Wily even with nothing to say (its line in the console)
+        t = clean((tempo or {}).get(name)) if isinstance(tempo, dict) else ""
+        body = f'say_team "{t}"\n' if t else f'echo "Wily: {TEMPO_STATE[name]}"\n'
+        f = os.path.join(d, f"coach_{name}.cfg")
+        if _LAST.get(name) != body or not os.path.exists(f):
+            open(f, "w", encoding="utf-8").write(body)
             _LAST[name] = body
     return True
 
@@ -127,6 +144,14 @@ def bound_site():
         return False
 
 
+def bound_tempo():
+    """True when numpad 4 runs coach_rush (exec coach_binds once more after the 06/10 update)."""
+    try:
+        return "exec coach_rush" in open(_keys_file(), encoding="utf-8", errors="replace").read()
+    except Exception:
+        return False
+
+
 def bound_focus():
     try:
         f = _keys_file()
@@ -140,7 +165,7 @@ def console_file():
     return os.path.join(os.path.dirname(d), "console.log") if d else None
 
 
-KEY_RE = re.compile(r"execing coach_(?:path([123])|focus0|site([AB])|(team))\b")
+KEY_RE = re.compile(r"execing coach_(?:path([123])|focus0|site([AB])|(team)|(rush|slow|ctrl))\b")
 
 
 def watch():
@@ -172,8 +197,14 @@ def watch():
                             print("team sound:", e, flush=True)
                     elif m and m.group(2):
                         gsi.set_site_key(m.group(2))
-                    elif m:
-                        gsi.set_focus(int(m.group(1)) if m.group(1) else 0)
+                    elif m and m.group(4):   # numpad 4-5-6: the tempo
+                        gsi.set_tdir(TEMPO_STATE[m.group(4)])
+                    elif m and m.group(1):   # numpad 1-2-3: the way (A, mid, B); hostage maps keep their routes 1-2-3
+                        gsi.set_focus(int(m.group(1)))
+                        gsi.set_tdir(WAYS[int(m.group(1))])
+                    elif m:   # numpad minus: no focus, no plan
+                        gsi.set_focus(0)
+                        gsi.drop_tdir()
         except Exception:
             pass
         time.sleep(0.3)
@@ -188,5 +219,5 @@ def status():
     cf = console_file()
     fresh = bool(cf and os.path.exists(cf) and time.time() - os.path.getmtime(cf) < 2 * 86400)
     return {"cfg": bool(d), "binds_file": bool(d and os.path.exists(os.path.join(d, BINDS))), "bound": bound(), "focus_bound": bound_focus(),
-            "site_bound": bound_site(),
+            "site_bound": bound_site(), "tempo_bound": bound_tempo(),
             "console": fresh}

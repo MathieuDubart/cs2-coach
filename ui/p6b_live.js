@@ -219,7 +219,11 @@ function liveRadar(box,p,map,level,g,o){
   if(on("post")&&planted&&site&&typeof postplantRadar==="function")postplantRadar(p,g,map,level,Ltop,legend,here,site,ct);
   // T side, before the hit: the way from the spawn of the plays that win most (numbered like the side panel's lines)
   const FN=o.following&&g?focusN(g):0;   // the path you pressed: the only one drawn
-  if(att&&on("paths")&&o.following&&g&&!planted&&(g.round_phase==="freezetime"||(live&&(g.elapsed||0)<45))){const W0=HMAP?hostageRank(p,g):winsRank(p,g),W=W0&&FN&&W0.rows.some(r=>r.rank===FN)?{...W0,rows:W0.rows.filter(r=>r.rank===FN)}:W0;
+  const TDR=!HMAP&&att&&o.following&&g&&typeof tdirsOf==="function"&&tdirsOf(map)?dirRank(p,g,tdirsOf(map)):null;   // 06/10: the ways in (A via Ramp...)
+  if(TDR&&on("paths")&&!planted&&(g.round_phase==="freezetime"||(live&&(g.elapsed||0)<45))&&TDR.rows.length){dirPaths(Lrot,Ltop,TDR,level);
+    legend.push(`<span>${SW.tpath}the way in from the spawn, % = rounds won by it this round (your buy and theirs${TDR.sel.tempo?`, ${TEMPO_EN[TDR.sel.tempo].toLowerCase()}`:""}); numpad 1-2-3 = A / mid / B, 4-5-6 = rush / slow / map control, minus drops them</span>`)}
+  const TDx=!HMAP&&o.following&&g&&typeof tdirsOf==="function"?tdirsOf(map):null;if(TDx)pingMark(Ltop,g,TDR,level,TDx);   // A, B or mid pressed or said: a ping
+  else if(att&&on("paths")&&o.following&&g&&!planted&&(g.round_phase==="freezetime"||(live&&(g.elapsed||0)<45))){const W0=HMAP?hostageRank(p,g):winsRank(p,g),W=W0&&FN&&W0.rows.some(r=>r.rank===FN)?{...W0,rows:W0.rows.filter(r=>r.rank===FN)}:W0;
     if(W){const seen=new Map();W.rows.slice(0,3).forEach(r=>{if(!r.route)return;const k=r.route.zones.join(">");if(seen.has(k)){seen.get(k).push(r.rank);return}seen.set(k,[r.rank]);r._k=k});
       W.rows.slice(0,3).filter(r=>r._k).reverse().forEach(r=>tPath(Lrot,Ltop,r.route.pts,r.col,seen.get(r._k),level,r.rank===1,r.wr,r.rot,r.timing));   // the play's chance this round (a route alone is biased: only the ones who got there alive count)
       if(seen.size&&W.rows.some(r=>r.rot))legend.push(`<span>${SW.tpath}↻ ranked ahead of a better %: that one lost this half or was played too often, they read you too</span>`);

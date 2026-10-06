@@ -268,6 +268,8 @@ def follow_ups():
     population.run_all()
     style.run_all(workers=1)
     nades_catalog.run_all(log=log)   # the pro catalog's lineups again once the base grew by a quarter
+    import tdirs
+    tdirs.run(log=log)   # the T ways in (Live's directions) again once the base grew by 15 %
 
 
 def _alive(pid):

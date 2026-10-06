@@ -306,6 +306,44 @@ def set_focus(n):
     return True
 
 
+def set_tdir(what, src="key"):
+    """Your team's plan for the round (06/10, the user: a key for A, one for mid, one for B, one for rush, slow and
+    map control): numpad 1-2-3 the way (A, MID, B), 4-5-6 the tempo (rush, slow, control), or the same said to Wily.
+    T: the page shows that way, its odds and its grenades; CT: 1-2-3 is where you play, 4-5-6 what you see the Ts do.
+    A key pressed after a round ended counts for the next one; the way and the tempo stay for the round (numpad minus
+    drops both; the same tempo twice drops it). A way pressed also pings on the page (a mark and a sound)."""
+    with LOCK:
+        rnd, ph, side = STATE.get("round"), STATE.get("round_phase"), STATE.get("side")
+        if not rnd:
+            return False
+        if ph == "over":
+            rnd += 1
+        cur = dict(STATE.get("tdir") or {})
+        if cur.get("round") != rnd:
+            cur = {"round": rnd}
+        now = time.time()
+        if what in ("A", "MID", "B"):
+            cur["dir"] = what
+            STATE["ping"] = {"what": what, "t": now, "round": rnd}
+        elif what in ("rush", "slow", "control"):
+            cur["tempo"] = None if cur.get("tempo") == what else what
+        else:
+            return False
+        cur.update(t=now, src=src)
+        STATE["tdir"] = cur
+        mp = STATE.get("map")
+    log_event({"map": mp, "round": int(rnd), "tdir": {k: cur.get(k) for k in ("dir", "tempo", "src")}})
+    if what in ("A", "B"):   # CT: the site you play; bomb down: its site (what numpad 7 / 9 say)
+        set_site_key(what)
+    return True
+
+
+def drop_tdir():
+    with LOCK:
+        STATE.pop("tdir", None)
+    return True
+
+
 def set_site_key(site):
     """Numpad 7 (A) or 9 (B). Bomb down: the site it went down on (both sides). Else on CT: the site you play this round
     (a key pressed after the round ended counts for the next one). On T before the plant: nothing."""
@@ -573,6 +611,8 @@ def update(payload):
             STATE.pop("seen", None)
             STATE.pop("mood", None)
             STATE.pop("focus", None)
+            STATE.pop("tdir", None)   # a new match: no plan, no ping left from the last one
+            STATE.pop("ping", None)
         el = now - STATE["live_since"] if STATE.get("round_phase") == "live" and STATE.get("live_since") else 0
         if STATE.get("map") and ((own and (st.get("money") or 0) > 16000) or el > 240 or _training()):
             STATE["practice"] = True

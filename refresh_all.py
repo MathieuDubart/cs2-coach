@@ -137,6 +137,8 @@ def _tside():
     lanes.geo(rebuild=True)
     _stale(tside.SUMMARY)
     tside.tendencies([])   # computed again for every map of the base (and the lanes and plays with it)
+    import tdirs
+    tdirs.run(force=True)   # the ways in (A via Ramp...): Live's directions, their odds and their grenades (06/10)
 
 
 def base_steps():
