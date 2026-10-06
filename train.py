@@ -377,7 +377,7 @@ def site_data(mp):
                 if len(holds) < 4 or not spawn:
                     continue
                 tcen = np.median(T, axis=0)
-                cr = g.ct_crouch.fillna(False).astype(bool).to_numpy()
+                cr = g.ct_crouch.eq(True).to_numpy()
                 hs = []
                 for c, p in holds:
                     m = (np.hypot(CP[:, 0] - p[0], CP[:, 1] - p[1]) < 110) & (np.abs(CP[:, 2] - p[2]) < 90)
@@ -688,6 +688,11 @@ def practice_drills(sid, mp):
     """Prefire (you T from an entrance, bots on every angle the CTs really hold, they don't shoot: clear them fast) and
     defense (you CT on the site, attackers keep coming from the real entrances for 90 s: as many frags as you can)."""
     out = []
+    try:   # the angles you rarely check in your demos (checks.py, 06/10): a prefire's bots go there first
+        import checks
+        unc = checks.unchecked(sid, mp)
+    except Exception:
+        unc = []
     for z, S in (site_data(mp).get("sites") or {}).items():
         site = replay_zone(z, mp)
         pick = []
@@ -719,7 +724,9 @@ def practice_drills(sid, mp):
                 h["vis"] = _sees(h, P)
                 if h["vis"] >= 2 and math.dist(h["pos"][:2], start[:2]) > 600:
                     keep.append(h)
-            keep = sorted(keep, key=lambda h: (-h["vis"], -h["n"]))[:10]
+            for h in keep:
+                h["unc"] = any(math.dist(h["pos"][:2], a["pos"][:2]) < 120 and abs(h["pos"][2] - a["pos"][2]) < 90 for a in unc)
+            keep = sorted(keep, key=lambda h: (-h["unc"], -h["vis"], -h["n"]))[:10]
             if len(keep) < 4:
                 continue
             for h in keep:   # each one turned to where it saw the Ts of this way
@@ -733,7 +740,9 @@ def practice_drills(sid, mp):
             line = _ground_line(P, mp) if hit else []   # the way drawn on the ground
             out.append({"id": f"prefire:{mp}:{z}:{e['zone']}", "kind": "aim", "mode": "prefire", "map": mp,
                         "title": f"PREFIRE {site} via {frm}", "team": 2, "route": route, "line": line,
-                        "tip": f"follow the gold line: {' → '.join(route)} · the angles CTs hold there, at their real timings · they don't move, they don't shoot",
+                        "tip": f"follow the gold line: {' → '.join(route)} · the angles CTs hold there, at their real timings"
+                               + (f" · {sum(h['unc'] for h in keep)} you rarely check in your matches" if any(h["unc"] for h in keep) else "")
+                               + " · they don't move, they don't shoot",
                         "me": {"pos": start, "ang": _angle(start, line[1] if len(line) > 1 else first["pos"])},
                         "weapons": ["weapon_knife", RIFLE[2]], "bot_weapons": ["weapon_knife", RIFLE[3]],
                         "bots": [{"pos": h["pos"], "ang": h["ang"], "zone": h.get("zone") or site, "at": at, "duck": h.get("crouch", 0) >= 0.35}
@@ -1232,6 +1241,31 @@ def wallbang_drills(sid, mp):
     return out
 
 
+def boost_drills(sid, mp):
+    """The map's boosts that kill (boosts.py, 06/10, the user: "sur Nuke il y a très peu de wallbangs, par contre il y a
+    des boosts, et ça c'est intéressant", "des moves de boost pour être au-dessus des smokes"): you on the teammate's
+    head where the base's players stood (a bot below, crouched when they boosted on a crouched one), still targets where
+    the players killed from up there stood; the ones that killed most first."""
+    import boosts
+    out = []
+    for b in boosts.load(mp):
+        if b["kills"] < 2 or not b.get("victims"):
+            continue
+        team = 2 if b["side"] == "T" else 3
+        top, base = b["pos"], b["base"]
+        wp = next((WB_WEAPON[k] for k in (b.get("weapons") or {}) if k in WB_WEAPON), RIFLE[team])
+        out.append({"id": f"boost:{mp}:{b['side']}:{round(top[0])}:{round(top[1])}", "kind": "aim", "map": mp,
+                    "title": f"BOOST {b['place']} ({b['side']})",
+                    "tip": f"on a teammate's head: {b['n']}× in my base, {b['kills']} kills from up there for {b['deaths']} deaths · they stand still where those players stood",
+                    "team": team, "me": {"pos": top, "ang": [b.get("pitch") or 0, b.get("yaw") or 0]},
+                    "mate": {"pos": base, "ang": [0, b.get("yaw") or 0], "zone": "your boost", "duck": b.get("dz", 72) < 63},
+                    "weapons": ["weapon_knife", wp], "bot_weapons": ["weapon_knife", RIFLE[5 - team]],
+                    "bots": [{"pos": v, "ang": _angle(v, top), "zone": b["victim_places"][0] if b.get("victim_places") else b["place"]} for v in b["victims"][:3]],
+                    "clock": round(max(10.0, 115 - float(b["t_med"]) + 3), 1) if b.get("t_med") is not None else 0,
+                    "weight": 1 + b["kills"] / 3})
+    return out
+
+
 def situation_drills(sid, mp, all_sc=None):
     return [{"id": s["id"], "kind": "situation", "map": s["map"], "title": f"R{s['round']} · " + (
                 f"1v{s['vs']} clutch" if s["kind"] == "clutch" else "death") + (f" · {replay_zone(s['zone'], mp)}" if s.get("zone") else ""),
@@ -1282,7 +1316,7 @@ def build(sid, minutes=20, where="random", difficulty=2):
         pr = practice_drills(sid, mp)
         fns = {"defend": lambda s_, m_: [d for d in pr if d.get("mode") == "defend"],
                "push": lambda s_, m_: [d for d in pr if d.get("mode") == "prefire"], "nade": nade_drills,
-               "wallbang": wallbang_drills, "situation": lambda s_, m_: situation_drills(s_, m_, all_sc)}
+               "wallbang": lambda s_, m_: wallbang_drills(s_, m_) + boost_drills(s_, m_), "situation": lambda s_, m_: situation_drills(s_, m_, all_sc)}
         share = {k: v for k, v in split.items() if k != "aim"}
         if not pr:   # a hostage map: no site to defend or push, the situations take their time
             share["situation"] = share.get("situation", 0) + share.pop("defend", 0) + share.pop("push", 0)
@@ -1354,6 +1388,7 @@ def build(sid, minutes=20, where="random", difficulty=2):
 def preview(sid, minutes=20, where="random"):
     """What a warm-up will be, before it's built (Prepare shows it under its button): each part's minutes, map by map;
     a part without data on a map (no wallbang found there yet) gives its time to the next one."""
+    import boosts
     import wallbangs
     sid = str(sid)
     mine = maps(sid) if sid.isdigit() else {}
@@ -1371,7 +1406,7 @@ def preview(sid, minutes=20, where="random"):
             if not share.get(k):
                 continue
             secs = per_map * share[k] + spare
-            if k == "wallbang" and mp != "random" and not wallbangs.load(mp):
+            if k == "wallbang" and mp != "random" and not wallbangs.load(mp) and not any(x["kills"] >= 2 for x in boosts.load(mp)):   # no wallbang, no boost that kills
                 spare = secs
                 continue
             spare = 0.0

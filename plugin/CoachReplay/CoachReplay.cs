@@ -289,6 +289,26 @@ public partial class CoachReplay : BasePlugin
                     Logger.LogInformation("dbgbreakat after: {n} valid {v} hp {h}", e.Entity?.Name, e.IsValid, e.Health);
             });
         });
+        AddCommand("css_dbgboost", "two bots of a team: one held still (crouched with 1), the other dropped on its head; heights after 1.5 s", (p, c) =>
+        {
+            var duck = c.ArgCount > 1 && c.GetArg(1) == "1";
+            var bs = Utilities.GetPlayers().Where(x => x is { IsValid: true, IsBot: true, PawnIsAlive: true }).GroupBy(x => x.Team).FirstOrDefault(g => g.Count() >= 2)?.Take(2).ToList();
+            if (bs == null || bs[0].PlayerPawn.Value?.AbsOrigin == null || bs[1].PlayerPawn.Value == null) { Logger.LogInformation("dbgboost: two living bots of one team needed"); return; }
+            Zombie(true);
+            var a = bs[0].PlayerPawn.Value!; var b = bs[1].PlayerPawn.Value!;
+            var at = new Vector3(a.AbsOrigin!.X, a.AbsOrigin.Y, a.AbsOrigin.Z);
+            Freeze(a, true);
+            b.Teleport(at + new Vector3(0, 0, 100), null, Vector3.Zero);
+            Freeze(b, false);
+            var tm = AddTimer(0.05f, () => { if (a.IsValid) { a.Teleport(at, null, Vector3.Zero); HoldAim(a, new Vector3(0, 90, 0), duck); } }, CounterStrikeSharp.API.Modules.Timers.TimerFlags.REPEAT);
+            AddTimer(1.5f, () =>
+            {
+                tm.Kill();
+                var da = a.MovementServices == null ? -1f : new CCSPlayer_MovementServices(a.MovementServices.Handle).DuckAmount;
+                Logger.LogInformation("dbgboost duck {d}: the one below has duck amount {da:F2}, the one on top is {h:F1} u above it (solid teammates {s})", duck, da,
+                    b.IsValid && b.AbsOrigin != null ? b.AbsOrigin.Z - at.Z : -999f, ConVar.Find("mp_solid_teammates")?.GetPrimitiveValue<int>());
+            });
+        });
         AddCommand("css_dbgents", "the map's entity classes and how many of each", (p, c) =>
         {
             foreach (var g in Utilities.GetAllEntities().Where(e => e.DesignerName != null).GroupBy(e => e.DesignerName).OrderBy(g => g.Key))
@@ -392,7 +412,7 @@ public partial class CoachReplay : BasePlugin
                      $"mp_roundtime_defuse {rt}", $"mp_roundtime_hostage {rt}", "mp_buytime 0", "mp_autoteambalance 0", "mp_limitteams 0",
                      "mp_friendlyfire 0", "mp_autokick 0", "mp_halftime 0", "mp_maxrounds 99", "mp_match_can_clinch 0",
                      "mp_give_player_c4 0", $"mp_death_drop_gun {drop}", $"mp_death_drop_defuser {drop}", "mp_c4timer 40",
-                     "mp_randomspawn 0", "bot_quota_mode normal", "mp_solid_teammates 0",   // no teammate's path blocks yours (04/10)
+                     "mp_randomspawn 0", "bot_quota_mode normal", $"mp_solid_teammates {(drill?.Id.StartsWith("boost") == true ? 1 : 0)}",   // no teammate's path blocks yours (04/10); a boost: you stand on one
                      "mp_playercashawards 0", "mp_teamcashawards 0",
                      "bot_join_after_player 0", "bot_chatter off", "sv_hibernate_when_empty 0", "sv_falldamage_scale 0",
                      $"bot_difficulty {diff}", "bot_quota 0", "bot_kick" })   // quota 0 first: kicked with the last drill's quota (10), the game added 10 of its own and a prefire got none (06/10)

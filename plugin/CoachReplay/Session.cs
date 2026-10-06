@@ -57,6 +57,7 @@ public class Drill
     [JsonPropertyName("variant")] public string Variant { get; set; } = "";   // the aim map: flick, strafe, duel
     [JsonPropertyName("count")] public int Count { get; set; } = 3;   // the aim map: targets at once
     [JsonPropertyName("clock")] public float Clock { get; set; }   // the round's clock at GO (s left; 0: none)
+    [JsonPropertyName("mate")] public Spot? Mate { get; set; }   // a boost: the teammate you stand on (06/10)
 }
 
 public class EntryTrack
@@ -491,7 +492,7 @@ public partial class CoachReplay
         aimOrder.Clear(); reacts.Clear(); aimHs = 0; aimNext = 0; attempts = 0; nadeWait = false; frags = deaths = plants = 0;
         cameAt.Clear(); strafe.Clear(); lastKill = 0;
         // the targets that must stay still idle: a prefire's, a wallbang's, the aim map's flicks and strafers (06/10)
-        Zombie(d.Kind == "aim" && (d.Mode == "prefire" || d.Id.StartsWith("wallbang") || (d.Mode == "range" && d.Variant != "duel")));
+        Zombie(d.Kind == "aim" && (d.Mode == "prefire" || d.Id.StartsWith("wallbang") || d.Id.StartsWith("boost") || (d.Mode == "range" && d.Variant != "duel")));
         Ammo(d.Mode == "range");
         Intro(d);
         Setup();
@@ -537,8 +538,11 @@ public partial class CoachReplay
             var b = d.Bots[k];
             s.Players.Add(new Track { Sid = $"target{k}", Name = b.Zone ?? $"Target {k + 1}", Team = 5 - d.Team, Hp = 100, Armor = 100, Helmet = true,
                 Weapons = d.BotWeapons, Active = d.BotWeapons.LastOrDefault(), Path = new[] { b.Pos[0], b.Pos[1], b.Pos[2], b.Ang[1], b.Ang[0] }, Hold = true,
-                Still = d.Mode == "prefire" || d.Id.StartsWith("wallbang"), Duck = b.Duck });
+                Still = d.Mode == "prefire" || d.Id.StartsWith("wallbang") || d.Id.StartsWith("boost"), Duck = b.Duck });
         }
+        if (d.Mate is { } m)   // a boost: the teammate below, still, crouched when the boost was on a crouched one
+            s.Players.Add(new Track { Sid = "mate", Name = m.Zone ?? "your boost", Team = d.Team, Hp = 100, Armor = 100, Helmet = true,
+                Weapons = d.Weapons, Active = d.Weapons.LastOrDefault(), Path = new[] { m.Pos[0], m.Pos[1], m.Pos[2], m.Ang[1], m.Ang[0] }, Hold = true, Still = true, Duck = m.Duck });
         return s;
     }
 
@@ -689,7 +693,7 @@ public partial class CoachReplay
         else if (cur.Kind == "aim")
         {
             aimOrder.Clear();
-            aimOrder.AddRange(bots.Keys.OrderBy(_ => Rng.Next()));
+            aimOrder.AddRange(bots.Where(b => b.Value.Team != cur.Team).Select(b => b.Key).OrderBy(_ => Rng.Next()));
             for (int k = 1; k < aimOrder.Count; k++) Utilities.GetPlayerFromSlot(aimOrder[k])?.PlayerPawn.Value?.CommitSuicide(false, true);
             aimNext = 1;
             // you start turned to the first target
