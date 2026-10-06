@@ -2332,15 +2332,16 @@ function prepWatch(){clearTimeout(PREP.watch);if(S.view!=="prepare"||!D.local)re
 // where you lose rounds lately (06/10: "la game d'Overpass où on s'est pris des execs B en CT: priorise-les en
 // entraînement"): the training puts their maps, the defense of those sites and those rounds first
 async function prepStruggles(v,p){const boxes=$$("[data-pstrug]",v);if(!boxes.length||!D.local)return;let r;
-  try{r=await api("/api/train/struggles?sid="+encodeURIComponent(p.steamid))}catch(e){return}
+  try{const x=await fetch("/api/train/struggles?sid="+encodeURIComponent(p.steamid));if(!x.ok)return;r=await x.json()}catch(e){return}
   const S=(r.struggles||[]).slice(0,3);if(!S.length)return;
   const html=`<p class="note"><b>⚠ The training puts first</b> where you lose rounds lately:</p><ul class="pstrug-l">${S.map(x=>`<li><b>${esc(MAPN(x.map))}</b> · ${esc(x.text)}${x.last?` <span class="note">(last ${esc(x.last)})</span>`:""}</li>`).join("")}</ul>`;
   boxes.forEach(b=>b.innerHTML=html)}
 // the photos of your maps' lineups (06/10: "les images de là où je dois viser"): taken in your game on the training
 // server, numpad + from one lineup to the next; Live shows them with the way's stuff
 async function prepShots(v,sel){const box=$("[data-pshots]",v);if(!box||!D.local)return;let st;
-  try{st=await api("/api/lineshots/status")}catch(e){return}
-  const per=await Promise.all(sel.map(mp=>api("/api/lineshots/status?map="+encodeURIComponent(mp)).catch(()=>null)));
+  const get=u=>fetch(u).then(r=>r.ok?r.json():null).catch(()=>null);   // read-only: GET (api() posts)
+  st=await get("/api/lineshots/status");if(!st)return;
+  const per=await Promise.all(sel.map(mp=>get("/api/lineshots/status?map="+encodeURIComponent(mp))));
   box.innerHTML=`<p class="note"><b>📷 Where to aim:</b> I photograph each lineup in your game (training server: numpad + puts you on the spot, aimed; keep still a second). Live then shows the photo with the way's stuff.</p>
    <div class="btns">${sel.map((mp,i)=>{const s=per[i]||{};const on=st.on&&st.map===mp;
      return on?`<span class="note">${esc(MAPN(mp))}: ${s.done||0}/${s.total||0} · <b>numpad +</b> for the next${st.next?` (${esc(st.next.type)} → ${esc(st.next.to||"")})`:""}</span><button type="button" data-pshotstop>Stop</button>`
