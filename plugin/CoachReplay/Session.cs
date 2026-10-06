@@ -641,6 +641,9 @@ public partial class CoachReplay
     void SessionTick()
     {
         if (sess == null || cur == null || phase != "live") return;
+        // dead without the drill knowing it (killed before GO: OnDeath only counts live deaths; 06/10, a minute on the
+        // floor while the aim drill's targets came and went): the drill ends as dead, its retry puts you back on your spot
+        if (drill?.Mode != "defend" && !humanDead && Humans().Any() && Humans().All(h => !h.PawnIsAlive)) { Finish("dead"); return; }
         var el = (Server.TickCount - t0) / 64f;
         if (drill?.Mode is "prefire" or "defend")
         {

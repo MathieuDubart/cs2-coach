@@ -685,7 +685,15 @@ def _land(mp, typ, pos):
 SPOTS_F = os.path.join(config.OUT, "train_spots.json")
 
 
+_MAPDIRS = {}
+
+
 def _map_dirs(mp):
+    """The base's matches on a map. Kept 10 min in memory (06/10: a map's stuff drills asked 19 times, reading the
+    2,900 matches' meta.json each time: 54,000 files, 14 s before the warm-up could start)."""
+    hit = _MAPDIRS.get(mp)
+    if hit and time.time() - hit[0] < 600:
+        return hit[1]
     dirs = []
     for d in sorted(os.listdir(os.path.join(config.OUT, "deep"))):
         try:
@@ -694,15 +702,22 @@ def _map_dirs(mp):
                     dirs.append(d)
         except (OSError, ValueError):
             continue
+    _MAPDIRS[mp] = (time.time(), dirs)
     return dirs
+
+
+_SPOTS_MEM = {"mt": None, "c": {}}
 
 
 def _spots(mp):
     """Where each side really stands on the map: the duels of every demo (killers and victims), 64 u cells with their
     mean position and how often. Cached per map, computed again after a quarter more matches."""
-    try:
-        with open(SPOTS_F, encoding="utf-8") as fh:
-            cache = json.load(fh)
+    try:   # the file read again only when it changed (19 reads of 1 MB per map's stuff before)
+        mt = os.path.getmtime(SPOTS_F)
+        if _SPOTS_MEM["mt"] != mt:
+            with open(SPOTS_F, encoding="utf-8") as fh:
+                _SPOTS_MEM.update(mt=mt, c=json.load(fh))
+        cache = _SPOTS_MEM["c"]
     except (OSError, ValueError):
         cache = {}
     dirs = _map_dirs(mp)
@@ -1170,8 +1185,10 @@ def _menu_since(start_size):
 
 def _connect():
     """The game sent to the server. A connect given while CS2 starts is lost (it runs before the menu is ready): a
-    closed game is started first, the connect waits for its menu; tried twice."""
-    url = f"steam://connect/127.0.0.1:{replay.PORT}"
+    closed game is started first, the connect waits for its menu. First the game's own connect (Steam passes it to the
+    running game), then Steam's: Steam's opens its "game info" window, whose check of the local server fails ("the app
+    ID given by the server is invalid", 06/10) while its "Join" button works."""
+    urls = [f"steam://rungame/730/76561202255233023/+connect%20127.0.0.1:{replay.PORT}", f"steam://connect/127.0.0.1:{replay.PORT}"]
     if not _game_running():
         f = _console()
         start = os.path.getsize(f) if f else 0
@@ -1181,9 +1198,9 @@ def _connect():
             if _menu_since(start):
                 break
         time.sleep(8)   # the menu settles
-    for _ in range(2):
+    for url in urls:
         os.startfile(url)
-        for _ in range(45):
+        for _ in range(30 if url.startswith("steam://rungame") else 60):
             time.sleep(1)
             h = replay.heartbeat()
             if h and h.get("humans"):
@@ -1194,11 +1211,24 @@ def _connect():
     return False
 
 
+def _quiet_start(mp):
+    try:
+        replay.start(mp)
+    except Exception as e:   # play() starts it again and says why
+        print("training server early start:", e, flush=True)
+
+
 def play(sid, minutes=20, where="random", difficulty=2):
     """One Play: the session built, the server on its first map, the plugin told, and the game sent to the server
     (started first if it is closed). You only follow what the game shows."""
     import threading
+    first = next((m for m in str(where).split(",") if m in maps(sid)), None)
+    pre = threading.Thread(target=lambda: _quiet_start(first), daemon=True) if first else None
+    if pre:   # the server starts while the session is built (06/10: a minute and a half before anything happened)
+        pre.start()
     sess = build(sid, minutes, where, difficulty)
+    if pre:
+        pre.join(timeout=150)   # never an RCON before its map runs: the server would then refuse 127.0.0.1
     replay.start(sess["blocks"][0]["map"])
     replay.rcon(f"css_session {sess['id']}")
     threading.Thread(target=_connect, daemon=True).start()

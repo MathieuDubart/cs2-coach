@@ -903,6 +903,8 @@ public partial class CoachReplay : BasePlugin
             }
             if (victim.DesignerName == "player" && Server.TickCount < protectUntil && new CCSPlayerPawn(victim.Handle).OriginalController.Value is { IsBot: false })
                 return HookResult.Handled;   // a defense: you just came back on your spot
+            if (victim.DesignerName == "player" && (phase == "setup" || phase == "countdown") && new CCSPlayerPawn(victim.Handle).OriginalController.Value is { IsBot: false })
+                return HookResult.Handled;   // before GO nothing hurts you (06/10: killed during an aim drill's countdown, a minute on the floor)
             var att = info.Attacker.Value;
             var hurt = info.Inflictor.Value?.DesignerName == "trigger_hurt" || att?.DesignerName == "trigger_hurt";   // logged "by null (trigger_hurt)"
             if (victim.DesignerName == "player" && hurt && new CCSPlayerPawn(victim.Handle).OriginalController.Value is { IsBot: false })
