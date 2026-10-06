@@ -221,6 +221,75 @@ def aim_drills(sid, mp):
     return out
 
 
+# ---------------------------------------------------------------- the aim block on the game's aim map (06/10)
+
+AIM_MAP = "aim_map"
+
+
+def _my_guns(sid):
+    """The guns you play (your demos): your T rifle, your CT rifle, your pistol (the default one unless you play another
+    one a lot)."""
+    t, ct, pist = Counter(), Counter(), Counter()
+    for mid, _ in _my_matches(str(sid)):
+        try:
+            L = pd.read_parquet(os.path.join(config.OUT, "deep", mid, "loadout.parquet"), columns=["steamid", "side", "primary", "pistol"])
+        except Exception:
+            continue
+        L = L[L.steamid.astype(str) == str(sid)]
+        t.update(L[L.side == "T"].primary.dropna())
+        ct.update(L[L.side == "CT"].primary.dropna())
+        pist.update(L.pistol.dropna())
+    rifle = lambda c, names, dflt: next((n for n, _ in c.most_common() if n in names and replay._item(n)), dflt)
+    tr = rifle(t, ("AK-47", "Galil AR", "SG 553"), "AK-47")
+    cr = rifle(ct, ("M4A1-S", "M4A4", "FAMAS", "AUG"), "M4A1-S")
+    n = sum(pist.values()) or 1
+    pi = next((p for p, k in pist.most_common() if p not in ("Glock-18", "USP-S", "P2000") and k >= 0.15 * n and replay._item(p)), "USP-S")
+    return tr, cr, pi
+
+
+def aim_range_drills(sid, secs):
+    """The aim block (06/10, the user: "fais le travail d'aim sur une map d'aim, une map d'entraînement d'aim, et
+    ensuite lance les maps que j'ai choisies"; the duel spots on the maps spawned in front of him or behind him and
+    prefired him): on the game's aim_map, targets across the map in front of you: still ones to flick to, strafing
+    ones, then duels that shoot back only after a player's reaction time; your guns. As many as the block's time holds."""
+    tr, cr, pi = _my_guns(sid)
+    w = lambda n: replay._item(n) or "weapon_ak47"
+    menu = [
+        {"variant": "flick", "gun": tr, "secs": 60, "count": 3, "goal": 25,
+         "tip": "still targets across the map: flick to the head, one bullet · they don't shoot"},
+        {"variant": "strafe", "gun": cr, "secs": 50, "count": 2, "goal": 14,
+         "tip": "strafing targets: stop, then shoot (counter-strafe) · they don't shoot"},
+        {"variant": "duel", "gun": tr, "secs": 60, "count": 2, "goal": 12,
+         "tip": "duels: they shoot back once they've seen you a player's reaction time · you respawn"},
+        {"variant": "flick", "gun": pi, "secs": 45, "count": 3, "goal": 15,
+         "tip": "pistol: still targets, head only · they don't shoot"},
+    ]
+    out, used, k = [], 0, 0
+    while used < secs - 20 and k < 8:
+        m = menu[k % len(menu)]
+        k += 1
+        name = {"flick": "FLICKS", "strafe": "STRAFE", "duel": "DUELS"}[m["variant"]]
+        out.append({"id": f"range:{m['variant']}:{m['gun']}", "kind": "aim", "mode": "range", "variant": m["variant"], "map": AIM_MAP,
+                    "title": f"{name} · {m['gun']}", "tip": m["tip"], "team": 2,
+                    "weapons": ["weapon_knife", w(m["gun"])] if m["gun"] == pi else ["weapon_knife", "weapon_glock", w(m["gun"])],
+                    "bot_weapons": ["weapon_knife", RIFLE[3]], "seconds": m["secs"], "count": m["count"], "goal": m["goal"],
+                    "clock": m["secs"]})
+        used += m["secs"] + 12
+    return out
+
+
+# a prefire's angles by the bots' level (06/10, the user: "en expert les bots vraiment partout, en normal le maximum
+# mais un peu moins, en simple vraiment beaucoup moins: les positions les plus fortes, les plus jouées")
+PREFIRE_N = {0: 4, 1: 7, 2: 9, 3: 10}
+
+
+def _by_level(d, difficulty):
+    b = d["bots"][:PREFIRE_N.get(int(difficulty), 9)]   # the most played first
+    m = min((x.get("at", 0) for x in b), default=0)
+    d["bots"] = [dict(x, at=round(x.get("at", 0) - m, 1)) for x in b]
+    return d
+
+
 # ---------------------------------------------------------------- aim like on practice servers
 
 def _cells(P, cell=110):
@@ -253,69 +322,116 @@ def _hold_t(CP, tm, p):
 def site_data(mp):
     """From every demo of the map (the whole base, not only yours): for each bomb site, the spots CTs hold it from (the
     duels of the first 75 s of a round, CT within 1500 u of the site) and where the Ts come from (entrance zones, with
-    their spots). Cached per map, rebuilt when the base grows."""
+    their spots). Each spot keeps where the Ts it fought stood ("seen", 40 at most: the two saw each other, so a way
+    that passes there is in its sight, 06/10) and how often its CTs fought crouched. Cached per map, rebuilt when the
+    base grows."""
     try:
         cache = json.load(open(SITES_F, encoding="utf-8"))
     except (OSError, ValueError):
         cache = {}
-    dirs = []
-    for d in sorted(os.listdir(os.path.join(config.OUT, "deep"))):
-        try:
-            if json.load(open(os.path.join(config.OUT, "deep", d, "meta.json"), encoding="utf-8")).get("map") == mp:
-                dirs.append(d)
-        except (OSError, ValueError):
-            continue
+    dirs = _map_dirs(mp)
     # computed again when the map has a quarter more matches (the base grows by itself: not at every Play)
-    if mp in cache and cache[mp].get("v") == 4 and cache[mp].get("n", 0) >= 0.8 * len(dirs):
+    if mp in cache and cache[mp].get("v") == 5 and cache[mp].get("n", 0) >= 0.8 * len(dirs):
         return cache[mp]
-    rows = []
+    cols = ["t", "killer_side", "victim_side", "killer_zone", "victim_zone", "killer_crouch", "victim_crouch",
+            "killer_X", "killer_Y", "killer_Z", "victim_X", "victim_Y", "victim_Z"]
+    parts = []
     for d in dirs:
         try:
-            D = pd.read_parquet(os.path.join(config.OUT, "deep", d, "duels.parquet"))
+            D = pd.read_parquet(os.path.join(config.OUT, "deep", d, "duels.parquet"), columns=cols)
         except Exception:
             continue
-        for _, r in D[D.t <= 75].iterrows():
-            if {r.killer_side, r.victim_side} != {"T", "CT"}:
-                continue
-            ct = "killer" if r.killer_side == "CT" else "victim"
-            tt = "victim" if ct == "killer" else "killer"
-            rows.append({"time": float(r.t), "ct": (r[f"{ct}_X"], r[f"{ct}_Y"], r[f"{ct}_Z"]), "ct_zone": r[f"{ct}_zone"],
-                         "t": (r[f"{tt}_X"], r[f"{tt}_Y"], r[f"{tt}_Z"]), "t_zone": r[f"{tt}_zone"]})
-    R = pd.DataFrame(rows)
+        D = D[(D.t <= 75) & (((D.killer_side == "CT") & (D.victim_side == "T")) | ((D.killer_side == "T") & (D.victim_side == "CT")))]
+        if not len(D):
+            continue
+        ck = (D.killer_side == "CT").to_numpy()
+        col = lambda a, ct: np.where(ck == ct, D[f"killer_{a}"].to_numpy(), D[f"victim_{a}"].to_numpy())
+        parts.append(pd.DataFrame({"time": D.t.to_numpy(float),
+                                   "ctx": col("X", True), "cty": col("Y", True), "ctz": col("Z", True), "ct_zone": col("zone", True),
+                                   "ct_crouch": col("crouch", True), "tx": col("X", False), "ty": col("Y", False), "tz": col("Z", False),
+                                   "t_zone": col("zone", False)}))
+    R = pd.concat(parts, ignore_index=True) if parts else pd.DataFrame()
     sites = {}
     if len(R):
+        R = R.dropna(subset=["ctx", "cty", "ctz", "tx", "ty", "tz"])
+        CA = R[["ctx", "cty", "ctz"]].to_numpy(float)
+        rng = np.random.default_rng(0)
         for z in sorted({z for z in R.ct_zone.dropna().unique() if "Bombsite" in str(z)}):
             S = R[R.ct_zone == z]
             if len(S) < 25:
                 continue
-            cen = np.median(np.array(S.ct.tolist(), float), axis=0)
-            near = R[[math.dist(c, cen) < 1500 and abs(c[2] - cen[2]) < 300 for c in R.ct]]   # its own floor (Nuke: A is above B)
+            cen = np.median(S[["ctx", "cty", "ctz"]].to_numpy(float), axis=0)
+            near = R[(np.linalg.norm(CA - cen, axis=1) < 1500) & (np.abs(CA[:, 2] - cen[2]) < 300)]   # its own floor (Nuke: A is above B)
             ents = []
             for tz, g in near.groupby("t_zone"):   # where the Ts were when they fought the site's CTs
                 if not isinstance(tz, str) or tz == z or len(g) < 12:
                     continue
-                T = np.array(g.t.tolist(), float)
-                dist = float(np.median([math.dist(p, cen) for p in T]))
+                T = g[["tx", "ty", "tz"]].to_numpy(float)
+                dist = float(np.median(np.linalg.norm(T - cen, axis=1)))
                 if dist < 500:
                     continue
-                CP = np.array(g.ct.tolist(), float)
+                CP = g[["ctx", "cty", "ctz"]].to_numpy(float)
                 holds = _spread(_cells(CP), 12)   # the CT spots facing that entrance
                 tm = g.time.to_numpy()
                 spawn = _spread(_cells(T), 3, gap=200, keep=lambda p: math.dist(p, cen) > 700)
                 if len(holds) < 4 or not spawn:
                     continue
                 tcen = np.median(T, axis=0)
+                cr = g.ct_crouch.fillna(False).astype(bool).to_numpy()
+                hs = []
+                for c, p in holds:
+                    m = (np.hypot(CP[:, 0] - p[0], CP[:, 1] - p[1]) < 110) & (np.abs(CP[:, 2] - p[2]) < 90)
+                    Tm = T[m]
+                    if len(Tm) > 40:
+                        Tm = Tm[rng.choice(len(Tm), 40, replace=False)]
+                    hs.append({"pos": [round(float(v), 1) for v in p], "ang": _angle(p, tcen), "n": c, "t": _hold_t(CP, tm, p),
+                               "zone": _hold_zone(CP, g.ct_zone.to_numpy(), p, mp), "seen": [[round(float(v)) for v in q] for q in Tm],
+                               "crouch": round(float(cr[m].mean()), 2) if m.any() else 0.0})
                 ents.append({"zone": tz, "n": int(len(g)), "dist": round(dist),
-                             "start": [round(float(v), 1) for v in _spread(_cells(T), 1)[0][1]],
-                             "holds": [{"pos": [round(float(v), 1) for v in p], "ang": _angle(p, tcen), "n": c, "t": _hold_t(CP, tm, p),
-                                        "zone": _hold_zone(CP, g.ct_zone.to_numpy(), p, mp)} for c, p in holds],
+                             "start": [round(float(v), 1) for v in _spread(_cells(T), 1)[0][1]], "holds": hs,
                              "spawns": [[round(float(v), 1) for v in p] for _, p in spawn]})
             ents.sort(key=lambda e: -e["n"])
-            spot = _spread(_cells(np.array(S.ct.tolist(), float)), 1)[0][1]   # the CTs' favourite spot on the site
+            spot = _spread(_cells(S[["ctx", "cty", "ctz"]].to_numpy(float)), 1)[0][1]   # the CTs' favourite spot on the site
             sites[z] = {"center": [round(float(v), 1) for v in cen], "defend": [round(float(v), 1) for v in spot], "entrances": ents[:4]}
-    cache[mp] = {"n": len(dirs), "v": 4, "sites": sites}
+    cache[mp] = {"n": len(dirs), "v": 5, "sites": sites}
     json.dump(cache, open(SITES_F, "w", encoding="utf-8"))
     return cache[mp]
+
+
+def _site_holds(S):
+    """A site's CT spots from all its entrances, the ones 160 u apart merged (their counts and their foes summed), the
+    most held first."""
+    out = []
+    for h in sorted((h for e in S["entrances"] for h in e["holds"]), key=lambda h: -h["n"]):
+        same = next((q for q in out if math.dist(h["pos"], q["pos"]) <= 160), None)
+        if same:
+            same["n"] += h["n"]
+            same["seen"] = same["seen"] + list(h.get("seen") or [])
+            continue
+        out.append(dict(h, seen=list(h.get("seen") or [])))
+    return out
+
+
+def _sees(h, P, r=160.0, dz=110.0):
+    """How many of a CT spot's foes stood on that way (its points within r, same floor): the duels prove the two saw
+    each other, so the way passes in the spot's sight. 0: never seen fighting from there."""
+    Q = np.array(h.get("seen") or [], float).reshape(-1, 3)
+    W = np.asarray(P, float)[:, :3]
+    if not len(Q) or not len(W):
+        return 0
+    W = W[::3] if len(W) > 90 else W
+    m = (np.hypot(Q[:, None, 0] - W[None, :, 0], Q[:, None, 1] - W[None, :, 1]) < r) & (np.abs(Q[:, None, 2] - W[None, :, 2]) < dz)
+    return int(m.any(1).sum())
+
+
+def _first_seen(h, P, r=160.0, dz=110.0):
+    """The first frame of a way in a CT spot's sight (one of its foes' spots), -1: never."""
+    Q = np.array(h.get("seen") or [], float).reshape(-1, 3)
+    W = np.asarray(P, float)[:, :3]
+    if not len(Q) or not len(W):
+        return -1
+    m = ((np.hypot(W[:, None, 0] - Q[None, :, 0], W[:, None, 1] - Q[None, :, 1]) < r) & (np.abs(W[:, None, 2] - Q[None, :, 2]) < dz)).any(1)
+    return int(np.argmax(m)) if m.any() else -1
 
 
 def _hold_zone(CP, zones, p, mp):
@@ -542,7 +658,12 @@ def _rdp(Q, eps):
     return sorted(keep)
 
 
-def _ground_line(P):
+# the maps' water: (x min, x max, y min, y max, -, the height the line goes up to there): Anubis's canals, where the
+# players' feet are at -189 and the walkways at -152
+WATER = {"de_anubis": [(-420, 1270, 20, 890, -200, -158)]}
+
+
+def _ground_line(P, mp=None):
     """The way drawn on the ground: the jumps flattened, the strafes straightened, 60 segments at most (03/10: the
     line hung in the air and zigzagged where the real player jumped on the boxes)."""
     Q = np.array(P[:, :3], float)
@@ -553,6 +674,9 @@ def _ground_line(P):
         sm = np.stack([np.convolve(pad[:, j], np.ones(2 * k + 1) / (2 * k + 1), mode="valid") for j in range(2)], 1)
         sm[0], sm[-1] = Q[0, :2], Q[-1, :2]
         Q[:, :2] = sm
+    for x0, x1, y0, y1, zmin, surf in WATER.get(mp, ()):   # in the water: on its surface, not under it (06/10, Anubis)
+        w = (Q[:, 0] > x0) & (Q[:, 0] < x1) & (Q[:, 1] > y0) & (Q[:, 1] < y1) & (Q[:, 2] < surf)
+        Q[w, 2] = surf
     eps, keep = 24.0, _rdp(Q, 24.0)   # 06/10: closer to the way walked (48 u cut the corners)
     while len(keep) > 81:
         eps *= 1.5
@@ -586,50 +710,68 @@ def practice_drills(sid, mp):
                 continue
             P = np.array(hit["path"], float).reshape(-1, 5)[:, :3] if hit else None
             start = [round(float(v), 1) for v in P[0]] if hit else e["start"]
-            holds = [h for s_ in S["entrances"] for h in s_["holds"]]   # the angles along that way, the site's included,
-            # along the way: a spot above it sees it (Heaven, a box, a balcony: 04/10 "all the high positions at A are
-            # not used"), a spot under it is on another floor (a height gap under the way counts three times)
-            def _gap(h):
-                dz = h["pos"][2] - P[:, 2]
-                return float(np.min(np.sqrt((P[:, 0] - h["pos"][0]) ** 2 + (P[:, 1] - h["pos"][1]) ** 2 + np.where(dz > 0, dz, 3 * dz) ** 2)))
-            holds = [h for h in holds if _gap(h) < 650 and math.dist(h["pos"][:2], start[:2]) > 600]   # none right at your start
-            seen_, keep = [], []
-            for h in sorted(holds, key=lambda h: -h["n"]):
-                if all(math.dist(h["pos"], q) > 160 for q in seen_):
-                    seen_.append(h["pos"])
+            # the CT angles seen from that very way (06/10, the user: "le dernier, je le croise jamais... je veux juste
+            # qu'il soit visible depuis le chemin que je prends"): the base's duels put Ts on this way fighting a CT on
+            # that spot (they saw each other); the most fought from it first (the strongest, the most played: the
+            # session keeps more or fewer by its level), none right at your start, 10 at most (a team holds 10 bots)
+            keep = []
+            for h in _site_holds(S):
+                h["vis"] = _sees(h, P)
+                if h["vis"] >= 2 and math.dist(h["pos"][:2], start[:2]) > 600:
                     keep.append(h)
-            keep = keep[:10]   # a team holds 10 bots at most (the server refused the 11th and 12th)
+            keep = sorted(keep, key=lambda h: (-h["vis"], -h["n"]))[:10]
             if len(keep) < 4:
                 continue
+            for h in keep:   # each one turned to where it saw the Ts of this way
+                Q = np.array(h["seen"], float).reshape(-1, 3)
+                near = Q[np.hypot(Q[:, 0, None] - P[None, ::3, 0], Q[:, 1, None] - P[None, ::3, 1]).min(1) < 160]
+                if len(near):
+                    eye = 46 if h.get("crouch", 0) >= 0.35 else 64
+                    h["ang"] = _angle([h["pos"][0], h["pos"][1], h["pos"][2] + eye], np.median(near, axis=0) + [0, 0, 56])
             route = hit["zones"] if hit else [frm, site]
             first = min(keep, key=lambda h: math.dist(h["pos"], start))
-            line = _ground_line(P) if hit else []   # the way drawn on the ground
+            line = _ground_line(P, mp) if hit else []   # the way drawn on the ground
             out.append({"id": f"prefire:{mp}:{z}:{e['zone']}", "kind": "aim", "mode": "prefire", "map": mp,
                         "title": f"PREFIRE {site} via {frm}", "team": 2, "route": route, "line": line,
-                        "tip": f"follow the gold line: {' → '.join(route)} · {len(keep)} CTs on the angles they hold there, at their real timings · they don't shoot",
+                        "tip": f"follow the gold line: {' → '.join(route)} · the angles CTs hold there, at their real timings · they don't move, they don't shoot",
                         "me": {"pos": start, "ang": _angle(start, line[1] if len(line) > 1 else first["pos"])},
                         "weapons": ["weapon_knife", RIFLE[2]], "bot_weapons": ["weapon_knife", RIFLE[3]],
-                        "bots": [{"pos": h["pos"], "ang": h["ang"], "zone": site, "at": at} for h, at in zip(keep, _timings(keep))],
+                        "bots": [{"pos": h["pos"], "ang": h["ang"], "zone": h.get("zone") or site, "at": at, "duck": h.get("crouch", 0) >= 0.35}
+                                 for h, at in zip(keep, _timings(keep))],
+                        # the round's clock as when these angles get fought (06/10: "le vrai temps in-game, pas 58 minutes")
+                        "clock": round(max(15.0, 115 - max(0.0, min(h["t"] for h in keep) - 8)), 1),
                         "seconds": 90, "weight": 2 + min(1.0, e["n"] / 400)})
         spawns = [{"pos": p, "ang": _angle(p, S["defend"]), "zone": replay_zone(e["zone"], mp)} for e in S["entrances"] for p in e["spawns"]]
         letter = z.replace("Bombsite", "")[:1]
         hits = (entries(mp).get(letter) or []) if letter in ("A", "B") else []
         other = replay_zone("Bombsite" + ("B" if letter == "A" else "A"), mp)
         hits = [t for t in hits if not any("CT" in zn for zn in t.get("zones") or []) and other not in (t.get("zones") or [])]   # attacks
-        tracks = _defense_tracks(hits, S["defend"])
+        # the spots to hold, one after the other, before playing free (04/10: "a specific work on positions: backsite,
+        # then that one, then free"): the most held of the site, each its own place, and only one the real hits come
+        # into sight of (06/10: "les bots n'attaquent pas le mid, je peux rester à rien faire"); each post gets its own
+        # attackers, real hits that walk into its sight from out of it
+        posts, tracks = [], []
+        for h in _site_holds(S):
+            if not h.get("zone") or any(h["zone"] == q["zone"] or math.dist(h["pos"], q["pos"]) <= 300 for q in posts):
+                continue
+            mine = [t for t in hits if _sees(h, np.array(t["path"], float).reshape(-1, 5), r=180) >= 2]
+            tr = _defense_tracks(mine, h["pos"], n=10, foes=h) if len(mine) >= 3 else []
+            if len(tr) < 3:   # too few walk into its sight from out of it
+                continue
+            k = len(posts)
+            Q = np.array(h["seen"], float).reshape(-1, 3)   # turned to where its foes stood
+            ang = _angle([h["pos"][0], h["pos"][1], h["pos"][2] + 64], np.median(Q, axis=0) + [0, 0, 56]) if len(Q) else h["ang"]
+            posts.append({"pos": h["pos"], "ang": ang, "zone": _post_name(mp, h), "poly": zone_outline(mp, h["zone"], h["pos"]), "t": h.get("t")})
+            tracks += [dict(t, post=k) for t in tr]
+            if len(posts) >= 2:
+                break
+        tracks += [dict(t, post=-1) for t in _defense_tracks(hits, S["defend"], n=12)]   # then free: any of them
         if len(spawns) < 2 and not tracks:
             continue
         ways = Counter(t["zone"] for t in tracks)
         froms = ", ".join(f"{w} {round(100 * n / len(tracks))}%" for w, n in ways.most_common(4)) if tracks else \
             ", ".join(dict.fromkeys(replay_zone(e["zone"], mp) for e in S["entrances"]))
-        # the spots to hold, one after the other, before playing free (04/10: "a specific work on positions: backsite,
-        # then that one, then free"): the most held of the site, each its own place
-        posts = []
-        for h in sorted((h for e in S["entrances"] for h in e["holds"]), key=lambda h: -h["n"]):
-            if h.get("zone") and all(h["zone"] != q["zone"] and math.dist(h["pos"], q["pos"]) > 300 for q in posts):
-                posts.append({"pos": h["pos"], "ang": h["ang"], "zone": h["zone"], "poly": zone_outline(mp, h["zone"], h["pos"])})
-            if len(posts) >= 2:
-                break
+        hold_t = [p["t"] for p in posts if p.get("t") is not None]
         for kit in _defense_kits(sid):
             out.append({"id": f"defend:{mp}:{z}:{kit['cls']}", "kind": "aim", "mode": "defend", "map": mp,
                         "title": f"DEFEND {site} · {kit['name']}", "team": 3,
@@ -637,25 +779,41 @@ def practice_drills(sid, mp):
                         "me": {"pos": S["defend"], "ang": _angle(S["defend"], spawns[0]["pos"] if spawns else tracks[0]["path"][:3])},
                         "weapons": kit["weapons"], "bot_weapons": kit["bot_weapons"], "armor": 100, "helmet": kit["helmet"],
                         "bots": spawns, "tracks": tracks, "seconds": kit["seconds"], "alive": kit["alive"], "goal": kit["goal"],
-                        "posts": posts, "weight": kit["weight"]})
+                        "posts": posts, "weight": kit["weight"],
+                        "clock": round(max(20.0, 115 - max(0.0, min(hold_t) - 6)), 1) if hold_t else 0})
     return out
 
 
-def _defense_tracks(hits, spot, n=24):
+# a post's name as players call it where the game's places say otherwise (06/10, the user on Overpass: "cette zone elle
+# s'appelle Toilettes, pas Lower Park"): (map, x, y, radius, callout)
+POST_NAMES = [("de_overpass", -2238.6, -603.1, 260, "Toilets")]
+
+
+def _post_name(mp, h):
+    for m, x, y, r, nm in POST_NAMES:
+        if m == mp and math.hypot(h["pos"][0] - x, h["pos"][1] - y) < r:
+            return nm
+    return h["zone"]
+
+
+def _defense_tracks(hits, spot, n=24, foes=None):
     """A defense's attackers: real hits on the site in their real proportions (the ways attackers really take: few by
     mid when few go by mid, 04/10), each one from 2 s before a CT first saw it in its match, so it walks in out of sight
-    instead of appearing in front of you ("the spawn kill problem"), never closer than 700 u; with its grenades."""
+    instead of appearing in front of you ("the spawn kill problem"), never closer than 700 u; with its grenades. For a
+    post (foes: its CT spot): from 3 s before it comes into that spot's sight, 900 u away at least (06/10: "ils sont trop
+    proches de moi")."""
     cut = []
     for t in hits:
         P = np.array(t["path"], float).reshape(-1, 5)
         d = np.hypot(P[:, 0] - spot[0], P[:, 1] - spot[1])
-        sp = t.get("spot", -1)
+        sp = _first_seen(foes, P, r=180) if foes else t.get("spot", -1)
+        far = 900 if foes else 700
         if 0 <= sp < 32 and d[0] < 1200:   # seen from its very first second, close: it would appear in your sight
             continue
-        k = max(0, sp - 64) if sp >= 0 else 0
-        while k > 0 and d[k] < 700:
+        k = max(0, sp - (96 if foes else 64)) if sp >= 0 else 0
+        while k > 0 and d[k] < far:
             k -= 1
-        if d[k] < 700 or len(P) - k < 40:
+        if d[k] < far or len(P) - k < 40:
             continue
         cut.append({"zone": t["zone"], "path": t["path"][5 * k:], "nades": [dict(nd, f=nd["f"] - k) for nd in t.get("nades") or [] if nd["f"] >= k]})
     by = {}
@@ -828,37 +986,62 @@ def _spots(mp):
     return out
 
 
-def _victims(mp, team, typ, land, me):
-    """The enemies a grenade is for: 2 spots of the other side, the most held ones at the right distance from where
-    it lands (a smoke 350-1100 u, a flash 250-900, an HE 80-350), on its floor, turned to it; a molotov: in its fire,
-    turned to where it came from."""
+def _victims(mp, team, typ, land, me, side=None, t_med=None):
+    """The enemies a grenade is for, where the base's players really were when the same lineup landed (06/10, the user:
+    "la personne qui subit le stuff doit être là où quelqu'un a pris des dégâts avec cette grenade": a Squeaky flash is
+    for the Ts in Squeaky, not for a CT outside): the throws from that spot onto that place in the demos, the enemies in
+    its reach at that moment (an HE 350 u, a molotov 220 u, a flash 650 u, a smoke 900 u, same floor), their most
+    frequent spots, turned to it. Without such throws: the most held enemy spots in its reach (a smoke or a flash: the
+    ones beyond it from where you throw); a molotov: in its fire, turned to where it came from."""
     if not land or len(land) < 3:
         return []
     lx, ly, lz = land[:3]
+    reach = {"he": 350, "molotov": 220, "flash": 650, "smoke": 900}.get(typ, 500)
+    foe = "CT" if team == 2 else "T"
+    _land(mp, typ, me)   # the base's throws of the map, loaded
+    N, hits = _LANDS.get(mp), []
+    if N is not None and len(N):
+        m = N[(N.type == typ) & ((N.X - me[0]).abs() < 24) & ((N.Y - me[1]).abs() < 24)]
+        for mid, rnd in list(dict.fromkeys(zip(m["match"].astype(str), m["round"])))[:10]:
+            try:
+                G = pd.read_parquet(os.path.join(config.OUT, "deep", mid, "grenades.parquet"),
+                                    columns=["round", "type", "X", "Y", "t", "flight_s", "land_X", "land_Y", "land_Z"])
+                Sm = pd.read_parquet(os.path.join(config.OUT, "deep", mid, "samples.parquet"), columns=["round", "t", "side", "X", "Y", "Z", "health"])
+            except Exception:
+                continue
+            g = G[(G["round"] == rnd) & (G.type == typ) & ((G.X - me[0]).abs() < 24) & ((G.Y - me[1]).abs() < 24)
+                  & (np.hypot(G.land_X - lx, G.land_Y - ly) < 160)]
+            for r in g.itertuples():
+                tl = float(r.t) + (float(r.flight_s) if r.flight_s == r.flight_s else 1.5)
+                q = Sm[(Sm["round"] == rnd) & ((Sm.t - tl).abs() <= 0.5) & (Sm.side == foe) & (Sm.health > 0)]
+                hits += [(x, y, z) for x, y, z in zip(q.X, q.Y, q.Z) if math.hypot(x - lx, y - ly) <= reach and abs(z - lz) < 260]
+    look = [lx, ly, lz + (0 if typ == "flash" else 40)]
+    out = []
+    if len(hits) >= 2:
+        for n, p in _cells(np.array(hits, float), cell=64):
+            if all(math.dist(p, o["pos"]) > 200 for o in out):
+                pp = [round(float(v), 1) for v in p]
+                out.append({"pos": pp, "ang": _angle([pp[0], pp[1], pp[2] + 64], look)})
+            if len(out) >= 2:
+                break
+        return out
     if typ == "molotov":
         dx, dy = me[0] - lx, me[1] - ly
         d = math.hypot(dx, dy) or 1.0
         p = [round(lx + 40 * dx / d, 1), round(ly + 40 * dy / d, 1), round(lz, 1)]
         return [{"pos": p, "ang": _angle([p[0], p[1], p[2] + 64], [me[0], me[1], me[2] + 64])}]
-    lo, hi = {"smoke": (350, 1100), "flash": (250, 900), "he": (80, 350)}.get(typ, (250, 900))
-    # on its floor; a flash pops in the air: the ones up to 450 u under it, never over it (Nuke: A is right above B)
-    lo_z, hi_z = (-450, 100) if typ == "flash" else (-200, 200)
-    # a smoke or a flash is for the ones beyond it, seen from where you throw it: the line it cuts, the players it
-    # blinds as they come (04/10: "are these lines people hold? rarely": they were any spot near it)
+    lo_z, hi_z = (-450, 100) if typ == "flash" else (-200, 200)   # a flash pops in the air: the ones under it
     ax, ay = lx - me[0], ly - me[1]
     an = math.hypot(ax, ay) or 1.0
-    cone = {"smoke": 0.5, "flash": 0.26}.get(typ)   # cos 60°, cos 75°
+    cone = {"smoke": 0.5, "flash": 0.0}.get(typ)
 
     def beyond(x, y):
         if cone is None:
             return True
         bx, by = x - lx, y - ly
         return (ax * bx + ay * by) / (an * (math.hypot(bx, by) or 1.0)) >= cone
-    S = _spots(mp)["CT" if team == 2 else "T"]
-    out = []
-    for x, y, z, n in S:   # the most held first
-        if lo <= math.hypot(x - lx, y - ly) <= hi and lo_z < z - lz < hi_z and beyond(x, y) and all(math.dist([x, y, z], o["pos"]) > 250 for o in out):
-            look = [lx, ly, lz + (0 if typ == "flash" else 40)]
+    for x, y, z, n in _spots(mp)["CT" if team == 2 else "T"]:   # the most held first
+        if math.hypot(x - lx, y - ly) <= reach and lo_z < z - lz < hi_z and beyond(x, y) and all(math.dist([x, y, z], o["pos"]) > 250 for o in out):
             out.append({"pos": [x, y, z], "ang": _angle([x, y, z + 64], look)})
             if len(out) >= 2:
                 break
@@ -937,7 +1120,8 @@ def nade_drills(sid, mp):
                         "title": f"{name} → {x['to']}", "tip": f"{why} · {x.get('timer') or ''}".strip(" ·"),
                         "team": team, "type": typ, "item": item, "how": x.get("how") or "standing still",
                         "click": {"right": "right click", "both": "left + right click"}.get(x.get("click"), "left click"),
-                        "me": {"pos": pos, "ang": ang}, "target": land, "victims": _victims(mp, team, typ, land, pos),
+                        "me": {"pos": pos, "ang": ang}, "target": land, "victims": [], "_vic": [side, x.get("t_med")],
+                        "clock": round(max(10.0, 115 - float(x.get("t_med") or 0) + 3), 1) if x.get("t_med") else 0,
                         "weight": 1 + 10 * w})
     return out
 
@@ -1084,14 +1268,17 @@ def build(sid, minutes=20, where="random", difficulty=2):
     split = splits(minutes)
     all_sc = [] if warm else replay.scenarios(sid, n=40)
     blocks, todo = [], []
+    if split.get("aim"):   # the aim first, on the aim map, for all the maps' share (06/10)
+        secs = minutes * 60 * split["aim"]
+        blocks.append({"map": AIM_MAP, "kind": "aim", "seconds": int(secs), "drills": aim_range_drills(sid, secs)})
     for mp in chosen:
         pr = practice_drills(sid, mp)
-        fns = {"aim": aim_drills, "defend": lambda s_, m_: [d for d in pr if d.get("mode") == "defend"],
+        fns = {"defend": lambda s_, m_: [d for d in pr if d.get("mode") == "defend"],
                "push": lambda s_, m_: [d for d in pr if d.get("mode") == "prefire"], "nade": nade_drills,
                "wallbang": wallbang_drills, "situation": lambda s_, m_: situation_drills(s_, m_, all_sc)}
-        share = dict(split)
-        if not pr:   # a hostage map: no site to defend or push, your duel spots take their time
-            share["aim"] = share.get("aim", 0) + share.pop("defend", 0) + share.pop("push", 0)
+        share = {k: v for k, v in split.items() if k != "aim"}
+        if not pr:   # a hostage map: no site to defend or push, the situations take their time
+            share["situation"] = share.get("situation", 0) + share.pop("defend", 0) + share.pop("push", 0)
         kinds = [(k, fns[k]) for k in ORDER if share.get(k)]
         bad = {(m_, r_) for x in S if x["map"] == mp for m_, r_ in x["rounds"]}   # the rounds you struggled in
         spare = 0.0   # a part with nothing to train on this map gives its time to the next ones
@@ -1123,6 +1310,13 @@ def build(sid, minutes=20, where="random", difficulty=2):
             for d in picked:
                 if kind == "nade":   # guided, then the spot and how, then the spot only
                     d["level"] = min(2, (p["items"].get(d["id"]) or {}).get("box", 0))
+                    side_, t_med = d.pop("_vic", [None, None])
+                    try:
+                        d["victims"] = _victims(mp, d["team"], d["type"], d.get("target"), d["me"]["pos"], side_, t_med)
+                    except Exception as e:
+                        print("victims", d["id"], e, flush=True)
+                if kind == "push":
+                    _by_level(d, difficulty)
                 if kind == "situation":   # its file is built below (the plugin waits for it if it comes to it first)
                     d["scenario"] = d["id"]
                     todo.append(d)
@@ -1159,10 +1353,12 @@ def preview(sid, minutes=20, where="random"):
     chosen = [m for m in str(where).split(",") if m in mine][:3] or [where if where in mine else "random"]
     split, out = splits(minutes), []
     per_map = minutes * 60 / len(chosen)
+    if split.get("aim"):   # the aim first, on the aim map (06/10)
+        out.append({"map": AIM_MAP, "kind": "aim", "seconds": int(minutes * 60 * split["aim"])})
     for mp in chosen:
-        share = dict(split)
+        share = {k: v for k, v in split.items() if k != "aim"}
         if mp.startswith("cs_"):
-            share["aim"] = share.get("aim", 0) + share.pop("defend", 0) + share.pop("push", 0)
+            share["situation"] = share.get("situation", 0) + share.pop("defend", 0) + share.pop("push", 0)
         spare = 0.0
         for k in ORDER:
             if not share.get(k):
@@ -1300,7 +1496,7 @@ def play(sid, minutes=20, where="random", difficulty=2):
     """One Play: the session built, the server on its first map, the plugin told, and the game sent to the server
     (started first if it is closed). You only follow what the game shows."""
     import threading
-    first = next((m for m in str(where).split(",") if m in maps(sid)), None)
+    first = AIM_MAP if splits(minutes).get("aim") else next((m for m in str(where).split(",") if m in maps(sid)), None)
     pre = threading.Thread(target=lambda: _quiet_start(first), daemon=True) if first else None
     if pre:   # the server starts while the session is built (06/10: a minute and a half before anything happened)
         pre.start()

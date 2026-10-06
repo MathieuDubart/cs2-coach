@@ -161,10 +161,13 @@ def build(sid, mid, rnd, kind="death", t=None):
         key = int(Dr[Dr.victim == sid].tick.iloc[0])
         start, end = max(t0, key - BEFORE * 64), min(t_end, key + AFTER * 64)
     p = DemoParser(os.path.join(config.CACHE, f"{mid}.dem"))
-    if kind != "clutch":   # start when no enemy is close: the latest moment 5 to 20 s before, with all of them 1,100 u away
+    # start when no enemy is close: the latest moment 5 to 20 s before (a clutch: 1 to 12 s before it starts), with all of
+    # them 1,100 u away (06/10, a clutch started face to face with its enemy: "je viens d'ici à la base, je ne peux pas
+    # me retrouver face à face")
+    if True:
         try:
-            early = max(t0 + 2 * 64, key - 20 * 64)
-            Q = p.parse_ticks(["X", "Y", "team_num", "is_alive"], ticks=list(range(early, key - 5 * 64 + 1, 32)))
+            early = max(t0 + 2 * 64, key - (12 if kind == "clutch" else 20) * 64)
+            Q = p.parse_ticks(["X", "Y", "team_num", "is_alive"], ticks=list(range(early, key - (1 if kind == "clutch" else 5) * 64 + 1, 32)))
             Q["steamid"] = Q.steamid.astype(str)
             mine = Q[Q.steamid == sid].set_index("tick")
             myteam = int(mine.team_num.iloc[0]) if len(mine) else 0
@@ -178,6 +181,8 @@ def build(sid, mid, rnd, kind="death", t=None):
                     break
         except Exception as e:
             print("start", mid, rnd, e, flush=True)
+    if start - t0 < 12 * 64:   # very early in the round: from the spawn (06/10: "fais-moi partir quasiment du spawn")
+        start = t0 + 16
     ticks = list(range(start, end + 1, STEP))
     T = p.parse_ticks(["X", "Y", "Z", "yaw", "pitch", "is_alive", "team_num", "ducking", "last_place_name"], ticks=ticks)
     T["steamid"] = T.steamid.astype(str)
@@ -252,16 +257,36 @@ def build(sid, mid, rnd, kind="death", t=None):
         goal = "win the round: defuse it" if me["team"] == 3 else "win the round: the bomb blows up, or they all die"
     try:   # your way in the match, drawn on the ground like the prefire's (04/10: "give me the route on the ground")
         import train
-        line = train._ground_line(np.array(me["path"], float).reshape(-1, 5)) if len(me["path"]) >= 10 else []
+        line = train._ground_line(np.array(me["path"], float).reshape(-1, 5), mp) if len(me["path"]) >= 10 else []
     except Exception as e:
         print("line", mid, rnd, e, flush=True)
         line = []
+    # who died before the window, where, when (06/10: "il me faut du contexte: savoir où mes alliés meurent pour savoir
+    # où sont les ennemis"), and where everyone went before it (the doors they opened, the vents they broke)
+    dead, trail = [], []
+    for r in Dr[(Dr.tick >= t0) & (Dr.tick < start)].itertuples():
+        if r.victim_side in ("T", "CT") and r.victim_X == r.victim_X:
+            dead.append({"pos": [round(float(r.victim_X), 1), round(float(r.victim_Y), 1), round(float(r.victim_Z), 1)],
+                         "team": 2 if r.victim_side == "T" else 3, "at": nades.humanize(r.victim_zone, mp) or "",
+                         "clock": nades._timer(float(r.t))})
+    try:
+        if start - t0 > 64:
+            B = p.parse_ticks(["X", "Y", "Z", "is_alive"], ticks=list(range(t0, start, 32)))
+            B = B[B.is_alive.astype(bool)]
+            seen_ = set()
+            for x, y, z in zip(B.X, B.Y, B.Z):
+                k = (int(x // 48), int(y // 48), int(z // 64))
+                if k not in seen_:
+                    seen_.add(k)
+                    trail.append([round(float(x)), round(float(y)), round(float(z))])
+    except Exception as e:
+        print("trail", mid, rnd, e, flush=True)
     sc = {"id": f"{mid}_r{rnd}_{kind[0]}", "map": mp, "match": mid, "round": rnd, "kind": kind, "rate": 64, "step": STEP,
           "start_tick": start, "key": (key - start) // STEP, "team": me["team"], "zone": zone,
           "title": f"{mp.replace('de_', '').replace('cs_', '').title()} R{rnd} · {'clutch' if kind == 'clutch' else 'death'}"
                    f"{' · ' + zone if zone else ''}", "players": players, "nades": _nades(p, start, end, teams),
           "danger": danger, "goal": goal, "bomb": bomb, "plant": plant, "line": line,
-          "clock": round(max(0.0, ROUND_S - (start - t0) / 64), 1)}
+          "clock": round(max(0.0, ROUND_S - (start - t0) / 64), 1), "dead": dead, "trail": trail}
     os.makedirs(SCEN, exist_ok=True)
     f = os.path.join(SCEN, f"{sc['id']}.json")
     json.dump(sc, open(f, "w", encoding="utf-8"), ensure_ascii=False, separators=(",", ":"))

@@ -21,6 +21,7 @@ public class Spot
     [JsonPropertyName("zone")] public string? Zone { get; set; }
     [JsonPropertyName("at")] public float At { get; set; }   // prefire: when it peeks (s after the start)
     [JsonPropertyName("poly")] public List<float[]> Poly { get; set; } = new();   // defend: the place's ground outline (06/10)
+    [JsonPropertyName("duck")] public bool Duck { get; set; }   // prefire: an angle held crouched
 }
 
 public class Drill
@@ -53,6 +54,9 @@ public class Drill
     [JsonPropertyName("tracks")] public List<EntryTrack> Tracks { get; set; } = new();   // defend: real hits on the site
     [JsonPropertyName("route")] public List<string> Route { get; set; } = new();   // prefire: the places of the way
     [JsonPropertyName("line")] public List<float[]> Line { get; set; } = new();   // prefire: the way, drawn on the ground
+    [JsonPropertyName("variant")] public string Variant { get; set; } = "";   // the aim map: flick, strafe, duel
+    [JsonPropertyName("count")] public int Count { get; set; } = 3;   // the aim map: targets at once
+    [JsonPropertyName("clock")] public float Clock { get; set; }   // the round's clock at GO (s left; 0: none)
 }
 
 public class EntryTrack
@@ -60,6 +64,7 @@ public class EntryTrack
     [JsonPropertyName("zone")] public string Zone { get; set; } = "";
     [JsonPropertyName("path")] public float[] Path { get; set; } = Array.Empty<float>();
     [JsonPropertyName("nades")] public List<Nade> Nades { get; set; } = new();   // the grenades its player threw on the way (f: its frame)
+    [JsonPropertyName("post")] public int Post { get; set; } = -1;   // the post it walks into the sight of (-1: any, the free part)
 }
 
 public class Block
@@ -109,6 +114,11 @@ public partial class CoachReplay
     static readonly Dictionary<string, string> KindName = new() { ["defend"] = "DEFENSE", ["push"] = "PUSH", ["aim"] = "AIM", ["nade"] = "STUFF", ["situation"] = "SITUATION", ["wallbang"] = "WALLBANG" };
     static readonly Dictionary<string, string> KindColor = new() { ["defend"] = "#4fc3a1", ["push"] = "#ff8a3d", ["aim"] = "#ff8a3d", ["nade"] = "#5ab4ff", ["situation"] = "#e0a030", ["wallbang"] = "#c792ea" };
     int postIdx = -1;   // a defense: the spot you hold now (Posts), Posts.Count: free
+    // the aim map: when each target came, the last kill, the strafers' way and its end
+    readonly Dictionary<int, int> cameAt = new();
+    readonly Dictionary<int, (int sign, int until)> strafe = new();
+    int lastKill;
+    List<Vector3> rangeTheirs = new();
     readonly List<(Drill d, bool ok, string outcome)> sessDone = new();   // this session's drills, each one's last try
     readonly List<(Drill d, bool ok, string outcome)> lastDone = new();   // the last session's (!again)
     Session? lastSess;
@@ -155,24 +165,11 @@ public partial class CoachReplay
     {
         ClearLine();
         var gold = System.Drawing.Color.FromArgb(255, 255, 205, 60);
-        float acc = 0;
         for (int i = 0; i + 1 < pts.Count; i++)
         {
             var a = new Vector3(pts[i][0], pts[i][1], pts[i][2] + 8);
             var b = new Vector3(pts[i + 1][0], pts[i + 1][1], pts[i + 1][2] + 8);
-            Beam(a, b, gold, 5f);   // 06/10: a line you see from afar ("le path à prendre au sol avec un trait")
-            var seg = b - a;
-            var len = seg.Length();
-            if (len < 1) continue;
-            var dir = seg / len;
-            var side = new Vector3(-dir.Y, dir.X, 0);
-            for (float d = 220 - acc; d < len; d += 220)   // a chevron every 220 u: which way to go
-            {
-                var at = a + dir * d;
-                Beam(at, at - dir * 26 + side * 16, gold, 4f);
-                Beam(at, at - dir * 26 - side * 16, gold, 4f);
-            }
-            acc = (acc + len) % 220;
+            Beam(a, b, gold, 5f);   // 06/10: a line you see from afar ("le path à prendre au sol avec un trait"; no arrows: "pas besoin de flèches")
         }
     }
     void ClearLine() { foreach (var b in beams) if (b.IsValid) b.Remove(); beams.Clear(); }
@@ -201,6 +198,27 @@ public partial class CoachReplay
             var a0 = i * MathF.PI / 8; var a1 = (i + 1) * MathF.PI / 8;
             Beam(new Vector3(x + r * MathF.Cos(a0), y + r * MathF.Sin(a0), ground.Value + 4), new Vector3(x + r * MathF.Cos(a1), y + r * MathF.Sin(a1), ground.Value + 4), blue, 3f);
         }
+    }
+
+    // stuff: where you stand, a green ring at your feet (06/10: "le repère de où moi je dois me mettre, il n'y en a pas")
+    void DrawStand(Spot me)
+    {
+        var green = System.Drawing.Color.FromArgb(255, 90, 230, 90);
+        var c = new Vector3(me.Pos[0], me.Pos[1], me.Pos[2] + 3);
+        for (int i = 0; i < 12; i++)
+        {
+            float a0 = i * MathF.PI / 6, a1 = (i + 1) * MathF.PI / 6;
+            Beam(c + new Vector3(18 * MathF.Cos(a0), 18 * MathF.Sin(a0), 0), c + new Vector3(18 * MathF.Cos(a1), 18 * MathF.Sin(a1), 0), green, 1.5f);
+        }
+    }
+
+    // a situation: an ally down, a red cross where it fell, a post over it seen from afar
+    void DrawX(Vector3 p)
+    {
+        var red = System.Drawing.Color.FromArgb(255, 255, 70, 70);
+        Beam(p + new Vector3(-22, -22, 4), p + new Vector3(22, 22, 4), red, 3f);
+        Beam(p + new Vector3(-22, 22, 4), p + new Vector3(22, -22, 4), red, 3f);
+        Beam(p + new Vector3(0, 0, 4), p + new Vector3(0, 0, 90), red, 2f);
     }
 
     // stuff: a green cross 150 u ahead on the aim, from your eyes: put the crosshair on it
@@ -456,7 +474,8 @@ public partial class CoachReplay
     {
         if (sess == null) return;
         sessGen++;
-        var s = d.Kind switch { "situation" => d.Scenario != null ? Peek(d.Scenario) : null, "aim" => AimScenario(d), "nade" => NadeScenario(d), _ => null };
+        var s = d.Kind switch { "situation" => d.Scenario != null ? Peek(d.Scenario) : null, "aim" => d.Mode == "range" ? RangeScenario(d) : AimScenario(d),
+            "nade" => NadeScenario(d), _ => null };
         if (s == null && d.Kind == "situation" && waitFile++ < 20)   // the app is still building it from the demo
         {
             Html($"<font color='#e0a030'>SITUATION</font><br>loading {d.Title}…", 2);
@@ -467,8 +486,13 @@ public partial class CoachReplay
         waitFile = 0;
         if (s == null) { Logger.LogInformation("drill {id}: nothing to play", d.Id); NextDrill(); return; }
         cur = s;
+        if (d.Kind != "situation" && d.Clock > 0) cur.Clock = d.Clock;
         mode = "actor";
         aimOrder.Clear(); reacts.Clear(); aimHs = 0; aimNext = 0; attempts = 0; nadeWait = false; frags = deaths = plants = 0;
+        cameAt.Clear(); strafe.Clear(); lastKill = 0;
+        // the targets that must stay still idle: a prefire's, a wallbang's, the aim map's flicks and strafers (06/10)
+        Zombie(d.Kind == "aim" && (d.Mode == "prefire" || d.Id.StartsWith("wallbang") || (d.Mode == "range" && d.Variant != "duel")));
+        Ammo(d.Mode == "range");
         Intro(d);
         Setup();
     }
@@ -479,15 +503,15 @@ public partial class CoachReplay
     {
         var how = d.Kind == "situation" && cur != null ? SituationText() : d.Kind != "nade" ? d.Tip : d.Level switch
         {
-            0 => $"{d.How} · {d.Click} — crosshair on the green cross · it must land in the blue ring",
-            1 => $"{d.How} · {d.Click} — find the aim: the blue ring is where it lands",
+            0 or 1 => $"{d.How} · {d.Click} — crosshair on the green cross · it must land in the blue ring · stand in the green ring",
             _ => "find the aim and the throw",
         };
         var again = tries > 0 ? " · AGAIN" : "";
         introHtml = $"<font color='{KindColor[d.Kind]}'>{KindName[d.Kind]}{again}</font> · {Left()} · ⭐ {points}<br><font class='fontSize-l'>{d.Title}</font><br>{how}";
         hudFlash = "";
         SetMain(introHtml);
-        All($"\x10{KindName[d.Kind]}{again}\x01 {d.Title} — {how}");
+        var plain = System.Text.RegularExpressions.Regex.Replace(how.Replace("<br>", " · "), "<[^>]+>", "");
+        All($"\x10{KindName[d.Kind]}{again}\x01 {d.Title} — {plain}");
     }
 
     Scenario AimScenario(Drill d)
@@ -500,7 +524,7 @@ public partial class CoachReplay
         {
             for (int k = 0; k < Math.Min(d.Alive, Math.Max(d.Bots.Count, d.Tracks.Count)); k++)
             {
-                var tr = d.Tracks.Count > 0 ? d.Tracks[Rng.Next(d.Tracks.Count)] : null;
+                var tr = PickTrack(d, 0);
                 var b = d.Bots.Count > 0 ? d.Bots[Rng.Next(d.Bots.Count)] : new Spot();
                 s.Players.Add(new Track { Sid = $"att{k}", Name = tr?.Zone ?? b.Zone ?? $"Attacker {k + 1}", Team = 5 - d.Team, Hp = 100, Armor = d.Armor, Helmet = d.Helmet,
                     Weapons = d.BotWeapons, Active = d.BotWeapons.FirstOrDefault(w => w.Contains("ak47") || w.Contains("m4")) ?? d.BotWeapons.LastOrDefault(),
@@ -512,29 +536,115 @@ public partial class CoachReplay
         {
             var b = d.Bots[k];
             s.Players.Add(new Track { Sid = $"target{k}", Name = b.Zone ?? $"Target {k + 1}", Team = 5 - d.Team, Hp = 100, Armor = 100, Helmet = true,
-                Weapons = d.BotWeapons, Active = d.BotWeapons.LastOrDefault(), Path = new[] { b.Pos[0], b.Pos[1], b.Pos[2], b.Ang[1], b.Ang[0] }, Hold = true });
+                Weapons = d.BotWeapons, Active = d.BotWeapons.LastOrDefault(), Path = new[] { b.Pos[0], b.Pos[1], b.Pos[2], b.Ang[1], b.Ang[0] }, Hold = true,
+                Still = d.Mode == "prefire" || d.Id.StartsWith("wallbang"), Duck = b.Duck });
         }
         return s;
     }
 
+    // a defense's attacker: a real hit that walks into the sight of the post you hold (06/10: "les bots n'attaquent pas
+    // ma zone"), any of them once you play free
+    static EntryTrack? PickTrack(Drill d, int post)
+    {
+        if (d.Tracks.Count == 0) return null;
+        var mine = d.Tracks.Where(t => post < d.Posts.Count ? t.Post == post : t.Post < 0).ToList();
+        if (mine.Count == 0) mine = d.Tracks;
+        return mine[Rng.Next(mine.Count)];
+    }
+
+    // the aim map (06/10, the user: "fais le travail d'aim sur une map d'aim, ensuite lance les maps que j'ai choisies"):
+    // you at the middle of your side's spawns, the targets on the other side's, turned to you
+    Scenario RangeScenario(Drill d)
+    {
+        var s = new Scenario { Id = d.Id, Map = d.Map, Kind = "aim", Title = d.Title, Team = d.Team, Clock = d.Clock };
+        List<Vector3> Of(string cls) => Utilities.FindAllEntitiesByDesignerName<CBaseEntity>(cls).Where(e => e.AbsOrigin != null)
+            .Select(e => new Vector3(e.AbsOrigin!.X, e.AbsOrigin.Y, e.AbsOrigin.Z)).ToList();
+        var mine = Of(d.Team == 2 ? "info_player_terrorist" : "info_player_counterterrorist");
+        rangeTheirs = Of(d.Team == 2 ? "info_player_counterterrorist" : "info_player_terrorist");
+        var mid = mine.Count > 0 ? new Vector3(mine.Average(p => p.X), mine.Average(p => p.Y), mine.Average(p => p.Z)) : Vector3.Zero;
+        var me = mine.Count > 0 ? mine.OrderBy(p => Vector3.Distance(p, mid)).First() : Vector3.Zero;
+        var far = rangeTheirs.Count > 0 ? new Vector3(rangeTheirs.Average(p => p.X), rangeTheirs.Average(p => p.Y), rangeTheirs.Average(p => p.Z)) : me + new Vector3(1000, 0, 0);
+        s.Players.Add(new Track { Sid = "me", Name = "you", Team = d.Team, Me = true, Hp = 100, Armor = 100, Helmet = true, Weapons = d.Weapons,
+            Active = d.Weapons.LastOrDefault(), Path = new[] { me.X, me.Y, me.Z, YawTo(me, far), 0f } });
+        var order = rangeTheirs.OrderBy(_ => Rng.Next()).ToList();
+        for (int k = 0; k < Math.Max(1, d.Count); k++)
+        {
+            var p = order.Count > 0 ? order[k % order.Count] : far;
+            s.Players.Add(new Track { Sid = $"target{k}", Name = $"Target {k + 1}", Team = 5 - d.Team, Hp = 100, Armor = 100, Helmet = true,
+                Weapons = d.BotWeapons, Active = d.BotWeapons.LastOrDefault(), Path = new[] { p.X, p.Y, p.Z, YawTo(p, me), 0f },
+                Hold = d.Variant != "strafe", Still = d.Variant == "flick", Strafe = d.Variant == "strafe" });
+        }
+        return s;
+    }
+
+    static float YawTo(Vector3 a, Vector3 b) => MathF.Atan2(b.Y - a.Y, b.X - a.X) * 180 / MathF.PI;
+
+    // a target of the aim map down: another one on a free spot of their side, turned to you
+    void RangeAgain(int g, int slot)
+    {
+        if (g != generation || phase != "live" || cur == null || drill == null || !bots.TryGetValue(slot, out var t)) return;
+        var c = Utilities.GetPlayerFromSlot(slot);
+        if (c == null || !c.IsValid) return;
+        var me = Humans().Select(h => h.PlayerPawn.Value?.AbsOrigin).FirstOrDefault(o => o != null) is { } mo ? new Vector3(mo.X, mo.Y, mo.Z) : Pos(cur.Players.First(p => p.Me), 0);
+        var taken = bots.Where(b => b.Key != slot && !gone.Contains(b.Value.Sid)).Select(b => Pos(b.Value, 0)).ToList();
+        var free_ = rangeTheirs.Where(p => taken.All(q => Vector3.Distance(p, q) > 120) && Vector3.Distance(p, Pos(t, 0)) > 120).ToList();
+        if (free_.Count == 0) free_ = rangeTheirs;
+        var p = free_.Count > 0 ? free_[Rng.Next(free_.Count)] : Pos(t, 0);
+        t.Path = new[] { p.X, p.Y, p.Z, YawTo(p, me), 0f };
+        c.Respawn();
+        Loadout(c, t);
+        if (c.PlayerPawn.Value is { } pw) { pw.Teleport(p, new Vector3(0, YawTo(p, me), 0), Vector3.Zero); Freeze(pw, !t.Strafe && t.Hold); }
+        gone.Remove(t.Sid);
+        contact.Remove(slot);
+        strafe.Remove(slot);
+        cameAt[slot] = Server.TickCount;
+    }
+
+    // the aim map's strafers: left and right across your line, a stop now and then (counter-strafe practice), 200 u
+    // around their spot at most, turned to you
+    void StrafeTick()
+    {
+        var mo = Humans().Select(h => h.PlayerPawn.Value?.AbsOrigin).FirstOrDefault(o => o != null);
+        if (mo == null) return;
+        var me = new Vector3(mo.X, mo.Y, mo.Z);
+        foreach (var (slot, t) in bots)
+        {
+            if (!t.Strafe || gone.Contains(t.Sid)) continue;
+            var pw = Utilities.GetPlayerFromSlot(slot)?.PlayerPawn.Value;
+            if (pw?.AbsOrigin is not { } o || pw.LifeState != (byte)LifeState_t.LIFE_ALIVE) continue;
+            var here = new Vector3(o.X, o.Y, o.Z);
+            var to = new Vector3(me.X - here.X, me.Y - here.Y, 0);
+            if (to.Length() < 1) continue;
+            var side = Vector3.Normalize(new Vector3(-to.Y, to.X, 0));
+            var off = Vector3.Dot(here - Pos(t, 0), side);
+            (int sign, int until) st = strafe.TryGetValue(slot, out var s0) ? s0 : (Rng.Next(2) * 2 - 1, Server.TickCount + Rng.Next(20, 50));
+            if (Math.Abs(off) > 200 && Math.Sign(off) == st.sign) st = (-st.sign, Server.TickCount + Rng.Next(20, 50));
+            else if (Server.TickCount >= st.until)
+                st = st.sign != 0 && Rng.Next(4) == 0 ? (0, Server.TickCount + Rng.Next(12, 30)) : (st.sign == 0 ? Rng.Next(2) * 2 - 1 : -st.sign, Server.TickCount + Rng.Next(20, 56));
+            strafe[slot] = st;
+            var v = side * (st.sign * 230f);
+            var yaw = MathF.Atan2(to.Y, to.X) * 180 / MathF.PI;
+            pw.Teleport(null, new Vector3(0, yaw, 0), new Vector3(v.X, v.Y, pw.AbsVelocity?.Z ?? 0f));
+            HoldAim(pw, new Vector3(0, yaw, 0), false);
+        }
+    }
+
     // a situation: what to do, your route in the match, who got you and from where
+    // the essentials only (06/10, the user: "moins d'infos écrites, que l'essentiel, pour nous pousser à les lire"): the
+    // goal, how many on each side and where your dead allies fell (red crosses on the ground), the bomb, who got you
     string SituationText()
     {
-        var me = cur?.Players.FirstOrDefault(p => p.Me);
-        var route = me == null ? "" : string.Join(" → ", me.Places.Select(p => p[1].GetString()).Where(x => !string.IsNullOrEmpty(x)));
-        var lines = new List<string> { $"goal: {(string.IsNullOrEmpty(cur?.Goal) ? "survive" : cur!.Goal)}" };
-        if (route != "") lines.Add($"your route: {route}");
         var mine = cur?.Players.FirstOrDefault(p => p.Me);
-        string Where(IEnumerable<Track> ts) => string.Join(", ", ts.GroupBy(p => p.At ?? "?").Select(g => g.Count() > 1 ? $"{g.Key} ×{g.Count()}" : g.Key));
+        var lines = new List<string> { string.IsNullOrEmpty(cur?.Goal) ? "survive" : cur!.Goal };
         if (mine != null && cur != null)
         {
-            var al = cur.Players.Where(p => !p.Me && p.Team == mine.Team).ToList();
-            var en = cur.Players.Where(p => p.Team != mine.Team).ToList();
-            lines.Add($"allies: {(al.Count > 0 ? Where(al) : "none")} · enemies: {Where(en)}");
+            var al = cur.Players.Count(p => p.Team == mine.Team);
+            var en = cur.Players.Count(p => p.Team != mine.Team);
+            var dead = cur.Dead.Where(x => x.Team == mine.Team && x.At != "").Select(x => x.At).Distinct().ToList();
+            lines.Add($"{al}v{en}{(dead.Count > 0 ? $" · allies dead: {string.Join(", ", dead)} (red crosses)" : "")}");
         }
         if (!string.IsNullOrEmpty(cur?.Plant)) lines.Add($"💣 {cur!.Plant}");   // planted or not: what you have to do (04/10)
         if (!string.IsNullOrEmpty(cur?.Danger)) lines.Add($"⚠ {cur!.Danger}");
-        if (mine != null && mine.Hp < MinHp) lines.Add($"❤ {mine.Hp} HP in the match: {MinHp} here");
         return string.Join("<br>", lines);
     }
 
@@ -553,9 +663,17 @@ public partial class CoachReplay
     void SessionPlaced()
     {
         if (cur is { Kind: "death" or "clutch" } && cur.Line.Count > 1) DrawLine(cur.Line);   // your way in the match, on the ground
+        if (cur is { Kind: "death" or "clutch" })   // the allies dead before it: where they fell
+            foreach (var x in cur.Dead.Where(x => x.Team == cur.Team && x.Pos.Length >= 3)) DrawX(new Vector3(x.Pos[0], x.Pos[1], x.Pos[2]));
         if (sess == null || cur == null) return;
         if (drill?.Mode == "prefire" && drill.Line.Count > 1) DrawLine(drill.Line);
-        if (cur.Kind == "aim" && drill?.Mode is "prefire" or "defend")
+        if (cur.Kind == "aim" && drill?.Mode == "range")
+        {
+            aimOrder.Clear();
+            aimOrder.AddRange(bots.Keys);
+            foreach (var sl in bots.Keys) cameAt[sl] = Server.TickCount + 3 * 64;
+        }
+        else if (cur.Kind == "aim" && drill?.Mode is "prefire" or "defend")
         {
             aimOrder.Clear();
             aimOrder.AddRange(bots.Keys);
@@ -592,7 +710,8 @@ public partial class CoachReplay
             var r = drill.Type switch { "flash" or "he" or "molotov" => 120f, _ => 80f };   // the PERFECT zone
             // a flash pops in the air: its ring would float; the beam then stands from your feet's height
             DrawMark(tg[0], tg[1], drill.Me.Pos[2], tg.Length >= 3 && drill.Type != "flash" ? tg[2] : null, r);
-            if (drill.Level == 0) DrawCross(drill);
+            DrawStand(drill.Me);
+            if (drill.Level <= 1) DrawCross(drill);   // 06/10: "il manque de repères, je n'ai aucun repère visuel"
             // the doors in its way open, as for the player who threw it (04/10: the HE through Squeaky hit the closed door)
             var from = new Vector3(drill.Me.Pos[0], drill.Me.Pos[1], drill.Me.Pos[2] + 64);
             var to = new Vector3(tg[0], tg[1], tg.Length >= 3 ? tg[2] : drill.Me.Pos[2]);
@@ -616,6 +735,7 @@ public partial class CoachReplay
         lastHud = Server.TickCount;
         if (cur.Kind == "aim" && string.IsNullOrEmpty(drill?.Mode)) AimCard();
         if (drill?.Mode == "prefire") Html($"<font color='#ff8a3d'>GO</font> · clear {aimOrder.Count} · {drill.Seconds} s", 2);
+        if (drill?.Mode == "range") { Html($"<font color='#ff8a3d'>GO</font> · {drill.Goal} kills · {drill.Seconds} s", 2); lastKill = Server.TickCount; foreach (var sl in bots.Keys) cameAt[sl] = Server.TickCount; }
         if (drill?.Mode == "defend") { postIdx = -1; Html($"<font color='#ff8a3d'>HOLD</font> · {drill.Seconds} s · they are coming", 2); }
     }
 
@@ -675,8 +795,18 @@ public partial class CoachReplay
         if (sess == null || cur == null || phase != "live") return;
         // dead without the drill knowing it (killed before GO: OnDeath only counts live deaths; 06/10, a minute on the
         // floor while the aim drill's targets came and went): the drill ends as dead, its retry puts you back on your spot
-        if (drill?.Mode != "defend" && !humanDead && Humans().Any() && Humans().All(h => !h.PawnIsAlive)) { Finish("dead"); return; }
+        if (drill?.Mode is not ("defend" or "range") && !humanDead && Humans().Any() && Humans().All(h => !h.PawnIsAlive)) { Finish("dead"); return; }
         var el = (Server.TickCount - t0) / 64f;
+        if (drill?.Mode == "range")
+        {
+            if (el >= drill.Seconds || frags >= drill.Goal * 2) { Finish(frags >= drill.Goal ? "cleared" : "done"); return; }
+            if (drill.Variant == "strafe") StrafeTick();
+            var avg = reacts.Count > 0 ? $" · {reacts.Average():F2} s" : "";
+            var hs = frags > 0 ? $" · {100 * aimHs / frags}% HS" : "";
+            SetMain($"<font color='#ff8a3d'>{drill.Title}</font> · ⚔ {frags}/{drill.Goal}{avg}{hs} · {(int)(drill.Seconds - el)} s"
+                    + $"<br><font class='fontSize-s'>{drill.Tip}</font>");
+            return;
+        }
         if (drill?.Mode is "prefire" or "defend")
         {
             if (el >= drill.Seconds) { Finish(drill.Mode == "prefire" ? "timeout" : "done"); return; }
@@ -750,6 +880,33 @@ public partial class CoachReplay
             else Html($"<font color='#ff8a3d'>{left} left</font>{(e.Headshot ? " · HS" : "")}", 1);
             return false;
         }
+        if (drill.Mode == "range")
+        {
+            var g = generation;
+            if (!v.IsBot)   // a duel lost: back on your spot in 1 s
+            {
+                deaths++;
+                AddTimer(1f, () =>
+                {
+                    if (g != generation || phase != "live" || cur == null) return;
+                    var me = cur.Players.First(p => p.Me);
+                    protectUntil = Server.TickCount + 64;
+                    foreach (var h in Humans()) { h.Respawn(); Loadout(h, me); h.PlayerPawn.Value?.Teleport(Pos(me, 0), Upright(Ang(me, 0)), Vector3.Zero); }
+                });
+                return true;
+            }
+            if (e.Attacker is { IsValid: true, IsBot: false })
+            {
+                frags++;
+                if (e.Headshot) aimHs++;
+                var now = Server.TickCount;   // from the later of its coming and your last kill: the time to find it and kill it
+                reacts.Add((now - Math.Max(lastKill, cameAt.GetValueOrDefault(v.Slot, t0))) / 64.0);
+                lastKill = now;
+            }
+            var sl0 = v.Slot;
+            AddTimer(drill.Variant == "flick" ? 0.25f + (float)Rng.NextDouble() * 0.45f : 0.6f + (float)Rng.NextDouble() * 0.6f, () => RangeAgain(g, sl0));
+            return false;
+        }
         if (drill.Mode == "defend")
         {
             var g = generation;
@@ -785,7 +942,7 @@ public partial class CoachReplay
                 string? zone;
                 if (drill.Tracks.Count > 0)   // another real hit on the site, walked from now with its grenades; it fights once it sees you
                 {
-                    var tr = drill.Tracks[Rng.Next(drill.Tracks.Count)];
+                    var tr = PickTrack(drill, postIdx < 0 ? 0 : postIdx)!;
                     t.Path = tr.Path;
                     t.TrackNades = tr.Nades;
                     t.NadeNext = 0;
@@ -793,6 +950,7 @@ public partial class CoachReplay
                     zone = tr.Zone;
                     free.Remove(slot);
                     contact.Remove(slot);
+                    engaged.Remove(slot);
                     if (c.PlayerPawn.Value is { } pw) { pw.Teleport(Pos(t, 0), Upright(Ang(t, 0)), Vector3.Zero); Freeze(pw, false); }   // it walks its way
                 }
                 else
@@ -928,6 +1086,14 @@ public partial class CoachReplay
             pts = frags * 30 + aimHs * 15 + (ok ? 100 + (int)Math.Max(0, (drill.Seconds - el) * 4) : 0);
             detail = $"{frags}/{aimOrder.Count}{(ok ? $" in {el:F1} s" : "")} · {aimHs} HS";
         }
+        else if (cur.Kind == "aim" && drill?.Mode == "range")
+        {
+            ok = frags >= drill.Goal;
+            var avg = reacts.Count > 0 ? reacts.Average() : 0;
+            pts = frags * 12 + aimHs * 8 + (int)Math.Max(0, (1.5 - avg) * 4 * frags) - deaths * 20;
+            pts = Math.Max(0, pts) + (ok ? 100 : 0);
+            detail = $"{frags} kills · {(reacts.Count > 0 ? $"{avg:F2} s each · " : "")}{(frags > 0 ? 100 * aimHs / frags : 0)}% HS{(deaths > 0 ? $" · {deaths} death(s)" : "")}";
+        }
         else if (cur.Kind == "aim" && drill?.Mode == "defend")
         {
             ok = frags >= drill.Goal && frags >= deaths;   // 03/10: 15 frags for 11 deaths never counted
@@ -938,6 +1104,7 @@ public partial class CoachReplay
         {
             var n = Math.Max(1, aimOrder.Count);
             ok = outcome != "dead" && (reacts.Count == n || (n >= 3 && reacts.Count >= n - 1));
+            if (drill?.Id.StartsWith("wallbang") == true) ok = reacts.Count * 2 >= n;   // half of them through the wall (06/10: no retry for playing it another way)
             foreach (var r in reacts) pts += 50 + (int)Math.Max(0, 50 * (1.2 - r) / 1.2);
             pts += aimHs * 20 + (ok ? 100 : 0);
             detail = reacts.Count > 0 ? $"{reacts.Count}/{aimOrder.Count} · {reacts.Average():F2} s avg · {aimHs} HS" : "no kill";
@@ -974,7 +1141,7 @@ public partial class CoachReplay
                 : $"<font color='#ff5a5a'>✘ {shown}</font><br>{detail}<br>⭐ {points}", 3);
         All($"{(ok ? "\x04✔" : "\x02✘")} {drill.Title}\x01 · {outcome} · {detail} · +{pts} (total {points}){st}");
         tries++;
-        var again = !ok && outcome != "skipped" && tries < 2 && DateTime.UtcNow < blockEnd;   // a miss: once more right away
+        var again = !ok && outcome != "skipped" && tries < 2 && DateTime.UtcNow < blockEnd && drill.Mode != "range";   // a miss: once more right away
         var g = ++sessGen;
         AddTimer(3.5f, () =>
         {
@@ -1009,6 +1176,9 @@ public partial class CoachReplay
         Prac(false);
         SetMain("");
         sess = null; drill = null; cur = null; phase = "idle"; bots.Clear(); builtFor = null; sessGen++;
+        Zombie(false);
+        Ammo(false);
+        Server.ExecuteCommand("bot_quota 0");   // or the game adds the last drill's count again
         Server.ExecuteCommand("bot_kick");
     }
 
