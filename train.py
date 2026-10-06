@@ -1595,6 +1595,26 @@ def _quiet_start(mp):
 def play(sid, minutes=20, where="random", difficulty=2):
     """One Play: the session built, the server on its first map, the plugin told, and the game sent to the server
     (started first if it is closed). You only follow what the game shows."""
+    import ctypes
+    import threading
+    if not replay.claim("a warm-up"):
+        raise RuntimeError(f"{replay.busy()} is starting on the training server: wait for it")
+    try:
+        # the build reads the hard disk a while: below the server and the game (the request's thread only)
+        ctypes.windll.kernel32.SetThreadPriority(ctypes.windll.kernel32.GetCurrentThread(), -1)
+    except Exception:
+        pass
+    try:
+        return _play(sid, minutes, where, difficulty)
+    finally:
+        try:
+            ctypes.windll.kernel32.SetThreadPriority(ctypes.windll.kernel32.GetCurrentThread(), 0)
+        except Exception:
+            pass
+        replay.release()
+
+
+def _play(sid, minutes, where, difficulty):
     import threading
     first = AIM_MAP if splits(minutes).get("aim") else next((m for m in str(where).split(",") if m in maps(sid)), None)
     if not _game_running():   # CS2 comes up while the session is built (its menu is needed before a connect)

@@ -103,10 +103,17 @@ def start(mp):
     items = [x for x in todo(mp) if x["id"] not in shots(mp)]
     if not items:
         return {"map": mp, "done": len(shots(mp)), "total": len(todo(mp)), "left": 0}
-    st = replay.status()
-    if not st.get("running") or st.get("map") != mp:
-        replay.start(mp)
-    replay.rcon("sv_cheats 1")   # setpos / setang for the session; stop() puts it back
+    if not replay.claim("a photo session"):
+        raise RuntimeError(f"{replay.busy()} is starting on the training server: wait for it")
+    try:
+        st = replay.status()
+        if st.get("session"):   # a warm-up runs there: not under its feet
+            raise RuntimeError("a warm-up runs on the training server: stop it first")
+        if not st.get("running") or st.get("map") != mp:
+            replay.start(mp)
+        replay.rcon("sv_cheats 1")   # setpos / setang for the session; stop() puts it back
+    finally:
+        replay.release()
     with _LOCK:
         _save({"map": mp, "items": items, "i": 0, "t": time.time(), "on": True})
         _write(items[0], 0, len(items))

@@ -481,7 +481,12 @@ class Handler(BaseHTTPRequestHandler):
                     if not mid.isdigit() or kind not in ("death", "clutch") or mode not in ("actor", "spec"):
                         return self.send(400, {"error": "invalid situation"})
                     sid = str(body.get("sid") or config.settings().get("own_steamid") or "")
-                    return self.send(200, replay.play(sid, mid, int(body.get("round")), kind, mode, int(body["diff"]) if body.get("diff") is not None else 2))
+                    if not replay.claim("a situation"):
+                        return self.send(409, {"error": f"{replay.busy()} is starting on the training server: wait for it"})
+                    try:
+                        return self.send(200, replay.play(sid, mid, int(body.get("round")), kind, mode, int(body["diff"]) if body.get("diff") is not None else 2))
+                    finally:
+                        replay.release()
                 if act == "session":   # one Play: the whole training (server, session, the game sent to it)
                     if config.in_match() and not replay.on_server():
                         return self.send(409, {"error": "A match is running: training after it."})
@@ -492,7 +497,10 @@ class Handler(BaseHTTPRequestHandler):
                     if not re.fullmatch(r"random|mix|(?:(?:de|cs|ar)_\w+)(?:,(?:de|cs|ar)_\w+){0,2}", where):   # Prepare: up to three maps
                         return self.send(400, {"error": "invalid map"})
                     diff = int(body["diff"]) if body.get("diff") is not None else 2
-                    return self.send(200, train.play(sid, minutes, where, diff))
+                    try:
+                        return self.send(200, train.play(sid, minutes, where, diff))
+                    except RuntimeError as e:   # another start on the server meanwhile
+                        return self.send(409, {"error": str(e)})
                 if act == "install":   # a player's PC: CS2's files linked next to the game, Metamod, CounterStrikeSharp, the plugin
                     if config.in_match():
                         return self.send(409, {"error": "A match is running: install after it."})

@@ -490,6 +490,41 @@ def install():
     return status()
 
 
+# one thing at a time on the training server (06/10 19:52: while a warm-up was built, the three photo buttons sent the
+# server to Nuke, Anubis and Overpass in one second and sent the game twice more): a warm-up, a photo session or a
+# situation claims the server while it starts; another one is refused meanwhile
+_BUSY = {"what": None, "t": 0.0}
+_BUSY_LOCK = threading.Lock()
+
+
+def claim(what, ttl=600):
+    """True: the server is yours for that start (release() after it); False: another start runs (busy() says which)."""
+    with _BUSY_LOCK:
+        if _BUSY["what"] and time.time() - _BUSY["t"] < ttl:
+            return False
+        _BUSY.update(what=what, t=time.time())
+        return True
+
+
+def release():
+    with _BUSY_LOCK:
+        _BUSY.update(what=None, t=0.0)
+
+
+def busy():
+    return _BUSY["what"] if _BUSY["what"] and time.time() - _BUSY["t"] < 600 else None
+
+
+def _above_normal(pid):
+    """The server above the app's own work: a build reading the hard disk made it run at half speed (06/10 19:53: frames
+    of 20-30 ms, 0.2 ms of them its own)."""
+    try:
+        import psutil
+        psutil.Process(pid).nice(psutil.ABOVE_NORMAL_PRIORITY_CLASS)
+    except Exception as e:
+        print("server priority:", e, flush=True)
+
+
 def start(mp):
     """The server on this map (started hidden, or its map changed); back when it answers."""
     if not installed():
@@ -509,6 +544,7 @@ def start(mp):
     si.dwFlags |= subprocess.STARTF_USESHOWWINDOW
     si.wShowWindow = 0   # SW_HIDE: never shown, never takes the focus
     pr = subprocess.Popen(args, cwd=os.path.dirname(EXE), creationflags=subprocess.CREATE_NEW_CONSOLE, startupinfo=si)
+    _above_normal(pr.pid)
     s.update(pid=pr.pid, map=mp, started=time.time())
     _save_state(s)
     # rcon only once the map runs (the plugin's heartbeat): an early try counts as a failed login and the server then
