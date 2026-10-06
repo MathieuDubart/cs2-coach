@@ -20,6 +20,7 @@ public class Spot
     [JsonPropertyName("ang")] public float[] Ang { get; set; } = new float[2];   // pitch, yaw
     [JsonPropertyName("zone")] public string? Zone { get; set; }
     [JsonPropertyName("at")] public float At { get; set; }   // prefire: when it peeks (s after the start)
+    [JsonPropertyName("poly")] public List<float[]> Poly { get; set; } = new();   // defend: the place's ground outline (06/10)
 }
 
 public class Drill
@@ -153,16 +154,25 @@ public partial class CoachReplay
     void DrawLine(List<float[]> pts)
     {
         ClearLine();
+        var gold = System.Drawing.Color.FromArgb(255, 255, 205, 60);
+        float acc = 0;
         for (int i = 0; i + 1 < pts.Count; i++)
         {
-            var b = Utilities.CreateEntityByName<CBeam>("beam");
-            if (b == null) return;
-            b.Render = System.Drawing.Color.FromArgb(255, 255, 196, 64);
-            b.Width = 2.5f;
-            b.Teleport(new Vector3(pts[i][0], pts[i][1], pts[i][2] + 6), Vector3.Zero, Vector3.Zero);
-            b.EndPos.X = pts[i + 1][0]; b.EndPos.Y = pts[i + 1][1]; b.EndPos.Z = pts[i + 1][2] + 6;
-            b.DispatchSpawn();
-            beams.Add(b);
+            var a = new Vector3(pts[i][0], pts[i][1], pts[i][2] + 8);
+            var b = new Vector3(pts[i + 1][0], pts[i + 1][1], pts[i + 1][2] + 8);
+            Beam(a, b, gold, 5f);   // 06/10: a line you see from afar ("le path à prendre au sol avec un trait")
+            var seg = b - a;
+            var len = seg.Length();
+            if (len < 1) continue;
+            var dir = seg / len;
+            var side = new Vector3(-dir.Y, dir.X, 0);
+            for (float d = 220 - acc; d < len; d += 220)   // a chevron every 220 u: which way to go
+            {
+                var at = a + dir * d;
+                Beam(at, at - dir * 26 + side * 16, gold, 4f);
+                Beam(at, at - dir * 26 - side * 16, gold, 4f);
+            }
+            acc = (acc + len) % 220;
         }
     }
     void ClearLine() { foreach (var b in beams) if (b.IsValid) b.Remove(); beams.Clear(); }
@@ -623,14 +633,36 @@ public partial class CoachReplay
         var p = drill.Posts[ph];
         var at = new Vector3(p.Pos[0], p.Pos[1], p.Pos[2]);
         var green = System.Drawing.Color.FromArgb(255, 79, 195, 161);
-        for (int i = 0; i < 16; i++)
-        {
-            float a0 = i * MathF.PI / 8, a1 = (i + 1) * MathF.PI / 8;
-            Beam(at + new Vector3(40 * MathF.Cos(a0), 40 * MathF.Sin(a0), 4), at + new Vector3(40 * MathF.Cos(a1), 40 * MathF.Sin(a1), 4), green, 2.5f);
-        }
+        if (p.Poly.Count >= 3)   // the place's own shape (06/10: "si c'est Garage, prends tout le Garage")
+            for (int i = 0; i < p.Poly.Count; i++)
+            {
+                var a = p.Poly[i]; var b = p.Poly[(i + 1) % p.Poly.Count];
+                Beam(new Vector3(a[0], a[1], a[2] + 6), new Vector3(b[0], b[1], b[2] + 6), green, 4f);
+            }
+        else
+            for (int i = 0; i < 16; i++)
+            {
+                float a0 = i * MathF.PI / 8, a1 = (i + 1) * MathF.PI / 8;
+                Beam(at + new Vector3(40 * MathF.Cos(a0), 40 * MathF.Sin(a0), 4), at + new Vector3(40 * MathF.Cos(a1), 40 * MathF.Sin(a1), 4), green, 2.5f);
+            }
         foreach (var h in Humans())
             if (h.PawnIsAlive && h.PlayerPawn.Value is { } pw) pw.Teleport(at, new Vector3(0, p.Ang[1], 0), Vector3.Zero);
         Html($"<font color='#4fc3a1'>HOLD {p.Zone}</font> · {ph + 1}/{drill.Posts.Count}, then free", 3);
+    }
+
+    // out of the place you hold (its outline drawn on the ground): the panel says to go back in it
+    bool OutOfPost()
+    {
+        if (drill == null || postIdx < 0 || postIdx >= drill.Posts.Count) return false;
+        var poly = drill.Posts[postIdx].Poly;
+        if (poly.Count < 3) return false;
+        var o = Humans().Where(h => h.PawnIsAlive).Select(h => h.PlayerPawn.Value?.AbsOrigin).FirstOrDefault(v => v != null);
+        if (o == null) return false;
+        bool inside = false;
+        for (int i = 0, j = poly.Count - 1; i < poly.Count; j = i++)   // ray casting on the ground
+            if ((poly[i][1] > o.Y) != (poly[j][1] > o.Y) && o.X < (poly[j][0] - poly[i][0]) * (o.Y - poly[i][1]) / (poly[j][1] - poly[i][1]) + poly[i][0])
+                inside = !inside;
+        return !inside;
     }
 
     // where you come back in a defense: the spot you hold, or the site's
@@ -672,7 +704,7 @@ public partial class CoachReplay
                 SetMain(drill.Mode == "prefire"
                     ? $"<font color='#ff8a3d'>{drill.Title}</font> · {aimOrder.Count - frags} left{(where != "" ? $": {where}" : "")} · {left} s<br><font class='fontSize-s'>{string.Join(" → ", drill.Route)} · follow the gold line</font>"
                     : $"<font color='#ff8a3d'>{drill.Title}</font> · {left} s · ⚔ {frags} · ☠ {deaths}"
-                      + (drill.Posts.Count == 0 || postIdx < 0 ? "" : postIdx < drill.Posts.Count ? $"<br><font class='fontSize-s'>hold {drill.Posts[postIdx].Zone} (the green ring)</font>" : "<br><font class='fontSize-s'>free</font>"));
+                      + (drill.Posts.Count == 0 || postIdx < 0 ? "" : postIdx < drill.Posts.Count ? (OutOfPost() ? $"<br><font color='#ff5a5a'>⚠ back in {drill.Posts[postIdx].Zone} (the green zone)</font>" : $"<br><font class='fontSize-s'>hold {drill.Posts[postIdx].Zone} (the green zone)</font>") : "<br><font class='fontSize-s'>free</font>"));
             }
             return;
         }

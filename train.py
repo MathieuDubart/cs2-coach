@@ -325,6 +325,84 @@ def _hold_zone(CP, zones, p, mp):
     return replay_zone(z.mode().iloc[0], mp) if len(z) else None
 
 
+ZONES_F = os.path.join(config.OUT, "train_zones.json")
+
+
+def zone_outline(mp, name, near, cell=32.0, max_matches=60, R=1600.0, ZR=170.0, hold=650.0):
+    """The ground outline of the place a defense's post is in (06/10, the user: "une zone plus grande que juste un cercle,
+    adapte-toi à la morphologie de la map: si c'est Garage, prends tout le Garage"): where the base's players stood in
+    that place (same name, same floor), 650 u around the post at most (Nuke's Outside is the whole yard), the piece
+    around the post with its small holes filled, its border walked around and simplified (20 u). Cached per post."""
+    if not name or not near:
+        return []
+    key = f"{mp}|{name}|{round(near[0])}|{round(near[1])}|{round(near[2])}"
+    try:
+        cache = json.load(open(ZONES_F, encoding="utf-8"))
+    except (OSError, ValueError):
+        cache = {}
+    if key in cache:
+        return cache[key]
+    from collections import deque
+    pts = []
+    for d in _map_dirs(mp)[-max_matches:]:
+        try:
+            S = pd.read_parquet(os.path.join(config.OUT, "deep", d, "samples.parquet"), columns=["X", "Y", "Z", "zone", "health"])
+        except Exception:
+            continue
+        S = S[(S.health > 0) & S.zone.notna()]
+        S = S[(np.hypot(S.X - near[0], S.Y - near[1]) < R) & ((S.Z - near[2]).abs() < ZR)]
+        if len(S):
+            zs = {z: replay_zone(z, mp) for z in S.zone.unique()}
+            S = S[S.zone.map(zs) == name]
+            pts.append(S[["X", "Y", "Z"]].to_numpy(float))
+    P = np.concatenate(pts) if pts else np.zeros((0, 3))
+    out = []
+    if len(P) >= 30:
+        cnt = Counter(zip(np.floor(P[:, 0] / cell).astype(int), np.floor(P[:, 1] / cell).astype(int)))
+        occ = {c for c, n in cnt.items() if n >= 2 and math.hypot((c[0] + .5) * cell - near[0], (c[1] + .5) * cell - near[1]) < hold}
+        if occ:
+            start = min(occ, key=lambda c: ((c[0] + .5) * cell - near[0]) ** 2 + ((c[1] + .5) * cell - near[1]) ** 2)
+            comp, q = {start}, deque([start])
+            while q:
+                x, y = q.popleft()
+                for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+                    n = (x + dx, y + dy)
+                    if n in occ and n not in comp:
+                        comp.add(n)
+                        q.append(n)
+            for _ in range(2):   # a box in the middle: its cells filled
+                xs, ys = [c[0] for c in comp], [c[1] for c in comp]
+                comp |= {(x, y) for x in range(min(xs) - 1, max(xs) + 2) for y in range(min(ys) - 1, max(ys) + 2)
+                         if (x, y) not in comp and sum((x + dx, y + dy) in comp for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1))) >= 3}
+            edges = {}
+            for (x, y) in comp:
+                for (dx, dy), (a, b) in (((0, -1), ((x, y), (x + 1, y))), ((1, 0), ((x + 1, y), (x + 1, y + 1))),
+                                          ((0, 1), ((x + 1, y + 1), (x, y + 1))), ((-1, 0), ((x, y + 1), (x, y)))):
+                    if (x + dx, y + dy) not in comp:
+                        edges.setdefault(a, []).append(b)
+            loops = []
+            while edges:
+                a = next(iter(edges))
+                loop = [a]
+                while a in edges:
+                    nx = edges[a].pop()
+                    if not edges[a]:
+                        del edges[a]
+                    if nx == loop[0]:
+                        break
+                    loop.append(nx)
+                    a = nx
+                loops.append(loop)
+            L = np.array(max(loops, key=len), float) * cell
+            L = L[_rdp(np.c_[L, np.zeros(len(L))], 20.0)]
+            for x, y in L:
+                d = np.hypot(P[:, 0] - x, P[:, 1] - y)
+                out.append([round(float(x), 1), round(float(y), 1), round(float(np.median(P[np.argsort(d)[:25], 2])), 1)])
+    cache[key] = out
+    config.write_json(ZONES_F, cache)
+    return out
+
+
 def _timings(holds):
     """When each angle peeks, from the real timings (the earliest at once, the others after it, compressed by half,
     within 30 s): the bots show up like the players do, at recurring moments."""
@@ -475,8 +553,8 @@ def _ground_line(P):
         sm = np.stack([np.convolve(pad[:, j], np.ones(2 * k + 1) / (2 * k + 1), mode="valid") for j in range(2)], 1)
         sm[0], sm[-1] = Q[0, :2], Q[-1, :2]
         Q[:, :2] = sm
-    eps, keep = 48.0, _rdp(Q, 48.0)
-    while len(keep) > 41:
+    eps, keep = 24.0, _rdp(Q, 24.0)   # 06/10: closer to the way walked (48 u cut the corners)
+    while len(keep) > 81:
         eps *= 1.5
         keep = _rdp(Q, eps)
     return [[round(float(v), 1) for v in Q[i]] for i in keep]
@@ -549,7 +627,7 @@ def practice_drills(sid, mp):
         posts = []
         for h in sorted((h for e in S["entrances"] for h in e["holds"]), key=lambda h: -h["n"]):
             if h.get("zone") and all(h["zone"] != q["zone"] and math.dist(h["pos"], q["pos"]) > 300 for q in posts):
-                posts.append({"pos": h["pos"], "ang": h["ang"], "zone": h["zone"]})
+                posts.append({"pos": h["pos"], "ang": h["ang"], "zone": h["zone"], "poly": zone_outline(mp, h["zone"], h["pos"])})
             if len(posts) >= 2:
                 break
         for kit in _defense_kits(sid):
