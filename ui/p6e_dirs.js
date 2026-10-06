@@ -10,7 +10,7 @@ function tdirsOf(map){if(!map||!D.local)return null;if(TDIRS[map]!==undefined)re
   if(!TDIR_ASK[map]){TDIR_ASK[map]=1;fetch("/api/tdirs/"+encodeURIComponent(map)).then(r=>r.json()).then(j=>{TDIRS[map]=j&&j.dirs&&j.dirs.length?j:null;if(S.view==="ingame"&&typeof renderIngame==="function")renderIngame()}).catch(()=>{TDIRS[map]=null})}
   return null}
 // the plan of this round: numpad 1-2-3 (or said to Wily) the way, 4-5-6 the tempo; a key after the round's end counts for the next
-function tdirSel(g){const t=g&&g.tdir;return t&&t.round===g.round?{dir:t.dir||null,tempo:t.tempo||null,src:t.src||null}:{dir:null,tempo:null,src:null}}
+function tdirSel(g){const t=g&&g.tdir;return t&&t.round===g.round?{dir:t.dir||null,via:t.via||null,tempo:t.tempo||null,src:t.src||null}:{dir:null,via:null,tempo:null,src:null}}
 const TEMPO_EN={rush:"RUSH",slow:"SLOW",control:"MAP CONTROL"},TEMPO_SAY={rush:"Rush",slow:"Slow",control:"Map control, then"};
 const DIR_EN={A:"A",MID:"MID",B:"B"};
 const lgt=p=>Math.log(p/(1-p)),sgm=x=>1/(1+Math.exp(-x)),clp=p=>Math.min(.97,Math.max(.03,p));
@@ -25,12 +25,16 @@ function dirOdds(p,g,d,tempo){const p0=clp(d.win/100),tb=myBuyKey(g);let pE=p0;
   const pT=tempo?shrinkTo((d.tempo||{})[tempo],p0,15):p0,sh=(lgt(clp(pE))-lgt(p0))+(lgt(clp(pT))-lgt(p0));
   return {wr:Math.round(100*sgm(lgt(p0)+sh)),shift:sh,n:tempo&&(d.tempo||{})[tempo]?d.tempo[tempo][0]:d.n}}
 const DIR_C=["var(--t)","#58a6ff","#a371f7"];
-// the ways to show: the picked way's own (A: every way onto A, mid ones included; MID: the ways through mid), else the
-// three that win most this round (a small sample doesn't win: the lower bound of its rounds won)
+// the ways to show: the picked way's own (A: the ways straight onto A, the ones through mid only when there is no
+// other, 06/10: "je ne choisis pas le mid to A, je choisis le A tout court"; MID: the ways through mid), the way said
+// to Wily first ("A from Ramp": A via Ramp, "mid to A": Mid → A), else the three that win most this round (a small
+// sample doesn't win: the lower bound of its rounds won)
 function dirRank(p,g,TD){if(!TD)return null;const sel=tdirSel(g),lb=(w,n)=>{const z=1.28,ph=w/100;return n?(ph+z*z/(2*n)-z*Math.sqrt(ph*(1-ph)/n+z*z/(4*n*n)))/(1+z*z/n):0};
   let ds=TD.dirs.filter(d=>d.n>=(d.split?40:25));   // a split needs more rounds to be read
-  if(sel.dir==="MID")ds=ds.filter(d=>d.mid);else if(sel.dir)ds=ds.filter(d=>d.site===sel.dir);
-  const rows=ds.map(d=>{const o=dirOdds(p,g,d,sel.tempo);return {...d,wr:o.wr,shift:o.shift,ns:o.n,s:lb(o.wr,Math.min(o.n,d.n))}}).sort((a,b)=>b.s-a.s).slice(0,3);
+  if(sel.dir==="MID")ds=ds.filter(d=>d.mid);
+  else if(sel.dir){const on=ds.filter(d=>d.site===sel.dir),direct=on.filter(d=>!d.mid);ds=sel.via&&/^mid$/i.test(sel.via)?on.filter(d=>d.mid):(direct.length?direct:on);if(!ds.length)ds=on}
+  const via=sel.via&&!/^mid$/i.test(sel.via)?String(sel.via).toLowerCase():null,said=d=>via&&String(d.label||"").toLowerCase().includes(via)?(d.split?1:2):0;
+  const rows=ds.map(d=>{const o=dirOdds(p,g,d,sel.tempo);return {...d,wr:o.wr,shift:o.shift,ns:o.n,s:lb(o.wr,Math.min(o.n,d.n))}}).sort((a,b)=>(said(b)-said(a))||(b.s-a.s)).slice(0,3);
   rows.forEach((r,i)=>{r.rank=i+1;r.col=DIR_C[i]});return {rows,sel,mid:TD.mid||null,gates:TD.gates||[]}}
 // the small timeline (06/10: "si je rush B j'ai 75 %, si j'arrive à 1:10 70 %, à 0:45 30 %, à 0:10 50 %"): the way's
 // rounds won by the moment the Ts get on the site (at equal numbers, like the plays' curves), moved like its odds this

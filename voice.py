@@ -548,7 +548,7 @@ COACH_RE = re.compile(r"^\W*(?:coach|coache|coatch|couch|koch|kosh|coch|coche)\b
 COACH_ANY = re.compile(r"\b(?:coach|coache|coatch)\b", re.I)   # anywhere: "round coach plutôt satisfait", "coach premier round ok, coach deuxième mitigé"
 # an order to Wily (06/10, "Wily exec B stuff", "Jarvis contre rush B 5 stack"): wily.WAKE, read again in French with
 # the orders' words so "post-plant B" doesn't come out "post plain blade"
-WILY_ANY = re.compile(r"\b(?:wh?[iy]l+(?:y|ie|i|ey|ier|is|ee)|wylie|wiley|wili|jarv[iy]s|jerv[iy]s|jarvi)", re.I)
+WILY_ANY = re.compile(r"\b(?:wh?[iy]l+(?:y|ie|i|ey|ier|is|ee)|wylie|wiley|wili|wall?(?:y|i|ie|ey)|woll?(?:y|ie)|woody|jarv[iy]s|jerv[iy]s|jarvi)", re.I)
 WILY_PROMPT = ("Wily, rush A. Wily, exec B stuff. Wily, post-plant B. Wily, fake A go B. Wily, force-buy A. Wily, anti-éco B. "
                "Wily, pistol round. Wily, contre rush B five stack. Wily, fake défense A. Wily, reprise jungle. "
                "Wily, j'ai vu trois rounds en B. Wily, tendance à fake. Wily, trois A sans bombe. Wily, cover mid. Wily, contrôle map.")
@@ -995,6 +995,7 @@ class LiveCalls:
             except Exception:
                 continue
             orders = []
+            follow = time.time() < getattr(self, "wily_until", 0)
             if r.get("wily_text") or (r.get("text") and WILY_ANY.search(r.get("text"))):   # said to Wily (06/10): an order, not a call
                 try:
                     import wily
@@ -1002,7 +1003,15 @@ class LiveCalls:
                     orders = wily.parse(r.get("wily_text") or "", zones) or wily.parse(r.get("text") or "", zones)
                 except Exception as e:
                     print("wily:", e, flush=True)
+            elif follow and r.get("text"):   # 8 s after an order to Wily: "Slow A", "go A slowly" go on without the name
+                try:
+                    import wily
+                    zones = sorted({n for n, _ in _zone_vocab(r.get("map")).values()})
+                    orders = [o for o in wily.parse("Wily " + r["text"], zones) if o["k"] in ("dir", "tempo", "buy", "stuff", "exec", "fake", "split")]
+                except Exception as e:
+                    print("wily:", e, flush=True)
             if orders:
+                self.wily_until = time.time() + 8
                 self.last = {"text": r.get("wily_text") or r.get("text"), "s": r.get("s"), "parsed": None, "mood": None, "wily": orders}
                 try:
                     import gsi
@@ -1124,12 +1133,15 @@ def _zone_vocab(map_name):
             name = humanize(key, map_name) if key != "?" else None
             if not name or "spawn" in name.lower():
                 continue
-            for w in re.findall(r"[a-zà-ÿ]+", name.lower()):
-                if len(w) >= 4 and w not in ("site", "main", "long", "short", "back", "upper", "lower", "middle", "side", "room"):
+            ws = re.findall(r"[a-zà-ÿ]+", name.lower())
+            for w in ws:   # a one-word callout keeps its word even when it is a common one (Mirage's Short)
+                if len(w) >= 4 and (len(ws) == 1 or w not in ("site", "main", "long", "short", "back", "upper", "lower", "middle", "side", "room")):
                     v.setdefault(w, (name, reg))
+                if len(w) >= 8:
+                    v.setdefault(w[:5], (name, reg))   # "under" for Underpass, "apart" for Apartments
     except Exception:
         pass
-    fr = {"banane": "banana", "appart": "apps", "apparts": "apps", "appartements": "apartments", "rampe": "ramp", "fenêtre": "window",
+    fr = {"banane": "banana", "appart": "apps", "apparts": "apps", "apse": "apps", "appartements": "apartments", "rampe": "ramp", "fenêtre": "window",
           "palais": "palace", "connecteur": "connector", "tunnel": "tunnels", "pont": "bridge"}
     for w_fr, w_en in fr.items():
         if w_en in v and w_fr not in v:
@@ -1155,7 +1167,13 @@ def parse_call(text, map_name):
     site = "B" if re.search(r"\b(b|bé|bee)\b", t) else None
     if re.search(A_CTX, t):
         site = "A" if site is None else None   # both letters: unclear
-    n = next((CALL_NUM[w] for w in words if w in CALL_NUM), None)
+    ns = [CALL_NUM[w] for w in words if w in CALL_NUM]
+    n = max(ns) if ns else None   # "2 or 3 mid": 3
+    stack = bool(re.search(r"\bstack(?:ed|ing)?\b", t))
+    if stack and not n:
+        n = 4   # "stack A", "A-stack"
+    if n is None and re.search(r"\b(last|dernier)\b", t):
+        n = 1   # "last mid": the last one is there
     zone = reg = None
     vocab = _zone_vocab(map_name)
     hits = [vocab.get(w) or vocab.get(w + "s") for w in words]
@@ -1164,6 +1182,8 @@ def parse_call(text, map_name):
         return None   # a list of callouts: the model repeating its prompt, not a call
     if hits:
         zone, reg = hits[0]
+    if zone is None and re.search(r"\b(mid|mids|milieu|middle)\b", t):
+        zone, reg = "Mid", "MID"   # "2 or 3 mid", "4 mids plus"
     if site is None and reg in ("A", "B"):
         site = reg
     if site is None:
@@ -1171,14 +1191,16 @@ def parse_call(text, map_name):
     rush = bool(re.search(r"\b(rush|rushent|rouch|rushs)\b", t))
     bomb = bool(re.search(r"\b(bombe|bomb|plant|plantée?|posée?|planted)\b", t))
     lone = bool(re.search(r"\b(seul|solo|lurk|lurker)\b", t)) or n == 1
-    clear = bool(re.search(r"\b(clear|clean|empty|nobody|vide|personne|no one)\b", t))   # "B clear", "personne en B"
+    clear = bool(re.search(r"\b(clear|clean|empty|nobody|nothing|none|vide|personne|rien|no one)\b", t))   # "B clear", "personne en B", "nothing B"
+    if clear:
+        n = None
     me = bool(re.search(r"\b(je suis|j'suis|chui|i'?m|i am|je joue|je reste|je tiens|i play|i'?ll play|i hold|moi je suis)\b", t))   # your own spot
     if not (site or zone or rush or bomb):
         return None
     if len(words) > 5 and not (n or zone or rush or bomb):
         return None   # a sentence with a letter in it, not a call
     regs = [h[1] for h in hits if h[1] in ("A", "B")]   # every zone named, with its side of the map ("1 jungle, 1 connector": A twice)
-    return {"site": site, "n": n, "zone": zone, "rush": rush, "bomb": bomb, "lone": lone, "clear": clear, "regs": regs, "me": me}
+    return {"site": site, "n": n, "zone": zone, "rush": rush, "bomb": bomb, "lone": lone, "clear": clear, "regs": regs, "me": me, "stack": stack}
 
 
 if __name__ == "__main__":

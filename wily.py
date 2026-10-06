@@ -15,7 +15,7 @@ rush, slow), call (how many on a site, without the bomb), cancel."""
 import re
 import unicodedata
 
-WAKE = re.compile(r"\b(?:wh?[iy]l+(?:y|ie|i|ey|ier|is|ee)|wylie|wiley|wili|jarv[iy]s|jerv[iy]s|jarvi)\b", re.I)
+WAKE = re.compile(r"\b(?:wh?[iy]l+(?:y|ie|i|ey|ier|is|ee)|wylie|wiley|wili|wall?(?:y|i|ie|ey)|woll?(?:y|ie)|woody|jarv[iy]s|jerv[iy]s|jarvi)\b", re.I)
 NUM = {"un": 1, "une": 1, "one": 1, "deux": 2, "two": 2, "trois": 3, "three": 3, "quatre": 4, "four": 4, "cinq": 5, "five": 5,
        "full": 5, "1": 1, "2": 2, "3": 3, "4": 4, "5": 5}
 N_ = r"(un|une|one|deux|two|trois|three|quatre|four|cinq|five|[1-5])"
@@ -34,7 +34,11 @@ WORDS = [   # what the live transcription hears for CS words (French mouths, Eng
     (r"\b(?:tendance|tendances|tendency|habitude)\b", "tendency"), (r"\b(?:sans|without|no)\s+(?:la\s+)?(?:bombe|bomb|c4)\b", "nobomb"),
     (r"\b(?:j'ai vu|jai vu|j'invise|j'ai vus|i saw|i've seen|i seen|je vois|on a vu)\b", "seen"),
     (r"\b(?:rounds?|roundes?|manches?)\b", "rounds"), (r"\b(?:beaucoup|plein|a lot|lots|souvent)\b", "many"),
-    (r"\b(?:rush|rushes|rusher)\b", "rush"), (r"\b(?:slow|lent|lente|doucement)\b", "slow"),
+    (r"\b(?:rush|rushes|rusher|fast|vite|rapide|rapidement)\b", "rush"), (r"\b(?:slow|slowly|lent|lente|lentement|doucement)\b", "slow"),
+    # 06/10 bot match: "Pistol Rush B, Apart", "go A from Ramp, slowly", "Mid slow to A", "Aigoo B" (I go B)
+    (r"\b(?:aigoo|aïgo|i go|i'm going|im going|i will go|je vais|je pars|je file)\b", "go"),
+    (r"\b(?:apart(?:ment)?s?|appart(?:ement)?s?|apse|apps)\b", "apps"),
+    (r"\b(?:from|by|par|through|depuis|à travers|en passant par)\b", "via"),
     (r"\b(?:fake|fakes|feinte)\b", "fake"), (r"\b(?:split|splitte)\b", "split"), (r"\b(?:cover|couvre|couvrir|lurk)\b", "cover"),
     (r"\b(?:milieu|middle)\b", "mid"), (r"\b(?:annule|cancel|oublie|stop)\b", "cancel"),
 ]
@@ -69,7 +73,11 @@ def parse(text, zones=()):
     m = WAKE.search(raw)
     if not m:
         return []
-    t = _norm(raw[m.end():])
+    if re.search(r"(?:(?<![a-z])à|\bto|\bde|\bque|\bavec|\bwith|\babout|\ble|\bla)\s*$", raw[:m.start()].strip(" ,.").lower()):
+        return []   # about Wily, not to it ("j'ai donné l'info à Wily", 06/10)
+    # the whole phrase but the name: "Go mid Wily", "last mid Wily" name it at the end (06/10: only what came after
+    # it was read)
+    t = _norm(raw[:m.start()] + " " + WAKE.sub(" ", raw[m.end():]))
     out = []
     add = lambda **o: out.append(o) if o not in out else None
     if re.search(r"^\s*cancel\b", t):
@@ -171,15 +179,43 @@ def parse(text, zones=()):
         add(k="stuff", **({"site": s} if s else {}))
         if s:
             add(k="dir", v=s)
-    if not out:   # "Wily A", "Wily mid", "Wily go B": the way only
-        w = re.match(r"^(?:go\s+|on\s+va\s+|en\s+|on\s+joue\s+|play\s+|joue\s+)?" + S_ + r"\b", t)
+    if re.search(r"\b(?:only|que|full|juste)\s+stack|\bstacking\b|\bils\s+stack\b", t) and not re.search(r"\bstack\s+(?:a|b)\b|\b(?:a|b)\s+stack\b", t):
+        add(k="tendency", v="stack")   # "I feel they're playing only stack"
+    # mid then a site ("mid to A", "Mid slow to A", "mid A"): that site through mid
+    ms = re.search(r"\bmid\b(?:\s+(?:slow|rush|control))?\s+(?:to\s+|vers\s+|puis\s+|then\s+|go\s+)?(a|b)\b", t)
+    if ms and not any(o["k"] == "dir" and o["v"] in ("A", "B") for o in out):
+        add(k="dir", v=site_of(ms.group(1)), via="Mid")
+    if not any(o["k"] == "dir" for o in out):   # "Wily A", "Wily mid", "go B", "I go mid": the way only
+        w = re.search(r"\b(?:go|plan|on\s+va|on\s+joue|play|joue|vers)\s+(?:to\s+|en\s+|à\s+)?" + S_ + r"\b", t) \
+            or re.match(r"^(?:en\s+)?" + S_ + r"\b", t)
         if w:
             add(k="dir", v=site_of(w.group(1)))
+        elif not out and len(t.split()) <= 4:   # "non B, Wily B": the last letter of a short phrase
+            ls = re.findall(r"\b" + S_ + r"\b", t)
+            if ls:
+                add(k="dir", v=site_of(ls[-1]))
     # one way per phrase: the last way said wins ("fake A go B": B)
     dirs = [o for o in out if o["k"] == "dir"]
     if len(dirs) > 1:
         keep = dirs[-1]
         out = [o for o in out if o["k"] != "dir" or o is keep]
+    # its way in: a place of the map said with it ("B Apps", "A from Ramp", "A by Palace"), not the site itself
+    d = next((o for o in out if o["k"] == "dir"), None)
+    if d and not d.get("via"):   # a callout's own word said ("A Ramp": ramp), the generic ones apart; the last one said wins
+        ws = t.split()
+        best = None
+        for z in zones or ():
+            for w in re.findall(r"[a-zà-ÿ]+", (z or "").lower()):
+                if len(w) >= 3 and w not in ("site", "bombsite", "mid", "top", "spawn", "the") and w in ws:
+                    at = max(i for i, x in enumerate(ws) if x == w)
+                    if best is None or at > best[0]:
+                        best = (at, w)
+        if best:
+            d["via"] = best[1].capitalize()
+    # what they do ("they tried to rush B", "ils stack A"): what you saw, not your plan: no way, no tempo of yours (the
+    # call reads it)
+    if re.search(r"\b(?:they|they're|theyre|ils|them|eux|leur|their)\b", t):
+        out = [o for o in out if o["k"] not in ("dir", "tempo", "buy", "stuff", "exec", "split")]
     return out
 
 
@@ -201,7 +237,7 @@ def ack(orders):
     elif "split" in O:
         plan.append(f"split {O['split']['site']}")
     elif "dir" in O:
-        plan.append(SAY.get(O["dir"]["v"], O["dir"]["v"]))
+        plan.append(SAY.get(O["dir"]["v"], O["dir"]["v"]) + (f" par {O['dir']['via']}" if O["dir"].get("via") else ""))
     parts = [" ".join(plan)] if plan else []
     for o in orders:
         k = o["k"]
@@ -224,7 +260,7 @@ def ack(orders):
         elif k == "seen":
             parts.append(f"{o['rounds']} rounds en {SAY.get(o['site'], o['site'])}, noté")
         elif k == "tendency":
-            parts.append({"fake": "ils fakent, noté", "rush": "ils rushent, noté", "slow": "ils jouent lent, noté"}[o["v"]])
+            parts.append({"fake": "ils fakent, noté", "rush": "ils rushent, noté", "slow": "ils jouent lent, noté", "stack": "ils stack, noté"}[o["v"]])
         elif k == "call":
             parts.append(f"{o['n']} {SAY.get(o['site'], o['site'])} sans bombe, noté")
         elif k == "cancel":

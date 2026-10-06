@@ -306,7 +306,7 @@ def set_focus(n):
     return True
 
 
-def set_tdir(what, src="key", toggle=True):
+def set_tdir(what, src="key", toggle=True, via=None):
     """Your team's plan for the round (06/10, the user: a key for A, one for mid, one for B, one for rush, slow and
     map control): numpad 1-2-3 the way (A, MID, B), 4-5-6 the tempo (rush, slow, control), or the same said to Wily.
     T: the page shows that way, its odds and its grenades; CT: 1-2-3 is where you play, 4-5-6 what you see the Ts do.
@@ -324,6 +324,7 @@ def set_tdir(what, src="key", toggle=True):
         now = time.time()
         if what in ("A", "MID", "B"):
             cur["dir"] = what
+            cur["via"] = via   # the way in said with it ("B Apps", "A from Ramp", "mid to A"); a key: none
             STATE["ping"] = {"what": what, "t": now, "round": rnd}
         elif what in ("rush", "slow", "control"):
             cur["tempo"] = None if toggle and cur.get("tempo") == what else what
@@ -332,7 +333,7 @@ def set_tdir(what, src="key", toggle=True):
         cur.update(t=now, src=src)
         STATE["tdir"] = cur
         mp = STATE.get("map")
-    log_event({"map": mp, "round": int(rnd), "tdir": {k: cur.get(k) for k in ("dir", "tempo", "src")}})
+    log_event({"map": mp, "round": int(rnd), "tdir": {k: cur.get(k) for k in ("dir", "via", "tempo", "src")}})
     if what in ("A", "B"):   # CT: the site you play; bomb down: its site (what numpad 7 / 9 say)
         set_site_key(what)
     return True
@@ -365,7 +366,7 @@ def wily(orders, text=None, said=None):
     for o in orders:
         k = o["k"]
         if k == "dir":
-            set_tdir(o["v"], src="voice")
+            set_tdir(o["v"], src="voice", via=o.get("via"))
         elif k == "tempo":
             set_tdir(o["v"], src="voice", toggle=False)
         elif k in ("exec", "stuff", "split"):
