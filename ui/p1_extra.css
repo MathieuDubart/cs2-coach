@@ -481,3 +481,11 @@ svg.radar .ping .ping-t{font:800 15px var(--f-mono);fill:#ffd34d;paint-order:str
 .pshots{display:grid;gap:6px;margin-top:8px}
 /* Prepare: where you struggle lately (06/10) */
 .pstrug{margin-top:8px}.pstrug-l{margin:4px 0 0;padding-left:18px;display:grid;gap:2px;font:500 14px var(--f-body)}
+/* Prepare's warm-up (06/10): one session on the training server, its parts in order */
+.pwarm{display:grid;gap:10px}
+.pwarm-plan{list-style:none;margin:0;padding:0;display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.pwarm-plan li{display:inline-flex;align-items:baseline;gap:6px;padding:6px 10px;border-radius:var(--radius);background:color-mix(in srgb,var(--ink) 7%,var(--panel));font:600 14px var(--f-body)}
+.pwarm-plan li span{font:700 13px var(--f-mono);color:var(--muted)}
+.pwarm-plan li+li:not(.pwmap)::before{content:"→";margin-right:4px;color:var(--muted)}
+.pwarm-plan li.pwmap{background:none;padding:6px 2px;font:800 13px var(--f-mono);letter-spacing:.06em;text-transform:uppercase;color:var(--t);width:100%}
+.pextra{margin:12px 0}.pextra summary{cursor:pointer;font:600 14px var(--f-body)}

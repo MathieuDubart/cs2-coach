@@ -269,6 +269,17 @@ class Handler(BaseHTTPRequestHandler):
         if u.path == "/api/train/status":   # installed, installing, running (Prepare's warm-up asks before offering it)
             import replay
             return self.send(200, replay.status())
+        if u.path == "/api/train/preview":   # Prepare's warm-up before it's built: each part's minutes (06/10)
+            import train
+            sid = (q.get("sid") or [""])[0] or str(config.settings().get("own_steamid") or "")
+            try:
+                mins = max(5, min(90, int((q.get("minutes") or ["20"])[0])))
+            except ValueError:
+                mins = 20
+            where = (q.get("where") or ["random"])[0]
+            if not re.fullmatch(r"random|mix|(?:(?:de|cs|ar)_\w+)(?:,(?:de|cs|ar)_\w+){0,2}", where):
+                return self.send(400, {"error": "invalid map"})
+            return self.send(200, {"blocks": train.preview(sid, mins, where)})
         if u.path == "/api/train/struggles":   # where you lose rounds lately: what the training puts first (06/10)
             import train
             sid = (q.get("sid") or [""])[0] or str(config.settings().get("own_steamid") or "")
@@ -478,7 +489,7 @@ class Handler(BaseHTTPRequestHandler):
                     sid = str(body.get("sid") or config.settings().get("own_steamid") or "")
                     minutes = max(5, min(90, int(body.get("minutes") or 20)))
                     where = str(body.get("where") or "random")
-                    if not re.fullmatch(r"random|mix|(de|cs|ar)_\w+", where):
+                    if not re.fullmatch(r"random|mix|(?:(?:de|cs|ar)_\w+)(?:,(?:de|cs|ar)_\w+){0,2}", where):   # Prepare: up to three maps
                         return self.send(400, {"error": "invalid map"})
                     diff = int(body["diff"]) if body.get("diff") is not None else 2
                     return self.send(200, train.play(sid, minutes, where, diff))

@@ -28,7 +28,21 @@ SITES_F = os.path.join(config.OUT, "train_sites.json")
 SESS = os.path.join(replay.COACH, "sessions")
 # share of the time of each block: defending a site (CT), the push routes with their prefires (T), the stuff, the
 # situations (04/10: "a CT training, then a T one: the push routes"); a warm-up (5 min) is the first two only
-SPLIT = {"defend": 0.17, "push": 0.17, "aim": 0.34, "nade": 0.2, "situation": 0.46, "wallbang": 0.12}   # wallbang: sessions of 30 min or more, the others then 88 %
+SPLIT = {"defend": 0.17, "push": 0.17, "aim": 0.34, "nade": 0.2, "situation": 0.46, "wallbang": 0.12}   # before 06/10 (kept for the old sessions' files)
+# the warm-up (06/10, the user: "tout l'entraînement sur le même serveur comme avant, le bouton warmup pour tout lancer:
+# de l'aim, de la défense de bomb site, du chemin de prefire, du stuff, du wallbang"): one session in that order, each
+# part's share of the time by the session's length (5 min: the hands only)
+ORDER = ["aim", "defend", "push", "nade", "wallbang", "situation"]
+
+
+def splits(minutes):
+    if minutes <= 5:
+        return {"aim": 0.4, "defend": 0.3, "push": 0.3}
+    if minutes <= 10:
+        return {"aim": 0.2, "defend": 0.15, "push": 0.15, "nade": 0.2, "wallbang": 0.1, "situation": 0.2}
+    if minutes <= 20:
+        return {"aim": 0.15, "defend": 0.15, "push": 0.15, "nade": 0.15, "wallbang": 0.1, "situation": 0.3}
+    return {"aim": 0.12, "defend": 0.15, "push": 0.15, "nade": 0.15, "wallbang": 0.12, "situation": 0.31}
 WARMUP = {"defend": 0.5, "push": 0.5, "aim": 1.0}
 WARMUP_MIN = 5
 EST = {"defend": 110, "push": 75, "aim": 85, "nade": 40, "situation": 45, "wallbang": 60}   # seconds a drill takes, about (with a retry)
@@ -962,8 +976,9 @@ def build(sid, minutes=20, where="random", difficulty=2):
         S = []
     top = max((x["score"] for x in S), default=0) or 1
     hard = {m: min(1.0, sum(x["score"] for x in S if x["map"] == m) / top) for m in names}   # your struggles: their maps come up more
-    if where in mine:
-        chosen = [where]
+    picked_maps = [m for m in str(where).split(",") if m in mine]   # Prepare's maps (one to three)
+    if picked_maps:
+        chosen = picked_maps[:3]
     elif where == "mix":
         k = 1 if minutes < 15 else 2 if minutes < 30 else 3
         w = np.array([mine[m] * (1 + 2 * hard[m]) for m in names], float)
@@ -972,24 +987,28 @@ def build(sid, minutes=20, where="random", difficulty=2):
         w = np.array([mine[m] * (1 + 2 * hard[m]) for m in names], float)
         chosen = [str(np.random.choice(names, p=w / w.sum()))]
     per_map = minutes * 60 / len(chosen)
-    warm = minutes <= WARMUP_MIN   # a quick warm-up before a game: aim only, no stuff, no situation (04/10)
-    split = WARMUP if warm else SPLIT
+    warm = minutes <= WARMUP_MIN   # a quick warm-up before a game: the hands only (aim, defense, prefire), no stuff, no situation
+    split = splits(minutes)
     all_sc = [] if warm else replay.scenarios(sid, n=40)
     blocks, todo = [], []
     for mp in chosen:
         pr = practice_drills(sid, mp)
-        kinds = [("defend", lambda s_, m_: [d for d in pr if d.get("mode") == "defend"]),
-                 ("push", lambda s_, m_: [d for d in pr if d.get("mode") == "prefire"])] if pr else [("aim", aim_drills)]   # hostage maps: your duel spots
-        if not warm:
-            kinds += [("nade", nade_drills), ("situation", lambda s_, m_: situation_drills(s_, m_, all_sc))]
-        if not warm and minutes >= 30:   # long sessions: the wallbangs of the map (06/10), as aim drills
-            kinds += [("wallbang", wallbang_drills)]
+        fns = {"aim": aim_drills, "defend": lambda s_, m_: [d for d in pr if d.get("mode") == "defend"],
+               "push": lambda s_, m_: [d for d in pr if d.get("mode") == "prefire"], "nade": nade_drills,
+               "wallbang": wallbang_drills, "situation": lambda s_, m_: situation_drills(s_, m_, all_sc)}
+        share = dict(split)
+        if not pr:   # a hostage map: no site to defend or push, your duel spots take their time
+            share["aim"] = share.get("aim", 0) + share.pop("defend", 0) + share.pop("push", 0)
+        kinds = [(k, fns[k]) for k in ORDER if share.get(k)]
         bad = {(m_, r_) for x in S if x["map"] == mp for m_, r_ in x["rounds"]}   # the rounds you struggled in
+        spare = 0.0   # a part with nothing to train on this map gives its time to the next ones
         for kind, fn in kinds:
-            secs = per_map * split.get(kind, 0.12) * (0.88 if not warm and minutes >= 30 and kind != "wallbang" else 1)
+            secs = per_map * share[kind] + spare
             cands = fn(sid, mp)
             if not cands:
+                spare = secs
                 continue
+            spare = 0.0
             for c in cands:   # your struggles first: the defense of that site, its pushes, the rounds you lost there
                 site = None
                 if c.get("mode") in ("defend", "prefire"):
@@ -1017,7 +1036,7 @@ def build(sid, minutes=20, where="random", difficulty=2):
                 d.pop("weight", None)
                 drills.append(d)
             if drills:
-                blocks.append({"map": mp, "kind": "aim" if kind == "wallbang" else kind, "seconds": int(secs), "drills": drills})   # the plugin knows aim blocks
+                blocks.append({"map": mp, "kind": kind, "seconds": int(secs), "drills": drills})
     if not blocks:
         raise ValueError("nothing to train on these maps yet")
     sid_ = time.strftime("s%Y%m%d_%H%M%S")
@@ -1036,6 +1055,32 @@ def build(sid, minutes=20, where="random", difficulty=2):
     p["sessions"].append({"id": sid_, "t": time.time(), "minutes": minutes, "maps": chosen, "done": False, "difficulty": int(difficulty)})
     _save(p)
     return sess
+
+
+def preview(sid, minutes=20, where="random"):
+    """What a warm-up will be, before it's built (Prepare shows it under its button): each part's minutes, map by map;
+    a part without data on a map (no wallbang found there yet) gives its time to the next one."""
+    import wallbangs
+    sid = str(sid)
+    mine = maps(sid) if sid.isdigit() else {}
+    chosen = [m for m in str(where).split(",") if m in mine][:3] or [where if where in mine else "random"]
+    split, out = splits(minutes), []
+    per_map = minutes * 60 / len(chosen)
+    for mp in chosen:
+        share = dict(split)
+        if mp.startswith("cs_"):
+            share["aim"] = share.get("aim", 0) + share.pop("defend", 0) + share.pop("push", 0)
+        spare = 0.0
+        for k in ORDER:
+            if not share.get(k):
+                continue
+            secs = per_map * share[k] + spare
+            if k == "wallbang" and mp != "random" and not wallbangs.load(mp):
+                spare = secs
+                continue
+            spare = 0.0
+            out.append({"map": mp, "kind": k, "seconds": int(secs)})
+    return out
 
 
 def _scenario(sid, d):

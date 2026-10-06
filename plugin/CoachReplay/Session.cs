@@ -105,8 +105,8 @@ public partial class CoachReplay
     static readonly Random Rng = new();
     string introHtml = "";
     // the blocks: defending a site (CT), the push routes (T), aim on hostage maps, the stuff, the situations
-    static readonly Dictionary<string, string> KindName = new() { ["defend"] = "DEFENSE", ["push"] = "PUSH", ["aim"] = "AIM", ["nade"] = "STUFF", ["situation"] = "SITUATION" };
-    static readonly Dictionary<string, string> KindColor = new() { ["defend"] = "#4fc3a1", ["push"] = "#ff8a3d", ["aim"] = "#ff8a3d", ["nade"] = "#5ab4ff", ["situation"] = "#e0a030" };
+    static readonly Dictionary<string, string> KindName = new() { ["defend"] = "DEFENSE", ["push"] = "PUSH", ["aim"] = "AIM", ["nade"] = "STUFF", ["situation"] = "SITUATION", ["wallbang"] = "WALLBANG" };
+    static readonly Dictionary<string, string> KindColor = new() { ["defend"] = "#4fc3a1", ["push"] = "#ff8a3d", ["aim"] = "#ff8a3d", ["nade"] = "#5ab4ff", ["situation"] = "#e0a030", ["wallbang"] = "#c792ea" };
     int postIdx = -1;   // a defense: the spot you hold now (Posts), Posts.Count: free
     readonly List<(Drill d, bool ok, string outcome)> sessDone = new();   // this session's drills, each one's last try
     readonly List<(Drill d, bool ok, string outcome)> lastDone = new();   // the last session's (!again)
