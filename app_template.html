@@ -820,6 +820,8 @@ svg.radar .ping .ping-t{font:800 15px var(--f-mono);fill:#ffd34d;paint-order:str
 .vshot{width:112px;height:auto;aspect-ratio:16/10;object-fit:cover;border-radius:4px;display:block;background:var(--chip)}
 .vnd.prac{color:var(--good)}.vnd b{font:800 12px var(--f-mono);color:var(--good)}
 .pshots{display:grid;gap:6px;margin-top:8px}
+/* Prepare: where you struggle lately (06/10) */
+.pstrug{margin-top:8px}.pstrug-l{margin:4px 0 0;padding-left:18px;display:grid;gap:2px;font:500 14px var(--f-body)}
 </style>
 
 <div class="bar"><div class="bar-in">
@@ -2225,7 +2227,7 @@ function prepProgram(p,sel,min){const PL=p.advice.plan||{},W=((PL.training||{}).
   const nr=(p.advice.rules||[]).find(r=>r.id==="nades"),M=sel.map(MAPN).join(", ");
   const B=[],add=(kind,mins,title,text,why)=>{if(mins>0)B.push({kind,mins,title,text,why})};
   add("aim",min>=30?5:min>=10?4:3,aim.map,aim.text,aim.why);
-  if(min>=20)add("train",min>=30?12:8,`Training server · ${MAPN(sel[0])}`,"Your situations on this map, with bots on the paths the demos recorded: your posts to hold, the routes to push, then the deaths that cost rounds.","The map in your hands before the first round.");
+  if(min>=20)add("train",min>=30?12:8,`Training server · ${MAPN(sel[0])}`,`Your situations on this map, with bots on the paths the demos recorded: your posts to hold, the routes to push, then the deaths that cost rounds${min>=30?", and the map's wallbangs":""}. Where you lose rounds lately comes first.`,"The map in your hands before the first round.");
   if(min>=10)add("nades",min>=30?5:min>=20?3:4,`Lineups · ${M}`,"The key grenades of your positions: paste a position in the console of a practice server (sv_cheats 1), throw each one twice.",nr?`${nr.short}: thrown, your grenades win rounds.`:"The utility of your positions, ready before the round.");
   if(min>=20)add("dm",min>=30?8:5,dm.map,dm.text,dm.why);
   if(min<20)add("sheet",2,"Your map sheets","Play, avoid, grenades, timing: each map in 60 seconds, just below.","The plan in your head before the first round.");
@@ -2278,7 +2280,7 @@ function renderPrepare(){
     <div class="btns prep-maps" role="group" aria-label="Maps">${maps.map(m=>`<button type="button" data-pmap="${esc(m.map)}" aria-pressed="${sel.includes(m.map)}">${esc(MAPN(m.map))} <span class="note">${m.n||0}</span></button>`).join("")}</div>
     <h3>How long?</h3>
     <div class="btns" role="group" aria-label="Duration">${PREP_LEN.map(n=>`<button type="button" data-pmin="${n}" aria-pressed="${st.min===n}">${n} min</button>`).join("")}</div>
-    <p class="note">${PREP_NOTE[st.min]||""}</p>
+    <p class="note">${PREP_NOTE[st.min]||""}</p>${own?`<div class="pstrug" data-pstrug></div>`:""}
     <div class="btns"><button type="button" class="primary" data-pgo ${sel.length?"":"disabled"}>Build my warm-up →</button></div>
     ${own?`<div style="margin-top:18px">${checkinCard((PL.context||{}).journal_n)}</div>`:""}</section>`;
   const block=(b,i)=>{const done=!!st.done[i],cur=st.cur===i,left=cur&&st.t0?b.mins*60-(Date.now()-st.t0)/1000:b.mins*60;
@@ -2286,7 +2288,7 @@ function renderPrepare(){
       <div class="pmin"><b>${b.mins}</b><span>min</span></div>
       <div class="pbody"><h4>${esc(b.title)}</h4><p>${esc(b.text)}</p><p class="note">Why: ${esc(b.why)}</p>
        ${b.kind==="nades"?prepNades(p,sel):""}${b.kind==="nades"&&own?`<div class="pshots" data-pshots></div>`:""}
-       ${b.kind==="train"&&own?`<div class="btns" data-ptrainbox style="align-items:center"><button type="button" data-ptrain="${i}">▶ Launch on the training server</button><span class="note" id="ptmsg" role="status"></span></div>`:""}</div>
+       ${b.kind==="train"&&own?`<div class="pstrug" data-pstrug></div>`:""}${b.kind==="train"&&own?`<div class="btns" data-ptrainbox style="align-items:center"><button type="button" data-ptrain="${i}">▶ Launch on the training server</button><span class="note" id="ptmsg" role="status"></span></div>`:""}</div>
       <div class="pact">${done?`<button type="button" data-pundo="${i}" title="Mark it not done">✓ Done</button>`:cur?`<b class="ptime" id="ptime">${fmtLeft(left)}</b><button type="button" data-pdone="${i}">Done</button>`:`<button type="button" class="primary" data-pstart="${i}">Start</button>`}</div></li>`};
   const step2=()=>`<section class="prep2"><ol class="prep-prog">${B.map(block).join("")}</ol>
     <div class="btns"><button type="button" data-pstep="3">I'm ready →</button></div>
@@ -2315,7 +2317,7 @@ function renderPrepare(){
       if(msg)msg.textContent=`${r.blocks.map(x=>`${BLOCK[x.kind]} ${Math.round(x.seconds/60)}′`).join(" → ")}: CS2 joins the server, follow the screen.`;
       PREP.tick=null;setTimeout(()=>{if(S.view==="prepare")renderPrepare()},6000)}
     catch(e){if(msg)msg.textContent="Failed: "+e.message;b.disabled=false}});
-  copyBtn(v);wireCheckin(v,p);wireFocus(v,p,renderPrepare);prepTrainCheck(v);prepShots(v,sel);
+  copyBtn(v);wireCheckin(v,p);wireFocus(v,p,renderPrepare);prepTrainCheck(v);prepShots(v,sel);prepStruggles(v,p);
   if(st.cur!=null&&st.t0&&B[st.cur]){const b=B[st.cur];   // the block running: its clock, and done when it reaches zero
     PREP.tick=setInterval(()=>{const t=$("#ptime",v);if(!t||S.view!=="prepare"){clearInterval(PREP.tick);return}
       const left=b.mins*60-(Date.now()-st.t0)/1000;t.textContent=fmtLeft(left);if(left<=0){clearInterval(PREP.tick);finish(st.cur)}},1000)}}
@@ -2327,6 +2329,13 @@ function prepWatch(){clearTimeout(PREP.watch);if(S.view!=="prepare"||!D.local)re
 
 // the training server not on this PC yet (a player's copy of the app, 05/10): installed from the warm-up's block, which
 // then launches it
+// where you lose rounds lately (06/10: "la game d'Overpass où on s'est pris des execs B en CT: priorise-les en
+// entraînement"): the training puts their maps, the defense of those sites and those rounds first
+async function prepStruggles(v,p){const boxes=$$("[data-pstrug]",v);if(!boxes.length||!D.local)return;let r;
+  try{r=await api("/api/train/struggles?sid="+encodeURIComponent(p.steamid))}catch(e){return}
+  const S=(r.struggles||[]).slice(0,3);if(!S.length)return;
+  const html=`<p class="note"><b>⚠ The training puts first</b> where you lose rounds lately:</p><ul class="pstrug-l">${S.map(x=>`<li><b>${esc(MAPN(x.map))}</b> · ${esc(x.text)}${x.last?` <span class="note">(last ${esc(x.last)})</span>`:""}</li>`).join("")}</ul>`;
+  boxes.forEach(b=>b.innerHTML=html)}
 // the photos of your maps' lineups (06/10: "les images de là où je dois viser"): taken in your game on the training
 // server, numpad + from one lineup to the next; Live shows them with the way's stuff
 async function prepShots(v,sel){const box=$("[data-pshots]",v);if(!box||!D.local)return;let st;

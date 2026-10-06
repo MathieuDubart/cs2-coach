@@ -269,6 +269,14 @@ class Handler(BaseHTTPRequestHandler):
         if u.path == "/api/train/status":   # installed, installing, running (Prepare's warm-up asks before offering it)
             import replay
             return self.send(200, replay.status())
+        if u.path == "/api/train/struggles":   # where you lose rounds lately: what the training puts first (06/10)
+            import train
+            sid = (q.get("sid") or [""])[0] or str(config.settings().get("own_steamid") or "")
+            try:
+                S = train.struggles(sid)[:4] if sid.isdigit() else []
+            except Exception as e:
+                return self.send(200, {"struggles": [], "error": str(e)})
+            return self.send(200, {"struggles": [{k: x[k] for k in ("map", "side", "site", "kind", "lost", "n", "last", "text")} for x in S]})
         if u.path == "/api/train":   # the training server, your situations to play again, your tries
             import replay
             sid = (q.get("sid") or [""])[0] or str(config.settings().get("own_steamid") or "")

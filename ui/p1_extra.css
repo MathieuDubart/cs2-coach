@@ -479,3 +479,5 @@ svg.radar .ping .ping-t{font:800 15px var(--f-mono);fill:#ffd34d;paint-order:str
 .vshot{width:112px;height:auto;aspect-ratio:16/10;object-fit:cover;border-radius:4px;display:block;background:var(--chip)}
 .vnd.prac{color:var(--good)}.vnd b{font:800 12px var(--f-mono);color:var(--good)}
 .pshots{display:grid;gap:6px;margin-top:8px}
+/* Prepare: where you struggle lately (06/10) */
+.pstrug{margin-top:8px}.pstrug-l{margin:4px 0 0;padding-left:18px;display:grid;gap:2px;font:500 14px var(--f-body)}

@@ -28,10 +28,10 @@ SITES_F = os.path.join(config.OUT, "train_sites.json")
 SESS = os.path.join(replay.COACH, "sessions")
 # share of the time of each block: defending a site (CT), the push routes with their prefires (T), the stuff, the
 # situations (04/10: "a CT training, then a T one: the push routes"); a warm-up (5 min) is the first two only
-SPLIT = {"defend": 0.17, "push": 0.17, "aim": 0.34, "nade": 0.2, "situation": 0.46}
+SPLIT = {"defend": 0.17, "push": 0.17, "aim": 0.34, "nade": 0.2, "situation": 0.46, "wallbang": 0.12}   # wallbang: sessions of 30 min or more, the others then 88 %
 WARMUP = {"defend": 0.5, "push": 0.5, "aim": 1.0}
 WARMUP_MIN = 5
-EST = {"defend": 110, "push": 75, "aim": 85, "nade": 40, "situation": 45}   # seconds a drill takes, about (with a retry)
+EST = {"defend": 110, "push": 75, "aim": 85, "nade": 40, "situation": 45, "wallbang": 60}   # seconds a drill takes, about (with a retry)
 RIFLE = {2: "weapon_ak47", 3: "weapon_m4a1"}
 PRIMARY = {"AK-47": "ak47", "M4A4": "m4a1", "M4A1-S": "m4a1_silencer", "AWP": "awp", "Galil AR": "galilar",
            "FAMAS": "famas", "SG 553": "sg556", "AUG": "aug", "SSG 08": "ssg08", "MP9": "mp9", "MAC-10": "mac10"}
@@ -835,6 +835,105 @@ def nade_drills(sid, mp):
     return out
 
 
+# ---------------------------------------------------------------- where you struggle lately (06/10)
+
+KIND_EN = {"exec": "executes", "rush": "rushes", "hit": "hits"}
+_STRUG = {"t": 0, "sid": None, "v": []}
+
+
+def struggles(sid, n=20):
+    """Where you lose rounds lately (06/10, the user: "la game d'Overpass entre le 4 et le 5 où on s'est pris des execs B
+    en CT: si tu vois des situations comme ça où je galère, priorise-les en entraînement"): your last matches' rounds by
+    map, side, site and how the Ts came (an execute: three Ts or more on the site after 0:30; a rush: before), the
+    recent ones weighing more (a week old: half). A situation counts when you lost most of its rounds, twice at least.
+    -> [{map, side, site, kind, lost, n, score, rounds: [[mid, round], ...], last}] the worst first"""
+    import tside
+    sid = str(sid)
+    if _STRUG["sid"] == sid and time.time() - _STRUG["t"] < 600:
+        return _STRUG["v"]
+    try:
+        reg = json.load(open(os.path.join(config.CACHE, "matches.json"), encoding="utf-8"))
+    except (OSError, ValueError):
+        reg = {}
+    acc = {}
+    for mid, mp in replay._own_matches(sid, n):
+        f = os.path.join(tside.OUT, mid + ".parquet")
+        lf = os.path.join(config.OUT, "deep", mid, "loadout.parquet")
+        if not mp or not os.path.exists(f) or not os.path.exists(lf):
+            continue
+        try:
+            R = pd.read_parquet(f, columns=["round", "site", "hit_t", "n_exec", "T_won"])
+            L = pd.read_parquet(lf, columns=["round", "steamid", "side"])
+        except Exception:
+            continue
+        me = L[L.steamid.astype(str) == sid].set_index("round").side
+        when = (reg.get(mid) or {}).get("time")
+        try:
+            t = time.mktime(time.strptime(when[:16], "%Y-%m-%dT%H:%M")) if when else None
+        except ValueError:
+            t = None
+        w = 0.5 ** (max(0.0, time.time() - t) / 86400 / 7) if t else 0.5
+        for r in R.itertuples():
+            side = me.get(r.round)
+            if side not in ("T", "CT") or r.site not in ("A", "B") or r.hit_t != r.hit_t:
+                continue
+            kind = "rush" if r.hit_t < 30 else "exec" if (r.n_exec or 0) >= 3 else "hit"
+            lost = bool(r.T_won) if side == "CT" else not bool(r.T_won)
+            e = acc.setdefault((mp, side, r.site, kind), {"lost": 0, "n": 0, "w": 0.0, "rounds": [], "last": 0})
+            e["n"] += 1
+            if lost:
+                e["lost"] += 1
+                e["w"] += w
+                e["rounds"].append([mid, int(r.round)])
+                e["last"] = max(e["last"], t or 0)
+    out = []
+    for (mp, side, site, kind), e in acc.items():
+        if e["lost"] >= 2 and e["lost"] / e["n"] >= 0.55:
+            out.append({"map": mp, "side": side, "site": site, "kind": kind, "lost": e["lost"], "n": e["n"],
+                        "score": round(e["w"] * e["lost"] / e["n"], 3), "rounds": e["rounds"],
+                        "last": time.strftime("%d/%m", time.localtime(e["last"])) if e["last"] else None,
+                        "text": f"{side} on {site}: {e['lost']} of {e['n']} rounds lost to {KIND_EN[kind]}" if side == "CT"
+                                else f"T on {site}: {e['lost']} of {e['n']} {KIND_EN[kind]} lost"})
+    out.sort(key=lambda x: -x["score"])
+    _STRUG.update(t=time.time(), sid=sid, v=out)
+    return out
+
+
+def _boost(S, mp, side, site):
+    """How much a drill on that map, side and site is pushed (1: not at all, up to 4): your recent struggles there."""
+    top = max((x["score"] for x in S), default=0) or 1
+    sc = sum(x["score"] for x in S if x["map"] == mp and x["side"] == side and x["site"] == site)
+    return 1 + 3 * min(1.0, sc / top)
+
+
+# ---------------------------------------------------------------- wallbangs (06/10: "practice des lineups de wallbang" in long sessions)
+
+WB_WEAPON = {"ak47": "weapon_ak47", "m4a1_silencer": "weapon_m4a1_silencer", "m4a1": "weapon_m4a1", "awp": "weapon_awp", "ssg08": "weapon_ssg08",
+             "deagle": "weapon_deagle", "galilar": "weapon_galilar", "famas": "weapon_famas", "aug": "weapon_aug", "sg556": "weapon_sg556"}
+
+
+def wallbang_drills(sid, mp):
+    """The map's wallbangs (wallbangs.py: the base's kills through walls from one spot onto one place): you on the
+    spot, the bots where the victims stood behind the wall, the weapon most of those kills were made with."""
+    import wallbangs
+    out = []
+    for w in wallbangs.load(mp)[:10]:
+        team = 2 if w["side"] == "T" else 3
+        wp = next((WB_WEAPON[k] for k in (w.get("weapons") or {}) if k in WB_WEAPON), RIFLE[team])
+        name = {v: k for k, v in WB_WEAPON.items()}.get(wp, "rifle").replace("_silencer", "-S").upper()
+        vic = [v for v in w.get("victims") or []][:3]
+        if not vic:
+            continue
+        out.append({"id": f"wallbang:{mp}:{w['side']}:{w.get('from_key')}>{w.get('to_key')}", "kind": "aim", "map": mp,
+                    "title": f"WALLBANG {w['from']} → {w['to']} ({w['side']})",
+                    "tip": f"through the wall with the {name}: {w['n']} kills from here in my base · shoot where they stand, a few bullets",
+                    "team": team, "me": {"pos": w["pos"], "ang": _angle(w["pos"], vic[0])}, "weapons": ["weapon_knife", wp],
+                    "bot_weapons": ["weapon_knife", RIFLE[5 - team]],
+                    "bots": [{"pos": v, "ang": _angle(v, w["pos"]), "zone": replay_zone(w.get("to_key") or "", mp)} for v in vic],
+                    "weight": 1 + w["n"] / 5})
+    return out
+
+
 def situation_drills(sid, mp, all_sc=None):
     return [{"id": s["id"], "kind": "situation", "map": s["map"], "title": f"R{s['round']} · " + (
                 f"1v{s['vs']} clutch" if s["kind"] == "clutch" else "death") + (f" · {replay_zone(s['zone'], mp)}" if s.get("zone") else ""),
@@ -856,14 +955,21 @@ def build(sid, minutes=20, where="random", difficulty=2):
     if not mine:
         raise ValueError("no match with a demo yet")
     names = list(mine)
+    try:
+        S = struggles(sid)
+    except Exception as e:
+        print("struggles:", e, flush=True)
+        S = []
+    top = max((x["score"] for x in S), default=0) or 1
+    hard = {m: min(1.0, sum(x["score"] for x in S if x["map"] == m) / top) for m in names}   # your struggles: their maps come up more
     if where in mine:
         chosen = [where]
     elif where == "mix":
         k = 1 if minutes < 15 else 2 if minutes < 30 else 3
-        w = np.array([mine[m] for m in names], float)
+        w = np.array([mine[m] * (1 + 2 * hard[m]) for m in names], float)
         chosen = list(np.random.choice(names, size=min(k, len(names)), replace=False, p=w / w.sum()))
     else:
-        w = np.array([mine[m] for m in names], float)
+        w = np.array([mine[m] * (1 + 2 * hard[m]) for m in names], float)
         chosen = [str(np.random.choice(names, p=w / w.sum()))]
     per_map = minutes * 60 / len(chosen)
     warm = minutes <= WARMUP_MIN   # a quick warm-up before a game: aim only, no stuff, no situation (04/10)
@@ -876,11 +982,29 @@ def build(sid, minutes=20, where="random", difficulty=2):
                  ("push", lambda s_, m_: [d for d in pr if d.get("mode") == "prefire"])] if pr else [("aim", aim_drills)]   # hostage maps: your duel spots
         if not warm:
             kinds += [("nade", nade_drills), ("situation", lambda s_, m_: situation_drills(s_, m_, all_sc))]
+        if not warm and minutes >= 30:   # long sessions: the wallbangs of the map (06/10), as aim drills
+            kinds += [("wallbang", wallbang_drills)]
+        bad = {(m_, r_) for x in S if x["map"] == mp for m_, r_ in x["rounds"]}   # the rounds you struggled in
         for kind, fn in kinds:
-            secs = per_map * split[kind]
+            secs = per_map * split.get(kind, 0.12) * (0.88 if not warm and minutes >= 30 and kind != "wallbang" else 1)
             cands = fn(sid, mp)
             if not cands:
                 continue
+            for c in cands:   # your struggles first: the defense of that site, its pushes, the rounds you lost there
+                site = None
+                if c.get("mode") in ("defend", "prefire"):
+                    site = next((s_ for s_ in ("A", "B") if f"Bombsite{s_}" in c["id"] or f":{s_} " in c.get("title", "") or c.get("title", "").endswith(f" {s_}")), None)
+                    if site is None:
+                        site = next((s_ for s_ in ("A", "B") if f"DEFEND {s_}" in c.get("title", "") or f"PUSH {s_}" in c.get("title", "")), None)
+                if site:
+                    b = _boost(S, mp, "CT" if c.get("mode") == "defend" else "T", site)
+                    if b > 1.05:
+                        c["weight"] = c.get("weight", 1.0) * b
+                        why = next((x for x in S if x["map"] == mp and x["site"] == site and x["side"] == ("CT" if c.get("mode") == "defend" else "T")), None)
+                        if why:
+                            c["tip"] = f"{c.get('tip', '')} · priority: {why['text']} lately".strip(" ·")
+                if kind == "situation" and (str(c.get("mid")), int(c.get("round") or 0)) in bad:
+                    c["weight"] = c.get("weight", 1.0) * 3
             n = max(1, int(secs / EST[kind]) + 1)
             picked = _pick(cands, n, p["items"], nsess, weight=lambda c: c.get("weight", 1.0))
             drills = []
@@ -893,7 +1017,7 @@ def build(sid, minutes=20, where="random", difficulty=2):
                 d.pop("weight", None)
                 drills.append(d)
             if drills:
-                blocks.append({"map": mp, "kind": kind, "seconds": int(secs), "drills": drills})
+                blocks.append({"map": mp, "kind": "aim" if kind == "wallbang" else kind, "seconds": int(secs), "drills": drills})   # the plugin knows aim blocks
     if not blocks:
         raise ValueError("nothing to train on these maps yet")
     sid_ = time.strftime("s%Y%m%d_%H%M%S")
