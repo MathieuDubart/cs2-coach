@@ -1224,7 +1224,7 @@ def wallbang_drills(sid, mp):
             continue
         out.append({"id": f"wallbang:{mp}:{w['side']}:{w.get('from_key')}>{w.get('to_key')}", "kind": "aim", "map": mp,
                     "title": f"WALLBANG {w['from']} → {w['to']} ({w['side']})",
-                    "tip": f"through the wall with the {name}: {w['n']} kills from here in my base · shoot where they stand, a few bullets",
+                    "tip": f"through the wall with the {name}: {w['n']} kills from here in my base, {round(100 * w.get('wall', 1))}% through the wall · they stand still behind it, they don't shoot · a few bullets where they stand",
                     "team": team, "me": {"pos": w["pos"], "ang": _angle(w["pos"], vic[0])}, "weapons": ["weapon_knife", wp],
                     "bot_weapons": ["weapon_knife", RIFLE[5 - team]],
                     "bots": [{"pos": v, "ang": _angle(v, w["pos"]), "zone": replay_zone(w.get("to_key") or "", mp)} for v in vic],

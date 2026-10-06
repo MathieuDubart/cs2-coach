@@ -277,6 +277,18 @@ public partial class CoachReplay : BasePlugin
                 foreach (var e in Utilities.FindAllEntitiesByDesignerName<CBaseEntity>(cls))
                     Logger.LogInformation("dbgbreak {c} {n} {x:F0} {y:F0} {z:F0} hp {h}", cls, e.Entity?.Name, e.AbsOrigin?.X, e.AbsOrigin?.Y, e.AbsOrigin?.Z, e.Health);
         });
+        AddCommand("css_dbgbreakat", "break the breakables near x y z", (p, c) =>
+        {
+            if (float.TryParse(c.GetArg(1), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var x)
+                && float.TryParse(c.GetArg(2), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var y)
+                && float.TryParse(c.GetArg(3), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var z))
+                Break(new List<Vector3> { new(x, y, z) });
+            AddTimer(1f, () =>
+            {
+                foreach (var e in Utilities.FindAllEntitiesByDesignerName<CBaseEntity>("prop_dynamic").Where(e => (e.Entity?.Name ?? "").Contains("vent")))
+                    Logger.LogInformation("dbgbreakat after: {n} valid {v} hp {h}", e.Entity?.Name, e.IsValid, e.Health);
+            });
+        });
         AddCommand("css_dbgents", "the map's entity classes and how many of each", (p, c) =>
         {
             foreach (var g in Utilities.GetAllEntities().Where(e => e.DesignerName != null).GroupBy(e => e.DesignerName).OrderBy(g => g.Key))
@@ -566,16 +578,19 @@ public partial class CoachReplay : BasePlugin
         if (open.Count > 0) Logger.LogInformation("{n} door(s) opened", open.Count);
     }
 
-    // the map's breakables near these points broken (a vent cover, a window the players went through)
+    // the map's breakables near these points broken (a vent cover, a window the players went through). Nuke's vent is a
+    // prop_dynamic named nuke_vent (448 -1403 -416), not a func_breakable
     void Break(List<Vector3> pts, float r = 72f)
     {
         var n = 0;
-        foreach (var cls in new[] { "func_breakable", "func_breakable_surf" })
+        foreach (var cls in new[] { "func_breakable", "func_breakable_surf", "prop_dynamic" })
             foreach (var e in Utilities.FindAllEntitiesByDesignerName<CBaseEntity>(cls))
             {
                 if (!e.IsValid || e.AbsOrigin == null) continue;
+                var name = (e.Entity?.Name ?? "").ToLowerInvariant();
+                if (cls == "prop_dynamic" && (e.Health <= 0 || !(name.Contains("vent") || name.Contains("window") || name.Contains("glass")))) continue;
                 var o = new Vector3(e.AbsOrigin.X, e.AbsOrigin.Y, e.AbsOrigin.Z);
-                if (pts.Any(p => Vector3.DistanceSquared(p, o) < r * r)) { e.AcceptInput("Break"); n++; }
+                if (pts.Any(p => Vector3.DistanceSquared(p, o) < r * r)) { e.AcceptInput("Break"); n++; Logger.LogInformation("broken: {c} {n}", cls, name); }
             }
         if (n > 0) Logger.LogInformation("{n} breakable(s) broken", n);
     }
