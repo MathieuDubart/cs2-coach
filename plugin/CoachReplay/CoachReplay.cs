@@ -102,6 +102,8 @@ public partial class CoachReplay : BasePlugin
     readonly HashSet<string> gone = new();   // tracks dead here
     readonly HashSet<int> free = new();   // slots whose path is over: the bot plays on its own
     readonly Dictionary<int, int> contact = new();   // ticks a scripted bot has seen you: then it plays on its own, like a player
+    readonly Dictionary<int, int> engaged = new();   // the tick a scripted bot started fighting you: it keeps the real player's moves 1.5 s
+    const int EngageTicks = 96;
     int t0, countdownEnd, kills, dmg, generation, lastBeat, nextNade;
     bool awaitRestart;
     int emptyTries;   // a drill set up again because its bots did not come
@@ -322,7 +324,7 @@ public partial class CoachReplay : BasePlugin
     {
         if (cur == null) return;
         var g = ++generation;
-        gone.Clear(); free.Clear(); contact.Clear();
+        gone.Clear(); free.Clear(); contact.Clear(); engaged.Clear();
         if (mode == "actor" && !Humans().Any()) { phase = "waiting"; return; }   // starts when you join
         phase = "setup";
         // the same situation again: the same bots, only a clean round (fast retries)
@@ -662,10 +664,13 @@ public partial class CoachReplay : BasePlugin
             var pos = Vector3.Lerp(p0, p1, a);
             if (phase == "live" && mode == "spec" && pawn.AbsOrigin != null)
             { var o = pawn.AbsOrigin; devSum += Vector3.Distance(new Vector3(o.X, o.Y, o.Z), pos); devN++; }
-            if (phase == "live" && seen != null && (seen[slot / 32] & (1u << (slot % 32))) != 0 && (contact[slot] = contact.GetValueOrDefault(slot) + 1) >= ReactTicks)
-            {   // it has seen you for a reaction time: from now on it fights like a player, not on its recorded path
-                Free(slot, c, t); Logger.LogInformation("contact {n} at {f}", t.Name, (int)f); continue;
-            }
+            // it has seen you for a reaction time: it fights you now, its aim is the game's. For 1.5 s it still moves the
+            // way the real player moved there (his peek, his strafe, his stop: 06/10, "les bots ne se déplacent pas comme des
+            // joueurs"), then it plays on its own
+            var eng = engaged.TryGetValue(slot, out var et);
+            if (eng && Server.TickCount - et > EngageTicks) { Free(slot, c, t); continue; }
+            if (!eng && phase == "live" && seen != null && (seen[slot / 32] & (1u << (slot % 32))) != 0 && (contact[slot] = contact.GetValueOrDefault(slot) + 1) >= ReactTicks)
+            { engaged[slot] = Server.TickCount; eng = true; Logger.LogInformation("contact {n} at {f}", t.Name, (int)f); }
             var here = pawn.AbsOrigin is { } ho ? new Vector3(ho.X, ho.Y, ho.Z) : pos;
             if (phase == "live" && mePos != null && t.Team != cur.Team && Vector3.DistanceSquared(here, mePos.Value) < Near * Near)
             {   // you are right on it: a player would notice you, path or not
@@ -679,15 +684,16 @@ public partial class CoachReplay : BasePlugin
             // like a player's; moved by teleports it slid, 04/10). Too far from its path (a closed door, a box it
             // jumped on in the match), or not live yet: put back on it
             var next = PathAt(t, ft + 1f / cur.Step) - here;
+            if (eng && (new Vector2(next.X, next.Y).Length() > 72f || Math.Abs(next.Z) > 56f)) { Free(slot, c, t); continue; }   // fighting, off its way: on its own
             if (phase != "live" || new Vector2(next.X, next.Y).Length() > 72f || Math.Abs(next.Z) > 56f)
                 pawn.Teleport(pos, face, phase == "live" ? (p1 - p0) * (cur.Rate / (float)cur.Step) : Vector3.Zero);
             else
             {   // the path's own speed, plus a third of the gap beyond it each tick (all of a gap at once: 786 u/s jolts)
                 var pv = (p1 - p0) * (cur.Rate / (float)cur.Step);
                 var gap = next - pv / 64f;
-                pawn.Teleport(null, face, new Vector3(pv.X + gap.X * 22f, pv.Y + gap.Y * 22f, pawn.AbsVelocity?.Z ?? 0f));
+                pawn.Teleport(null, eng ? null : face, new Vector3(pv.X + gap.X * 22f, pv.Y + gap.Y * 22f, pawn.AbsVelocity?.Z ?? 0f));   // fighting: its own aim
             }
-            if (pawn.EyeAngles is { } eye && Math.Abs(eye.X - pitch) > 0.5f)
+            if (!eng && pawn.EyeAngles is { } eye && Math.Abs(eye.X - pitch) > 0.5f)
             { eye.X = pitch; Utilities.SetStateChanged(pawn, "CCSPlayerPawn", "m_angEyeAngles"); }
         }
         if (phase != "live") return;
