@@ -3,7 +3,7 @@ const D=__DATA__;
 if(D.local){const f0=window.fetch.bind(window);window.fetch=(u,o)=>f0(typeof u==="string"&&!/^(\/|[a-z]+:)/i.test(u)?"/"+u:u,o)}
 const $=(s,r=document)=>r.querySelector(s), $$=(s,r=document)=>[...r.querySelectorAll(s)];
 const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
-const MAPN=m=>{const n=m.replace(/^(de|cs|ar)_/,"");return n.charAt(0).toUpperCase()+n.slice(1)};
+const MAPN=m=>{if(m==="aim_map")return"Aim map";const n=m.replace(/^(de|cs|ar)_/,"");return n.charAt(0).toUpperCase()+n.slice(1)};
 const fmtDate=t=>t?new Date(t).toLocaleString("en-US",{weekday:"short",day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"}):"—";
 const f1=v=>v==null?"—":String(v);
 const TYPE={smoke:"Smoke",flash:"Flash",molotov:"Molotov",he:"HE"};

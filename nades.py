@@ -43,7 +43,7 @@ def _timer(t):
     return f"{int(left // 60)}:{int(left % 60):02d}"
 
 
-VERSION = 3   # bump when the summary changes (texts, fields): the cache is rebuilt
+VERSION = 4   # bump when the summary changes (texts, fields): the cache is rebuilt
 
 
 def fresh(cached, stamp, slack=0.85):
@@ -226,6 +226,11 @@ def groups(df, side_rounds):
                 pool = rep[rep.repro] if rep.repro.any() else rep
                 cell = pool.cell.value_counts().index[0]
                 cand = pool[pool.cell == cell]
+                # a jumpthrow lineup: the demos often miss the jump (a jumpthrow bind releases on the tick of the jump,
+                # still on the ground), so a third of the spot's throws in the air make it one, and its reference throw
+                # is one of them (06/10, Overpass smoke to Canal: 44% in the air, said "standing still")
+                if cand.jump.astype(bool).mean() >= 0.3 and cand.jump.astype(bool).any():
+                    cand = cand[cand.jump.astype(bool)]
                 if typ == "flash":
                     cand = cand.sort_values("enemies_blind", ascending=False)
                 elif typ in ("he", "molotov"):

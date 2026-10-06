@@ -1005,16 +1005,23 @@ def _victims(mp, team, typ, land, me, side=None, t_med=None):
         for mid, rnd in list(dict.fromkeys(zip(m["match"].astype(str), m["round"])))[:10]:
             try:
                 G = pd.read_parquet(os.path.join(config.OUT, "deep", mid, "grenades.parquet"),
-                                    columns=["round", "type", "X", "Y", "t", "flight_s", "land_X", "land_Y", "land_Z"])
+                                    columns=["round", "type", "X", "Y", "t", "flight_s", "land_X", "land_Y", "land_Z", "enemies_blind", "damage"])
                 Sm = pd.read_parquet(os.path.join(config.OUT, "deep", mid, "samples.parquet"), columns=["round", "t", "side", "X", "Y", "Z", "health"])
             except Exception:
                 continue
             g = G[(G["round"] == rnd) & (G.type == typ) & ((G.X - me[0]).abs() < 24) & ((G.Y - me[1]).abs() < 24)
                   & (np.hypot(G.land_X - lx, G.land_Y - ly) < 160)]
+            lo, hi = {"flash": (-260, 60), "he": (-150, 90), "molotov": (-90, 90)}.get(typ, (-160, 160))   # its floor (Nuke: A over B)
             for r in g.itertuples():
+                if typ == "flash" and not (r.enemies_blind == r.enemies_blind and r.enemies_blind > 0):
+                    continue   # that time it blinded nobody
+                if typ in ("he", "molotov") and not (r.damage == r.damage and r.damage > 0):
+                    continue   # that time it hurt nobody
                 tl = float(r.t) + (float(r.flight_s) if r.flight_s == r.flight_s else 1.5)
                 q = Sm[(Sm["round"] == rnd) & ((Sm.t - tl).abs() <= 0.5) & (Sm.side == foe) & (Sm.health > 0)]
-                hits += [(x, y, z) for x, y, z in zip(q.X, q.Y, q.Z) if math.hypot(x - lx, y - ly) <= reach and abs(z - lz) < 260]
+                near = sorted((math.hypot(x - lx, y - ly) + 2 * abs(z - lz), (x, y, z)) for x, y, z in zip(q.X, q.Y, q.Z)
+                              if math.hypot(x - lx, y - ly) <= reach and lo <= z - lz <= hi)
+                hits += [p for _, p in near[:2]]   # the closest: the ones it was for
     look = [lx, ly, lz + (0 if typ == "flash" else 40)]
     out = []
     if len(hits) >= 2:

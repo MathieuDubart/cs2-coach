@@ -84,7 +84,8 @@ async function prepWarm(v,p,sel,st){const box=$("[data-pwarm]",v);if(!box||!D.lo
   if(!d){box.innerHTML=`<p class="note">The local server doesn't answer.</p>`;return}
   const T=d.status||{},Pg=d.progress||{level:1,xp:0,from:0,to:300},ss=T.session;
   if(!T.installed){trainInstall(box,p.steamid,T);if((T.install||{}).running)PREP.warm=setTimeout(()=>prepWarm(v,p,sel,st),2500);return}
-  const B=(pv&&pv.blocks)||[],byMap=sel.map(mp=>({mp,b:B.filter(x=>x.map===mp)})).filter(x=>x.b.length);
+  // the aim first, on the game's aim map (06/10), then your maps
+  const B=(pv&&pv.blocks)||[],byMap=[...new Set([...B.filter(x=>!sel.includes(x.map)).map(x=>x.map),...sel])].map(mp=>({mp,b:B.filter(x=>x.map===mp)})).filter(x=>x.b.length);
   const sug=Pg.suggest||null,chose=Date.now()-(+tPref("at","0"))<12*3600e3,df=sug&&!chose?sug.diff:trainDiff(),pct=Math.max(0,Math.min(100,100*(Pg.xp-Pg.from)/Math.max(1,Pg.to-Pg.from)));
   const top=((sg&&sg.struggles)||[]).filter(x=>sel.includes(x.map)).slice(0,2);
   const running=ss&&T.running;
