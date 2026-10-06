@@ -139,14 +139,34 @@ def run(maps=None, workers=3, per_map=PER_MAP, low=True, log=print):
     from concurrent.futures import ProcessPoolExecutor
     from functools import partial
     todo_maps = maps or [m for m, ds in sorted(tside._map_dirs().items(), key=lambda kv: -len(kv[1])) if len(ds) >= 10]
+    import threading
     for mp in todo_maps:
         ds = [d for d in demos(mp, per_map) if not load(d)]
         t0, nb, nk, bad = time.time(), 0, 0, 0
+        # the demos sit on a hard disk (06/10: 200 MB each, 10 readers at once made it seek all the time: 16 demos a
+        # minute): one thread reads them in the workers' order, 14 ahead, the workers then parse them from memory
+        done, stop = [0], threading.Event()
+
+        def pre():
+            for i, mid in enumerate(ds):
+                while i > done[0] + 14 and not stop.is_set():
+                    time.sleep(0.2)
+                if stop.is_set():
+                    return
+                try:
+                    with open(os.path.join(config.CACHE, mid + ".dem"), "rb") as f:
+                        while f.read(16 << 20):
+                            pass
+                except OSError:
+                    pass
+        threading.Thread(target=pre, daemon=True).start()
         with ProcessPoolExecutor(workers) as ex:
             for mid, b, k, s, err in ex.map(partial(_one, low=low), ds):
+                done[0] += 1
                 nb += b
                 nk += k
                 bad += bool(err)
+        stop.set()
         log(f"{mp}: {len(demos(mp, per_map))} demos scanned ({len(ds)} new: {nb} boost episodes, {nk} kills, {bad} unreadable) in {time.time() - t0:.0f} s", flush=True)
 
 

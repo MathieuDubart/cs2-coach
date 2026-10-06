@@ -489,3 +489,11 @@ svg.radar .ping .ping-t{font:800 15px var(--f-mono);fill:#ffd34d;paint-order:str
 .pwarm-plan li+li:not(.pwmap)::before{content:"→";margin-right:4px;color:var(--muted)}
 .pwarm-plan li.pwmap{background:none;padding:6px 2px;font:800 13px var(--f-mono);letter-spacing:.06em;text-transform:uppercase;color:var(--t);width:100%}
 .pextra{margin:12px 0}.pextra summary{cursor:pointer;font:600 14px var(--f-body)}
+
+/* CT: the Ts' habits this half, one line (06/10) */
+.vhab{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 8px;font-size:13px;line-height:1.35;margin:2px 0 6px}
+.vhab>span{font:600 10px/1 var(--mono,monospace);letter-spacing:.08em;color:var(--muted)}
+.vhab b{font-size:15px}
+.vhab em{font-style:normal;color:var(--muted);font-size:12px}
+.vctl{font:700 10px/1 var(--mono,monospace)}
+.vctm{font:800 8.5px/1 var(--mono,monospace);fill:#0b0f14}

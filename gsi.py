@@ -287,7 +287,7 @@ def voice_call(p, t_wall=None):
         f["dyn"] = "rush"
     if f:
         set_mark(rnd, f)
-    if site:
+    if site and not p.get("clear"):   # "nothing B" is not their hit on B (06/10)
         set_site(rnd, site)
     return True
 

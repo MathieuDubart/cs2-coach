@@ -25,13 +25,25 @@ SIDE = {2: "T", 3: "CT"}
 
 
 def _demos(mp):
+    import scan
     import tside
+    done = [d for d in scan.demos(mp, 100000) if scan.load(d)]   # every demo scan.py has read
+    if len(done) >= PER_MAP:
+        return done
     ds = tside._map_dirs().get(mp, [])
     ds = [d for d in ds if os.path.exists(os.path.join(config.CACHE, os.path.basename(d) + ".dem"))]
     return sorted(ds, key=lambda d: -int(os.path.basename(d)))[:PER_MAP]
 
 
 def _kills(mid):
+    import scan
+    k = scan.kills(mid)   # scan.py's pass already read this demo (06/10): no second read of 200 MB
+    if k is not None:
+        k = k[(k.ateam != k.vteam) & k.ax.notna() & k.vx.notna()]
+        return pd.DataFrame({"weapon": k.weapon, "penetrated": k.penetrated, "attacker_X": k.ax, "attacker_Y": k.ay, "attacker_Z": k.az,
+                             "attacker_pitch": k.apitch, "attacker_yaw": k.ayaw, "attacker_team_num": k.ateam,
+                             "attacker_last_place_name": k.aplace, "user_X": k.vx, "user_Y": k.vy, "user_Z": k.vz,
+                             "user_last_place_name": k.vplace, "match": mid})
     from demoparser2 import DemoParser
     p = DemoParser(os.path.join(config.CACHE, mid + ".dem"))
     k = p.parse_event("player_death", player=["X", "Y", "Z", "pitch", "yaw", "team_num", "last_place_name"])
@@ -101,8 +113,12 @@ def analyze_map(mp, log=print):
         # mec, c'est pas un wallbang du tout")
         sx, sy, sz = float(x.attacker_X.median()), float(x.attacker_Y.median()), float(b.attacker_Z)
         VX, VY = x.user_X.to_numpy(float), x.user_Y.to_numpy(float)
-        d0 = D[(np.abs(D.attacker_X - sx) < sr) & (np.abs(D.attacker_Y - sy) < sr) & (np.abs(D.attacker_Z - sz) < STAND_Z)]
-        direct = int(sum(np.hypot(VX - vx, VY - vy).min() < 150 for vx, vy in zip(d0.user_X, d0.user_Y))) if len(d0) else 0
+        yw = np.radians(x.attacker_yaw.to_numpy(float))
+        my = float(np.degrees(np.arctan2(np.sin(yw).mean(), np.cos(yw).mean())))
+        # the same line of fire only (aim within 12 degrees): the kills in plain sight from there, onto them
+        d0 = D[(np.abs(D.attacker_X - sx) < sr) & (np.abs(D.attacker_Y - sy) < sr) & (np.abs(D.attacker_Z - sz) < STAND_Z)
+               & (np.abs(((D.attacker_yaw - my) + 180) % 360 - 180) < ad)]
+        direct = int(sum(np.hypot(VX - vx, VY - vy).min() < 100 for vx, vy in zip(d0.user_X, d0.user_Y))) if len(d0) else 0
         wall = len(x) / (len(x) + direct)
         if wall < 0.5:
             continue
@@ -139,7 +155,7 @@ def run(maps=None, log=print):
         except Exception as e:
             log(f"{mp}: wallbangs unavailable ({e})")
             r = None
-        if r:
+        if r is not None:   # none found is an answer too: the old ones (weak ones included) go
             res["maps"][mp] = r
             config.write_json(OUT, res)   # map by map: a long run keeps what it found
     return res

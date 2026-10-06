@@ -193,7 +193,7 @@ function layerBtns(){const L=liveLayers(),H=typeof isHostage==="function"&&isHos
 
 function liveRadar(box,p,map,level,g,o){
   const dead=!!(o.following&&g&&typeof deadAgo==="function"&&deadAgo(g)!=null);   // dead (05/10): the enemies' layers stay, your own go
-  const PL=p.advice.plan||{},TS=PL.tside,M=TS&&TS.maps&&TS.maps[map],GEO=M&&M.geo,ct=o.side==="CT",HMAP=isHostage(map),att=HMAP?ct:!ct,on=k=>o.layers.includes(k)&&!(dead&&["paths","key","spots","multi"].includes(k))&&(att?!["strong","multi","spots"].includes(k):!["paths","ctpos","danger"].includes(k));   // the attack (T, or CT on a hostage map): the enemies, not your own spots
+  const PL=p.advice.plan||{},TS=PL.tside,M=TS&&TS.maps&&TS.maps[map],GEO=M&&M.geo,ct=o.side==="CT",HMAP=isHostage(map),att=HMAP?ct:!ct,on=k=>o.layers.includes(k)&&!(dead&&["paths","key","spots","multi"].includes(k))&&(att?!["strong","multi","spots"].includes(k):!["paths","ctpos","danger"].includes(k))&&!(ct&&!HMAP&&["multi","spots"].includes(k));   // the attack (T, or CT on a hostage map): the enemies, not your own spots; CT: no static layer (06/10)
   const svg=$("svg",box),img=$("image",svg),ov=$("g",svg),cap=$(".caption",box);
   img.setAttribute("href",D.radars[`${map}:${level}`]||"");svg.setAttribute("viewBox",(D.viewboxes[map]||[0,0,1024,1024]).join(" "));ov.replaceChildren();PLACED.set(ov,[]);
   const here=x=>x&&x.px&&(!x.level||!level||x.level===level),legend=[];
@@ -207,6 +207,7 @@ function liveRadar(box,p,map,level,g,o){
   // strong spots: where the players of your matches win most of their duels, at this moment of the round
   const CM=typeof crossMap==="function"?crossMap(p,map):null,BS=(((CM||{}).sides||{})[o.side]||{}).best_spots||[];
   if(on("strong")&&BS.length){const pick=nearT(BS.filter(here),t,15,25,2).sort((a,b)=>b.win*Math.sqrt(b.k)-a.win*Math.sqrt(a.k)).slice(0,planted?3:5);
+    if(ct)pick.splice(3);   // CT: three at most (06/10: less static noise)
     pick.forEach(s=>strongMark(Lstrong,s));if(pick.length)legend.push(`<span>${SW.shield}strong spot${t!=null?" now":""}: players win most of their duels from there</span>`)}
   // multi-kill spots: yours (exact), and the other players' on the spots you play
   if(on("multi")){const mine=(((PL.multi||{})[map]||{})[o.side]||[]).filter(here),zones=new Set(SP.map(s=>s.name));

@@ -86,10 +86,16 @@ function vCTline(p,g,r){const M=(((p.advice.plan||{}).tside||{}).maps||{})[g.map
   const mix=site=>{const acc={};let any=false;for(const [c,w] of Object.entries(ew)){const X=TT[c]&&TT[c][site];if(!X||!w)continue;any=true;X.curve.forEach(([t,v])=>acc[t]=(acc[t]||0)+w*v)}
     return any?Object.entries(acc).map(([t,v])=>[+t,v]).sort((a,b)=>a[0]-b[0]):null};
   const A=mix("A"),B=mix("B");if(!A&&!B)return "";
-  const site=r&&r.A!==r.B?(r.A>r.B?"A":"B"):((A||[]).reduce((s,x)=>s+x[1],0)>=(B||[]).reduce((s,x)=>s+x[1],0)?"A":"B");
+  // the site you hold (numpad 7 / 9 or said: your stuff, your molly's moment), else the likely one
+  const site=mySite(g)||(r&&r.A!==r.B?(r.A>r.B?"A":"B"):((A||[]).reduce((s,x)=>s+x[1],0)>=(B||[]).reduce((s,x)=>s+x[1],0)?"A":"B"));
   const UT={};for(const [c,w] of Object.entries(ew)){((TT[c]&&TT[c][site]&&TT[c][site].util)||[]).forEach(u=>{const k=u.type+"|"+u.land,o=UT[k]||(UT[k]={...u,share:0});o.share+=w*u.share})}
   const ut=Object.values(UT).filter(u=>u.share>=10&&(u.type==="smoke"||u.type==="molotov")&&u.t>=5).sort((a,b)=>b.share-a.share).slice(0,2);   // their smokes and mollies on that side, not the spawn ones
-  const Wd=320,L=RLEN(),H=78+ut.length*7,base=H-14-ut.length*7,mx=Math.max(1,...(A||[]).map(x=>x[1]),...(B||[]).map(x=>x[1]));
+  // your stuff on the line (06/10, the user: "la timeline CT: quand ils arrivent sur chaque site, et quand lancer ton
+  // stuff"): your site's lineups (numpad 7 / 9 or said; else the likely site) at the moment the base throws them
+  const ms=mySite(g)||site,LL=((((((p.advice.plan||{}).nades||{}).maps||{})[g.map]||{}).CT)||{}).lanes||{},myU=[];
+  Object.entries(LL).filter(([k])=>k[0]===ms).forEach(([,o])=>["molotov","smoke","flash","he"].forEach(t=>{const x=o[t],m=x&&/^(\d+):(\d\d)$/.exec(x.timer||"");
+    if(!m||myU.length>=4||myU.some(y=>y.type===t&&y.to===x.to))return;const el=RLEN()-(+m[1]*60+ +m[2]);if(el>=0&&el<=RLEN())myU.push({...x,type:t,el})}));
+  const Wd=320,L=RLEN(),mrow=myU.length?16:0,H=78+ut.length*7+mrow,base=H-14-ut.length*7-mrow,mx=Math.max(1,...(A||[]).map(x=>x[1]),...(B||[]).map(x=>x[1]));
   const X=t=>Math.round(Wd*t/L),Y=v=>Math.round(4+(base-6)*(1-v/mx));
   const path=c=>c.map(([t,v],i)=>`${i?"L":"M"}${X(t)} ${Y(v)}`).join(""),area=c=>`${path(c)}L${X(c[c.length-1][0])} ${base}L${X(c[0][0])} ${base}Z`;
   const S=site==="A"?A:B,pk=S?S.reduce((a,b)=>b[1]>a[1]?b:a):null,now=g.round_phase==="live"?(g.elapsed||0):null;
@@ -99,6 +105,10 @@ function vCTline(p,g,r){const M=(((p.advice.plan||{}).tside||{}).maps||{})[g.map
     ${pk?`<rect x="${X(Math.max(0,pk[0]-6))}" y="0" width="${X(8)}" height="${base}" fill="var(--good)" fill-opacity=".22"/>`:""}
     ${[["B",B],["A",A]].filter(([,c])=>c).map(([s_,c])=>`<path d="${area(c)}" fill="${SITE_C[s_]}" fill-opacity="${s_===site?.28:.12}"/><path d="${path(c)}" fill="none" stroke="${SITE_C[s_]}" stroke-width="${s_===site?2.4:1.4}" stroke-linejoin="round" opacity="${s_===site?1:.7}"/>`).join("")}
     ${ut.map((u,i)=>`<rect x="${X(u.t)}" y="${base+2+i*7}" width="${Math.max(3,X(u.end)-X(u.t))}" height="5" rx="2" fill="${UCOL[u.type]||"#ccc"}"/>`).join("")}
+    ${(()=>{const pk2=[["A",A],["B",B]].filter(([,c])=>c&&c.length).map(([s_,c])=>[s_,c.reduce((a,b)=>b[1]>a[1]?b:a)]);   // each site's peak, named; the second one a line lower when they meet
+      return pk2.map(([s_,q],i)=>{const x=Math.min(Wd-30,Math.max(2,X(q[0])-12)),near=i&&Math.abs(X(pk2[0][1][0])-X(q[0]))<44;
+        return `<text x="${x}" y="${Math.min(base-3,Math.max(10,Y(q[1])-3)+(near?11:0))}" class="vctl" style="fill:${SITE_C[s_]}">${s_} ${clock(q[0])}</text>`}).join("")})()}
+    ${myU.map(u=>{const yy=base+ut.length*7+11;return `<circle cx="${X(u.el)}" cy="${yy}" r="6.5" fill="${NADE_C[u.type]||"#ccc"}"/><text x="${X(u.el)}" y="${yy+3.5}" text-anchor="middle" class="vctm">${vLetter[u.type]||"?"}</text>`}).join("")}
     ${ticks}${now!=null?`<line x1="${X(now)}" y1="0" x2="${X(now)}" y2="${base}" stroke="#fff" stroke-width="1.6"/>`:""}</svg>`;
   // the one to hold (the hold card's best: your rounds won when it meets their hit, and when thrown early)
   // only the grenades you have (bought at the buy time: the best one to buy, marked so); none in the round: the window alone
@@ -107,7 +117,7 @@ function vCTline(p,g,r){const M=(((p.advice.plan||{}).tside||{}).maps||{})[g.map
   const h=held.length||!live_?cand[0]:null,sp=((UW&&UW.hits)||{}).spent,win=pk?`${clock(Math.max(0,pk[0]-6))}-${clock(pk[0]+2)}`:"";
   const what=h?`${NM[h.type]||h.type} ${esc(vShort(h.land||"?"))}${held.length?"":" (buy)"}`:held.length?held.map(t=>NM[t]).join("/"):"";
   const mine=what?`your ${what} ${win}${h?` · won ${100-h.met_t_won}%${sp?` vs ${100-sp[1]}% early`:""}`:""}`:`their arrival ${win}`;
-  return vHead(`THEY'RE ON THE SITE · ${site} · OF ROUNDS`)+svg+`<div class="vleg"><span><i style="background:var(--good)"></i>${mine}</span>${ut.map(u=>`<span><i style="background:${UCOL[u.type]||"#ccc"}"></i>their ${u.type==="molotov"?"molly":u.type} ${esc(vShort(u.land||"?"))} ${clock(u.t)}</span>`).join("")}</div>`}
+  return vHead(`WHEN THEY'RE ON A · B${r?` · ${Math.round(r.A)}% · ${Math.round(r.B)}%`:""}`)+svg+`<div class="vleg"><span><i style="background:var(--good)"></i>${mine}</span>${ut.map(u=>`<span><i style="background:${UCOL[u.type]||"#ccc"}"></i>their ${u.type==="molotov"?"molly":u.type} ${esc(vShort(u.land||"?"))} ${clock(u.t)}</span>`).join("")}${myU.map(u=>`<span><i style="background:${NADE_C[u.type]||"#ccc"}"></i>${vLetter[u.type]||"?"} ${esc(vShort(u.to))} ${esc(u.timer)}</span>`).join("")}</div>`}
 // CT: what to keep for their hit on the likely site: your rounds won when it meets their hit, and what thrown-early
 // utility gives
 function vHold(p,g,r){const M=(((p.advice.plan||{}).tside||{}).maps||{})[g.map]||{},site=r&&r.A!==r.B?(r.A>r.B?"A":"B"):null,UW=site&&(M.util_war||{})[site];if(!UW)return "";
@@ -130,6 +140,21 @@ const SITE_C={A:"var(--siteA)",B:"var(--siteB)"};
 const vHead=t=>`<div class="vhead">${t}</div>`;
 function vRows(rows){const mx=Math.max(...rows.map(r=>r.v),1);
   return `<div class="vrows">${rows.map(r=>`<div class="vrow" style="--c:${r.c||"var(--ink)"}${r.o!=null&&r.o<1?`;opacity:${r.o}`:""}"><span>${r.l}</span><i><u style="width:${Math.max(4,Math.round(100*r.v/mx))}%"></u></i><b>${Math.round(r.v)}%</b></div>`).join("")}</div>`}
+// CT: what this team did this half, by their buy (06/10, the user: "avant le round, une seule ligne sur les habitudes des
+// T dans ce match, selon leur éco: B 3/4, rush sur éco"): the rounds you know (the bomb's site, else your calls), their
+// buy each of those rounds rebuilt like enemyBuy (eco: pistol, eco or force; full), their rushes (your calls, the plant)
+function buyLow(p,g,n){const x=enemyBuy(p,{...g,round:n})||{};return !!(x.pistol||(x.eco||0)+(x.force||0)>=(x.full||0))}
+function vHabits(p,g){if(g.side!=="CT"||isHostage(g.map))return "";const TS=(p.advice.plan||{}).tside,H=g.hist||{},SI=H.sites||{},MK=H.marks||{},cur=g.round_phase==="over"?g.round+1:g.round;
+  const rows=[];for(let n=halfStart(cur);n<cur;n++){const mk=MK[n]||{},s=mk.bomb_site||SI[n],d=roundDyn(TS,H,n);
+    if(((H.rounds||{})[n]||{}).side!=="CT"||(s!=="A"&&s!=="B"&&!(d&&d.dyn)))continue;   // your CT rounds only (a team switched mid-half)
+    rows.push({site:s==="A"||s==="B"?s:null,rush:!!(d&&d.dyn==="rush"),low:buyLow(p,g,n)})}
+  if(rows.length<2)return "";
+  const kn=rows.filter(r=>r.site),nA=kn.filter(r=>r.site==="A").length,nB=kn.length-nA,top=nA>=nB?"A":"B";
+  const lowR=rows.filter(r=>r.low),fullR=rows.filter(r=>!r.low),rl=lowR.filter(r=>r.rush).length,rf=fullR.filter(r=>r.rush).length,bits=[];
+  if(kn.length)bits.push(`<b style="color:${SITE_C[top]}">${top} ${Math.max(nA,nB)}/${kn.length}</b>`);
+  if(rl)bits.push(`rush on eco ${rl}/${lowR.length}`);if(rf)bits.push(`rush on full buy ${rf}/${fullR.length}`);
+  if(!bits.length)return "";
+  return `<div class="vhab"><span>THEM THIS HALF</span>${bits.join(" · ")}<em>now: ${buyLow(p,g,cur)?"eco":"full buy"}</em></div>`}
 function vOdds(r,h){return vHead(h||"WHERE THEY GO · LIKELY")+`<div class="vodds">${vRows([{l:"A",v:r.A,c:SITE_C.A},{l:"B",v:r.B,c:SITE_C.B},{l:"?",v:r.none,c:"var(--muted)"}])}</div>`}
 // a rush: how likely, and where it goes (the most likely in big, the second smaller and fainter)
 function vRush(TS,g,r){const PLs=tsidePlays(TS,g.map,g,evFor(g),r);if(!PLs)return "";
@@ -286,13 +311,13 @@ function deadAgo(g){const R=(((g.hist||{}).rounds||{})[g.round])||{};return g.ro
 function calledSince(g,a){const c=g&&g.call;return !!(c&&c.round===g.round&&c.t>=Date.now()/1000-a-.5)}   // you gave an info after your death
 // CT: numpad 7 (A) / 9 (B): the site you play this round
 const mySite=g=>{const s=(((g.hist||{}).marks||{})[g.round]||{}).me_site;return s==="A"||s==="B"?s:null};
-function vMySite(p,g){const s=mySite(g);if(!s)return "";const E=(((p.advice.plan||{}).nades||{}).maps||{})[g.map],C=E&&E.CT,L=(C&&C.lanes)||{};
+function vMySite(p,g,onLine){const s=mySite(g);if(!s)return "";const E=(((p.advice.plan||{}).nades||{}).maps||{})[g.map],C=E&&E.CT,L=(C&&C.lanes)||{};
   const TS=(p.advice.plan||{}).tside,M=((TS||{}).maps||{})[g.map]||{},GS=(M.geo||{}).sites||{},S=GS[s];
   // the stuff of the site, entrance by entrance (the grenades that close each entrance of the Ts)
   const st=[];Object.entries(L).filter(([k])=>k[0]===s).forEach(([k,o])=>["smoke","molotov","flash","he"].forEach(t=>{const x=o[t];if(x&&st.length<5&&!st.some(y=>y.to===x.to&&y.type===t))st.push({...x,type:t})}));
   const holds=(((M.ct_spots||{}).early||{}).hold||[]).filter(h=>S&&Math.hypot(h.px[0]-S.px[0],h.px[1]-S.px[1])<260&&(!h.level||!S.level||h.level===S.level)).slice(0,3);
   return `<div class="vfocus" style="--c:#5ab4ff"><b>${s}</b><div><span>You hold ${s}</span><small>numpad 7 A · 9 B</small></div></div>
-   ${st.length?`<div class="vchips">${st.map(x=>`<span class="vchip" style="border-color:${NADE_C[x.type]||"#ccc"}">${vLetter[x.type]||"?"} ${vShort(x.to)} <small>${esc(x.from||"")}${x.timer?` · ${x.timer}`:""}</small></span>`).join("")}</div>`:""}
+   ${st.length&&!onLine?`<div class="vchips">${st.map(x=>`<span class="vchip" style="border-color:${NADE_C[x.type]||"#ccc"}">${vLetter[x.type]||"?"} ${vShort(x.to)} <small>${esc(x.from||"")}${x.timer?` · ${x.timer}`:""}</small></span>`).join("")}</div>`:""}
    ${holds.length?`<div class="vchips">${holds.map(h=>`<span class="vchip">🛡 ${vShort(h.zone)}</span>`).join("")}</div>`:""}`}
 // the post-plant / retake grenades of a side that land on that site (the base's: every lineup thrown after a plant)
 function postStuff(p,g,side,site){const E=((((p.advice.plan||{}).nades||{}).maps||{})[g.map]||{})[side],S=(((((p.advice.plan||{}).tside||{}).maps||{})[g.map]||{}).geo||{}).sites||{},c=S[site];
@@ -360,9 +385,10 @@ function nowVisual(p,g,following){
   if(ph==="freezetime"){put("reset",vReset(p,g));put("key",vKey(p,g));
     if(voiceOn()&&navigator.userActivation&&!navigator.userActivation.hasBeenActive)put("call",`<span class="vchip">🔊 click this page once so I can talk</span>`);
     if(typeof antiEco==="function"&&antiEco(p,g))put("eco",`<span class="vchip bad">! eco kill spots on the map: clear them, no close duel</span>`);
-    if(ct)put("focus",WF||vMySite(p,g));
+    const CTL=ct&&r?vCTline(p,g,r):"";
+    if(ct)put("focus",WF||vMySite(p,g,!!CTL));
     put("peek",vPeekTimes(g,null));
-    if(ct&&r){put("read",vOdds(r));put("play",vRush(TS,g,r)||vEntries(TS,g,r));put("hold",vCTline(p,g,r)||vHold(p,g,r));put("book",vBook(p,g,r))}
+    if(ct&&r){put("read",vHabits(p,g),vOdds(r));put("play",vRush(TS,g,r)||vEntries(TS,g,r));put("hold",CTL||vHold(p,g,r));put("book",vBook(p,g,r))}
     const HM=isHostage(g.map);if(HM)put("focus",ct?(vFocus(p,g)||vHostRoutes(p,g,false)):vHostRoutes(p,g,true));
     if(!ct&&!HM&&!tdirsLoading(g.map)){put("focus",WF||vDir(p,g)||vFocus(p,g)||vPathCurve(p,g)||vTimeline(p,g));put("book",vBook(p,g,null));put("early",vEarlyMatch(g));
       if(!tdirsOf(g.map)){put("play",vPush(p,g));put("hold",vPushAns(p,g,false));put("tchips",vTchips(p,g))}}}   // the ways' grenades in the card; the CT pushes on the map only (06/10)
@@ -372,15 +398,15 @@ function nowVisual(p,g,following){
       put("alert",`<div class="vbig ${ct?"bad":"good"}"><b>💣 ${Math.ceil(left)}s</b><span>${ct?"retake together":"hold the bomb"}${as?` · ${as.site} site, ${as.said?"you said it":`${as.p}% sure`}`:" · numpad 7 A / 9 B"}</span></div>`);
       if(WF)put("focus",WF);else if(as&&(as.said||as.p>=70))put("focus",ct?vRetake(p,g,as.site):vPostPlant(p,g,as.site))}
     else if(isHostage(g.map))put("focus",ct?(vFocus(p,g)||(el<45?vHostRoutes(p,g,false):"")):(el<45?vHostRoutes(p,g,true):""));
-    else if(ct){if(!dead)put("focus",WF||vMySite(p,g));
+    else if(ct){const CTL=r&&el<75&&!dead?vCTline(p,g,r):"";if(!dead)put("focus",WF||vMySite(p,g,!!CTL));
       const WM=g.wily_match||{};if(WM.fake||WM.rush||WM.slow)put("evid",`<span class="vchip warn">🎙 they ${[WM.fake?"fake":"",WM.rush?"rush":"",WM.slow?"play slow":""].filter(Boolean).join(", ")} · you said</span>`);
-      if(g.call&&g.call.round===g.round&&g.call.nobomb&&g.call.site)put("alert",`<div class="vbig warn"><b>${g.call.n||""} ${esc(g.call.site)} · NO BOMB</b><span>likely a fake: hold ${g.call.site==="A"?"B":"A"}, don't rotate yet</span></div>`);put("peek",vPeekTimes(g,el));if(r){put("read",vOdds(r));
+      if(g.call&&g.call.round===g.round&&g.call.nobomb&&g.call.site)put("alert",`<div class="vbig warn"><b>${g.call.n||""} ${esc(g.call.site)} · NO BOMB</b><span>likely a fake: hold ${g.call.site==="A"?"B":"A"}, don't rotate yet</span></div>`);put("peek",vPeekTimes(g,el));if(r){put("read",el<20?vHabits(p,g):"",vOdds(r));
         const M=TS&&TS.maps&&TS.maps[g.map];
         put("play",(el<32?vRush(TS,g,r):"")||vFights(M,g,r));
         if(el>=15&&el<=80&&Math.max(r.A,r.B)>=70&&typeof rotationFor==="function"){const X=r.A>r.B?"A":"B",o=X==="A"?"B":"A",R=rotationFor(M,X,`${o} Site`,M.geo),rt=R&&R.routes&&R.routes[0];
           const me=mySite(g);   // where you said you are this round (numpad 7 / 9, or said)
           if(rt&&me!==X)put("alert",`<div class="vbig warn"><b>${o} → ${X}</b><span>${me===o?`you're ${o}: rotate now`:`if you hold ${o}: rotate`} · ${rt.travel!=null?`${Math.round(rt.travel)} s · `:""}${rt.died}% die on the way</span></div>`)}   // the hit leans hard to one site
-        if(el<75&&!dead)put("hold",vCTline(p,g,r)||(el<60?vHold(p,g,r):""));
+        if(el<75&&!dead)put("hold",CTL||(el<60?vHold(p,g,r):""));
         (r.evid||[]).filter(x=>/spot/.test(x)).slice(0,2).forEach(ev=>put("evid",`<span class="vchip ${/fight/.test(ev)?"bad":""}">● ${esc(ev)}</span>`))}}
     else{const TDm=tdirsOf(g.map)||tdirsLoading(g.map);put("read",vOpen(g));put("peek",vPeekTimes(g,el));if(!dead&&!tdirsLoading(g.map))put("focus",WF||vDir(p,g)||vFocus(p,g)||vPathCurve(p,g)||vTimeline(p,g));
       put("play",(el<45&&!dead&&!TDm&&vPush(p,g))||vFights(TS&&TS.maps&&TS.maps[g.map],g,null));if(!dead&&!TDm)put("hold",el<50?vPushAns(p,g,true):"");
