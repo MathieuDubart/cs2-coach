@@ -356,6 +356,10 @@ def site_data(mp):
     # computed again when the map has a quarter more matches (the base grows by itself: not at every Play)
     if mp in cache and cache[mp].get("v") == 6 and cache[mp].get("n", 0) >= 0.8 * len(dirs):
         return cache[mp]
+    # never the base's spots replaced by a count from far fewer demos (07/10: a player's app holds the base's sites but
+    # not its demos; an older version's sites, rebuilt there from the player's own few matches, came out empty)
+    if mp in cache and cache[mp].get("sites") and (config.role() == "client" or len(dirs) < 0.5 * cache[mp].get("n", 0)):
+        return cache[mp]
     cols = ["t", "killer_side", "victim_side", "killer_zone", "victim_zone", "killer_crouch", "victim_crouch",
             "killer_X", "killer_Y", "killer_Z", "victim_X", "victim_Y", "victim_Z"]
     parts = []
