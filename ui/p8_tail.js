@@ -241,7 +241,7 @@ let updFrom=null;
 if(D.local)fetch("/api/update").then(r=>r.json()).then(gearDot).catch(()=>{});   // a dot on the gear: an update is there
 usageNotice();
 {const at=$("#alphatag");if(at&&D.local&&D.role==="client"){at.hidden=false;at.onclick=()=>openReport("bug")}wireReport()}
-if(D.local){wireFeedback();setTimeout(fbPoll,4000)}   // how it went: after a warm-up, after a match (07/10, the closed alpha)   // the alpha: a report from any page
+if(D.local){wireFeedback();setTimeout(fbPoll,4000);liveDot()}   // how it went: after a warm-up, after a match (07/10, the closed alpha)   // the alpha: a report from any page
 if(D.local){navQuiet++;route().finally(()=>navQuiet--);
   fetch("/api/codes").then(r=>r.json()).then(c=>{CODES={...c,...CODES};if(S.view==="matches"&&S.mpin){navQuiet++;try{syncUrl()}finally{navQuiet--}}}).catch(()=>{})}
 else setPlayer(defPlayer());

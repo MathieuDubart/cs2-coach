@@ -255,7 +255,8 @@ class Handler(BaseHTTPRequestHandler):
             return self.send(200, account())
         if u.path == "/api/gsi/state":
             import gsi
-            PAGE["seen"] = time.time()   # the In game page asks a few times a second: a Wily page is open
+            if not q.get("peek"):   # the bar's Live button only peeks (07/10): CS2's start still opens Live when no Live page is open
+                PAGE["seen"] = time.time()   # the In game page asks a few times a second: a Wily page is open
             s = gsi.state()
             try:
                 import voice

@@ -920,13 +920,23 @@ svg.vdcurve .band.ct{fill:color-mix(in srgb,var(--ct) 16%,transparent)}
 .vrotl{display:flex;flex-wrap:wrap;align-items:baseline;gap:2px 10px;padding:6px 10px;border-radius:var(--radius);border-left:5px solid #ffd34d;background:color-mix(in srgb,#ffd34d 10%,var(--panel))}
 .vrotl b{font:800 19px var(--f-display);letter-spacing:.03em}.vrotl span{font:600 13px var(--f-mono);color:var(--muted)}
 .vhead .vnone{color:var(--muted);font-weight:600;letter-spacing:.02em;text-transform:none}
+
+/* the Live button (07/10): a pill that stands out; red with a blinking dot, like a camera's REC, while a match is followed */
+nav a[data-view="ingame"]{display:inline-flex;align-items:center;gap:7px;font:700 15px var(--f-body);color:var(--ink);border:1.5px solid var(--ink);border-radius:999px;padding:5px 15px;margin-left:6px;letter-spacing:.02em}
+nav a[data-view="ingame"]:hover{background:var(--chip)}
+nav a[data-view="ingame"][aria-current="page"]{background:var(--ink);color:var(--bg)}
+nav a[data-view="ingame"].rec,nav a[data-view="ingame"].rec[aria-current="page"]{background:#e0262d;border-color:#e0262d;color:#fff;letter-spacing:.1em;animation:recglow 1.6s ease-in-out infinite}
+nav a[data-view="ingame"].rec .recdot{width:10px;height:10px;border-radius:50%;background:#fff;animation:recblink 1s steps(2,start) infinite}
+@keyframes recblink{to{visibility:hidden}}
+@keyframes recglow{0%,100%{box-shadow:0 0 0 0 rgba(224,38,45,.55)}50%{box-shadow:0 0 0 6px rgba(224,38,45,0)}}
+@media (prefers-reduced-motion:reduce){nav a[data-view="ingame"].rec,nav a[data-view="ingame"].rec .recdot{animation:none}}
 </style>
 
 <div class="bar"><div class="bar-in">
   <div class="bar-left"><span class="brand">Wily</span><button type="button" class="alphatag" id="alphatag" hidden title="This is an alpha: report a bug or an idea">alpha · report</button>
   <nav aria-label="Views">
     <a href="#review" data-view="review" title="After your matches and the next day">Review</a>
-    <a href="#prepare" data-view="prepare" title="Before you play: warm-up, map sheets">Prepare</a>
+    <a href="#prepare" data-view="prepare" title="Before you play: the warm-up">Prepare</a>
     <a href="#ingame" data-view="ingame" title="During your match, on a 2nd screen">Live</a>
   </nav>
   <span class="whochip" id="whochip"></span></div>
@@ -2482,6 +2492,18 @@ function focusOf(p){const A=p&&p.advice;if(!A)return null;const F=(A.plan||{}).f
 // your profile in tabs (07/10, the user: "plein de liens différents qui redirigent vers plein de choses"): one row, the
 // same on each of its pages, instead of cards that each led somewhere else
 const PTABS=[["profile","Overview"],["analysis","Reads"],["midround","Mid-round"],["maps","Maps"],["progress","Weapons & buys"],["routine","Habits"]];
+// the Live button as a camera's REC (07/10, the user: "met le bouton live beaucoup plus visible et met le en rouge avec
+// un point à côté quand il détecte une game live et qu'il est actif"): red with a blinking dot while Wily follows a match
+// (CS2 sends its state, a map is loaded, not the training server), a plain pill otherwise. A peek at the game state every
+// 4 s (15 s in a hidden tab) that doesn't count as an open Live page
+const LIVEDOT={t:null,on:null};
+const liveIs=g=>!!(g&&g.map&&!g.practice&&(g.age==null||g.age<30)&&g.map_phase&&g.map_phase!=="gameover");
+function liveDot(){clearTimeout(LIVEDOT.t);if(!D.local)return;const next=()=>{LIVEDOT.t=setTimeout(liveDot,document.hidden?15000:4000)};
+  fetch("/api/gsi/state?peek=1").then(r=>r.ok?r.json():null).then(g=>{const on=liveIs(g),a=$('nav a[data-view="ingame"]');
+    if(a){if(on!==LIVEDOT.on){LIVEDOT.on=on;a.classList.toggle("rec",on);a.innerHTML=on?`<i class="recdot" aria-hidden="true"></i>LIVE`:"Live"}
+      a.title=on?`Your match is live${g.map?` · ${MAPN(g.map)}`:""}${g.round?` · round ${g.round}`:""}: open Live`:"During your match, on a 2nd screen"}
+    next()}).catch(next)}
+document.addEventListener("visibilitychange",()=>{if(!document.hidden&&D.local)liveDot()});
 function navUpdate(view){const g=GROUP[view]||view;
   $$("nav a, .gear").forEach(a=>{if(a.dataset.view===g)a.setAttribute("aria-current","page");else a.removeAttribute("aria-current");
     if(D.local&&typeof viewPath==="function"){a.setAttribute("href",viewPath(a.dataset.view));a.dataset.go=a.dataset.view}});   // real addresses (07/10)
@@ -2501,7 +2523,7 @@ function welcome(v){const own=D.own;
   v.innerHTML=`<div class="welcome"><h2>Hi, I'm Wily</h2>
    <p class="lede">I watch your CS2 matches and tell you what wins rounds. I'm with you at three moments:</p>
    <ul style="font-size:15px"><li><b>Live</b>: a sheet to keep on a 2nd screen that follows your match (what to buy, where the Ts are likely to go, your paths, your rotations).</li>
-     <li><b>Prepare</b>: before you play, a timed warm-up built on your weak points and a 60-second sheet for each map.</li>
+     <li><b>Prepare</b>: before you play, a timed warm-up built on your weak points.</li>
      <li><b>Review</b>: after your session or the next day, what changed, why, your focus of the week and what you could test.</li></ul>
    ${D.local&&own?`<p><button type="button" class="primary" id="w-own">Analyze this PC's Steam account</button></p>`:""}
    <form class="search" id="w-form" autocomplete="off"><input id="w-q" type="search" placeholder="Your Steam profile link or SteamID64" aria-label="Your Steam profile link"><button type="submit">Analyze</button></form>
@@ -5001,7 +5023,7 @@ let updFrom=null;
 if(D.local)fetch("/api/update").then(r=>r.json()).then(gearDot).catch(()=>{});   // a dot on the gear: an update is there
 usageNotice();
 {const at=$("#alphatag");if(at&&D.local&&D.role==="client"){at.hidden=false;at.onclick=()=>openReport("bug")}wireReport()}
-if(D.local){wireFeedback();setTimeout(fbPoll,4000)}   // how it went: after a warm-up, after a match (07/10, the closed alpha)   // the alpha: a report from any page
+if(D.local){wireFeedback();setTimeout(fbPoll,4000);liveDot()}   // how it went: after a warm-up, after a match (07/10, the closed alpha)   // the alpha: a report from any page
 if(D.local){navQuiet++;route().finally(()=>navQuiet--);
   fetch("/api/codes").then(r=>r.json()).then(c=>{CODES={...c,...CODES};if(S.view==="matches"&&S.mpin){navQuiet++;try{syncUrl()}finally{navQuiet--}}}).catch(()=>{})}
 else setPlayer(defPlayer());

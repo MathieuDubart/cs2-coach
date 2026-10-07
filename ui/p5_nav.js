@@ -44,6 +44,18 @@ function focusOf(p){const A=p&&p.advice;if(!A)return null;const F=(A.plan||{}).f
 // your profile in tabs (07/10, the user: "plein de liens différents qui redirigent vers plein de choses"): one row, the
 // same on each of its pages, instead of cards that each led somewhere else
 const PTABS=[["profile","Overview"],["analysis","Reads"],["midround","Mid-round"],["maps","Maps"],["progress","Weapons & buys"],["routine","Habits"]];
+// the Live button as a camera's REC (07/10, the user: "met le bouton live beaucoup plus visible et met le en rouge avec
+// un point à côté quand il détecte une game live et qu'il est actif"): red with a blinking dot while Wily follows a match
+// (CS2 sends its state, a map is loaded, not the training server), a plain pill otherwise. A peek at the game state every
+// 4 s (15 s in a hidden tab) that doesn't count as an open Live page
+const LIVEDOT={t:null,on:null};
+const liveIs=g=>!!(g&&g.map&&!g.practice&&(g.age==null||g.age<30)&&g.map_phase&&g.map_phase!=="gameover");
+function liveDot(){clearTimeout(LIVEDOT.t);if(!D.local)return;const next=()=>{LIVEDOT.t=setTimeout(liveDot,document.hidden?15000:4000)};
+  fetch("/api/gsi/state?peek=1").then(r=>r.ok?r.json():null).then(g=>{const on=liveIs(g),a=$('nav a[data-view="ingame"]');
+    if(a){if(on!==LIVEDOT.on){LIVEDOT.on=on;a.classList.toggle("rec",on);a.innerHTML=on?`<i class="recdot" aria-hidden="true"></i>LIVE`:"Live"}
+      a.title=on?`Your match is live${g.map?` · ${MAPN(g.map)}`:""}${g.round?` · round ${g.round}`:""}: open Live`:"During your match, on a 2nd screen"}
+    next()}).catch(next)}
+document.addEventListener("visibilitychange",()=>{if(!document.hidden&&D.local)liveDot()});
 function navUpdate(view){const g=GROUP[view]||view;
   $$("nav a, .gear").forEach(a=>{if(a.dataset.view===g)a.setAttribute("aria-current","page");else a.removeAttribute("aria-current");
     if(D.local&&typeof viewPath==="function"){a.setAttribute("href",viewPath(a.dataset.view));a.dataset.go=a.dataset.view}});   // real addresses (07/10)
@@ -63,7 +75,7 @@ function welcome(v){const own=D.own;
   v.innerHTML=`<div class="welcome"><h2>Hi, I'm Wily</h2>
    <p class="lede">I watch your CS2 matches and tell you what wins rounds. I'm with you at three moments:</p>
    <ul style="font-size:15px"><li><b>Live</b>: a sheet to keep on a 2nd screen that follows your match (what to buy, where the Ts are likely to go, your paths, your rotations).</li>
-     <li><b>Prepare</b>: before you play, a timed warm-up built on your weak points and a 60-second sheet for each map.</li>
+     <li><b>Prepare</b>: before you play, a timed warm-up built on your weak points.</li>
      <li><b>Review</b>: after your session or the next day, what changed, why, your focus of the week and what you could test.</li></ul>
    ${D.local&&own?`<p><button type="button" class="primary" id="w-own">Analyze this PC's Steam account</button></p>`:""}
    <form class="search" id="w-form" autocomplete="off"><input id="w-q" type="search" placeholder="Your Steam profile link or SteamID64" aria-label="Your Steam profile link"><button type="submit">Analyze</button></form>
