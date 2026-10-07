@@ -1123,7 +1123,7 @@ def nade_drills(sid, mp):
     import nades
     S = (nades.summary().get("maps") or {}).get(mp) or {}
     setup, faced = _my_setup(sid, mp)
-    out = []
+    out, E = [], None
     for side, M in S.items():
         if not isinstance(M, dict) or not setup.get(side):
             continue
@@ -1160,7 +1160,102 @@ def nade_drills(sid, mp):
                         "me": {"pos": pos, "ang": ang}, "target": land, "victims": [], "_vic": [side, x.get("t_med")],
                         "clock": round(max(10.0, 115 - float(x.get("t_med") or 0) + 3), 1) if x.get("t_med") else 0,
                         "weight": 1 + 10 * w})
+            # a CT's early smoke or molotov: thrown against a real rush, in its timing (06/10, the user: "quand c'est une
+            # smoke de timing j'aimerais bien avoir la smoke dans le timing")
+            if side == "CT" and typ in ("smoke", "molotov") and (x.get("usual") == "debut" or (x.get("t_med") or 99) <= 25):
+                try:
+                    if E is None:
+                        E = _early(mp)
+                    R = _rush(mp, land, float(x.get("flight_s") or 2.5), max(0.0, float(x.get("t_med") or 10) - 3), E)
+                except Exception as e:
+                    print("rush", mp, x.get("to"), e, flush=True)
+                    R = None
+                if R:
+                    at = max(0.0, 115 - R["at"])
+                    out[-1].update(tracks=R["tracks"], step=RUSH_STEP, clock=R["clock"], rush_at=R["at"], weight=out[-1]["weight"] * 1.5,
+                                   title=f"ANTI-RUSH {name} → {x['to']}",
+                                   tip=f"{why} · a real rush gets there at {int(at // 60)}:{int(at % 60):02d}: up before it")
     return out
+
+
+EARLY_D = os.path.join(config.OUT, "train_early")
+RUSH_R, RUSH_DZ, RUSH_STEP, RUSH_LEAD = 240.0, 140.0, 32, 7.0   # the spot reached: 240 u, same floor; samples every 0.5 s
+
+
+def _early(mp, demos=250):
+    """The Ts' positions in the first 40 s of the base's rounds on a map (the demos' samples, every 0.5 s): when a rush is
+    where. Cached per map (out/train_early), made again when the base has a quarter more matches."""
+    os.makedirs(EARLY_D, exist_ok=True)
+    f, meta = os.path.join(EARLY_D, f"{mp}.parquet"), os.path.join(EARLY_D, f"{mp}.json")
+    dirs = _map_dirs(mp)[-demos:]
+    try:
+        with open(meta, encoding="utf-8") as fh:
+            if json.load(fh).get("n", 0) >= 0.8 * len(dirs):
+                return pd.read_parquet(f)
+    except (OSError, ValueError):
+        pass
+    parts = []
+    for i, d in enumerate(dirs):
+        try:
+            S = pd.read_parquet(os.path.join(config.OUT, "deep", d, "samples.parquet"), columns=["steamid", "side", "round", "t", "X", "Y", "Z", "zone"])
+        except Exception:
+            continue
+        S = S[(S.side == "T") & (S.t <= 40)]
+        if len(S):
+            parts.append(pd.DataFrame({"d": np.int16(i), "round": S["round"].astype(np.int16), "sid": S.steamid.astype(str),
+                                       "t": S.t.astype(np.float32), "X": S.X.astype(np.float32), "Y": S.Y.astype(np.float32),
+                                       "Z": S.Z.astype(np.float32), "zone": S.zone.astype(str)}))
+    E = pd.concat(parts, ignore_index=True) if parts else pd.DataFrame(columns=["d", "round", "sid", "t", "X", "Y", "Z", "zone"])
+    E["sid"] = E.sid.astype("category")
+    E["zone"] = E.zone.astype("category")
+    E.to_parquet(f)
+    with open(meta, "w", encoding="utf-8") as fh:
+        json.dump({"n": len(dirs), "rows": len(E)}, fh)
+    return E
+
+
+def _rush(mp, land, flight, ready=0.0, E=None):
+    """A real rush through a grenade's spot (06/10, the user on a CT smoke: "une smoke anti rush: j'aimerais avoir la
+    situation du mec qui rush et qui se prend cette smoke, pour avoir la smoke dans le timing"): of the base's Ts who
+    reach that spot in the first 40 s after a CT can have it up there (ready: when the CTs usually get to the throw, plus
+    the flight), the fastest fifth are the rushes; their round with the most Ts through it within 4 s gives the runners.
+    GO when the CT gets to the spot, or 7 s before the last moment to throw when the rush is slower.
+    -> {"tracks": [{zone, path, arrive}], "clock": the clock at GO, "at": the round's time the first one gets there}"""
+    if not land or len(land) < 3:
+        return None
+    E = _early(mp) if E is None else E
+    if not len(E):
+        return None
+    m = (np.hypot(E.X.to_numpy() - land[0], E.Y.to_numpy() - land[1]) < RUSH_R) & (np.abs(E.Z.to_numpy() - land[2]) < RUSH_DZ)
+    A = E[m].groupby(["d", "round", "sid"], observed=True).t.min().reset_index()
+    A = A[A.t >= max(6.0, ready + flight + 2.5)]   # a rush the grenade can stop: drawn (it comes at GO), thrown, up (not a T whose spawn is next to it)
+    if len(A) < 10:
+        return None
+    fast = A[A.t <= A.t.quantile(0.2)]
+    best = None
+    for (d, r), g in fast.groupby(["d", "round"]):
+        g = g.sort_values("t")
+        k = int((g.t <= g.t.iloc[0] + 4).sum())
+        if best is None or k > best[0] or (k == best[0] and g.t.iloc[0] < best[1]):
+            best = (k, float(g.t.iloc[0]), d, r, g[g.t <= g.t.iloc[0] + 4])
+    _, t_arr, d, r, who = best
+    t_go = max(0.0, round(max(ready, t_arr - flight - RUSH_LEAD) * 2) / 2)
+    tracks = []
+    for sid_, ta in zip(who.sid, who.t):
+        g = E[(E.d == d) & (E["round"] == r) & (E.sid == sid_) & (E.t >= t_go - 0.01) & (E.t <= ta + 4)].sort_values("t")
+        if len(g) < 4 or abs(float(g.t.iloc[0]) - t_go) > 0.01 or (np.diff(g.t.to_numpy()) > 0.51).any():
+            continue   # a gap in its samples: not walked
+        P = g[["X", "Y", "Z"]].to_numpy(float)
+        path, yaw = [], 0.0
+        for i in range(len(P)):
+            if i + 1 < len(P) and math.hypot(P[i + 1][0] - P[i][0], P[i + 1][1] - P[i][1]) > 4:
+                yaw = math.degrees(math.atan2(P[i + 1][1] - P[i][1], P[i + 1][0] - P[i][0]))   # facing the way it runs
+            path += [round(P[i][0], 1), round(P[i][1], 1), round(P[i][2], 1), round(yaw, 1), 0.0]
+        z0 = str(g.zone.iloc[0])
+        tracks.append({"zone": replay_zone(z0, mp) if z0 and z0 != "nan" else "rush", "path": path, "arrive": round(float(ta) - t_go, 1)})
+    if not tracks:
+        return None
+    return {"tracks": tracks[:4], "clock": round(115 - t_go, 1), "at": round(t_arr, 1)}
 
 
 def clip_drills(sid, mp):
@@ -1414,8 +1509,8 @@ def build(sid, minutes=20, where="random", difficulty=2):
                 if kind == "nade":   # guided, then the spot and how, then the spot only
                     d["level"] = min(2, (p["items"].get(d["id"]) or {}).get("box", 0))
                     side_, t_med = d.pop("_vic", [None, None])
-                    try:
-                        d["victims"] = _victims(mp, d["team"], d["type"], d.get("target"), d["me"]["pos"], side_, t_med)
+                    try:   # a rush's runners are the ones it is for: no victims to show after
+                        d["victims"] = [] if d.get("tracks") else _victims(mp, d["team"], d["type"], d.get("target"), d["me"]["pos"], side_, t_med)
                     except Exception as e:
                         print("victims", d["id"], e, flush=True)
                 if kind == "push":

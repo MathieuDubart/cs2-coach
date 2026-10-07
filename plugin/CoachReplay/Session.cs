@@ -58,6 +58,9 @@ public class Drill
     [JsonPropertyName("count")] public int Count { get; set; } = 3;   // the aim map: targets at once
     [JsonPropertyName("clock")] public float Clock { get; set; }   // the round's clock at GO (s left; 0: none)
     [JsonPropertyName("mate")] public Spot? Mate { get; set; }   // a boost: the teammate you stand on (06/10)
+    [JsonPropertyName("step")] public int Step { get; set; } = 2;   // its tracks' ticks per frame (a rush, from the 0.5 s samples: 32)
+    [JsonPropertyName("rush_at")] public float RushAt { get; set; }   // a timing smoke: the round's time (s) the real rush gets to its spot (07/10)
+    [JsonIgnore] public bool Rush => Kind == "nade" && Tracks.Count > 0;
 }
 
 public class EntryTrack
@@ -66,6 +69,7 @@ public class EntryTrack
     [JsonPropertyName("path")] public float[] Path { get; set; } = Array.Empty<float>();
     [JsonPropertyName("nades")] public List<Nade> Nades { get; set; } = new();   // the grenades its player threw on the way (f: its frame)
     [JsonPropertyName("post")] public int Post { get; set; } = -1;   // the post it walks into the sight of (-1: any, the free part)
+    [JsonPropertyName("arrive")] public float Arrive { get; set; } = -1f;   // a rush: s after GO it gets to the grenade's spot
 }
 
 public class Block
@@ -100,6 +104,8 @@ public partial class CoachReplay
     // stuff: three throws, the camera on your grenade, then from their side
     int attempts;
     bool nadeWait;
+    int rushIn = -1;   // a timing smoke: the tick the first runner got to its spot (-1: not yet)
+    float rushDelay;   // the runners' wait before they start (guided: 2 s, the spot: 1 s, alone: the real timing)
     string nadeStage = "";   // "throw": your throws (the camera follows them), "theirs": watching it from their spot
     bool pracOn;   // CS2's grenade practice views are on (stuff drills only)
     CDynamicProp? cam;
@@ -487,12 +493,13 @@ public partial class CoachReplay
         waitFile = 0;
         if (s == null) { Logger.LogInformation("drill {id}: nothing to play", d.Id); NextDrill(); return; }
         cur = s;
-        if (d.Kind != "situation" && d.Clock > 0) cur.Clock = d.Clock;
+        if (d.Kind != "situation" && d.Clock > 0) cur.Clock = d.Clock + (d.Rush ? rushDelay : 0);   // a rush's wait: its arrival stays on the real clock
+        rushIn = -1;
         mode = "actor";
         aimOrder.Clear(); reacts.Clear(); aimHs = 0; aimNext = 0; attempts = 0; nadeWait = false; frags = deaths = plants = 0;
         cameAt.Clear(); strafe.Clear(); lastKill = 0;
         // the targets that must stay still idle: a prefire's, a wallbang's, the aim map's flicks and strafers (06/10)
-        Zombie(d.Kind == "aim" && (d.Mode == "prefire" || d.Id.StartsWith("wallbang") || d.Id.StartsWith("boost") || (d.Mode == "range" && d.Variant != "duel")));
+        Zombie((d.Kind == "aim" && (d.Mode == "prefire" || d.Id.StartsWith("wallbang") || d.Id.StartsWith("boost") || (d.Mode == "range" && d.Variant != "duel"))) || d.Rush);   // a rush's runners only run
         Ammo(d.Mode == "range");
         Intro(d);
         Setup();
@@ -504,6 +511,8 @@ public partial class CoachReplay
     {
         var how = d.Kind == "situation" && cur != null ? SituationText() : d.Kind != "nade" ? d.Tip : d.Level switch
         {
+            0 or 1 when d.Rush => $"{d.How} · {d.Click} — a real rush gets to the blue ring at {RoundClock(d.RushAt)}: your {d.Type} must be up before · the grenade comes at GO",
+            _ when d.Rush => $"they rush: your {d.Type} up on its spot in time · the grenade comes at GO",
             0 or 1 => $"{d.How} · {d.Click} — crosshair on the green cross · it must land in the blue ring · stand in the green ring",
             _ => "find the aim and the throw",
         };
@@ -658,8 +667,18 @@ public partial class CoachReplay
         var me = d.Me ?? new Spot();
         float pitch = me.Ang[0], yaw = me.Ang[1];
         if (d.Level >= 1) { yaw += (float)(Rng.NextDouble() * 120 - 60); pitch = 0; }   // the spot, not the aim
-        s.Players.Add(new Track { Sid = "me", Name = "you", Team = d.Team, Me = true, Hp = 100, Weapons = new() { "weapon_knife", d.Item },
-            Active = d.Item, Path = new[] { me.Pos[0], me.Pos[1], me.Pos[2], yaw, pitch } });
+        // a timing smoke: the grenade comes at GO (none thrown during the countdown, the runners still)
+        s.Players.Add(new Track { Sid = "me", Name = "you", Team = d.Team, Me = true, Hp = 100, Weapons = d.Rush ? new() { "weapon_knife" } : new() { "weapon_knife", d.Item },
+            Active = d.Rush ? "weapon_knife" : d.Item, Path = new[] { me.Pos[0], me.Pos[1], me.Pos[2], yaw, pitch } });
+        if (d.Rush)
+        {   // the real rush's runners, on their way at their pace (07/10)
+            s.Step = Math.Max(1, d.Step);
+            rushDelay = Math.Max(0, 2 - d.Level);
+            var w = d.BotWeapons.Count > 0 ? d.BotWeapons : new() { "weapon_knife", d.Team == 3 ? "weapon_ak47" : "weapon_m4a1" };
+            for (int k = 0; k < d.Tracks.Count; k++)
+                s.Players.Add(new Track { Sid = $"rush{k}", Name = d.Tracks[k].Zone, Team = 5 - d.Team, Hp = 100, Armor = 100, Helmet = true,
+                    Weapons = w, Active = w.Last(), Path = d.Tracks[k].Path, Runner = true, Start = rushDelay * 64f / s.Step });
+        }
         return s;
     }
 
@@ -741,6 +760,38 @@ public partial class CoachReplay
         if (drill?.Mode == "prefire") Html($"<font color='#ff8a3d'>GO</font> · clear {aimOrder.Count} · {drill.Seconds} s", 2);
         if (drill?.Mode == "range") { Html($"<font color='#ff8a3d'>GO</font> · {drill.Goal} kills · {drill.Seconds} s", 2); lastKill = Server.TickCount; foreach (var sl in bots.Keys) cameAt[sl] = Server.TickCount; }
         if (drill?.Mode == "defend") { postIdx = -1; Html($"<font color='#ff8a3d'>HOLD</font> · {drill.Seconds} s · they are coming", 2); }
+        if (drill is { Rush: true })
+        {
+            foreach (var h in Humans())
+            {
+                if (!h.PawnIsAlive) continue;
+                h.GiveNamedItem(drill.Item);
+                h.ExecuteClientCommandFromServer($"use {drill.Item}");
+            }
+            Html($"<font color='#ff5a5a'>THEY RUSH</font>{(drill.Level < 2 ? $" · there at {RoundClock(drill.RushAt)}" : "")}", 2);
+        }
+    }
+
+    static string RoundClock(float t) { var l = (int)Math.Max(0, 115 - t); return $"{l / 60}:{l % 60:D2}"; }
+
+    // a timing smoke: the first runner on its spot before it is up: late (07/10)
+    void RushCheck()
+    {
+        if (drill is not { Rush: true } || cur == null || rushIn >= 0 || drill.Target is not { Length: >= 2 } tg) return;
+        foreach (var (slot, t) in bots)
+        {
+            if (t.Team == cur.Team) continue;
+            var o = Utilities.GetPlayerFromSlot(slot)?.PlayerPawn.Value?.AbsOrigin;
+            if (o == null) continue;
+            var dz = tg.Length >= 3 ? Math.Abs(o.Z - tg[2]) : 0f;
+            if (MathF.Sqrt((o.X - tg[0]) * (o.X - tg[0]) + (o.Y - tg[1]) * (o.Y - tg[1])) > 240f || dz > 160f) continue;
+            rushIn = Server.TickCount;
+            Logger.LogInformation("rush: {n} on the spot at {s:F1} s", t.Name, (rushIn - t0) / 64.0);
+            if (!nadeWait) return;   // up already (scored at its pop)
+            nadeWait = false;
+            DrillDone(false, "late", 0, $"{t.Name} got there before your {drill.Type}");
+            return;
+        }
     }
 
     // a defense in turns: each spot to hold for its share of the time (marked on the ground, you are put on it), then free
@@ -857,7 +908,7 @@ public partial class CoachReplay
         if (cur.Kind == "aim" && string.IsNullOrEmpty(drill?.Mode))
             SetMain($"<font color='#ff8a3d'>{drill?.Title}</font> · target {Math.Max(1, aimNext)}/{aimOrder.Count}");
         if (cur.Kind == "nade" && drill != null)
-            SetMain($"<font color='#5ab4ff'>{drill.Title}</font> · throw {Math.Min(3, attempts + 1)}/3<br><font class='fontSize-s'>{(drill.Level < 2 ? $"{drill.How} · {drill.Click}" : "find the aim and the throw")}</font>");
+            SetMain($"<font color='#5ab4ff'>{drill.Title}</font>{(drill.Rush ? (drill.Level < 2 ? $" · they get there at {RoundClock(drill.RushAt)}" : " · in time") : $" · throw {Math.Min(3, attempts + 1)}/3")}<br><font class='fontSize-s'>{(drill.Level < 2 ? $"{drill.How} · {drill.Click}" : "find the aim and the throw")}</font>");
         // a target not found in 12 s goes away (missed), the next one comes
         if (cur.Kind == "aim" && aimSpawn > 0 && Server.TickCount - aimSpawn > 12 * 64)
         {
@@ -868,6 +919,7 @@ public partial class CoachReplay
         }
         if (cur.Kind == "aim" && Server.TickCount - t0 > 120 * 64) Finish("timeout");
         if (cur.Kind == "nade" && nadeWait && DateTime.UtcNow > attemptEnd) NadeResult(double.NaN);
+        if (cur.Kind == "nade") RushCheck();
     }
 
     // true: handled here (a defense: you come back instead of the drill ending)
@@ -1040,6 +1092,23 @@ public partial class CoachReplay
         var (ok1, ok2) = drill.Type switch { "flash" or "he" => (120, 260), "molotov" => (120, 240), _ => (80, 180) };
         var q = double.IsNaN(dist) ? "NO THROW" : dist <= ok1 ? "PERFECT" : dist <= ok2 ? "GOOD" : "MISS";
         var away = double.IsNaN(dist) ? "" : $"{dist:F0} u from the spot";
+        if (drill.Rush)
+        {   // a timing smoke: up on its spot before the runners, one throw (they ran past otherwise: all again)
+            nadeWait = false;
+            var el = (Server.TickCount - t0) / 64f - rushDelay;
+            var first = drill.Tracks.Where(x => x.Arrive >= 0).Select(x => x.Arrive).DefaultIfEmpty(99f).Min();
+            var margin = first - el;
+            if (q is "PERFECT" or "GOOD" && rushIn < 0)
+            {
+                var pts = (int)((q == "PERFECT" ? 150 : 100) * (margin < 1.5f ? 1.2 : 1.0) * (1 + 0.25 * drill.Level));
+                Html($"<font color='#5ad15a'>✔ IN TIME</font> · {margin:F1} s before them<br>{away}", 3);
+                var g1 = sessGen;
+                AddTimer(3f, () => { if (g1 == sessGen) DrillDone(true, "in time", pts, $"{margin:F1} s before them · {away}"); });   // they run into it
+                return;
+            }
+            DrillDone(false, rushIn >= 0 ? "late" : q.ToLower(), 0, rushIn >= 0 ? $"they were there before it · {away}" : away);
+            return;
+        }
         if (q is "PERFECT" or "GOOD")
         {
             nadeWait = false;

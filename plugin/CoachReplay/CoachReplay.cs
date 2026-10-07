@@ -49,6 +49,7 @@ public class Track
     [JsonPropertyName("kit")] public bool Kit { get; set; }   // a CT's defuse kit
     [JsonIgnore] public List<Nade> TrackNades { get; set; } = new();   // a defense's attacker: the grenades of the real hit it walks
     [JsonIgnore] public int NadeNext { get; set; }
+    [JsonIgnore] public bool Runner { get; set; }   // a timing smoke's rusher: runs its way, never stops to fight (07/10)
     public int Frames => Path.Length / 5;
 }
 
@@ -798,10 +799,10 @@ public partial class CoachReplay : BasePlugin
             // joueurs"), then it plays on its own
             var eng = engaged.TryGetValue(slot, out var et);
             if (eng && Server.TickCount - et > EngageTicks) { Free(slot, c, t); continue; }
-            if (!eng && phase == "live" && seen != null && (seen[slot / 32] & (1u << (slot % 32))) != 0 && (contact[slot] = contact.GetValueOrDefault(slot) + 1) >= ReactTicks)
+            if (!eng && !t.Runner && phase == "live" && seen != null && (seen[slot / 32] & (1u << (slot % 32))) != 0 && (contact[slot] = contact.GetValueOrDefault(slot) + 1) >= ReactTicks)
             { engaged[slot] = Server.TickCount; eng = true; Logger.LogInformation("contact {n} at {f}", t.Name, (int)f); }
             var here = pawn.AbsOrigin is { } ho ? new Vector3(ho.X, ho.Y, ho.Z) : pos;
-            if (phase == "live" && mePos != null && t.Team != cur.Team && Vector3.DistanceSquared(here, mePos.Value) < Near * Near)
+            if (phase == "live" && mePos != null && t.Team != cur.Team && !t.Runner && Vector3.DistanceSquared(here, mePos.Value) < Near * Near)
             {   // you are right on it: a player would notice you, path or not
                 Free(slot, c, t); Logger.LogInformation("close {n} at {f}", t.Name, (int)f); continue;
             }
@@ -809,6 +810,7 @@ public partial class CoachReplay : BasePlugin
             var y0 = t.Path[i * 5 + 3]; var dy = ((t.Path[i * 5 + 8] - y0 + 540f) % 360f) - 180f;
             var pitch = t.Path[i * 5 + 4] + (t.Path[i * 5 + 9] - t.Path[i * 5 + 4]) * a;
             var face = new Vector3(0, y0 + dy * a, 0);
+            if (ft < 0f) { pawn.Teleport(p0, face, Vector3.Zero); continue; }   // not its time yet (a rush's runners wait at their start)
             // it walks: its speed takes it to where the path is at the next tick, and the game moves it (its legs move
             // like a player's; moved by teleports it slid, 04/10). Too far from its path (a closed door, a box it
             // jumped on in the match), or not live yet: put back on it
