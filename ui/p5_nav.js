@@ -51,13 +51,13 @@ const PTABS=[["profile","Overview"],["analysis","Reads"],["midround","Mid-round"
 const LIVEDOT={t:null,on:null};
 const liveIs=g=>!!(g&&g.map&&!g.practice&&(g.age==null||g.age<30)&&g.map_phase&&g.map_phase!=="gameover");
 function liveDot(){clearTimeout(LIVEDOT.t);if(!D.local)return;const next=()=>{LIVEDOT.t=setTimeout(liveDot,document.hidden?15000:4000)};
-  fetch("/api/gsi/state?peek=1").then(r=>r.ok?r.json():null).then(g=>{const on=liveIs(g),a=$('nav a[data-view="ingame"]');
+  fetch("/api/gsi/state?peek=1").then(r=>r.ok?r.json():null).then(g=>{const on=liveIs(g),a=$(".livebtn");
     if(a){if(on!==LIVEDOT.on){LIVEDOT.on=on;a.classList.toggle("rec",on);a.innerHTML=on?`<i class="recdot" aria-hidden="true"></i>LIVE`:"Live"}
       a.title=on?`Your match is live${g.map?` · ${MAPN(g.map)}`:""}${g.round?` · round ${g.round}`:""}: open Live`:"During your match, on a 2nd screen"}
     next()}).catch(next)}
 document.addEventListener("visibilitychange",()=>{if(!document.hidden&&D.local)liveDot()});
 function navUpdate(view){const g=GROUP[view]||view;
-  $$("nav a, .gear").forEach(a=>{if(a.dataset.view===g)a.setAttribute("aria-current","page");else a.removeAttribute("aria-current");
+  $$("nav a, .gear, .livebtn").forEach(a=>{if(a.dataset.view===g)a.setAttribute("aria-current","page");else a.removeAttribute("aria-current");
     if(D.local&&typeof viewPath==="function"){a.setAttribute("href",viewPath(a.dataset.view));a.dataset.go=a.dataset.view}});   // real addresses (07/10)
   const sn=$("#subnav"),items=SUB[g],inProf=PTABS.some(([k])=>k===view);sn.hidden=!items;
   const hr=k=>D.local&&typeof viewPath==="function"?`href="${viewPath(k)}" data-go="${k}"`:`href="#${k}"`;

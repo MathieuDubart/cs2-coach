@@ -865,11 +865,11 @@ svg.radar .ping .ping-t{font:800 15px var(--f-mono);fill:#ffd34d;paint-order:str
 .set-h{margin:26px 0 2px;font:600 13px var(--f-mono);letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
 .set-more>summary{cursor:pointer;font-weight:600;margin:6px 0}
 /* the bar (07/10): your three moments on the left, a player or a match to open in the middle, your menu on the right */
-.bar-in{display:grid;grid-template-columns:minmax(0,1fr) minmax(260px,500px) minmax(0,1fr);gap:8px 18px}
+.bar-in{display:grid;grid-template-columns:minmax(0,1fr) minmax(330px,620px) minmax(0,1fr);gap:8px 18px}
 .bar-left{display:flex;flex-wrap:wrap;align-items:center;gap:8px 18px;min-width:0}
 .bar-in>.bar-right{justify-self:end;margin-left:0}
 .bar-search{max-width:none;width:100%;flex:none}
-@media (max-width:900px){.bar-in{grid-template-columns:minmax(0,1fr) auto}.bar-search{grid-column:1/-1;grid-row:2}}
+@media (max-width:900px){.bar-in{grid-template-columns:minmax(0,1fr) auto}.bar-mid{grid-column:1/-1;grid-row:2}}
 .per-pick{align-self:end;flex-wrap:wrap}.per-pick button:disabled{opacity:.4;cursor:not-allowed}
 /* the "i" of a block (07/10): its explanation on hover or focus, not on the page */
 .itip{position:relative;display:inline-grid;place-items:center;width:17px;height:17px;margin-left:6px;border-radius:50%;border:1px solid var(--line);color:var(--muted);font:600 10.5px/1 var(--f-mono);font-style:normal;text-transform:none;letter-spacing:0;cursor:help;vertical-align:middle;flex:none}
@@ -922,14 +922,17 @@ svg.vdcurve .band.ct{fill:color-mix(in srgb,var(--ct) 16%,transparent)}
 .vhead .vnone{color:var(--muted);font-weight:600;letter-spacing:.02em;text-transform:none}
 
 /* the Live button (07/10): a pill that stands out; red with a blinking dot, like a camera's REC, while a match is followed */
-nav a[data-view="ingame"]{display:inline-flex;align-items:center;gap:7px;font:700 15px var(--f-body);color:var(--ink);border:1.5px solid var(--ink);border-radius:999px;padding:5px 15px;margin-left:6px;letter-spacing:.02em}
-nav a[data-view="ingame"]:hover{background:var(--chip)}
-nav a[data-view="ingame"][aria-current="page"]{background:var(--ink);color:var(--bg)}
-nav a[data-view="ingame"].rec,nav a[data-view="ingame"].rec[aria-current="page"]{background:#e0262d;border-color:#e0262d;color:#fff;letter-spacing:.1em;animation:recglow 1.6s ease-in-out infinite}
-nav a[data-view="ingame"].rec .recdot{width:10px;height:10px;border-radius:50%;background:#fff;animation:recblink 1s steps(2,start) infinite}
+.bar-mid{display:flex;align-items:center;gap:10px;min-width:0}
+.bar-mid .bar-search{flex:1 1 auto;min-width:0;width:auto}
+.livebtn{display:inline-flex;align-items:center;justify-content:center;min-width:6.6em;gap:7px;flex:none;white-space:nowrap;text-decoration:none;font:700 15px var(--f-body);color:var(--ink);border:1.5px solid var(--ink);border-radius:999px;padding:5px 15px;letter-spacing:.02em}
+.livebtn:hover{background:var(--chip)}
+.livebtn:focus-visible{outline:2px solid var(--ct);outline-offset:2px}
+.livebtn[aria-current="page"]{background:var(--ink);color:var(--bg)}
+.livebtn.rec,.livebtn.rec[aria-current="page"]{background:#e0262d;border-color:#e0262d;color:#fff;letter-spacing:.1em;animation:recglow 1.6s ease-in-out infinite}
+.livebtn.rec .recdot{width:10px;height:10px;border-radius:50%;background:#fff;animation:recblink 1s steps(2,start) infinite}
 @keyframes recblink{to{visibility:hidden}}
 @keyframes recglow{0%,100%{box-shadow:0 0 0 0 rgba(224,38,45,.55)}50%{box-shadow:0 0 0 6px rgba(224,38,45,0)}}
-@media (prefers-reduced-motion:reduce){nav a[data-view="ingame"].rec,nav a[data-view="ingame"].rec .recdot{animation:none}}
+@media (prefers-reduced-motion:reduce){.livebtn.rec,.livebtn.rec .recdot{animation:none}}
 </style>
 
 <div class="bar"><div class="bar-in">
@@ -937,13 +940,13 @@ nav a[data-view="ingame"].rec .recdot{width:10px;height:10px;border-radius:50%;b
   <nav aria-label="Views">
     <a href="#review" data-view="review" title="After your matches and the next day">Review</a>
     <a href="#prepare" data-view="prepare" title="Before you play: the warm-up">Prepare</a>
-    <a href="#ingame" data-view="ingame" title="During your match, on a 2nd screen">Live</a>
   </nav>
   <span class="whochip" id="whochip"></span></div>
+  <div class="bar-mid"><a href="#ingame" class="livebtn" data-view="ingame" title="During your match, on a 2nd screen">Live</a>
   <form class="search bar-search" id="search" role="search" autocomplete="off">
     <input id="q" name="q" type="search" placeholder="Steam link, SteamID64, name or share code" aria-label="Open a player or a match: Steam profile link, SteamID64, name or CSGO-… share code">
     <button type="submit" id="qbtn">Open</button>
-  </form>
+  </form></div>
   <div class="bar-right">
     <div class="acct" id="acct" hidden><button type="button" class="acct-btn" id="acctbtn" aria-haspopup="true" aria-expanded="false" aria-controls="acctmenu"></button>
       <div class="acct-menu" id="acctmenu" hidden>
@@ -2499,13 +2502,13 @@ const PTABS=[["profile","Overview"],["analysis","Reads"],["midround","Mid-round"
 const LIVEDOT={t:null,on:null};
 const liveIs=g=>!!(g&&g.map&&!g.practice&&(g.age==null||g.age<30)&&g.map_phase&&g.map_phase!=="gameover");
 function liveDot(){clearTimeout(LIVEDOT.t);if(!D.local)return;const next=()=>{LIVEDOT.t=setTimeout(liveDot,document.hidden?15000:4000)};
-  fetch("/api/gsi/state?peek=1").then(r=>r.ok?r.json():null).then(g=>{const on=liveIs(g),a=$('nav a[data-view="ingame"]');
+  fetch("/api/gsi/state?peek=1").then(r=>r.ok?r.json():null).then(g=>{const on=liveIs(g),a=$(".livebtn");
     if(a){if(on!==LIVEDOT.on){LIVEDOT.on=on;a.classList.toggle("rec",on);a.innerHTML=on?`<i class="recdot" aria-hidden="true"></i>LIVE`:"Live"}
       a.title=on?`Your match is live${g.map?` · ${MAPN(g.map)}`:""}${g.round?` · round ${g.round}`:""}: open Live`:"During your match, on a 2nd screen"}
     next()}).catch(next)}
 document.addEventListener("visibilitychange",()=>{if(!document.hidden&&D.local)liveDot()});
 function navUpdate(view){const g=GROUP[view]||view;
-  $$("nav a, .gear").forEach(a=>{if(a.dataset.view===g)a.setAttribute("aria-current","page");else a.removeAttribute("aria-current");
+  $$("nav a, .gear, .livebtn").forEach(a=>{if(a.dataset.view===g)a.setAttribute("aria-current","page");else a.removeAttribute("aria-current");
     if(D.local&&typeof viewPath==="function"){a.setAttribute("href",viewPath(a.dataset.view));a.dataset.go=a.dataset.view}});   // real addresses (07/10)
   const sn=$("#subnav"),items=SUB[g],inProf=PTABS.some(([k])=>k===view);sn.hidden=!items;
   const hr=k=>D.local&&typeof viewPath==="function"?`href="${viewPath(k)}" data-go="${k}"`:`href="#${k}"`;
