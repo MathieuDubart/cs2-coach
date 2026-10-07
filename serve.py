@@ -618,8 +618,9 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send(400, {"error": "invalid target"})
             if on and config.role() == "client":
                 return self.send(403, {"error": "My base grows on my author's PC: it comes to you with my updates."})
-            # then: "refresh", the app's full update once the target is reached (07/10)
-            config.write_json(GROW_CTL, {"on": on, "target": target} | ({"then": "refresh"} if on and body.get("then") == "refresh" else {}))
+            # then: the app's update once the target is reached (07/10): "refresh" every profile, "refresh_mine" yours and your team's
+            then = body.get("then") if on and body.get("then") in ("refresh", "refresh_mine") else None
+            config.write_json(GROW_CTL, {"on": on, "target": target} | ({"then": then} if then else {}))
             if on:
                 grow_start()
             return self.send(200, grow_status())

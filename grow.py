@@ -66,20 +66,22 @@ def save(st):
             time.sleep(0.1)
 
 
-def refresh_everything():
-    """The app updated with the base as it is now (Settings' "Update everything": refresh_all.py, every profile): through
-    the app, whose page follows it; started here when the app doesn't answer."""
+def refresh_everything(mine=False):
+    """The app updated with the base as it is now (Settings' "Update the app with the base": refresh_all.py; mine: the
+    base's references, your profile and your team's only, else every profile): through the app, whose page follows it;
+    started here when the app doesn't answer."""
     import subprocess
+    what = "the base, your profile and your team's" if mine else "every profile"
     try:
-        req = urllib.request.Request(f"http://127.0.0.1:{PORT}/api/refresh/start", data=b'{"mine": false}',
+        req = urllib.request.Request(f"http://127.0.0.1:{PORT}/api/refresh/start", data=json.dumps({"mine": bool(mine)}).encode(),
                                      headers={"Content-Type": "application/json"}, method="POST")
         urllib.request.urlopen(req, timeout=30).read()
-        log("target reached: the app's full update with the base started")
+        log(f"target reached: the app's update with the base started ({what})")
         return
     except Exception as e:
-        log(f"target reached, the app doesn't answer ({type(e).__name__}): the full update started from here")
+        log(f"target reached, the app doesn't answer ({type(e).__name__}): its update started from here ({what})")
     config.write_json(os.path.join(config.OUT, "refresh_ctl.json"), {"stop": False})
-    subprocess.Popen([sys.executable, "refresh_all.py"], cwd=os.path.dirname(os.path.abspath(__file__)),
+    subprocess.Popen([sys.executable, "refresh_all.py"] + (["--mine"] if mine else []), cwd=os.path.dirname(os.path.abspath(__file__)),
                      creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0) | getattr(subprocess, "BELOW_NORMAL_PRIORITY_CLASS", 0))
 
 
@@ -320,9 +322,11 @@ def main():
             st["n"] = n = analyzed()
             if n >= target:
                 status(st, f"done: {n} matches")
-                if c.get("then") == "refresh":   # 07/10, the user: "stop à 3000 matchs et fais la mise à jour complète de l'app à cette étape"
+                # 07/10, the user: "stop à 3000 matchs et fais la mise à jour complète de l'app à cette étape", then "met à
+                # jour Patro et Catharsis, ça suffit": refresh_mine = the base's references, his profile and his team's
+                if c.get("then") in ("refresh", "refresh_mine"):
                     config.write_json(CTL, {k: v for k, v in c.items() if k != "then"})   # once
-                    refresh_everything()
+                    refresh_everything(mine=c["then"] == "refresh_mine")
                 break
             if free_gb() < MIN_FREE_GB:
                 status(st, f"stopped: {MIN_FREE_GB} GB left on the disk")
