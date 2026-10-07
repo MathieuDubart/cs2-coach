@@ -218,6 +218,9 @@ class Handler(BaseHTTPRequestHandler):
         if u.path == "/api/coach/status":
             import chatcalls
             return self.send(200, chatcalls.status())
+        if u.path == "/api/clips":   # the lineups of the clips you sent, found in the base (clips.py)
+            import clips
+            return self.send(200, clips.by_map())
         if u.path.startswith("/api/tdirs/"):   # the T side's ways in on a map (tdirs.py): Live's directions, odds and grenades
             import tdirs
             mp = u.path.rsplit("/", 1)[-1]

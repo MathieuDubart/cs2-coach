@@ -1002,6 +1002,13 @@ const ERRS=[];
 window.addEventListener("error",e=>{ERRS.push(`${e.message||"error"} @ ${(e.filename||"").split("/").pop()}:${e.lineno||0}`);if(ERRS.length>20)ERRS.shift()});
 window.addEventListener("unhandledrejection",e=>{ERRS.push("promise: "+String((e.reason&&e.reason.message)||e.reason||"").slice(0,300));if(ERRS.length>20)ERRS.shift()});
 async function nadeCat(mp){if(mp in NCAT)return NCAT[mp];try{const r=await fetch(`nadecat/${mp}.json`);NCAT[mp]=r.ok?await r.json():null}catch(e){NCAT[mp]=null}return NCAT[mp]}
+// the lineups of the clips you sent, found in the base's demos (clips.py, /api/clips, 07/10): the local app only
+let CLIPS=null;const clipsReady=D.local?fetch("/api/clips").then(r=>r.ok?r.json():{}).then(j=>CLIPS=j||{}).catch(()=>CLIPS={}):Promise.resolve(CLIPS={});
+const clipsOf=(mp,side)=>((CLIPS||{})[mp]||[]).filter(c=>!side||c.side===side);
+function clipHead(c){return `<p class="note"><b>${esc(c.title)}</b> · <a href="${esc(c.url)}" target="_blank" rel="noopener" style="color:var(--ct)">@${esc(c.handle)}'s clip</a> (${esc(c.date)}) · ${esc(c.seen)}${c.check?` · <em>${esc(c.check)}</em>`:""}</p>`}
+function clipCards(c){return c.throws.map((x,i)=>`<article class="lu cat" data-type="${x.type}" data-clip="${esc(c.id)}" data-ci="${i}" tabindex="0"><div class="top"><span class="ty">${TYPE[x.type]}${c.throws.length>1?` · ${i+1} of ${c.throws.length}`:""}</span>${x.t!=null?`<span class="pill">${clock(x.t)}</span>`:""}</div>
+  <div class="route">${esc(x.from_zone||"?")} → ${esc(x.to)}</div><div class="meta">${esc(x.how)} · ${esc(x.click)}${x.uses?` · ${x.uses} throw${x.uses>1?"s":""} in the base${x.pro_uses?`, ${x.pro_uses} by pros`:""}`:" · not in the base yet"}${(x.pros||[]).length?` · ${x.pros.slice(0,3).map(esc).join(", ")}`:""}</div>
+  <div class="cmd"><code>${esc(x.setpos)}</code><button type="button">Copy</button></div></article>`).join("")}
 function drawCat(box,l,level){const ov=$("g",$("svg",box));if((l.level||level)!==level&&(l.land_level||level)!==level)return;
   const col=l.type==="smoke"?"var(--smoke)":l.type==="flash"?"var(--flash)":l.type==="molotov"?"var(--molotov)":"var(--he)";
   el("line",{x1:l.px[0],y1:l.px[1],x2:l.land_px[0],y2:l.land_px[1],style:`stroke:${col};stroke-width:2.5;stroke-dasharray:6 4`},ov);
@@ -1414,6 +1421,17 @@ function renderMaps(){
         <div class="lineups">${miss.map(x=>`<article class="lu" data-type="${x.type}"><div class="top"><span class="ty">${TYPE[x.type]} · ${x.pro_uses} pro throws</span><span class="pill">${clock(x.t)}</span></div>
           <div class="route">${esc(x.from)} → ${esc(nTo(x,S.cmap)||"?")}</div><div class="meta">${esc(x.how)} · seen from ${esc(x.by)}</div>
           <div class="cmd"><code>${esc(x.setpos)}</code><button type="button">Copy</button></div></article>`).join("")}</div></div>`:"");
+      const clipHost=document.createElement("div");$("#zl",host).appendChild(clipHost);
+      clipsReady.then(()=>{const cs=clipsOf(m.map,st.side);if(!cs.length||!clipHost.isConnected)return;
+        clipHost.innerHTML=`<h4 class="lbl4" style="color:var(--muted);margin-bottom:6px">From the clips you sent</h4>
+          <p class="note">Each clip's grenades found in the base's demos: the exact spot, aim and technique. They come up in your warm-ups on ${esc(MAPN(m.map))}, one after the other. A card draws it on the radar.</p>
+          ${cs.map(c=>clipHead(c)+`<div class="lineups">${clipCards(c)}</div>`).join("")}`;
+        $$(".lu.cat",clipHost).forEach(cd=>{cd.onclick=e=>{if(e.target.closest("button"))return;const c=cs.find(y=>y.id===cd.dataset.clip),x=c&&c.throws[+cd.dataset.ci];if(!x||!x.px)return;
+          st.layers=["nades"];st.sel=null;press(box,"[data-layer]",$('[data-layer="nades"]',box));
+          if(x.level&&x.level!==st.level&&m.levels.some(y=>y.key===x.level)){st.level=x.level;const b=$(`[data-level="${x.level}"]`,box);if(b)press(box,"[data-level]",b)}
+          redraw();c.throws.forEach(y=>y.px&&drawCat(box,y,st.level));$$(".lu",host).forEach(y=>y.classList.toggle("sel",y===cd));box.scrollIntoView({behavior:"smooth",block:"nearest"})};
+          cd.onkeydown=e=>{if(e.key==="Enter")cd.click()}});
+        copyBtn(clipHost)});
       const catHost=document.createElement("div");$("#zl",host).appendChild(catHost);
       nadeCat(m.map).then(C=>{if(!C||!catHost.isConnected)return;const xs=C.lineups.filter(x=>x.side===st.side).slice(0,9);if(!xs.length)return;
         catHost.innerHTML=`<h4 class="lbl4" style="color:var(--muted);margin-bottom:6px">Pro catalog lineups, verified in the demos</h4>
@@ -2734,6 +2752,9 @@ function nadeLive(p,g){const N=(p.advice.plan||{}).nades,E=N&&((N.maps||{})[g.ma
     return `<li class="ct"><b>${v>1?v+" ":""}${nadeName(t,g.side)}${v>1?"es":""}</b><br>${ps.length?ps.map(x=>nadeLine(N,g.side,t,x,!!w&&(w==="post"||x.best===w||x.usual===w||(x.t_med!=null&&Math.abs(x.t_med-el)<=8)),w==="post"&&(E.types[t].post||[]).includes(x))).join("<br>"):`<span class="note">${keep(t)}</span>`}</li>`}).join("");
   const warn=N.unused_per_death>=0.6?`<p class="note">In your last matches, you die with ${N.unused_per_death} grenade in hand on average: throw it before taking a risky duel.</p>`:"";
   return `<div class="tread nd"><h3><span>Your grenades</span><small>${w?esc(nadeWin(N,g.side,w)):"in play"}</small></h3><ul class="big-list">${rows}</ul>${warn}</div>`}
+// the clips you sent (clips.py): their grenades on this map and side, in the clip's order, with the exact spot
+function clipsBlock(map,side){const cs=clipsOf(map,side);if(!cs.length)return "";
+  return `<h3>From the clips you sent</h3>${cs.map(c=>clipHead(c)+`<div class="lineups">${clipCards(c)}</div>`).join("")}`}
 // the map's lineup book (a player's), your side: every lineup with where to stand, where to aim and where it lands
 function bookBlock(p,map,side){const B=((p.advice.plan||{}).lineups||{})[map];if(!B)return "";const L=(B.lineups||[]).filter(x=>x.side===side);if(!L.length)return "";
   const im=(u,a)=>u?`<img src="${esc(u)}" alt="${a}" loading="lazy">`:"";
@@ -2934,7 +2955,7 @@ function renderIngame(){
   const TABS=[["plan","Game plan"],["buys","Buys"],["nades","Grenades"],...(S.side==="CT"?[["t","T habits"]]:[])];
   let tab=store("igtab")||"plan";if(!TABS.some(t=>t[0]===tab))tab="plan";
   const cols=planColumns(p,m,R0);
-  const body={plan:()=>cols.html,buys:()=>S.map?buyRows(p,S.map,S.side,following?roundType(gsiLast):null):"",nades:()=>S.map?nadeTable(p,S.map,S.side)+bookBlock(p,S.map,S.side):"",t:()=>S.map?tsideTable(p,S.map):""}[tab]();
+  const body={plan:()=>cols.html,buys:()=>S.map?buyRows(p,S.map,S.side,following?roundType(gsiLast):null):"",nades:()=>S.map?nadeTable(p,S.map,S.side)+clipsBlock(S.map,S.side)+bookBlock(p,S.map,S.side):"",t:()=>S.map?tsideTable(p,S.map):""}[tab]();
   const radarHTML=liveR?radarShell(layerBtns()+levelBtns({levels:LVs},S.level)):m?radarShell(levelBtns(m,S.level)):R0?radarShell((R0.levels||[]).length>1?`<div class="btns" role="group" aria-label="Level">${R0.levels.map(l=>`<button type="button" data-blevel="${l.key}">${esc(l.name)}</button>`).join("")}</div>`:""):`<div class="empty">No radar for this map yet.</div>`;
   const full=!!(following&&store("igfull")!==false),tkey=gsiLast?`${gsiLast.map}|${gsiLast.round}`:"";
   document.body.classList.toggle("igfull",full);

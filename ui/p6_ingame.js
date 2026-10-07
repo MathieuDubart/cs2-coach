@@ -317,6 +317,9 @@ function nadeLive(p,g){const N=(p.advice.plan||{}).nades,E=N&&((N.maps||{})[g.ma
     return `<li class="ct"><b>${v>1?v+" ":""}${nadeName(t,g.side)}${v>1?"es":""}</b><br>${ps.length?ps.map(x=>nadeLine(N,g.side,t,x,!!w&&(w==="post"||x.best===w||x.usual===w||(x.t_med!=null&&Math.abs(x.t_med-el)<=8)),w==="post"&&(E.types[t].post||[]).includes(x))).join("<br>"):`<span class="note">${keep(t)}</span>`}</li>`}).join("");
   const warn=N.unused_per_death>=0.6?`<p class="note">In your last matches, you die with ${N.unused_per_death} grenade in hand on average: throw it before taking a risky duel.</p>`:"";
   return `<div class="tread nd"><h3><span>Your grenades</span><small>${w?esc(nadeWin(N,g.side,w)):"in play"}</small></h3><ul class="big-list">${rows}</ul>${warn}</div>`}
+// the clips you sent (clips.py): their grenades on this map and side, in the clip's order, with the exact spot
+function clipsBlock(map,side){const cs=clipsOf(map,side);if(!cs.length)return "";
+  return `<h3>From the clips you sent</h3>${cs.map(c=>clipHead(c)+`<div class="lineups">${clipCards(c)}</div>`).join("")}`}
 // the map's lineup book (a player's), your side: every lineup with where to stand, where to aim and where it lands
 function bookBlock(p,map,side){const B=((p.advice.plan||{}).lineups||{})[map];if(!B)return "";const L=(B.lineups||[]).filter(x=>x.side===side);if(!L.length)return "";
   const im=(u,a)=>u?`<img src="${esc(u)}" alt="${a}" loading="lazy">`:"";
@@ -517,7 +520,7 @@ function renderIngame(){
   const TABS=[["plan","Game plan"],["buys","Buys"],["nades","Grenades"],...(S.side==="CT"?[["t","T habits"]]:[])];
   let tab=store("igtab")||"plan";if(!TABS.some(t=>t[0]===tab))tab="plan";
   const cols=planColumns(p,m,R0);
-  const body={plan:()=>cols.html,buys:()=>S.map?buyRows(p,S.map,S.side,following?roundType(gsiLast):null):"",nades:()=>S.map?nadeTable(p,S.map,S.side)+bookBlock(p,S.map,S.side):"",t:()=>S.map?tsideTable(p,S.map):""}[tab]();
+  const body={plan:()=>cols.html,buys:()=>S.map?buyRows(p,S.map,S.side,following?roundType(gsiLast):null):"",nades:()=>S.map?nadeTable(p,S.map,S.side)+clipsBlock(S.map,S.side)+bookBlock(p,S.map,S.side):"",t:()=>S.map?tsideTable(p,S.map):""}[tab]();
   const radarHTML=liveR?radarShell(layerBtns()+levelBtns({levels:LVs},S.level)):m?radarShell(levelBtns(m,S.level)):R0?radarShell((R0.levels||[]).length>1?`<div class="btns" role="group" aria-label="Level">${R0.levels.map(l=>`<button type="button" data-blevel="${l.key}">${esc(l.name)}</button>`).join("")}</div>`:""):`<div class="empty">No radar for this map yet.</div>`;
   const full=!!(following&&store("igfull")!==false),tkey=gsiLast?`${gsiLast.map}|${gsiLast.round}`:"";
   document.body.classList.toggle("igfull",full);

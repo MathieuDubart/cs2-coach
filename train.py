@@ -1163,6 +1163,45 @@ def nade_drills(sid, mp):
     return out
 
 
+def clip_drills(sid, mp):
+    """The lineups of the clips you sent (clips.py, 07/10: "Essaye de récupérer ces stuffs"): a clip's grenades one after
+    the other from its exact spot, at the clip's moment of the round. Weighed well above the base's: you asked for them."""
+    import clips
+    out = []
+    for c in clips.load(mp):
+        team = 2 if c["side"] == "T" else 3
+        n = len(c["throws"])
+        for i, x in enumerate(c["throws"]):
+            typ = x["type"]
+            item = NADE_ITEM[typ][team] if typ == "molotov" else NADE_ITEM.get(typ)
+            if not item or not x.get("pos") or not x.get("land"):
+                continue
+            name = {"smoke": "Smoke", "flash": "Flash", "he": "HE", "molotov": "Molotov"}[typ]
+            seen = f"{x['uses']} throws in the base, {x['pro_uses']} by pros" if x.get("uses") else "not in the base yet"
+            out.append({"id": f"clip:{c['id']}:{i}", "kind": "nade", "map": mp, "clip": c["id"], "step": i,
+                        "title": f"{name} → {x['to']}" + (f" ({i + 1}/{n})" if n > 1 else ""),
+                        "tip": f"{c['title']} · @{c['handle']}'s clip · {seen}",
+                        "team": team, "type": typ, "item": item, "how": x.get("how") or "standing still", "click": x.get("click") or "left click",
+                        "me": {"pos": x["pos"], "ang": x["ang"]}, "target": x["land"], "victims": [], "_vic": [c["side"], x.get("t")],
+                        "clock": round(max(10.0, 115 - float(x["t"]) + 3), 1) if x.get("t") is not None else 0,
+                        "weight": 25})
+    return out
+
+
+def _whole_clips(picked, cands):
+    """A clip's grenades go together, in its order: one of them picked brings the others (ZywOo's smoke without its
+    molotov and flash is not his execute)."""
+    out, done = [], set()
+    for d in picked:
+        cl = d.get("clip")
+        if not cl:
+            out.append(d)
+        elif cl not in done:
+            done.add(cl)
+            out += sorted([c for c in cands if c.get("clip") == cl], key=lambda c: c.get("step", 0))
+    return out
+
+
 # ---------------------------------------------------------------- where you struggle lately (06/10)
 
 KIND_EN = {"exec": "executes", "rush": "rushes", "hit": "hits"}
@@ -1336,7 +1375,7 @@ def build(sid, minutes=20, where="random", difficulty=2):
     for mp in chosen:
         pr = practice_drills(sid, mp)
         fns = {"defend": lambda s_, m_: [d for d in pr if d.get("mode") == "defend"],
-               "push": lambda s_, m_: [d for d in pr if d.get("mode") == "prefire"], "nade": nade_drills,
+               "push": lambda s_, m_: [d for d in pr if d.get("mode") == "prefire"], "nade": lambda s_, m_: nade_drills(s_, m_) + clip_drills(s_, m_),
                "wallbang": lambda s_, m_: wallbang_drills(s_, m_) + boost_drills(s_, m_), "situation": lambda s_, m_: situation_drills(s_, m_, all_sc)}
         share = {k: v for k, v in split.items() if k != "aim"}
         if not pr:   # a hostage map: no site to defend or push, the situations take their time
@@ -1368,6 +1407,8 @@ def build(sid, minutes=20, where="random", difficulty=2):
                     c["weight"] = c.get("weight", 1.0) * 3
             n = max(1, int(secs / EST[kind]) + 1)
             picked = _pick(cands, n, p["items"], nsess, weight=lambda c: c.get("weight", 1.0))
+            if kind == "nade":
+                picked = _whole_clips(picked, cands)
             drills = []
             for d in picked:
                 if kind == "nade":   # guided, then the spot and how, then the spot only
