@@ -499,7 +499,8 @@ public partial class CoachReplay
         aimOrder.Clear(); reacts.Clear(); aimHs = 0; aimNext = 0; attempts = 0; nadeWait = false; frags = deaths = plants = 0;
         cameAt.Clear(); strafe.Clear(); lastKill = 0;
         // the targets that must stay still idle: a prefire's, a wallbang's, the aim map's flicks and strafers (06/10)
-        Zombie((d.Kind == "aim" && (d.Mode == "prefire" || d.Id.StartsWith("wallbang") || d.Id.StartsWith("boost") || (d.Mode == "range" && d.Variant != "duel"))) || d.Rush);   // a rush's runners only run
+        Zombie(d.Kind == "aim" && (d.Mode == "prefire" || d.Id.StartsWith("wallbang") || d.Id.StartsWith("boost") || (d.Mode == "range" && d.Variant != "duel")));
+        DontShoot(d.Rush);   // a rush's runners run their way like a situation's players (driven, not idle), and never fire
         Ammo(d.Mode == "range");
         Intro(d);
         Setup();
@@ -1250,6 +1251,7 @@ public partial class CoachReplay
         SetMain("");
         sess = null; drill = null; cur = null; phase = "idle"; bots.Clear(); builtFor = null; sessGen++;
         Zombie(false);
+        DontShoot(false);
         Ammo(false);
         Server.ExecuteCommand("bot_quota 0");   // or the game adds the last drill's count again
         Server.ExecuteCommand("bot_kick");

@@ -570,6 +570,12 @@ public partial class CoachReplay : BasePlugin
         try { ConVar.Find("bot_zombie")?.SetValue(on); } catch (Exception) { }
     }
 
+    // the game's bots never fire (bot_dont_shoot, a cheat setting set the same way): a timing smoke's runners (07/10)
+    static void DontShoot(bool on)
+    {
+        try { ConVar.Find("bot_dont_shoot")?.SetValue(on); } catch (Exception) { }
+    }
+
     // the aim map: the guns never run dry (reloads stay)
     static void Ammo(bool on)
     {
