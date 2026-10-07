@@ -838,6 +838,49 @@ svg.radar .ping .ping-t{font:800 15px var(--f-mono);fill:#ffd34d;paint-order:str
 .vhab em{font-style:normal;color:var(--muted);font-size:12px}
 .vctl{font:700 10px/1 var(--mono,monospace)}
 .vctm{font:800 8.5px/1 var(--mono,monospace);fill:#0b0f14}
+
+/* the account menu (07/10): favorites, a player or a match to open, update, settings */
+.acct-menu{min-width:300px;gap:6px;padding:8px}
+.am-sec{display:grid;gap:1px}
+.am-h{font:600 11px var(--f-mono);letter-spacing:.08em;text-transform:uppercase;color:var(--muted);padding:4px 10px 2px}
+.favlist{display:grid}
+.favlist a{display:flex;gap:9px;align-items:center}
+.favlist a[aria-current="true"]{background:var(--chip)}
+.favlist small{color:var(--muted);font-size:11.5px}
+.favlist .av{width:22px;height:22px;border-radius:50%;object-fit:cover;flex:none}
+.favlist .ini{display:grid;place-items:center;background:var(--chip);font:700 12px var(--f-display);color:var(--ink)}
+.favlist .none{font:12.5px var(--f-body);color:var(--muted);padding:4px 10px 6px}
+.acct-menu .search{flex:none;max-width:none;padding:8px 4px;border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
+.am-item{font:500 14px var(--f-body);color:var(--ink);text-decoration:none;padding:7px 10px;border-radius:4px;background:none;border:0;text-align:left;cursor:pointer}
+.am-item:hover,.am-item:focus-visible{background:var(--chip);outline:none}
+.am-item:disabled{opacity:.5;cursor:wait}
+.acct-menu .gear{font-size:14px;color:var(--ink)}
+.acct-menu .gear.has-update::after{top:50%;right:10px;transform:translateY(-50%)}
+.acct-btn{position:relative}
+.acct-btn.has-update::after{content:"";position:absolute;top:0;right:2px;width:8px;height:8px;border-radius:50%;background:var(--good,#3ba55d)}
+.whochip .fav{color:var(--warn);font-size:13px;line-height:1}
+.bar{z-index:40}   /* its menu over the pages' sticky parts (Review's section bar) */
+.ig-wait{max-width:760px;margin:28px auto;padding:22px 26px;border:1px solid var(--line);border-radius:var(--radius);background:var(--panel)}.ig-wait h3{margin:0 0 8px}.ig-wait ul{margin:8px 0 12px;padding-left:20px;display:grid;gap:4px}
+/* Review (07/10): an item and its evidence in one place */
+.blist{display:grid;gap:6px;margin-top:8px}
+.bitem{border-left:2px solid var(--line);padding:2px 0 2px 10px}
+.bitem>summary{cursor:pointer;font-size:14.5px;line-height:1.45;list-style:none}
+.bitem>summary::-webkit-details-marker{display:none}
+.bitem>summary::before{content:"▸";color:var(--muted);margin-right:6px;display:inline-block;transition:transform .15s}
+.bitem[open]>summary::before{transform:rotate(90deg)}
+.bitem[open]{padding-bottom:8px}
+.bitem .rd-card{border:0;background:none;padding:6px 0 0;box-shadow:none}
+.bitem .rd-card .rd-h{display:none}
+.mc-matches{display:grid;gap:4px;margin-top:auto;padding-top:8px;border-top:1px solid var(--line)}
+.mc-m{display:flex;gap:8px;align-items:center;justify-content:space-between;font:500 12.5px var(--f-body);color:var(--ink);background:none;border:1px solid transparent;border-radius:4px;padding:3px 6px;cursor:pointer;text-align:left}
+.mc-m:hover,.mc-m:focus-visible{border-color:var(--ct);outline:none}
+.mc-m span:first-child{flex:1;color:var(--muted)}
+.tier-more{margin-top:24px;border-top:1px solid var(--line);padding-top:12px}
+.tier-more>summary{cursor:pointer;font:600 15px var(--f-body);color:var(--muted)}
+.gauge .gtip{font:500 13px var(--f-body);font-style:normal;color:var(--warn);margin-top:2px}
+.brief3>.card{align-content:start}
+.set-h{margin:26px 0 2px;font:600 13px var(--f-mono);letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+.set-more>summary{cursor:pointer;font-weight:600;margin:6px 0}
 </style>
 
 <div class="bar"><div class="bar-in">
@@ -846,18 +889,22 @@ svg.radar .ping .ping-t{font:800 15px var(--f-mono);fill:#ffd34d;paint-order:str
     <a href="#ingame" data-view="ingame" title="During your match, on a 2nd screen">Live</a>
     <a href="#prepare" data-view="prepare" title="Before you play: warm-up, map sheets">Prepare</a>
     <a href="#review" data-view="review" title="After your matches and the next day">Review</a>
-    <a href="#players" data-view="players" title="Players, pros, your team">Explore</a>
   </nav>
   <span class="whochip" id="whochip"></span>
-  <form class="search" id="search" role="search" autocomplete="off">
-    <input id="q" name="q" type="search" placeholder="Steam link, SteamID64, name or CSGO-… share code" aria-label="Find a player: Steam profile link, SteamID64 or name">
-    <button type="submit" id="qbtn">Analyze</button>
-  </form>
   <div class="bar-right">
-    <button type="button" class="focuschip" id="focuschip" hidden></button>
-    <button type="button" class="upd" id="updbtn" hidden title="Fetch your new matches from Steam and analyze them">↻ Update</button>
-    <div class="acct" id="acct" hidden><button type="button" class="acct-btn" id="acctbtn" aria-haspopup="menu" aria-expanded="false"></button><div class="acct-menu" id="acctmenu" role="menu" hidden></div></div>
-    <a href="#settings" class="gear" data-view="settings" aria-label="Settings" title="Settings: Steam, game detection, microphone">⚙</a>
+    <div class="acct" id="acct" hidden><button type="button" class="acct-btn" id="acctbtn" aria-haspopup="true" aria-expanded="false" aria-controls="acctmenu"></button>
+      <div class="acct-menu" id="acctmenu" hidden>
+        <div class="am-sec"><span class="am-h">Favorites</span><div class="favlist" id="favlist"></div></div>
+        <form class="search am-search" id="search" role="search" autocomplete="off">
+          <input id="q" name="q" type="search" placeholder="Steam link, SteamID64, name or share code" aria-label="Open a player or a match: Steam profile link, SteamID64, name or CSGO-… share code">
+          <button type="submit" id="qbtn">Open</button>
+        </form>
+        <div class="am-sec">
+          <button type="button" class="am-item" id="updbtn" hidden title="Fetch your new matches from Steam and analyze them">↻ Update my matches</button>
+          <a href="#settings" class="am-item gear" data-view="settings">Settings</a>
+        </div>
+      </div>
+    </div>
   </div>
 </div><div class="subnav" id="subnav" hidden></div></div>
 <dialog class="bugdlg" id="bugdlg" aria-labelledby="bug-h"><form method="dialog" id="bugform">
@@ -1182,6 +1229,7 @@ document.addEventListener("click",e=>{const b=e.target.closest&&e.target.closest
 // here"): the one priority of the app is the focus of the week. BRIEF_CAP collects the briefs for the Profile.
 let BRIEF_CAP=null;
 function tabBrief(o){if(BRIEF_CAP){BRIEF_CAP.push(o);return ""}
+  return "";   // 07/10: the detail pages open on their content; their brief is the Profile's card that leads to them (said once)
   const li=xs=>(xs||[]).filter(Boolean).slice(0,3).map(x=>`<li>${x}</li>`).join(""),w=li(o.works),fx=li(o.fix);
   return `<section class="brief3 brief2 tabbrief" id="${o.id||""}" aria-label="Brief">
    <article class="card b-good"><span class="eyebrow">What works here</span>${w?`<ul>${w}</ul>`:`<p class="note">${o.worksNone||"Nothing stands out above the base yet."}</p>`}</article>
@@ -1199,13 +1247,6 @@ function analysisBrief(p,auto){const I=((readsOf().all||{}).items)||[],good=I.fi
     fix:[r0?`<b>${esc(r0.title)}</b>${r0.standing?` <span class="note">· ${esc(r0.standing)}</span>`:""}`:null,...bad.slice(0,2).map(readTxt)],
     next:r0&&r0.fix&&r0.fix.length?r0.fix[0]:null,nextLabel:"Work on"})+(St.length>nS?`<p class="note">Also: ${St.slice(nS).map(esc).join(" · ")}</p>`:"")}
 // one match: its rating, the coach's priority, the reads that stand out against the base (with their rounds)
-function matchBrief(m){const R=m.reads||{},M=readsOf().meta||{},s=m.sum,pr=((m.notes||{}).priorities)||[],rt=mRating(m);
-  const tone=k=>R[k]&&R[k].of?readTone(k,100*R[k].value/R[k].of,R[k].of):"";
-  const rl=k=>{const x=R[k];return `${esc((M[k]||{}).title||k)}: <b>${x.value}</b> ${READ_LINE[k](x)}${rchips(x.rounds)}`};
-  const rline=rt==null?null:`Rating ${rtBadge(rt)} · ${s.kills}-${s.deaths}-${s.assists}, ADR ${f1(s.adr)}`;
-  return tabBrief({id:"m-brief",works:[rt!=null&&rt>=1.05?rline:null,...READ_IDS.filter(k=>tone(k)==="good").map(rl)],
-    fix:[rt!=null&&rt<0.85?rline:null,pr[0]?`<b>${esc(pr[0].title)}</b>`:null,...READ_IDS.filter(k=>tone(k)==="bad").map(rl)],
-    next:pr[0]&&pr[0].fix&&pr[0].fix.length?pr[0].fix[0]:null,nextLabel:"For the next match"})}
 // one map: your record and rating there, your zones that work and the ones to change, a pro grenade to learn
 function mapBrief(p,m){const ms=p.matches.filter(x=>x.map===m.map),w=ms.filter(x=>x.result==="win").length,l=ms.filter(x=>x.result==="loss").length;
   const rts=ms.map(mRating).filter(x=>x!=null),avg=rts.length?rts.reduce((a,b)=>a+b,0)/rts.length:null;
@@ -1275,15 +1316,11 @@ function renderMatches(){
   const s=m.sum,md=m.map_data;const st={layer:"control",level:md.levels[0].key,side:"all"},lim=S.mall||S.match>=10?ms.length:10;
   v.innerHTML=`<div class="head"><div style="display:grid;gap:4px"><span class="eyebrow">${ms.length} matches · pick one below</span><h2>Matches</h2></div></div>
   <div class="tbl"><table>${TREND_HEAD}<tbody>${trendRows(ms.slice(0,lim),S.match)}</tbody></table></div>${ms.length>lim?`<button type="button" class="more-btn" id="mall">All ${ms.length} matches</button>`:""}
-  <div class="head" id="mhead"><div style="display:grid;gap:4px"><span class="eyebrow">${fmtDate(m.time)} · ${m.rounds} rounds · ${RES[m.result]}${m.hostage?" · hostage map: CTs attack":""}</span>
+  <div class="head" id="mhead"><div style="display:grid;gap:4px"><span class="eyebrow">${fmtDate(m.time)} · ${m.rounds} rounds · ${RES[m.result]}${s.clutches?` · ${s.clutches_won}/${s.clutches} clutches won`:""}${m.hostage?" · hostage map: CTs attack":""}</span>
     <h2>${MAPN(m.map)} · ${esc(m.mode)}</h2></div><div class="record"><span>${m.score.me}-${m.score.them}</span></div>
     ${D.local?`<button type="button" class="close" id="reanalyze" title="Extract this match again from its demo, then update your profile and plan (a minute or two)">Re-analyze this match</button>`:""}</div>
-  <div class="stats"><div class="stat"><b class="num">${s.kills}/${s.deaths}/${s.assists}</b><span>K / D / A</span></div><div class="stat"><b class="num">${f1(s.adr)}</b><span>ADR</span></div>
-    <div class="stat"><b class="num">${f1(s.kast)}%</b><span>KAST</span></div><div class="stat"><b class="num">${s.traded_pct==null?"—":f1(s.traded_pct)+"%"}</b><span>deaths traded</span></div>
-    <div class="stat"><b class="num">${s.nades_unused}</b><span>grenades wasted</span></div><div class="stat"><b class="num">${s.clutches_won}/${s.clutches}</b><span>clutches won</span></div></div>
-  ${secNav([["m-brief","Brief"],m.notes?["m-coach","Coach"]:null,m.reads?["m-reads","Analyst reads"]:null,["m-rounds","Rounds"],["m-zones","Zones"],["m-replay","2D replay"]])}
-  ${matchBrief(m)}
-  ${anchor("m-coach")}${m.notes?`<p style="max-width:75ch;font-size:16px">${m.notes.summary||""}</p>${findings(m.notes.priorities)}`:""}
+  ${secNav([m.notes?["m-coach","Coach"]:null,m.reads?["m-reads","Analyst reads"]:null,["m-rounds","Rounds"],["m-zones","Zones"],["m-replay","2D replay"]])}
+  ${anchor("m-coach")}${m.notes?findings(m.notes.priorities):""}
   ${anchor("m-reads")}${matchReads(m)}
   ${anchor("m-rounds")}${m.story&&m.story.length?storyBlock(m):""}
   <h3>Your rounds</h3><div class="timeline-wrap"><div class="timeline">${m.per_round.map(r=>`<div class="rd ${r.side}" title="Round ${r.round} (${r.side}, ${roleOf(m.map,r.side)}): ${r.won?"won":"lost"}, ${r.kills} kill(s), ${r.deaths} death(s), your buy ${r.my_buy} / team ${r.team_buy}"><span>${r.round}</span><span class="${r.won?"w":"l"}">${r.won?"W":"L"}</span><span>${r.kills}-${r.deaths}</span></div>`).join("")}</div></div>
@@ -1840,6 +1877,7 @@ async function pollUpdate(v){clearTimeout(S.upTimer);
   c.outerHTML=updateCard(u);wireUpdate(v);
   if(pr.busy||pr.restarting)S.upTimer=setTimeout(()=>{if(S.view==="settings")pollUpdate(v)},1500)}
 function gearDot(u){const g=$(".gear");if(!g)return;const n=((u||{}).available||[]).length;g.classList.toggle("has-update",!!n);
+  const ab=$("#acctbtn");if(ab)ab.classList.toggle("has-update",!!n);
   g.title=n?"Settings: an update of the app is available":"Settings: Steam, game detection, microphone"}
 // the base grows with the players (05/10): a player's switch (off until they turn it on), or what the coach received
 function shareCard(c){
@@ -1905,7 +1943,7 @@ function usageCard(u){if(!u||!u.client)return "";
    <p class="note">${u.on?`Today so far: ${nv} page(s), ${na} click(s) counted · ${u.days_sent} day(s) sent`:"Off: nothing is counted or sent."}</p>
    ${u.on&&u.today?`<details><summary>Today's counters, exactly</summary><pre class="uspre">${esc(JSON.stringify(u.today,null,1))}</pre></details>`:""}
    <div class="btns"><button type="button" id="us-on">${u.on?"Turn it off":"Turn it on"}</button></div></article>`}
-const VLABEL={ingame:"Live",prepare:"Prepare",review:"Review",profile:"Profile",players:"Explore · players",pros:"Explore · pros",team:"Explore · team",settings:"Settings"};
+const VLABEL={ingame:"Live",prepare:"Prepare",review:"Review",profile:"Profile",players:"Players",pros:"Pros",team:"Team",settings:"Settings"};
 function usageStatsCard(st){if(!st||D.role==="client")return "";
   const T=st.totals||{},pd=T.reports||0,mins=s=>(s/60).toFixed(1);
   if(!pd)return `<article class="card" id="ust-card"><h3>How players use the app</h3><p class="note">No usage statistics yet: they come from players' apps (0.0.2-alpha and later), one day after use, pulled every hour by the base loop.</p><div class="btns"><button type="button" id="ust-pull">Pull now</button></div></article>`;
@@ -1974,9 +2012,7 @@ async function renderSettings(){
   const pt=st.playtime,L=st.links||{};
   v.innerHTML=head+`
   ${flag==="ok"?`<div class="jobpanel" style="padding:0"><div class="in ok">Steam confirmed the sign-in.</div></div>`:flag==="refused"||flag==="refus"?`<div class="jobpanel" style="padding:0"><div class="in err">Steam didn't confirm the sign-in. Try again.</div></div>`:""}
-  <article class="card"><h3>Display</h3>
-   <div class="btns" role="group" aria-label="Theme">${[["dark","Dark"],["light","Light"],["system","Your system's"]].map(([k,l])=>`<button type="button" data-theme-set="${k}" aria-pressed="${(store("theme")||"dark")===k}">${l}</button>`).join("")}</div>
-   <p class="note">The theme of the app on this browser. Dark is the default; "your system's" follows Windows.</p></article>
+  <h3 class="set-h">In game</h3>
   <article class="card"><h3>Game detection ${ok(gs&&gs.installed)}</h3>
    <p>CS2 sends the app the map, your side, the round, the score, your money and your grenades: the "In game" page follows your match on its own and gives the right advice at the right time (buys during freeze time, bomb planted, end of round).</p>
    <p class="note">This is Valve's Game State Integration, the official feature used by HUDs and RGB keyboards. During a match, CS2 only sends your own info, never the enemies'.${gs&&gs.path?` File: <code>${esc(gs.path)}</code>.`:""}${gs&&gs.installed?(gs.receiving?" CS2 is sending its data.":" Restart CS2 so it picks it up."):""}</p>
@@ -2011,17 +2047,12 @@ async function renderSettings(){
         <td>${r.silent?'<span class="bad">silent: wrong microphone</span>':r.transcribed?"done":r.duration?`<button type="button" data-vtr="${r.id}">Transcribe</button>`:"—"}</td><td><button type="button" data-vdel="${r.id}">Delete</button></td></tr>`).join("")}</tbody></table></div>`
       :`<p class="note">No recording yet.</p>`}<span class="note" id="v-msg" role="status"></span>`
     :`<p class="note">Microphone unavailable on this PC${vs&&vs.error?` (${esc(vs.error)})`:""}.</p>`}</article>
-  <div class="insights">
+  <h3 class="set-h">Your Steam account</h3>
    <article class="card"><h3>1. Who are you? ${ok(st.login)}</h3>
     ${st.login?`<p>Signed in with Steam: <b>${esc(st.login.name||st.login.steamid)}</b> <span class="num note">${esc(st.login.steamid)}</span>, on ${fmtDate(st.login.time)}. This account is your default profile in the app.</p>`
       :`<p>Sign in through Steam's official page: it confirms your account to me. I never see your password, only your SteamID.</p>`}
     <p><a class="primary" style="display:inline-block;text-decoration:none" href="/api/steam/login">${st.login?"Sign in with Steam again":"Sign in with Steam"}</a></p>
     ${st.pc_account&&st.pc_account.steamid?`<p class="note">Steam account open on this PC: ${esc(st.pc_account.name||"")} <span class="num">${esc(st.pc_account.steamid)}</span>.</p>`:""}</article>
-   <article class="card"><h3>Playtime</h3>
-    ${pt?`<div class="gauge"><div><b>${pt.total_h.toLocaleString("en-US")} h</b><span>on CS2 in total</span></div><div><b>${pt.two_weeks_h} h</b><span>over the last 2 weeks</span></div></div>
-      <p class="note">Source: ${esc(pt.source)}${pt.last_played?` · last played ${fmtDate(pt.last_played)}`:""}. Used to set your priorities by experience.</p>`
-      :`<p class="note">No playtime found: this account hasn't played on this PC. With the API key (step 2), I read it from Steam if your game details are public.</p>`}</article>
-  </div>
   <article class="card form"><h3>2. Full, automatic history ${ok(st.has_key&&st.has_auth)}</h3>
    <p>Valve only gives your <b>last 8 matches</b> and deletes demos after about <b>a month</b>. With these two codes, I find <b>every new match</b>, even if it hasn't run for weeks. It analyzes the demos still available and keeps the date, score, your kills and deaths and your teammates for all the others: your times, sessions, streaks and group become measurable over your whole history.</p>
    <div class="row"><span class="f">Steam API key ${ok(st.has_key)}</span><input id="st-key" type="password" autocomplete="off" spellcheck="false" placeholder="${st.has_key?"already saved · paste a new key to replace it":"32 characters"}" style="flex:1;min-width:220px;font:14px var(--f-mono);background:var(--bg);color:var(--ink);border:1px solid var(--line);border-radius:3px;padding:5px 8px"></div>
@@ -2031,16 +2062,20 @@ async function renderSettings(){
    <p class="note">On <a href="${esc(L.auth)}" target="_blank" rel="noopener" style="color:var(--ct)">Steam's CS2 help page</a> (signed in to your account): "Create authentication code". The same page shows the code of your last match. If it's empty, I find it from your last 8 matches (Steam open, CS2 closed).</p>
    <div class="row"><button type="button" class="primary" id="st-save">Save and check</button>
      <button type="button" class="primary" id="st-sync" ${st.has_auth?"":"disabled"}>Sync now</button><span class="note" id="st-msg" role="status"></span></div>
-   ${st.has_auth?`<div class="row"><label style="display:flex;gap:8px;align-items:center;font-size:14px"><input type="checkbox" id="st-auto" ${st.auto_sync?"checked":""}> Sync automatically when the app starts, then every 30 minutes (off: the ↻ Update button at the top does it when you want)</label></div>
+   ${st.has_auth?`<div class="row"><label style="display:flex;gap:8px;align-items:center;font-size:14px"><input type="checkbox" id="st-auto" ${st.auto_sync?"checked":""}> Sync automatically when the app starts, then every 30 minutes (off: "Update my matches" in your menu, top right, does it when you want)</label></div>
      <p class="note">Last sync: ${st.last_sync?fmtDate(st.last_sync):"never"} · ${st.known_matches} match(es) known for this account${st.pending?` · ${st.pending} pending (Steam must be open and CS2 closed)`:""}${st.friends!=null?` · ${st.friends} Steam friends (used to detect your group)`:""}.</p>`:""}
-  </article>
-  <article class="card"><h3>What it unlocks</h3><ul>
+   <details class="set-more"><summary>What it unlocks</summary><ul>
     <li><b>No lost match</b>: every matchmaking match is found, analyzed while the demo exists, and counted in your habits afterwards.</li>
     <li><b>Habits over your whole history</b>: hours when you play best, ideal number of games per session, effect of loss streaks (Routine tab).</li>
     <li><b>Your group</b>: your Steam friends on your team are recognized as your group, even after a single match together.</li>
-    <li><b>Your experience</b>: your playtime sets the priorities of the Progress tab.</li></ul>
+    <li><b>Your experience</b>: your playtime sets the priorities of the Progress tab.</li></ul></details>
    <p class="note">Your codes stay in <code>out/settings.json</code> on this PC: this file is not versioned and the codes only go to Steam's official API. You can remove everything at any time.</p>
-   <div class="btns"><button type="button" id="st-forget">${steamForget?"Confirm: remove the sign-in and the codes":"Disconnect everything"}</button></div></article>${reportCard()}${updateCard(up)}${shareCard(ct)}${D.role==="client"?usageCard(us):""}${reportsCard(rs)}${D.role!=="client"?usageStatsCard(us):""}${growCard(gr)}${refreshCard(rf)}`;
+   <div class="btns"><button type="button" id="st-forget">${steamForget?"Confirm: remove the sign-in and the codes":"Disconnect everything"}</button></div></article>
+  <h3 class="set-h">This app</h3>
+  <article class="card"><h3>Display</h3>
+   <div class="btns" role="group" aria-label="Theme">${[["dark","Dark"],["light","Light"],["system","Your system's"]].map(([k,l])=>`<button type="button" data-theme-set="${k}" aria-pressed="${(store("theme")||"dark")===k}">${l}</button>`).join("")}</div>
+   <p class="note">The theme of the app on this browser. Dark is the default; "your system's" follows Windows.</p></article>${reportCard()}${updateCard(up)}${D.role==="client"?shareCard(ct)+usageCard(us):""}
+  ${D.role!=="client"?`<h3 class="set-h">The base and the players' apps</h3>${growCard(gr)}${refreshCard(rf)}${shareCard(ct)}${reportsCard(rs)}${usageStatsCard(us)}`:""}`;
   wireRefresh(v);if(rf&&rf.running)pollRefresh(v);
   const msg=$("#st-msg",v),sid=st.steamid;
   const vmsg=$("#v-msg",v),vcall=async(path,body)=>{try{await api(path,Object.assign({sid},body||{}));renderSettings()}catch(e){if(vmsg)vmsg.textContent=e.message}};
@@ -2387,25 +2422,41 @@ async function prepShots(v,sel){const box=$("[data-pshots]",v);if(!box||!D.local
   if(st.on&&S.view==="prepare")setTimeout(()=>{if(S.view==="prepare")prepShots(v,sel)},5000)}
 
 // ---------- navigation: three moments (05/10): Live during the match, Prepare before it, Review after it ----------
-const GROUP={ingame:"ingame",prepare:"prepare",review:"review",profile:"review",matches:"review",maps:"review",midround:"review",progress:"review",analysis:"review",routine:"review",team:"players",players:"players",pros:"players",settings:"settings"};
+const GROUP={ingame:"ingame",prepare:"prepare",review:"review",profile:"review",matches:"review",maps:"review",midround:"review",progress:"review",analysis:"review",routine:"review",team:"review",players:"review",pros:"review",settings:"settings"};
 // Review in three levels (05/10): the session, your profile, every match; the detailed pages open from the profile
-const SUB={review:[["review","Session"],["profile","Profile"],["matches","Matches"]],players:[["players","Players"],["pros","Pros"],["team","Team"]]};
+const SUB={review:[["review","Session"],["profile","Profile"],["matches","Matches"]]};   // 07/10: no Explore (the menu's favorites instead)
 const PLAYER_VIEWS=["ingame","prepare","review","profile","matches","maps","midround","progress","analysis","routine"];
 // old French addresses keep working, and the moments' names
 const ALIAS={partie:"ingame",avant:"prepare",bilan:"review",matchs:"matches",cartes:"maps",mid:"midround",prog:"progress",synthese:"analysis",equipe:"team",joueurs:"players",steam:"settings",live:"ingame",prep:"prepare",warmup:"prepare"};
-// your account on the right of the bar, like a signed-in account (05/10): your Steam avatar and name, and a menu
+// your account on the right of the bar (05/10), its menu (07/10, the user: "juste un espace favoris quand je clique sur
+// mon profil, avec les autres profils que j'ai mis en favoris, à la place d'une répétition des onglets de la nav; mets
+// aussi les paramètres et le bouton update"): you and your favorite profiles, a player or a match to open, your
+// update, the settings. Nothing the bar's three moments already give.
 let ACCT=null;   // your Steam avatar when the profile has none (/api/account: the public profile, kept a day)
-function acctUpdate(){const ac=$("#acct"),ab=$("#acctbtn"),am=$("#acctmenu"),mi=D.own&&IDX()[D.own];if(!ac)return;
-  ac.hidden=!(D.local&&mi);if(ac.hidden)return;
-  const me=D.players[D.own],av=(me&&((me.advice||{}).steam||{}).avatar)||mi.avatar||(ACCT&&ACCT.avatar),nm=(me&&me.name)||mi.name||"You";
-  if(!av&&ACCT===null){ACCT={};fetch("/api/account").then(r=>r.json()).then(j=>{ACCT=j||{};if(ACCT.avatar)acctUpdate()}).catch(()=>{})}
-  ab.innerHTML=`${av?`<img class="av" src="${esc(av)}" alt="" width="26" height="26">`:`<span class="av ini" aria-hidden="true">${esc(String(nm).trim().charAt(0).toUpperCase())}</span>`}<span class="an">${esc(nm)}</span><span class="caret" aria-hidden="true">▾</span>`;
-  ab.title=`Your account: ${nm}`;ab.setAttribute("aria-label",`Your account: ${nm}`);
+const avatarHtml=(av,nm,cls="av")=>av?`<img class="${cls}" src="${esc(av)}" alt="" width="22" height="22">`:`<span class="${cls} ini" aria-hidden="true">${esc(String(nm||"?").trim().charAt(0).toUpperCase())}</span>`;
+function acctUpdate(){const ac=$("#acct"),ab=$("#acctbtn"),am=$("#acctmenu");if(!ac)return;
+  ac.hidden=!D.local;if(ac.hidden)return;
+  const mi=D.own&&IDX()[D.own],me=D.own&&D.players[D.own];
+  const av=mi?((me&&((me.advice||{}).steam||{}).avatar)||mi.avatar||(ACCT&&ACCT.avatar)):null,nm=(me&&me.name)||(mi&&mi.name)||"Menu";
+  if(mi&&!av&&ACCT===null){ACCT={};fetch("/api/account").then(r=>r.json()).then(j=>{ACCT=j||{};if(ACCT.avatar)acctUpdate()}).catch(()=>{})}
+  ab.innerHTML=`${mi?avatarHtml(av,nm):`<span class="av ini" aria-hidden="true">☰</span>`}<span class="an">${esc(nm)}</span><span class="caret" aria-hidden="true">▾</span>`;
+  ab.title=mi?`${nm}: your favorites, a player to open, update, settings`:"Menu";ab.setAttribute("aria-label",ab.title);
   const im=$("img.av",ab);if(im)im.onerror=()=>{const sp=document.createElement("span");sp.className="av ini";sp.setAttribute("aria-hidden","true");sp.textContent=String(nm).trim().charAt(0).toUpperCase();im.replaceWith(sp)};   // an avatar that doesn't load: your initial
-  am.innerHTML=`<a href="#profile" role="menuitem" data-acct="profile">Your profile</a><a href="#review" role="menuitem" data-acct="review">Your last session</a><a href="#prepare" role="menuitem" data-acct="prepare">Prepare your next game</a><a href="#settings" role="menuitem" data-acct="settings">Steam account and settings</a>`;
-  ab.onclick=e=>{e.stopPropagation();const open=am.hidden;am.hidden=!open;ab.setAttribute("aria-expanded",String(open));if(open){const f=$("a",am);if(f)f.focus()}};
-  $$("[data-acct]",am).forEach(a=>a.onclick=e=>{e.preventDefault();acctClose();const v=a.dataset.acct;
-    if(v==="settings")go("settings");else if(S.player!==D.own){S.view=v;setPlayer(D.own)}else go(v)})}
+  favRender();
+  ab.onclick=e=>{e.stopPropagation();const open=am.hidden;am.hidden=!open;ab.setAttribute("aria-expanded",String(open));if(open){const f=$("a,input",am);if(f)f.focus()}};
+  am.onclick=e=>e.stopPropagation()}
+// favorites: profiles kept at hand (this browser); the first time, your team's players
+function favs(){const f=store("favs");return Array.isArray(f)?f:[]}
+function favToggle(sid){const f=favs();store("favs",f.includes(sid)?f.filter(x=>x!==sid):[...f,sid]);favRender();navUpdate(S.view)}
+function favSeed(){if(store("favs")!==null||!D.local||!D.own)return;store("favs",[]);
+  fetch("teams/index.json").then(r=>r.ok?r.json():[]).then(T=>{const m=new Set();for(const t of T||[])if((t.members||[]).some(x=>String(x.steamid)===D.own))for(const x of t.members||[])if(String(x.steamid)!==D.own)m.add(String(x.steamid));
+    if(m.size){store("favs",[...m]);favRender()}}).catch(()=>{})}
+function favRender(){const box=$("#favlist");if(!box)return;favSeed();const I=IDX(),list=[...(D.own&&I[D.own]?[D.own]:[]),...favs().filter(s=>I[s]&&s!==D.own)];
+  box.innerHTML=list.map(s=>{const e=I[s];return `<a href="#" data-fav="${s}" ${s===S.player?'aria-current="true"':""}>${avatarHtml(e.avatar,e.name)}<span>${esc(e.name)}${s===D.own?' <small>you</small>':""}</span></a>`}).join("")
+    +(list.length<2?`<span class="none">Open a player below, then ☆ on the bar keeps them here.</span>`:"");
+  $$("img.av",box).forEach(im=>im.onerror=()=>{const sp=document.createElement("span");sp.className="av ini";sp.setAttribute("aria-hidden","true");sp.textContent=(im.closest("a").textContent||"?").trim().charAt(0).toUpperCase();im.replaceWith(sp)});   // an avatar gone: the initial
+  $$("[data-fav]",box).forEach(a=>a.onclick=e=>{e.preventDefault();acctClose();const s=a.dataset.fav;if(s===S.player)return;
+    S.view=s===D.own?"review":(["profile","matches","maps","analysis","midround","progress","routine"].includes(S.view)?S.view:"profile");setPlayer(s)})}
 function acctClose(){const am=$("#acctmenu"),ab=$("#acctbtn");if(am&&!am.hidden){am.hidden=true;if(ab)ab.setAttribute("aria-expanded","false")}}
 document.addEventListener("click",e=>{if(!e.target.closest||!e.target.closest("#acct"))acctClose()});
 document.addEventListener("keydown",e=>{if(e.key==="Escape"){const am=$("#acctmenu");if(am&&!am.hidden){acctClose();const ab=$("#acctbtn");if(ab)ab.focus()}}});
@@ -2419,11 +2470,11 @@ function navUpdate(view){const g=GROUP[view]||view;
     .map(([k,t])=>`<a href="#${k}" ${k===view?'aria-current="page"':""}>${t}</a>`).join("");
   // another profile on screen: said by the views, with the way back to yours (yours: the account on the right says it)
   const w=$("#whochip"),p=S.player&&D.players[S.player],other=!!(p&&D.own&&S.player!==D.own);
-  w.innerHTML=p&&PLAYER_VIEWS.includes(view)&&(other||!D.local||!D.own)?`${other?"Viewing":"Profile"}: <b>${esc(p.name)}</b>${other&&IDX()[D.own]?` <button type="button" id="backme" title="Back to my profile">back to mine</button>`:""}`:"";
-  const bm=$("#backme");if(bm)bm.onclick=()=>setPlayer(D.own);
+  const fav=other&&D.local&&favs().includes(S.player);
+  w.innerHTML=p&&PLAYER_VIEWS.includes(view)&&(other||!D.local||!D.own)?`${other?"Viewing":"Profile"}: <b>${esc(p.name)}</b>${other&&D.local?` <button type="button" id="favme" class="fav" aria-pressed="${fav}" title="${fav?"In your favorites: click to remove":"Keep in your favorites (your menu, top right)"}">${fav?"★":"☆"}</button>`:""}${other&&IDX()[D.own]?` <button type="button" id="backme" title="Back to my profile">back to mine</button>`:""}`:"";
+  const bm=$("#backme");if(bm)bm.onclick=()=>{S.view="review";setPlayer(D.own)};
+  const fm=$("#favme");if(fm)fm.onclick=()=>favToggle(S.player);
   acctUpdate();
-  const fc=$("#focuschip"),me=D.own&&D.players[D.own],F=me?focusOf(me):null;   // yours, whatever profile is on screen
-  if(fc){fc.hidden=!F;if(F){fc.textContent="Focus · "+F.short;fc.title="Your focus of the week: see it in Review";fc.onclick=()=>{if(S.player!==D.own){S.view="review";setPlayer(D.own)}else go("review")}}}
   document.body.classList.toggle("ingame",view==="ingame")}
 function welcome(v){const own=D.own;
   v.innerHTML=`<div class="welcome"><h2>Hi, I'm Wily</h2>
@@ -2433,7 +2484,7 @@ function welcome(v){const own=D.own;
      <li><b>Review</b>: after your session or the next day, what changed, why, your focus of the week and what you could test.</li></ul>
    ${D.local&&own?`<p><button type="button" class="primary" id="w-own">Analyze this PC's Steam account</button></p>`:""}
    <form class="search" id="w-form" autocomplete="off"><input id="w-q" type="search" placeholder="Your Steam profile link or SteamID64" aria-label="Your Steam profile link"><button type="submit">Analyze</button></form>
-   <p class="note">${D.local?"I work right here on your PC (Steam open, CS2 closed so I can fetch your latest matches): a first look in seconds, your full profile in a few minutes.":"I run in the local app: double-click Wily.bat."} You can also look at any player in <a href="#players" style="color:var(--ct)">Explore</a>.</p></div>`;
+   <p class="note">${D.local?"I work right here on your PC (Steam open, CS2 closed so I can fetch your latest matches): a first look in seconds, your full profile in a few minutes.":"I run in the local app: double-click Wily.bat."}</p></div>`;
   const wo=$("#w-own",v);if(wo)wo.onclick=()=>{partialShown=null;startAnalysis(own)};
   $("#w-form",v).onsubmit=e=>{e.preventDefault();const q=$("#w-q",v).value.trim();if(!q)return;$("#q").value=q;$("#search").requestSubmit()}}
 
@@ -2942,6 +2993,13 @@ function nowPanel(p,g,following,opt){const noBuy=opt&&opt.noBuy;
       out.push(nadeLive(p,g))}}
   else if(ph==="over"&&ct)out.push(tsideLive(p,g));
   return out.filter(Boolean).join("")||`<div class="now-empty"><b>Round ${g.round}</b><span class="mini">${ph==="over"?"5 s: why did this round go that way? Then one long exhale.":"Nothing to flag right now."}</span></div>`}
+// Live without a match (07/10, the user: "je ne vois pas l'intérêt de cette page"): what it will show, nothing to
+// browse. The map sheets are Prepare's; this page comes to life when CS2 sends a map.
+function igWaiting(){return `<div class="ig-wait"><h3>Waiting for your match</h3>
+  <p>As soon as CS2 loads a map, this page follows the game by itself and shows, round by round, only what matters now:</p>
+  <ul><li>at the buy time: what to buy, with your team's money;</li><li>on T: the way in that wins most against this team, its stuff and when to be on the site;</li>
+   <li>on CT: where the Ts go this half, rushes included, and when to throw your grenades;</li><li>your calls and Wily's orders, live.</li></ul>
+  <p class="note">Keep it on a second screen. Your sheet for each map is in Prepare.</p></div>`}
 function renderIngame(){
   const p=P(),v=$("#v-ingame"),PL=p.advice.plan||{},live=gsiFresh(),refs=PL.map_refs||{},mine=mapsOf(p);
   const maps=bombFirst([...mine,...Object.keys(refs).filter(k=>!mine.some(x=>x.map===k)).sort().map(k=>({map:k,n:0}))],x=>x.map);
@@ -2969,6 +3027,7 @@ function renderIngame(){
      <div class="ig-hud">${liveBar()}<span class="hudbtns"><button type="button" class="close" id="sidebtn" aria-pressed="${side}">${side?"◀ Hide panel":"▶ Show panel"}</button><button type="button" class="close" id="fsbtn">${document.fullscreenElement?"Exit full screen":"⛶ Full screen"}</button><button type="button" class="close" id="igfull">Normal view</button></span></div>
      ${side?"":toast}
      <div class="now ig-side" id="now">${side?toast:""}${nowVisual(p,gsiLast,following)}</div></div>`}
+  else if(D.local&&!(live&&gsiLast&&gsiLast.map))v.innerHTML=`${liveBar()}${missNote(p)}${igWaiting()}`;   // no match: no map to browse (07/10, Prepare has the sheets)
   else v.innerHTML=`${liveBar()}
    ${following?"":missNote(p)}
    ${following&&focus?"":`<div class="ig-top">
@@ -2982,7 +3041,7 @@ function renderIngame(){
    ${tabs(v,"Map guide",TABS,tab)}
    <div class="tabpanel" role="tabpanel">${body}</div>`;
   copyBtn(v);
-  if(typeof slotMeasure==="function")slotMeasure($("#now",v));   // the panel's slots keep their room
+  {const nw=$("#now",v);if(nw&&typeof slotMeasure==="function")slotMeasure(nw)}   // the panel's slots keep their room (none while waiting for a match)
   const fbt=$("#igfull",v);if(fbt)fbt.onclick=()=>{store("igfull",!full);renderIngame()};
   const fsb=$("#fsbtn",v);if(fsb)fsb.onclick=async()=>{try{if(document.fullscreenElement)await document.exitFullscreen();else await document.documentElement.requestFullscreen()}catch(e){}renderIngame()};
   const sbt=$("#sidebtn",v);if(sbt)sbt.onclick=()=>{store("igside",store("igside")===false);renderIngame()};
@@ -3007,6 +3066,7 @@ function renderIngame(){
     if(following&&gsiLast.side==="CT"&&gsiLast.round)mark(gsiLast.round,on?null:s,{site_t:on?null:el_()});else renderIngame()});   // also marks the round for the history
   $$("[data-mic]",v).forEach(b=>b.onclick=async()=>{b.disabled=true;try{await api("/api/voice/"+b.dataset.mic,{sid:p.steamid});gsiLast=Object.assign(gsiLast||{},{mic:b.dataset.mic==="start"});renderIngame()}catch(e){b.textContent=e.message}});
   $$("[data-team]",v).forEach(b=>b.onclick=async()=>{b.disabled=true;try{const t=(await api("/api/voice/team",{on:b.dataset.team==="on"})).team||{};gsiLast=Object.assign(gsiLast||{},{team_rec:t.on?"on":t.pending?"pending":null});renderIngame()}catch(e){b.textContent=e.message}});
+  if(!$(".radar-box",v))return;   // waiting for a match: no radar on screen
   // radar: your data, or the base's positions; plant spots when the bomb site is known
   const plantSpots=()=>{const TS=PL.tside,M=TS&&TS.maps&&TS.maps[S.map],site=following&&(igEv.site||null);if(!M||!site||!(M.evidence||{}).plants)return [];
     return (((M.evidence.plants||{})[site]||{}).spots||[]).map(s=>({px:s.px,level:s.level,label:`plant ${s.share}%`,color:"var(--bad)",title:`Plant spot on ${site}: ${s.share}% of plants, Ts win ${s.t_win}% after it`}))};
@@ -4363,15 +4423,18 @@ function liveCheckBlock(PL){const L=PL.livecheck,maps=Object.entries((L||{}).map
 
 function callsBlock(PL){const C=PL.calls||[];if(!C.length)return D.local?`<h3>Your calls</h3><p class="note">No recording yet: turn on "Your calls" in <a href="#settings" style="color:var(--ct)">Settings</a>, play, and I analyze your communication after the match.</p>`:"";
   const a=C[0],pct=(x,n)=>n?Math.round(100*x/n)+"%":"—";
+  // each number once (07/10): its advice in its own tile, the other advice below
+  const TIP_RX=[/deaths out of/,/say where AND how many/,/grenades called out of/,/teammate clutch/],tipFor=(rx,t)=>(a.tips||[]).some(x=>rx.test(x))?`<em class="gtip">${esc(t)}</em>`:"";
+  const rest=(a.tips||[]).filter(x=>!TIP_RX.some(rx=>rx.test(x))&&!/^Your calls are clean/.test(x));
   const src=((PL.phases||[]).flatMap(ph=>ph.items).find(i=>i.id==="info_calls")||{}).src;
   return `<h3>Your calls</h3>
    <p class="note">${a.map?MAPN(a.map):"Match"} · ${fmtDate(a.start)} · ${a.utterances} phrases, ${(a.speech_s||0)<60?`${Math.round(a.speech_s||0)} s`:`${Math.round(a.speech_s/60)} min`} of speech${a.match?"":" · match not analyzed yet: update your profile"}${a.aligned?"":" · without game detection, calls aren't lined up with rounds"}.</p>
    <div class="gauge">
-    <div><b>${a.deaths?pct(a.deaths-a.silent_deaths,a.deaths):"—"}</b><span>of your deaths preceded by a call (10 s before)</span></div>
-    <div><b>${a.info?a.complete_share+"%":"—"}</b><span>of your calls say where and how many</span></div>
-    <div><b>${a.throws?pct(a.announced,a.throws):"—"}</b><span>of your grenades called</span></div>
-    <div><b>${a.clutch_talk_rounds}</b><span>teammate clutch${a.clutch_talk_rounds===1?"":"es"} where you talked</span></div></div>
-   <ul class="pl-list">${a.tips.map(t=>`<li class="coach">${esc(t)}</li>`).join("")}</ul>
+    <div><b>${a.deaths?pct(a.deaths-a.silent_deaths,a.deaths):"—"}</b><span>of your deaths preceded by a call (10 s before)${a.deaths?` · ${a.silent_deaths} of ${a.deaths} without`:""}</span>${tipFor(/deaths out of/,"Call what you see before taking the duel, not after.")}</div>
+    <div><b>${a.info?a.complete_share+"%":"—"}</b><span>of your calls say where and how many</span>${tipFor(/say where AND how many/,"'Two B, one tagged for 80' rather than 'they're B'.")}</div>
+    <div><b>${a.throws?pct(a.announced,a.throws):"—"}</b><span>of your grenades called${a.throws?` · ${a.announced} of ${a.throws}`:""}</span>${tipFor(/grenades called out of/,"Say 'flash' before throwing it: your teammates turn away.")}</div>
+    <div><b>${a.clutch_talk_rounds}</b><span>teammate clutch${a.clutch_talk_rounds===1?"":"es"} where you talked</span>${tipFor(/teammate clutch/,"One useful piece of info, then silence.")}</div></div>
+   ${rest.length?`<ul class="pl-list">${rest.map(t=>`<li class="coach">${esc(t)}</li>`).join("")}</ul>`:""}
    ${a.examples.length?`<p class="note">Your best calls: ${a.examples.map(x=>"“"+esc(x)+"”").join(" · ")}</p>`:""}
    ${heardBlock(C)}${teamCallsBlock(C)}
    ${a.rounds.length?`<details><summary style="cursor:pointer">Your calls round by round</summary><div class="tbl" style="margin-top:8px"><table><thead><tr><th class="n">Round</th><th>What you said (seconds into the round)</th><th class="n">Died at</th></tr></thead><tbody>
@@ -4464,19 +4527,23 @@ function ratingSpark(T){if(!T||T.length<2)return "";const W=640,H=120,pad=12,rs=
    <text x="${pad}" y="${Y(1)-5}" class="vct">1.00</text>
    <polyline points="${T.map((x,i)=>`${X(i).toFixed(1)},${Y(x.rating).toFixed(1)}`).join(" ")}" fill="none" stroke="var(--ink)" stroke-opacity=".3" stroke-width="1.5"/>
    ${T.map((x,i)=>`<circle cx="${X(i).toFixed(1)}" cy="${Y(x.rating).toFixed(1)}" r="${x.recent?5:3.2}" fill="${x.result==="win"?"var(--good)":x.result==="loss"?"var(--bad)":"var(--muted)"}" opacity="${x.recent?1:.45}"><title>${esc(MAPN(x.map))} · ${esc(fmtDate(x.time))} · ${x.rating}</title></circle>`).join("")}</svg>`}
-// 1 · the brief: the session in 2 minutes
+// 1 · the session (07/10, the user: "évite les répétitions d'informations, de data, regroupe si plusieurs data parlent
+// de la même chose"): each change and each analyst read once, in what works or what slips, its evidence folded under
+// it (the reasons, the rounds, the base and the pros); the focus once; no "what changed" or "analyst reads" again below
 function reviewBrief(R,f){const T=R.trend||[],rec=T.filter(x=>x.recent),bef=T.filter(x=>!x.recent),avg=a=>a.length?a.reduce((s,x)=>s+x.rating,0)/a.length:null;
   const ra=avg(rec),rb=avg(bef),M=R.maps||[],ng=M.reduce((s,m)=>s+m.games,0),adr=ng?M.reduce((s,m)=>s+m.adr*m.games,0)/ng:null,PI=(R.pro||{}).items||[];
-  // a read's name: the analyst reads carry an id (named in readsOf().meta, as the deep dive does), the older insights a title (05/10: the bullets were empty)
   const RM=readsOf().meta||{},rdT=i=>i.title||(i.id==="spot"?`Deaths at ${i.place} (${MAPN(i.map)})`:(RM[i.id]||{}).title||i.id);
-  const works=[...R.changes.filter(c=>c.better).slice(0,2).map(c=>`${esc(c.label)}: ${f(c.before,c.unit)} → <b>${f(c.after,c.unit)}</b>`),
-    ...PI.filter(i=>i.severity==="positive").map(i=>`${esc(rdT(i))} <span class="note">(${i.value} of ${i.of})</span>`),
-    ...(()=>{const top=M.filter(m=>m.rating>=1.2).sort((a,b)=>b.rating-a.rating).slice(0,3);   // the maps you played well
-      return top.length?[`Strong on ${top.map(m=>`${esc(MAPN(m.map))} ${rtBadge(m.rating)}`).join(", ")}`]:[]})()].slice(0,3);
-  const watch=[...R.changes.filter(c=>!c.better).slice(0,2).map(c=>`${esc(c.label)}: ${f(c.before,c.unit)} → <b>${f(c.after,c.unit)}</b>`),
-    ...PI.filter(i=>i.severity!=="positive").map(i=>`${esc(rdT(i))} <span class="note">(${i.value} of ${i.of})</span>`)].slice(0,3);
-  const a0=(R.axes||[])[0],li=xs=>xs.length?`<ul>${xs.map(x=>`<li>${x}</li>`).join("")}</ul>`:"";
-  return `<section class="tier" id="tier1"><div class="tier-h"><b>1</b><h3>Quick brief</h3><span class="note">the session in 2 minutes</span></div>
+  const chg=c=>{const clear=c.level==="clear"||c.level==="net";
+    return `<details class="bitem"><summary>${esc(c.label)}: ${f(c.before,c.unit)} → <b class="${c.better?"good":"bad"}">${f(c.after,c.unit)}</b> <span class="lvl ${clear?"clear":"trend"}">${clear?"clear gap":"trend"}</span></summary>
+     <p class="note">${c.better?"Improving":"Slipping"} over ${esc(R.label)} against the ${c.n_before} matches before.</p>
+     ${(c.why||[]).length?`<p class="mini">Possible reasons, to check over the next matches:</p><ul class="why">${c.why.map(w=>`<li>${esc(w)}</li>`).join("")}</ul>`
+       :`<p class="note">${c.better?"No single cause in your data: keep doing what you did in these games.":"No obvious explanation in your data: keep an eye on it."}</p>`}</details>`};
+  const rd=i=>`<details class="bitem"><summary>${esc(rdT(i))} <span class="note">${i.pct!=null?`<b>${i.pct}%</b> · `:""}${i.value} of ${i.of}</span></summary>
+     ${i.ref!==undefined||i.id==="spot"?readCard(i,RM,P().advice.bench):`<p>${esc(i.detail||"")}</p>`}</details>`;
+  const works=[...R.changes.filter(c=>c.better).map(chg),...PI.filter(i=>i.severity==="positive").map(rd)];
+  const watch=[...R.changes.filter(c=>!c.better).map(chg),...PI.filter(i=>i.severity!=="positive").map(rd)];
+  const n=(R.pro||{}).matches;
+  return `<section class="tier" id="tier1"><div class="tier-h"><b>1</b><h3>The session</h3><span class="note">${R.session.games} game${R.session.games>1?"s":""}, against your ${bef.length} matches before</span></div>
    <div class="brief">
     <div class="tiles">
      <div class="tile"><span class="eyebrow">Record</span><b class="num big">${R.session.wins}-${R.session.losses}</b><span class="note">${R.session.games} game${R.session.games>1?"s":""}</span></div>
@@ -4487,70 +4554,33 @@ function reviewBrief(R,f){const T=R.trend||[],rec=T.filter(x=>x.recent),bef=T.fi
     <div class="spark-box">${ratingSpark(T)}<span class="note">Your rating match by match: this session on the band, the ${bef.length} matches before dimmed. Green won, red lost.</span></div>
    </div>
    <div class="brief3">
-    <article class="card b-good"><span class="eyebrow">What works</span>${li(works)||`<p class="note">Nothing stands out above your usual level.</p>`}</article>
-    <article class="card b-bad"><span class="eyebrow">Watch out</span>${li(watch)||`<p class="note">Nothing slips: your numbers hold.</p>`}</article>
+    <article class="card b-good"><span class="eyebrow">What works</span>${works.length?`<div class="blist">${works.join("")}</div>`:`<p class="note">Nothing stands out above your usual level.</p>`}</article>
+    <article class="card b-bad"><span class="eyebrow">Watch out</span>${watch.length?`<div class="blist">${watch.join("")}</div>`:`<p class="note">Nothing slips: your numbers hold.</p>`}</article>
     ${focusCard(P(),R.next&&/^Fix what is slipping/.test(R.next)?`<p class="note">Also this session: ${esc(R.next)}</p>`:"")}
-   </div></section>`}
-// 2 · map by map: each map of the session
-function reviewMaps(R){const M=R.maps||[];if(!M.length)return "";
+   </div>
+   <p class="note">${n?`An item opens its evidence: the reasons, the rounds (one opens it in the 2D replay), you against the base and the pros (${n} demo${n>1?"s":""} read). `:""}${R.stable.length?`Stable: ${R.stable.map(esc).join(" · ")}.`:""}</p></section>`}
+// 2 · map by map: each map of the session, with its matches (one opens it)
+function reviewMaps(R){const M=R.maps||[];if(!M.length)return "";const ms=R.session.matches||[];
   const side=(m,s)=>{const x=m.sides[s],pc=x.of?Math.round(100*x.won/x.of):null;
     return `<div class="mc-side"><span class="side-tag ${s}">${s}</span><div class="mc-bar"><i style="width:${pc||0}%;background:var(--${s==="T"?"t":"ct"})"></i></div><b class="num">${pc==null?"—":pc+"%"}</b><span class="note">${x.won}/${x.of} rounds</span></div>
      ${x.play?`<p class="mc-note"><span class="good">▲</span> ${x.play}</p>`:""}${x.avoid?`<p class="mc-note"><span class="bad">▼</span> ${x.avoid}</p>`:""}`};
-  return `<section class="tier" id="tier2"><div class="tier-h"><b>2</b><h3>Map by map</h3><span class="note">this session · round wins per side, what to play and to avoid there</span></div>
+  return `<section class="tier" id="tier2"><div class="tier-h"><b>2</b><h3>Map by map</h3><span class="note">round wins per side, what to play and to avoid there, the matches</span></div>
    <div class="mapcards">${M.map(m=>`<article class="mapcard"><div class="mc-h"><b>${esc(MAPN(m.map))}</b><span class="res ${m.wins>m.losses?"win":m.wins<m.losses?"loss":"draw"}">${m.wins}-${m.losses}</span>
      ${rtBadge(m.rating)}<span class="note num">ADR ${m.adr}</span></div>${side(m,"T")}${side(m,"CT")}
-     <button type="button" class="mc-prep" data-prepmap="${esc(m.map)}">Prepare this map →</button></article>`).join("")}</div></section>`}
-// 3 · the analyst's reads of the session (from the demos), against the base and the pros
-function reviewInsights(R){const X=R.pro||{},I=X.items||[];if(!X.matches)return "";
-  if(!I.length||I[0].ref!==undefined||I[0].title===undefined)return readsSection(P(),X,"Analyst reads",`What a team's analyst points at in the demos of this session's ${X.matches} match${X.matches>1?"es":""}, against the base and the pros.`)||
-    `<h3>Analyst reads</h3><p>Nothing to say yet on this session's matches.</p>`;
-  const P0=X;
-  const lab={high:"priority",medium:"watch",positive:"strength"};
-  return `<h3>Pro insights</h3><p class="note">What an analyst points at in the demos of this session's ${P0.matches} match${P0.matches>1?"es":""}, with enough cases to say it.</p>
-   ${I.length?`<div class="ins">${I.map(i=>`<article class="ins-${i.severity}"><span class="eyebrow">${lab[i.severity]}</span><h4>${esc(i.title)}</h4><p>${esc(i.detail)}</p>
-     <div class="pbar"><i style="width:${Math.round(100*i.value/Math.max(1,i.of))}%"></i></div><span class="note num">${i.value} of ${i.of}</span></article>`).join("")}</div>`
-     :`<p>Nothing stands out: no re-peek after your kills, deaths without impact, unused flashes or death spot above the usual.</p>`}`}
-function renderReview(){const p=P(),v=$("#v-review"),PL=p.advice.plan||{},R=reviewOf(PL),X=PL.experiments||{};
-  const head=`<div class="head"><div style="display:grid;gap:4px"><span class="eyebrow">${esc(p.name)}${R?` · ${esc(R.label)}, compared with your previous ${R.n_before} matches`:""}</span><h2>Review</h2></div>
-    ${R?`<div class="record"><span>${R.session.wins}<small>wins</small></span><span>${R.session.losses}<small>losses</small></span></div>`:""}</div>`;
-  if(!R){v.innerHTML=head+`<div class="empty">The review compares your latest matches with the previous ones: it takes at least 3 matches analyzed with their demo.${p.light?" This profile has no demo yet.":""}</div>
-    ${(p.advice.rules||[]).length?`<h3>Your focus areas</h3>${findings(p.advice.rules.slice(0,3).map((r,i)=>({level:i<1?"high":"mid",title:r.title,evidence:r.why,fix:r.do,drills:r.drills,sources:r.sources})))}`:""}`;return}
-  const f=(x,u)=>fmtU(x,u),TREND={better:"strong",worse:"weak",mieux:"strong","moins bien":"weak"};
+     <div class="mc-matches">${ms.filter(x=>x.map===m.map).map(x=>`<button type="button" class="mc-m" data-mid="${x.id}" title="Open this match"><span>${esc(fmtDate(x.time))}</span><span class="res ${x.result}">${x.score.me}-${x.score.them}</span>${rtBadge(x.rating)}</button>`).join("")}</div></article>`).join("")}</div></section>`}
+function renderReview(){const p=P(),v=$("#v-review"),PL=p.advice.plan||{},R=reviewOf(PL);
+  const head=`<div class="head"><div style="display:grid;gap:4px"><span class="eyebrow">${esc(p.name)}${R?` · ${esc(R.label)}, compared with your previous ${R.n_before} matches`:""}</span><h2>Review</h2></div></div>`;
+  if(!R){v.innerHTML=head+`<div class="empty">The review compares your latest matches with the previous ones: it takes at least 3 matches analyzed with their demo.${p.light?" This profile has no demo yet.":""}</div>`;return}
+  const f=(x,u)=>fmtU(x,u);
+  const comms=callsBlock(PL)+moodBlock(PL),facts=factsBlock(PL),lc=liveCheckBlock(PL);
   v.innerHTML=head+`
-   <nav class="tier-nav" aria-label="Review tiers"><a href="#tier1" data-tier="tier1">1 · The session</a><a href="#tier2" data-tier="tier2">2 · Map by map</a><a href="#tier3" data-tier="tier3">3 · The details</a><a href="#profile">Your profile →</a></nav>
    ${reviewBrief(R,f)}
    ${reviewMaps(R)}
-   <section class="tier" id="tier3"><div class="tier-h"><b>3</b><h3>Deep dive</h3><span class="note">every change and its possible reasons, the demos' insights, your matches</span></div>
-   <h3>What changed</h3>
-   ${R.changes.length?`<div class="chg">${R.changes.map(c=>`<article class="${c.better?"better":"worse"}"><span class="eyebrow">${esc(c.label)}</span>
-     <span class="ba">${f(c.before,c.unit)}<span class="arrow" aria-hidden="true">→</span><span class="${c.better?"good":"bad"}">${f(c.after,c.unit)}</span> <span class="lvl ${c.level==="clear"||c.level==="net"?"clear":"trend"}">${c.level==="clear"||c.level==="net"?"clear gap":"trend"}</span></span>
-     <span>${c.better?"Improving":"Slipping"} over ${esc(R.label)} against the ${c.n_before} matches before.</span>
-     ${c.why.length?`<details><summary class="mini" style="cursor:pointer">Possible reasons (to check over the next matches)</summary><ul class="why">${c.why.map(w=>`<li>${esc(w)}</li>`).join("")}</ul></details>`:`<span class="note">${c.better?"No single cause in your data: keep doing what you did in these games.":"No obvious explanation in your data: keep an eye on it."}</span>`}</article>`).join("")}</div>`
-     :`<p>Nothing moved clearly: your numbers are stable.</p>`}
-   ${R.stable.length?`<p class="note">Stable: ${R.stable.map(esc).join(" · ")}.</p>`:""}
-   ${reviewInsights(R)}
-   <div class="cols3" style="grid-template-columns:repeat(auto-fit,minmax(340px,1fr))">
-    <div style="display:grid;gap:10px;align-content:start"><h3>Your last session</h3>
-     <div class="tbl"><table><thead><tr><th>Date</th><th>Map</th><th>Score</th><th class="n">Rating</th></tr></thead><tbody>${R.session.matches.map(x=>`<tr class="click" data-mid="${x.id}" tabindex="0"><td>${fmtDate(x.time)}</td><td>${MAPN(x.map)}</td><td><span class="res ${x.result}">${x.score.me}-${x.score.them}</span></td><td class="n">${rtBadge(x.rating)}</td></tr>`).join("")}</tbody></table></div>
-     <p class="note">Click a match to open it.</p></div>
-    <div style="display:grid;gap:10px;align-content:start"><h3>Your focus areas</h3>
-     <div class="axes">${R.axes.map(a=>`<article class="card"><h3>${esc(a.short||a.title)}</h3><p class="note">${esc(a.title)}</p>
-       ${a.kpi&&a.before!=null?`<p>${esc(a.kpi_label)}: ${f(a.before,a.unit)} → <b>${f(a.after,a.unit)}</b> ${a.trend&&a.trend!=="stable"?`<span class="pill ${TREND[a.trend]||""}">${a.trend==="mieux"?"better":a.trend==="moins bien"?"worse":esc(a.trend)}</span>`:""}</p>`:""}
-       ${a.do.length?`<ul>${a.do.map(d=>`<li>${esc(d)}</li>`).join("")}</ul>`:""}${a.drills.length?`<p class="note">Drill: ${esc(a.drills[0])}</p>`:""}${srcLinks(a.sources,true)}</article>`).join("")}</div></div>
-   </div>
-   ${callsBlock(PL)}
-   ${moodBlock(PL)}
-   ${factsBlock(PL)}
-   ${liveCheckBlock(PL)}
-   ${R.tests.active.length?`<p class="note">Running test${R.tests.active.length>1?"s":""}: ${R.tests.active.map(e=>esc(e.title)).join(" · ")}. Your tests and the ones worth starting are in <a href="#profile" style="color:var(--ct)">Profile</a>.</p>`:""}
-   ${R.tests.done.length?`<details><summary style="cursor:pointer">Finished experiments (${R.tests.done.length})</summary><div class="exps" style="margin-top:10px">${R.tests.done.map(expCard).join("")}</div></details>`:""}
-   <p class="note" id="xmsg" role="status"></p>
-   <div class="linkrow"><a href="#profile">Your profile: strengths, axes, evidence</a><a href="#matches">Every match</a></div>
-   </section>`;
-  wireExp(v,X,p);wireFocus(v,p,renderReview);
-  $$("[data-prepmap]",v).forEach(b=>b.onclick=()=>{const st=prepState();st.maps=[b.dataset.prepmap];st.step=1;st.done={};st.cur=null;prepSave(st);go("prepare")});   // Prepare with this map
-  $$("[data-tier]",v).forEach(a=>a.onclick=e=>{e.preventDefault();const t=$("#"+a.dataset.tier,v);if(t)t.scrollIntoView({behavior:"smooth",block:"start"})});   // not a #view link
-  $$("tr[data-mid]",v).forEach(r=>{r.onclick=()=>{const i=p.matches.findIndex(x=>x.id===r.dataset.mid);S.match=i<0?0:i;S.mpin=i>=0;go("matches")};r.onkeydown=e=>{if(e.key==="Enter")r.click()}});
+   ${comms?`<section class="tier" id="tier3"><div class="tier-h"><b>3</b><h3>Your comms</h3><span class="note">your calls, what you heard and called, your mood, from your recordings</span></div>${comms}</section>`:""}
+   ${facts?`<section class="tier" id="tier4"><div class="tier-h"><b>${comms?4:3}</b><h3>Teamplay and opponents</h3><span class="note">from the demos of your last matches</span></div>${facts}</section>`:""}
+   ${lc?`<details class="tier-more"><summary>Live check: what the Live page showed against what the demos say</summary>${lc}</details>`:""}`;
+  wireFocus(v,p,renderReview);
+  $$("[data-mid]",v).forEach(r=>{r.onclick=()=>{const i=p.matches.findIndex(x=>x.id===r.dataset.mid);S.match=i<0?0:i;S.mpin=i>=0;go("matches")}});
 }
 // ---------- view: profile (05/10): Review's third level, what stays true over weeks. Your focus of the week and your
 // strengths, your axes ranked by the coach's priority score (one list instead of a "Fix first" on every page), the
@@ -4571,16 +4601,11 @@ function renderProfile(){
     ["progress","Weapons, buys and trends","your weapons, your buys by kind of round, your indicators",PL.kpis||PL.weapons?briefOf(progBrief,PL):null],
     ["routine","Habits","time of day, session length, group",PL.context?briefOf(routineBrief,PL):null]].filter(x=>x[3]);
   const li=xs=>(xs||[]).filter(Boolean).slice(0,2).map(x=>`<li>${x}</li>`).join("");
-  const seen=new Set(),plain=h=>String(h).replace(/<[^>]+>/g,"").replace(/\s+/g," ").trim();   // each strength once; a map's with its name
-  const strengths=[...(A.strengths||[]).map(esc),...parts.map(x=>{const w=(x[3].works||[]).filter(Boolean)[0];return w&&x[0]==="maps"?`${esc(x[1])} · ${w}`:w})]
-    .filter(h=>h&&!seen.has(plain(h))&&seen.add(plain(h))).slice(0,5);
   v.innerHTML=`<div class="head"><div style="display:grid;gap:4px"><span class="eyebrow">${esc(p.name)}${PL.level?` · ${levelLine(PL.level)}`:""}</span><h2>Your profile</h2></div>
     ${ms.length?`<div class="record"><span>${win}<small>wins</small></span><span>${draw}<small>draws</small></span><span>${loss}<small>losses</small></span></div>`:""}</div>
-   <p class="note">What stays true over weeks${ms.length?`, from ${ms.length} analyzed matches`:""}${role?` · your role: <b>${esc(role)}</b>`:""}. The session's review is in <a href="#review" style="color:var(--ct)">Session</a>.</p>
-   <div class="prof-top">${focusCard(p)}
-    <article class="card b-good"><span class="eyebrow">Your strengths</span>${strengths.length?`<ul>${strengths.map(x=>`<li>${x}</li>`).join("")}</ul>`:`<p class="note">Nothing stands out above the base yet.</p>`}</article></div>
+   <p class="note">What stays true over weeks${ms.length?`, from ${ms.length} analyzed matches`:""}${role?` · your role: <b>${esc(role)}</b>`:""}.</p>
    <h3>Your axes, ranked</h3>
-   <p class="note">What costs you the most rounds, in my order (my priority score: the bar). One list for the whole app: the first is your focus of the week unless you picked another.</p>
+   <p class="note">What costs you the most rounds, in my order (my priority score: the bar). One list for the whole app: the first is your focus of the week unless you picked another${F&&F.until&&!isNaN(new Date(F.until))?` (until ${new Date(F.until).toLocaleDateString("en-US",{weekday:"short",month:"short",day:"numeric"})})`:""}. What works for you is in the evidence, part by part, below.</p>
    ${rules.length?`<div class="axes-list">${rules.map((r,i)=>{const isF=F&&F.id===r.id;return `<article class="axis${isF?" is-focus":""}">
      <div class="ax-n">${i+1}</div>
      <div class="ax-b"><h4>${esc(r.short||r.title)}</h4>${r.short&&r.title&&r.short!==r.title?`<p class="note">${esc(r.title)}</p>`:""}
@@ -4597,7 +4622,7 @@ function renderProfile(){
     ${act.length?`<div class="exps">${act.map(expCard).join("")}</div>`:`<p class="note">No test running.</p>`}
     ${sug.length?`<span class="lbl4" style="color:var(--muted)">Worth testing</span><div class="exps">${sug.slice(0,4).map(suggestCard).join("")}</div>`:""}
     <p class="note" id="xmsg" role="status"></p>`:""}
-   <div class="linkrow"><a href="#matches">Every match</a><a href="#analysis">Full analysis and pros like you</a><a href="#review">This session</a></div>`;
+`;
   if(X)wireExp(v,X,p);
   wireFocus(v,p,renderProfile);
   $$("[data-axfocus]",v).forEach(b=>b.onclick=async()=>{b.disabled=true;
@@ -4638,7 +4663,7 @@ function renderPlayers(){
   const jf=$("#jf",v);jf.oninput=()=>{jq=jf.value.trim().toLowerCase();jshow=24;const pos=jf.selectionStart;renderPlayers();const n=$("#jf");n.focus();n.setSelectionRange(pos,pos)};
   $$("[data-sort]",v).forEach(b=>b.onclick=()=>{jsort=b.dataset.sort;jshow=24;renderPlayers()});
   const jm=$("#jmore",v);if(jm)jm.onclick=()=>{const y=scrollY;jshow+=24;renderPlayers();scrollTo(0,y)};
-  $$("[data-pid]",v).forEach(b=>b.onclick=()=>{setPlayer(b.dataset.pid).then(()=>go(b.dataset.pid===D.own?"ingame":"analysis"))});
+  $$("[data-pid]",v).forEach(b=>b.onclick=()=>{setPlayer(b.dataset.pid).then(()=>go(b.dataset.pid===D.own?"review":"analysis"))});
 }
 
 // ---------- view: pros ----------
@@ -4698,7 +4723,7 @@ function poll(){clearTimeout(polling);polling=setTimeout(async()=>{
   let j;try{j=await (await fetch("/api/job")).json()}catch(e){return poll()}
   const logs=(j.log||[]).slice(-60).map(esc).join("\n");
   if(j.running){
-    if(j.partial&&partialShown!==j.partial&&mayGo()){partialShown=j.partial;try{D.index=await (await fetch(`index.json?t=${Date.now()}`)).json();playerOptions();delete D.players[j.partial];await setPlayer(j.partial,true);go(j.partial===D.own?"ingame":"analysis");jobFrom=S.view}catch(e){}}
+    if(j.partial&&partialShown!==j.partial&&mayGo()){partialShown=j.partial;try{D.index=await (await fetch(`index.json?t=${Date.now()}`)).json();playerOptions();delete D.players[j.partial];await setPlayer(j.partial,true);go(j.partial===D.own?"review":"analysis");jobFrom=S.view}catch(e){}}
     jobPanel(`<div class="row"><b><span class="spin" aria-hidden="true"></span>${partialShown?"First preview shown. Full demo analysis running…":j.view==="matches"?"Analyzing the match again…":/^Steam sync/.test(j.query||"")?"Updating your matches…":`Analyzing ${esc(j.query)}…`}</b><span class="note">The profile completes itself at the end (from a few seconds to a few minutes).</span></div><pre>${logs||"Starting…"}</pre>`);poll();return}
   $("#qbtn").disabled=false;const go_=mayGo(),aj=afterJob;jobFrom=null;afterJob=null;
   if(j.error){updFrom=null;const ub=$("#updbtn");if(ub)ub.disabled=false;jobPanel(`<b>${esc(j.error)}</b><pre>${logs}</pre>`,"err");return}
@@ -4716,16 +4741,17 @@ function poll(){clearTimeout(polling);polling=setTimeout(async()=>{
   if(j.steamid){try{D.index=await (await fetch(`index.json?t=${Date.now()}`)).json();playerOptions();delete D.players[j.steamid];
       const upd=updFrom;updFrom=null;const ub=$("#updbtn");if(ub)ub.disabled=false;
       if(upd&&/(^|\D)0 new match/.test((j.log||[]).slice(-3).join(" "))&&!(j.log||[]).some(l=>/demo\(s\) from Valve|Analyzing/.test(l))){if(S.player===j.steamid)await setPlayer(j.steamid,true);go(upd);jobPanel(`<b>Up to date</b>: no new match since the last analysis.`,"ok");return}
-      const e=(D.index||[]).find(x=>x.steamid===j.steamid)||{},view=upd||(j.steamid===D.own?"ingame":"analysis");
+      const e=(D.index||[]).find(x=>x.steamid===j.steamid)||{},view=upd||(j.steamid===D.own?"review":"analysis");
       if(go_){await setPlayer(j.steamid,true);S.map=null}
       jobPanel(`<b>${esc(e.name||j.steamid)} is analyzed.</b> ${e.light?"Light profile (Leetify stats, no demo available).":e.n!=null?`${e.n} demo(s) analyzed.`:""}${go_?"":openBtn(j.steamid,e.name,view)}<pre>${logs}</pre>`,"ok");bindOpen();if(go_)go(view)}
     catch(e){jobPanel(`<b>Nothing to show for this player.</b><pre>${logs}</pre>`,"err")}}},1000)}
-$("#search").addEventListener("submit",async e=>{e.preventDefault();const q=$("#q").value.trim();if(!q)return;
+$("#search").addEventListener("submit",async e=>{e.preventDefault();const q=$("#q").value.trim();if(!q)return;acctClose();
   const ps=await loadPros(),ql=q.toLowerCase(),idm=(q.match(/7656\d{13}/)||[])[0];
   const pro=ps.find(x=>x.handle.toLowerCase()===ql||x.steamid===idm);
   if(pro){$("#q").value="";$("#job").hidden=true;openPro(pro.steamid);return}
   const known=findKnown(q);
-  if(known){await setPlayer(known);$("#job").hidden=true;$("#q").value="";go(S.view==="players"?"ingame":S.view);
+  if(known){const v0=S.view;await setPlayer(known);$("#job").hidden=true;$("#q").value="";
+    go(known===D.own?"review":["profile","matches","maps","analysis","midround","progress","routine"].includes(v0)?v0:"profile");
     if(D.local){jobPanel(`<b>${esc(P().name)} is already analyzed.</b> To fetch their new matches: <button type="button" class="close" id="refresh">Update</button>`,"ok");$("#refresh").onclick=()=>startAnalysis(q)}
     return}
   if(D.local){partialShown=null;startAnalysis(q);return}
@@ -4739,7 +4765,9 @@ const RENDER={ingame:renderIngame,prepare:renderPrepare,review:renderReview,prof
 // The local app has addresses like csrep's: /player/<steamid> (their first view: In game for you, Analysis for the others),
 // /player/<steamid>/<view>, /match/<share code, or match id when it has none>[?as=<steamid>: seen as someone else than
 // you], /team, /players, /pros, /settings; old links (/#review) still open. The published page (one file) keeps #view.
-const GLOBAL=["team","players","pros","settings"],homeView=sid=>sid&&sid===D.own?"ingame":"profile";
+// 07/10, the user ("je ne vois pas l'intérêt de cette page", Live outside a match): Review first; Live opens itself when
+// CS2 starts (serve.py) and from the bar
+const GLOBAL=["team","players","pros","settings"],homeView=sid=>sid&&sid===D.own?"review":"profile";
 let navAt=0,navQuiet=0,afterJob=null,CODES={};   // CODES: match id -> share code
 // /live: your In game page, the address to keep open during a match (a second screen, OBS) (04/10)
 function pathNow(){const v=S.view;if(GLOBAL.includes(v))return "/"+v;if(!S.player)return "/";if(v==="ingame"&&S.player===D.own)return "/live";
@@ -4787,7 +4815,7 @@ function notYet(msg,q,after){
   v.innerHTML=`<div class="empty">${msg}${q&&D.local?`<div class="btns" style="justify-content:center;margin-top:12px"><button type="button" id="nyet">Analyze it</button></div>`:""}</div>`;
   const b=$("#nyet",v);if(b)b.onclick=()=>{b.disabled=true;partialShown=null;startAnalysis(q,after)}}
 function go(view){view=ALIAS[view]||view;if(!D.local&&location.hash!=="#"+view)history.replaceState(null,"",location.pathname+location.search+"#"+view);show(view)}
-function show(view){view=ALIAS[view]||view;if(!RENDER[view])view="ingame";if(view!=="ingame")document.body.classList.remove("igfull");
+function show(view){view=ALIAS[view]||view;if(!RENDER[view])view="review";if(view!=="ingame")document.body.classList.remove("igfull");
   S.view=view;$$("main>.view").forEach(x=>x.hidden=x.id!=="v-"+view);
   if(!D.local||GLOBAL.includes(view)||!S.player||D.players[S.player])syncUrl();   // a profile still loading: its address once it is in
   navUpdate(view);usageView(view);if(view!=="ingame")clearTimeout(gsiTimer);
@@ -4796,7 +4824,7 @@ function show(view){view=ALIAS[view]||view;if(!RENDER[view])view="ingame";if(vie
   if(view==="settings"){renderSettings();window.scrollTo(0,0);return}
   if(view==="team"){renderTeam();window.scrollTo(0,0);return}
   // no profile: the welcome (and on a new install, 05/10, everywhere until a first profile)
-  if(!S.player){if(view==="ingame"||view==="review"||!Object.keys(IDX()).length)welcome($("#v-"+view));else $("#v-"+view).innerHTML=`<div class="empty">Show me a profile first: yours from the home page, or anyone in Explore.</div>`;return}
+  if(!S.player){if(view==="ingame"||view==="review"||!Object.keys(IDX()).length)welcome($("#v-"+view));else $("#v-"+view).innerHTML=`<div class="empty">Show me a profile first: yours from the home page, or anyone from your menu (top right).</div>`;return}
   if(!D.players[S.player]){$("#v-"+view).innerHTML=`<div class="empty"><span class="spin" aria-hidden="true"></span>Loading the profile…</div>`;return}
   RENDER[view]();navUpdate(view);window.scrollTo(0,0);
   if(view==="prepare"&&D.local)prepWatch();   // CS2 loads a map: Live takes over
@@ -4808,12 +4836,12 @@ S.map=HOST(store("map"))?null:store("map");S.side=store("side")||"T";
 // a #view link: that view, at its address (the same history entry); back and forward: what their address says
 window.addEventListener("hashchange",()=>{const h=location.hash.slice(1),v=ALIAS[h]||h;if(!D.local)return show(h);if(!RENDER[v])return;navQuiet++;try{show(v)}finally{navQuiet--}});
 window.addEventListener("popstate",()=>{const h=location.hash.slice(1);if(!D.local||RENDER[ALIAS[h]||h])return;navQuiet++;route().finally(()=>navQuiet--)});
-S.view=ALIAS[location.hash.slice(1)]||location.hash.slice(1)||"ingame";if(!RENDER[S.view])S.view="ingame";
+S.view=ALIAS[location.hash.slice(1)]||location.hash.slice(1)||"review";if(!RENDER[S.view])S.view="review";
 {const f=store("focus");if(f||(f==null&&location.pathname.replace(/\/+$/,"")==="/live"))document.body.classList.add("focus")}   // /live: 2nd screen mode unless you left it
 // Update: your new matches fetched and analyzed (the same as the automatic sync, now)
 let updFrom=null;
 {const ub=$("#updbtn");if(ub&&D.local&&D.own){ub.hidden=false;
-  ub.onclick=async()=>{ub.disabled=true;updFrom=S.view;jobFrom=S.view;
+  ub.onclick=async()=>{ub.disabled=true;acctClose();updFrom=S.view;jobFrom=S.view;
     try{await api("/api/steam/sync",{sid:D.own});poll()}
     catch(e){if(/already running/i.test(e.message||""))poll();else{ub.disabled=false;updFrom=null;jobPanel(`<b>${esc(e.message||"Update impossible")}</b>`,"err")}}}}}
 if(D.local)fetch("/api/update").then(r=>r.json()).then(gearDot).catch(()=>{});   // a dot on the gear: an update is there

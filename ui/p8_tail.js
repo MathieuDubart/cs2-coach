@@ -32,7 +32,7 @@ function renderPlayers(){
   const jf=$("#jf",v);jf.oninput=()=>{jq=jf.value.trim().toLowerCase();jshow=24;const pos=jf.selectionStart;renderPlayers();const n=$("#jf");n.focus();n.setSelectionRange(pos,pos)};
   $$("[data-sort]",v).forEach(b=>b.onclick=()=>{jsort=b.dataset.sort;jshow=24;renderPlayers()});
   const jm=$("#jmore",v);if(jm)jm.onclick=()=>{const y=scrollY;jshow+=24;renderPlayers();scrollTo(0,y)};
-  $$("[data-pid]",v).forEach(b=>b.onclick=()=>{setPlayer(b.dataset.pid).then(()=>go(b.dataset.pid===D.own?"ingame":"analysis"))});
+  $$("[data-pid]",v).forEach(b=>b.onclick=()=>{setPlayer(b.dataset.pid).then(()=>go(b.dataset.pid===D.own?"review":"analysis"))});
 }
 
 // ---------- view: pros ----------
@@ -92,7 +92,7 @@ function poll(){clearTimeout(polling);polling=setTimeout(async()=>{
   let j;try{j=await (await fetch("/api/job")).json()}catch(e){return poll()}
   const logs=(j.log||[]).slice(-60).map(esc).join("\n");
   if(j.running){
-    if(j.partial&&partialShown!==j.partial&&mayGo()){partialShown=j.partial;try{D.index=await (await fetch(`index.json?t=${Date.now()}`)).json();playerOptions();delete D.players[j.partial];await setPlayer(j.partial,true);go(j.partial===D.own?"ingame":"analysis");jobFrom=S.view}catch(e){}}
+    if(j.partial&&partialShown!==j.partial&&mayGo()){partialShown=j.partial;try{D.index=await (await fetch(`index.json?t=${Date.now()}`)).json();playerOptions();delete D.players[j.partial];await setPlayer(j.partial,true);go(j.partial===D.own?"review":"analysis");jobFrom=S.view}catch(e){}}
     jobPanel(`<div class="row"><b><span class="spin" aria-hidden="true"></span>${partialShown?"First preview shown. Full demo analysis running…":j.view==="matches"?"Analyzing the match again…":/^Steam sync/.test(j.query||"")?"Updating your matches…":`Analyzing ${esc(j.query)}…`}</b><span class="note">The profile completes itself at the end (from a few seconds to a few minutes).</span></div><pre>${logs||"Starting…"}</pre>`);poll();return}
   $("#qbtn").disabled=false;const go_=mayGo(),aj=afterJob;jobFrom=null;afterJob=null;
   if(j.error){updFrom=null;const ub=$("#updbtn");if(ub)ub.disabled=false;jobPanel(`<b>${esc(j.error)}</b><pre>${logs}</pre>`,"err");return}
@@ -110,16 +110,17 @@ function poll(){clearTimeout(polling);polling=setTimeout(async()=>{
   if(j.steamid){try{D.index=await (await fetch(`index.json?t=${Date.now()}`)).json();playerOptions();delete D.players[j.steamid];
       const upd=updFrom;updFrom=null;const ub=$("#updbtn");if(ub)ub.disabled=false;
       if(upd&&/(^|\D)0 new match/.test((j.log||[]).slice(-3).join(" "))&&!(j.log||[]).some(l=>/demo\(s\) from Valve|Analyzing/.test(l))){if(S.player===j.steamid)await setPlayer(j.steamid,true);go(upd);jobPanel(`<b>Up to date</b>: no new match since the last analysis.`,"ok");return}
-      const e=(D.index||[]).find(x=>x.steamid===j.steamid)||{},view=upd||(j.steamid===D.own?"ingame":"analysis");
+      const e=(D.index||[]).find(x=>x.steamid===j.steamid)||{},view=upd||(j.steamid===D.own?"review":"analysis");
       if(go_){await setPlayer(j.steamid,true);S.map=null}
       jobPanel(`<b>${esc(e.name||j.steamid)} is analyzed.</b> ${e.light?"Light profile (Leetify stats, no demo available).":e.n!=null?`${e.n} demo(s) analyzed.`:""}${go_?"":openBtn(j.steamid,e.name,view)}<pre>${logs}</pre>`,"ok");bindOpen();if(go_)go(view)}
     catch(e){jobPanel(`<b>Nothing to show for this player.</b><pre>${logs}</pre>`,"err")}}},1000)}
-$("#search").addEventListener("submit",async e=>{e.preventDefault();const q=$("#q").value.trim();if(!q)return;
+$("#search").addEventListener("submit",async e=>{e.preventDefault();const q=$("#q").value.trim();if(!q)return;acctClose();
   const ps=await loadPros(),ql=q.toLowerCase(),idm=(q.match(/7656\d{13}/)||[])[0];
   const pro=ps.find(x=>x.handle.toLowerCase()===ql||x.steamid===idm);
   if(pro){$("#q").value="";$("#job").hidden=true;openPro(pro.steamid);return}
   const known=findKnown(q);
-  if(known){await setPlayer(known);$("#job").hidden=true;$("#q").value="";go(S.view==="players"?"ingame":S.view);
+  if(known){const v0=S.view;await setPlayer(known);$("#job").hidden=true;$("#q").value="";
+    go(known===D.own?"review":["profile","matches","maps","analysis","midround","progress","routine"].includes(v0)?v0:"profile");
     if(D.local){jobPanel(`<b>${esc(P().name)} is already analyzed.</b> To fetch their new matches: <button type="button" class="close" id="refresh">Update</button>`,"ok");$("#refresh").onclick=()=>startAnalysis(q)}
     return}
   if(D.local){partialShown=null;startAnalysis(q);return}
@@ -133,7 +134,9 @@ const RENDER={ingame:renderIngame,prepare:renderPrepare,review:renderReview,prof
 // The local app has addresses like csrep's: /player/<steamid> (their first view: In game for you, Analysis for the others),
 // /player/<steamid>/<view>, /match/<share code, or match id when it has none>[?as=<steamid>: seen as someone else than
 // you], /team, /players, /pros, /settings; old links (/#review) still open. The published page (one file) keeps #view.
-const GLOBAL=["team","players","pros","settings"],homeView=sid=>sid&&sid===D.own?"ingame":"profile";
+// 07/10, the user ("je ne vois pas l'intérêt de cette page", Live outside a match): Review first; Live opens itself when
+// CS2 starts (serve.py) and from the bar
+const GLOBAL=["team","players","pros","settings"],homeView=sid=>sid&&sid===D.own?"review":"profile";
 let navAt=0,navQuiet=0,afterJob=null,CODES={};   // CODES: match id -> share code
 // /live: your In game page, the address to keep open during a match (a second screen, OBS) (04/10)
 function pathNow(){const v=S.view;if(GLOBAL.includes(v))return "/"+v;if(!S.player)return "/";if(v==="ingame"&&S.player===D.own)return "/live";
@@ -181,7 +184,7 @@ function notYet(msg,q,after){
   v.innerHTML=`<div class="empty">${msg}${q&&D.local?`<div class="btns" style="justify-content:center;margin-top:12px"><button type="button" id="nyet">Analyze it</button></div>`:""}</div>`;
   const b=$("#nyet",v);if(b)b.onclick=()=>{b.disabled=true;partialShown=null;startAnalysis(q,after)}}
 function go(view){view=ALIAS[view]||view;if(!D.local&&location.hash!=="#"+view)history.replaceState(null,"",location.pathname+location.search+"#"+view);show(view)}
-function show(view){view=ALIAS[view]||view;if(!RENDER[view])view="ingame";if(view!=="ingame")document.body.classList.remove("igfull");
+function show(view){view=ALIAS[view]||view;if(!RENDER[view])view="review";if(view!=="ingame")document.body.classList.remove("igfull");
   S.view=view;$$("main>.view").forEach(x=>x.hidden=x.id!=="v-"+view);
   if(!D.local||GLOBAL.includes(view)||!S.player||D.players[S.player])syncUrl();   // a profile still loading: its address once it is in
   navUpdate(view);usageView(view);if(view!=="ingame")clearTimeout(gsiTimer);
@@ -190,7 +193,7 @@ function show(view){view=ALIAS[view]||view;if(!RENDER[view])view="ingame";if(vie
   if(view==="settings"){renderSettings();window.scrollTo(0,0);return}
   if(view==="team"){renderTeam();window.scrollTo(0,0);return}
   // no profile: the welcome (and on a new install, 05/10, everywhere until a first profile)
-  if(!S.player){if(view==="ingame"||view==="review"||!Object.keys(IDX()).length)welcome($("#v-"+view));else $("#v-"+view).innerHTML=`<div class="empty">Show me a profile first: yours from the home page, or anyone in Explore.</div>`;return}
+  if(!S.player){if(view==="ingame"||view==="review"||!Object.keys(IDX()).length)welcome($("#v-"+view));else $("#v-"+view).innerHTML=`<div class="empty">Show me a profile first: yours from the home page, or anyone from your menu (top right).</div>`;return}
   if(!D.players[S.player]){$("#v-"+view).innerHTML=`<div class="empty"><span class="spin" aria-hidden="true"></span>Loading the profile…</div>`;return}
   RENDER[view]();navUpdate(view);window.scrollTo(0,0);
   if(view==="prepare"&&D.local)prepWatch();   // CS2 loads a map: Live takes over
@@ -202,12 +205,12 @@ S.map=HOST(store("map"))?null:store("map");S.side=store("side")||"T";
 // a #view link: that view, at its address (the same history entry); back and forward: what their address says
 window.addEventListener("hashchange",()=>{const h=location.hash.slice(1),v=ALIAS[h]||h;if(!D.local)return show(h);if(!RENDER[v])return;navQuiet++;try{show(v)}finally{navQuiet--}});
 window.addEventListener("popstate",()=>{const h=location.hash.slice(1);if(!D.local||RENDER[ALIAS[h]||h])return;navQuiet++;route().finally(()=>navQuiet--)});
-S.view=ALIAS[location.hash.slice(1)]||location.hash.slice(1)||"ingame";if(!RENDER[S.view])S.view="ingame";
+S.view=ALIAS[location.hash.slice(1)]||location.hash.slice(1)||"review";if(!RENDER[S.view])S.view="review";
 {const f=store("focus");if(f||(f==null&&location.pathname.replace(/\/+$/,"")==="/live"))document.body.classList.add("focus")}   // /live: 2nd screen mode unless you left it
 // Update: your new matches fetched and analyzed (the same as the automatic sync, now)
 let updFrom=null;
 {const ub=$("#updbtn");if(ub&&D.local&&D.own){ub.hidden=false;
-  ub.onclick=async()=>{ub.disabled=true;updFrom=S.view;jobFrom=S.view;
+  ub.onclick=async()=>{ub.disabled=true;acctClose();updFrom=S.view;jobFrom=S.view;
     try{await api("/api/steam/sync",{sid:D.own});poll()}
     catch(e){if(/already running/i.test(e.message||""))poll();else{ub.disabled=false;updFrom=null;jobPanel(`<b>${esc(e.message||"Update impossible")}</b>`,"err")}}}}}
 if(D.local)fetch("/api/update").then(r=>r.json()).then(gearDot).catch(()=>{});   // a dot on the gear: an update is there

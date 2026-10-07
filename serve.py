@@ -878,11 +878,11 @@ if __name__ == "__main__":
     try:
         srv = ThreadingHTTPServer(("127.0.0.1", PORT), Handler)
     except OSError:
-        print(f"Wily is already running: open http://127.0.0.1:{PORT}/#ingame")
+        print(f"Wily is already running: open http://127.0.0.1:{PORT}/")
         if "--no-browser" not in sys.argv:
-            webbrowser.open(f"http://127.0.0.1:{PORT}/#ingame")
+            webbrowser.open(f"http://127.0.0.1:{PORT}/")   # your Review (07/10: Live is for the match)
         sys.exit(0)
-    url = f"http://127.0.0.1:{PORT}/#ingame"
+    url = f"http://127.0.0.1:{PORT}/"   # your Review first; CS2's start opens Live (cs2_page_watch)
     print(f"Wily: {url}  (Ctrl+C to stop)")
     if not os.environ.get("COACH_TEST"):
         threading.Thread(target=cs2_page_watch, daemon=True).start()

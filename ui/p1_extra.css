@@ -497,3 +497,46 @@ svg.radar .ping .ping-t{font:800 15px var(--f-mono);fill:#ffd34d;paint-order:str
 .vhab em{font-style:normal;color:var(--muted);font-size:12px}
 .vctl{font:700 10px/1 var(--mono,monospace)}
 .vctm{font:800 8.5px/1 var(--mono,monospace);fill:#0b0f14}
+
+/* the account menu (07/10): favorites, a player or a match to open, update, settings */
+.acct-menu{min-width:300px;gap:6px;padding:8px}
+.am-sec{display:grid;gap:1px}
+.am-h{font:600 11px var(--f-mono);letter-spacing:.08em;text-transform:uppercase;color:var(--muted);padding:4px 10px 2px}
+.favlist{display:grid}
+.favlist a{display:flex;gap:9px;align-items:center}
+.favlist a[aria-current="true"]{background:var(--chip)}
+.favlist small{color:var(--muted);font-size:11.5px}
+.favlist .av{width:22px;height:22px;border-radius:50%;object-fit:cover;flex:none}
+.favlist .ini{display:grid;place-items:center;background:var(--chip);font:700 12px var(--f-display);color:var(--ink)}
+.favlist .none{font:12.5px var(--f-body);color:var(--muted);padding:4px 10px 6px}
+.acct-menu .search{flex:none;max-width:none;padding:8px 4px;border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
+.am-item{font:500 14px var(--f-body);color:var(--ink);text-decoration:none;padding:7px 10px;border-radius:4px;background:none;border:0;text-align:left;cursor:pointer}
+.am-item:hover,.am-item:focus-visible{background:var(--chip);outline:none}
+.am-item:disabled{opacity:.5;cursor:wait}
+.acct-menu .gear{font-size:14px;color:var(--ink)}
+.acct-menu .gear.has-update::after{top:50%;right:10px;transform:translateY(-50%)}
+.acct-btn{position:relative}
+.acct-btn.has-update::after{content:"";position:absolute;top:0;right:2px;width:8px;height:8px;border-radius:50%;background:var(--good,#3ba55d)}
+.whochip .fav{color:var(--warn);font-size:13px;line-height:1}
+.bar{z-index:40}   /* its menu over the pages' sticky parts (Review's section bar) */
+.ig-wait{max-width:760px;margin:28px auto;padding:22px 26px;border:1px solid var(--line);border-radius:var(--radius);background:var(--panel)}.ig-wait h3{margin:0 0 8px}.ig-wait ul{margin:8px 0 12px;padding-left:20px;display:grid;gap:4px}
+/* Review (07/10): an item and its evidence in one place */
+.blist{display:grid;gap:6px;margin-top:8px}
+.bitem{border-left:2px solid var(--line);padding:2px 0 2px 10px}
+.bitem>summary{cursor:pointer;font-size:14.5px;line-height:1.45;list-style:none}
+.bitem>summary::-webkit-details-marker{display:none}
+.bitem>summary::before{content:"▸";color:var(--muted);margin-right:6px;display:inline-block;transition:transform .15s}
+.bitem[open]>summary::before{transform:rotate(90deg)}
+.bitem[open]{padding-bottom:8px}
+.bitem .rd-card{border:0;background:none;padding:6px 0 0;box-shadow:none}
+.bitem .rd-card .rd-h{display:none}
+.mc-matches{display:grid;gap:4px;margin-top:auto;padding-top:8px;border-top:1px solid var(--line)}
+.mc-m{display:flex;gap:8px;align-items:center;justify-content:space-between;font:500 12.5px var(--f-body);color:var(--ink);background:none;border:1px solid transparent;border-radius:4px;padding:3px 6px;cursor:pointer;text-align:left}
+.mc-m:hover,.mc-m:focus-visible{border-color:var(--ct);outline:none}
+.mc-m span:first-child{flex:1;color:var(--muted)}
+.tier-more{margin-top:24px;border-top:1px solid var(--line);padding-top:12px}
+.tier-more>summary{cursor:pointer;font:600 15px var(--f-body);color:var(--muted)}
+.gauge .gtip{font:500 13px var(--f-body);font-style:normal;color:var(--warn);margin-top:2px}
+.brief3>.card{align-content:start}
+.set-h{margin:26px 0 2px;font:600 13px var(--f-mono);letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+.set-more>summary{cursor:pointer;font-weight:600;margin:6px 0}

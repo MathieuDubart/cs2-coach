@@ -287,6 +287,7 @@ document.addEventListener("click",e=>{const b=e.target.closest&&e.target.closest
 // here"): the one priority of the app is the focus of the week. BRIEF_CAP collects the briefs for the Profile.
 let BRIEF_CAP=null;
 function tabBrief(o){if(BRIEF_CAP){BRIEF_CAP.push(o);return ""}
+  return "";   // 07/10: the detail pages open on their content; their brief is the Profile's card that leads to them (said once)
   const li=xs=>(xs||[]).filter(Boolean).slice(0,3).map(x=>`<li>${x}</li>`).join(""),w=li(o.works),fx=li(o.fix);
   return `<section class="brief3 brief2 tabbrief" id="${o.id||""}" aria-label="Brief">
    <article class="card b-good"><span class="eyebrow">What works here</span>${w?`<ul>${w}</ul>`:`<p class="note">${o.worksNone||"Nothing stands out above the base yet."}</p>`}</article>
@@ -304,13 +305,6 @@ function analysisBrief(p,auto){const I=((readsOf().all||{}).items)||[],good=I.fi
     fix:[r0?`<b>${esc(r0.title)}</b>${r0.standing?` <span class="note">· ${esc(r0.standing)}</span>`:""}`:null,...bad.slice(0,2).map(readTxt)],
     next:r0&&r0.fix&&r0.fix.length?r0.fix[0]:null,nextLabel:"Work on"})+(St.length>nS?`<p class="note">Also: ${St.slice(nS).map(esc).join(" · ")}</p>`:"")}
 // one match: its rating, the coach's priority, the reads that stand out against the base (with their rounds)
-function matchBrief(m){const R=m.reads||{},M=readsOf().meta||{},s=m.sum,pr=((m.notes||{}).priorities)||[],rt=mRating(m);
-  const tone=k=>R[k]&&R[k].of?readTone(k,100*R[k].value/R[k].of,R[k].of):"";
-  const rl=k=>{const x=R[k];return `${esc((M[k]||{}).title||k)}: <b>${x.value}</b> ${READ_LINE[k](x)}${rchips(x.rounds)}`};
-  const rline=rt==null?null:`Rating ${rtBadge(rt)} · ${s.kills}-${s.deaths}-${s.assists}, ADR ${f1(s.adr)}`;
-  return tabBrief({id:"m-brief",works:[rt!=null&&rt>=1.05?rline:null,...READ_IDS.filter(k=>tone(k)==="good").map(rl)],
-    fix:[rt!=null&&rt<0.85?rline:null,pr[0]?`<b>${esc(pr[0].title)}</b>`:null,...READ_IDS.filter(k=>tone(k)==="bad").map(rl)],
-    next:pr[0]&&pr[0].fix&&pr[0].fix.length?pr[0].fix[0]:null,nextLabel:"For the next match"})}
 // one map: your record and rating there, your zones that work and the ones to change, a pro grenade to learn
 function mapBrief(p,m){const ms=p.matches.filter(x=>x.map===m.map),w=ms.filter(x=>x.result==="win").length,l=ms.filter(x=>x.result==="loss").length;
   const rts=ms.map(mRating).filter(x=>x!=null),avg=rts.length?rts.reduce((a,b)=>a+b,0)/rts.length:null;
@@ -380,15 +374,11 @@ function renderMatches(){
   const s=m.sum,md=m.map_data;const st={layer:"control",level:md.levels[0].key,side:"all"},lim=S.mall||S.match>=10?ms.length:10;
   v.innerHTML=`<div class="head"><div style="display:grid;gap:4px"><span class="eyebrow">${ms.length} matches · pick one below</span><h2>Matches</h2></div></div>
   <div class="tbl"><table>${TREND_HEAD}<tbody>${trendRows(ms.slice(0,lim),S.match)}</tbody></table></div>${ms.length>lim?`<button type="button" class="more-btn" id="mall">All ${ms.length} matches</button>`:""}
-  <div class="head" id="mhead"><div style="display:grid;gap:4px"><span class="eyebrow">${fmtDate(m.time)} · ${m.rounds} rounds · ${RES[m.result]}${m.hostage?" · hostage map: CTs attack":""}</span>
+  <div class="head" id="mhead"><div style="display:grid;gap:4px"><span class="eyebrow">${fmtDate(m.time)} · ${m.rounds} rounds · ${RES[m.result]}${s.clutches?` · ${s.clutches_won}/${s.clutches} clutches won`:""}${m.hostage?" · hostage map: CTs attack":""}</span>
     <h2>${MAPN(m.map)} · ${esc(m.mode)}</h2></div><div class="record"><span>${m.score.me}-${m.score.them}</span></div>
     ${D.local?`<button type="button" class="close" id="reanalyze" title="Extract this match again from its demo, then update your profile and plan (a minute or two)">Re-analyze this match</button>`:""}</div>
-  <div class="stats"><div class="stat"><b class="num">${s.kills}/${s.deaths}/${s.assists}</b><span>K / D / A</span></div><div class="stat"><b class="num">${f1(s.adr)}</b><span>ADR</span></div>
-    <div class="stat"><b class="num">${f1(s.kast)}%</b><span>KAST</span></div><div class="stat"><b class="num">${s.traded_pct==null?"—":f1(s.traded_pct)+"%"}</b><span>deaths traded</span></div>
-    <div class="stat"><b class="num">${s.nades_unused}</b><span>grenades wasted</span></div><div class="stat"><b class="num">${s.clutches_won}/${s.clutches}</b><span>clutches won</span></div></div>
-  ${secNav([["m-brief","Brief"],m.notes?["m-coach","Coach"]:null,m.reads?["m-reads","Analyst reads"]:null,["m-rounds","Rounds"],["m-zones","Zones"],["m-replay","2D replay"]])}
-  ${matchBrief(m)}
-  ${anchor("m-coach")}${m.notes?`<p style="max-width:75ch;font-size:16px">${m.notes.summary||""}</p>${findings(m.notes.priorities)}`:""}
+  ${secNav([m.notes?["m-coach","Coach"]:null,m.reads?["m-reads","Analyst reads"]:null,["m-rounds","Rounds"],["m-zones","Zones"],["m-replay","2D replay"]])}
+  ${anchor("m-coach")}${m.notes?findings(m.notes.priorities):""}
   ${anchor("m-reads")}${matchReads(m)}
   ${anchor("m-rounds")}${m.story&&m.story.length?storyBlock(m):""}
   <h3>Your rounds</h3><div class="timeline-wrap"><div class="timeline">${m.per_round.map(r=>`<div class="rd ${r.side}" title="Round ${r.round} (${r.side}, ${roleOf(m.map,r.side)}): ${r.won?"won":"lost"}, ${r.kills} kill(s), ${r.deaths} death(s), your buy ${r.my_buy} / team ${r.team_buy}"><span>${r.round}</span><span class="${r.won?"w":"l"}">${r.won?"W":"L"}</span><span>${r.kills}-${r.deaths}</span></div>`).join("")}</div></div>

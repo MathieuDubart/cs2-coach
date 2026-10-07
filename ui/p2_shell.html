@@ -4,18 +4,22 @@
     <a href="#ingame" data-view="ingame" title="During your match, on a 2nd screen">Live</a>
     <a href="#prepare" data-view="prepare" title="Before you play: warm-up, map sheets">Prepare</a>
     <a href="#review" data-view="review" title="After your matches and the next day">Review</a>
-    <a href="#players" data-view="players" title="Players, pros, your team">Explore</a>
   </nav>
   <span class="whochip" id="whochip"></span>
-  <form class="search" id="search" role="search" autocomplete="off">
-    <input id="q" name="q" type="search" placeholder="Steam link, SteamID64, name or CSGO-… share code" aria-label="Find a player: Steam profile link, SteamID64 or name">
-    <button type="submit" id="qbtn">Analyze</button>
-  </form>
   <div class="bar-right">
-    <button type="button" class="focuschip" id="focuschip" hidden></button>
-    <button type="button" class="upd" id="updbtn" hidden title="Fetch your new matches from Steam and analyze them">↻ Update</button>
-    <div class="acct" id="acct" hidden><button type="button" class="acct-btn" id="acctbtn" aria-haspopup="menu" aria-expanded="false"></button><div class="acct-menu" id="acctmenu" role="menu" hidden></div></div>
-    <a href="#settings" class="gear" data-view="settings" aria-label="Settings" title="Settings: Steam, game detection, microphone">⚙</a>
+    <div class="acct" id="acct" hidden><button type="button" class="acct-btn" id="acctbtn" aria-haspopup="true" aria-expanded="false" aria-controls="acctmenu"></button>
+      <div class="acct-menu" id="acctmenu" hidden>
+        <div class="am-sec"><span class="am-h">Favorites</span><div class="favlist" id="favlist"></div></div>
+        <form class="search am-search" id="search" role="search" autocomplete="off">
+          <input id="q" name="q" type="search" placeholder="Steam link, SteamID64, name or share code" aria-label="Open a player or a match: Steam profile link, SteamID64, name or CSGO-… share code">
+          <button type="submit" id="qbtn">Open</button>
+        </form>
+        <div class="am-sec">
+          <button type="button" class="am-item" id="updbtn" hidden title="Fetch your new matches from Steam and analyze them">↻ Update my matches</button>
+          <a href="#settings" class="am-item gear" data-view="settings">Settings</a>
+        </div>
+      </div>
+    </div>
   </div>
 </div><div class="subnav" id="subnav" hidden></div></div>
 <dialog class="bugdlg" id="bugdlg" aria-labelledby="bug-h"><form method="dialog" id="bugform">

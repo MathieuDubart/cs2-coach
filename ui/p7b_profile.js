@@ -17,16 +17,11 @@ function renderProfile(){
     ["progress","Weapons, buys and trends","your weapons, your buys by kind of round, your indicators",PL.kpis||PL.weapons?briefOf(progBrief,PL):null],
     ["routine","Habits","time of day, session length, group",PL.context?briefOf(routineBrief,PL):null]].filter(x=>x[3]);
   const li=xs=>(xs||[]).filter(Boolean).slice(0,2).map(x=>`<li>${x}</li>`).join("");
-  const seen=new Set(),plain=h=>String(h).replace(/<[^>]+>/g,"").replace(/\s+/g," ").trim();   // each strength once; a map's with its name
-  const strengths=[...(A.strengths||[]).map(esc),...parts.map(x=>{const w=(x[3].works||[]).filter(Boolean)[0];return w&&x[0]==="maps"?`${esc(x[1])} · ${w}`:w})]
-    .filter(h=>h&&!seen.has(plain(h))&&seen.add(plain(h))).slice(0,5);
   v.innerHTML=`<div class="head"><div style="display:grid;gap:4px"><span class="eyebrow">${esc(p.name)}${PL.level?` · ${levelLine(PL.level)}`:""}</span><h2>Your profile</h2></div>
     ${ms.length?`<div class="record"><span>${win}<small>wins</small></span><span>${draw}<small>draws</small></span><span>${loss}<small>losses</small></span></div>`:""}</div>
-   <p class="note">What stays true over weeks${ms.length?`, from ${ms.length} analyzed matches`:""}${role?` · your role: <b>${esc(role)}</b>`:""}. The session's review is in <a href="#review" style="color:var(--ct)">Session</a>.</p>
-   <div class="prof-top">${focusCard(p)}
-    <article class="card b-good"><span class="eyebrow">Your strengths</span>${strengths.length?`<ul>${strengths.map(x=>`<li>${x}</li>`).join("")}</ul>`:`<p class="note">Nothing stands out above the base yet.</p>`}</article></div>
+   <p class="note">What stays true over weeks${ms.length?`, from ${ms.length} analyzed matches`:""}${role?` · your role: <b>${esc(role)}</b>`:""}.</p>
    <h3>Your axes, ranked</h3>
-   <p class="note">What costs you the most rounds, in my order (my priority score: the bar). One list for the whole app: the first is your focus of the week unless you picked another.</p>
+   <p class="note">What costs you the most rounds, in my order (my priority score: the bar). One list for the whole app: the first is your focus of the week unless you picked another${F&&F.until&&!isNaN(new Date(F.until))?` (until ${new Date(F.until).toLocaleDateString("en-US",{weekday:"short",month:"short",day:"numeric"})})`:""}. What works for you is in the evidence, part by part, below.</p>
    ${rules.length?`<div class="axes-list">${rules.map((r,i)=>{const isF=F&&F.id===r.id;return `<article class="axis${isF?" is-focus":""}">
      <div class="ax-n">${i+1}</div>
      <div class="ax-b"><h4>${esc(r.short||r.title)}</h4>${r.short&&r.title&&r.short!==r.title?`<p class="note">${esc(r.title)}</p>`:""}
@@ -43,7 +38,7 @@ function renderProfile(){
     ${act.length?`<div class="exps">${act.map(expCard).join("")}</div>`:`<p class="note">No test running.</p>`}
     ${sug.length?`<span class="lbl4" style="color:var(--muted)">Worth testing</span><div class="exps">${sug.slice(0,4).map(suggestCard).join("")}</div>`:""}
     <p class="note" id="xmsg" role="status"></p>`:""}
-   <div class="linkrow"><a href="#matches">Every match</a><a href="#analysis">Full analysis and pros like you</a><a href="#review">This session</a></div>`;
+`;
   if(X)wireExp(v,X,p);
   wireFocus(v,p,renderProfile);
   $$("[data-axfocus]",v).forEach(b=>b.onclick=async()=>{b.disabled=true;

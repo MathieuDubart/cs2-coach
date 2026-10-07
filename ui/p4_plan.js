@@ -340,6 +340,7 @@ async function pollUpdate(v){clearTimeout(S.upTimer);
   c.outerHTML=updateCard(u);wireUpdate(v);
   if(pr.busy||pr.restarting)S.upTimer=setTimeout(()=>{if(S.view==="settings")pollUpdate(v)},1500)}
 function gearDot(u){const g=$(".gear");if(!g)return;const n=((u||{}).available||[]).length;g.classList.toggle("has-update",!!n);
+  const ab=$("#acctbtn");if(ab)ab.classList.toggle("has-update",!!n);
   g.title=n?"Settings: an update of the app is available":"Settings: Steam, game detection, microphone"}
 // the base grows with the players (05/10): a player's switch (off until they turn it on), or what the coach received
 function shareCard(c){
@@ -405,7 +406,7 @@ function usageCard(u){if(!u||!u.client)return "";
    <p class="note">${u.on?`Today so far: ${nv} page(s), ${na} click(s) counted · ${u.days_sent} day(s) sent`:"Off: nothing is counted or sent."}</p>
    ${u.on&&u.today?`<details><summary>Today's counters, exactly</summary><pre class="uspre">${esc(JSON.stringify(u.today,null,1))}</pre></details>`:""}
    <div class="btns"><button type="button" id="us-on">${u.on?"Turn it off":"Turn it on"}</button></div></article>`}
-const VLABEL={ingame:"Live",prepare:"Prepare",review:"Review",profile:"Profile",players:"Explore · players",pros:"Explore · pros",team:"Explore · team",settings:"Settings"};
+const VLABEL={ingame:"Live",prepare:"Prepare",review:"Review",profile:"Profile",players:"Players",pros:"Pros",team:"Team",settings:"Settings"};
 function usageStatsCard(st){if(!st||D.role==="client")return "";
   const T=st.totals||{},pd=T.reports||0,mins=s=>(s/60).toFixed(1);
   if(!pd)return `<article class="card" id="ust-card"><h3>How players use the app</h3><p class="note">No usage statistics yet: they come from players' apps (0.0.2-alpha and later), one day after use, pulled every hour by the base loop.</p><div class="btns"><button type="button" id="ust-pull">Pull now</button></div></article>`;
@@ -474,9 +475,7 @@ async function renderSettings(){
   const pt=st.playtime,L=st.links||{};
   v.innerHTML=head+`
   ${flag==="ok"?`<div class="jobpanel" style="padding:0"><div class="in ok">Steam confirmed the sign-in.</div></div>`:flag==="refused"||flag==="refus"?`<div class="jobpanel" style="padding:0"><div class="in err">Steam didn't confirm the sign-in. Try again.</div></div>`:""}
-  <article class="card"><h3>Display</h3>
-   <div class="btns" role="group" aria-label="Theme">${[["dark","Dark"],["light","Light"],["system","Your system's"]].map(([k,l])=>`<button type="button" data-theme-set="${k}" aria-pressed="${(store("theme")||"dark")===k}">${l}</button>`).join("")}</div>
-   <p class="note">The theme of the app on this browser. Dark is the default; "your system's" follows Windows.</p></article>
+  <h3 class="set-h">In game</h3>
   <article class="card"><h3>Game detection ${ok(gs&&gs.installed)}</h3>
    <p>CS2 sends the app the map, your side, the round, the score, your money and your grenades: the "In game" page follows your match on its own and gives the right advice at the right time (buys during freeze time, bomb planted, end of round).</p>
    <p class="note">This is Valve's Game State Integration, the official feature used by HUDs and RGB keyboards. During a match, CS2 only sends your own info, never the enemies'.${gs&&gs.path?` File: <code>${esc(gs.path)}</code>.`:""}${gs&&gs.installed?(gs.receiving?" CS2 is sending its data.":" Restart CS2 so it picks it up."):""}</p>
@@ -511,17 +510,12 @@ async function renderSettings(){
         <td>${r.silent?'<span class="bad">silent: wrong microphone</span>':r.transcribed?"done":r.duration?`<button type="button" data-vtr="${r.id}">Transcribe</button>`:"—"}</td><td><button type="button" data-vdel="${r.id}">Delete</button></td></tr>`).join("")}</tbody></table></div>`
       :`<p class="note">No recording yet.</p>`}<span class="note" id="v-msg" role="status"></span>`
     :`<p class="note">Microphone unavailable on this PC${vs&&vs.error?` (${esc(vs.error)})`:""}.</p>`}</article>
-  <div class="insights">
+  <h3 class="set-h">Your Steam account</h3>
    <article class="card"><h3>1. Who are you? ${ok(st.login)}</h3>
     ${st.login?`<p>Signed in with Steam: <b>${esc(st.login.name||st.login.steamid)}</b> <span class="num note">${esc(st.login.steamid)}</span>, on ${fmtDate(st.login.time)}. This account is your default profile in the app.</p>`
       :`<p>Sign in through Steam's official page: it confirms your account to me. I never see your password, only your SteamID.</p>`}
     <p><a class="primary" style="display:inline-block;text-decoration:none" href="/api/steam/login">${st.login?"Sign in with Steam again":"Sign in with Steam"}</a></p>
     ${st.pc_account&&st.pc_account.steamid?`<p class="note">Steam account open on this PC: ${esc(st.pc_account.name||"")} <span class="num">${esc(st.pc_account.steamid)}</span>.</p>`:""}</article>
-   <article class="card"><h3>Playtime</h3>
-    ${pt?`<div class="gauge"><div><b>${pt.total_h.toLocaleString("en-US")} h</b><span>on CS2 in total</span></div><div><b>${pt.two_weeks_h} h</b><span>over the last 2 weeks</span></div></div>
-      <p class="note">Source: ${esc(pt.source)}${pt.last_played?` · last played ${fmtDate(pt.last_played)}`:""}. Used to set your priorities by experience.</p>`
-      :`<p class="note">No playtime found: this account hasn't played on this PC. With the API key (step 2), I read it from Steam if your game details are public.</p>`}</article>
-  </div>
   <article class="card form"><h3>2. Full, automatic history ${ok(st.has_key&&st.has_auth)}</h3>
    <p>Valve only gives your <b>last 8 matches</b> and deletes demos after about <b>a month</b>. With these two codes, I find <b>every new match</b>, even if it hasn't run for weeks. It analyzes the demos still available and keeps the date, score, your kills and deaths and your teammates for all the others: your times, sessions, streaks and group become measurable over your whole history.</p>
    <div class="row"><span class="f">Steam API key ${ok(st.has_key)}</span><input id="st-key" type="password" autocomplete="off" spellcheck="false" placeholder="${st.has_key?"already saved · paste a new key to replace it":"32 characters"}" style="flex:1;min-width:220px;font:14px var(--f-mono);background:var(--bg);color:var(--ink);border:1px solid var(--line);border-radius:3px;padding:5px 8px"></div>
@@ -531,16 +525,20 @@ async function renderSettings(){
    <p class="note">On <a href="${esc(L.auth)}" target="_blank" rel="noopener" style="color:var(--ct)">Steam's CS2 help page</a> (signed in to your account): "Create authentication code". The same page shows the code of your last match. If it's empty, I find it from your last 8 matches (Steam open, CS2 closed).</p>
    <div class="row"><button type="button" class="primary" id="st-save">Save and check</button>
      <button type="button" class="primary" id="st-sync" ${st.has_auth?"":"disabled"}>Sync now</button><span class="note" id="st-msg" role="status"></span></div>
-   ${st.has_auth?`<div class="row"><label style="display:flex;gap:8px;align-items:center;font-size:14px"><input type="checkbox" id="st-auto" ${st.auto_sync?"checked":""}> Sync automatically when the app starts, then every 30 minutes (off: the ↻ Update button at the top does it when you want)</label></div>
+   ${st.has_auth?`<div class="row"><label style="display:flex;gap:8px;align-items:center;font-size:14px"><input type="checkbox" id="st-auto" ${st.auto_sync?"checked":""}> Sync automatically when the app starts, then every 30 minutes (off: "Update my matches" in your menu, top right, does it when you want)</label></div>
      <p class="note">Last sync: ${st.last_sync?fmtDate(st.last_sync):"never"} · ${st.known_matches} match(es) known for this account${st.pending?` · ${st.pending} pending (Steam must be open and CS2 closed)`:""}${st.friends!=null?` · ${st.friends} Steam friends (used to detect your group)`:""}.</p>`:""}
-  </article>
-  <article class="card"><h3>What it unlocks</h3><ul>
+   <details class="set-more"><summary>What it unlocks</summary><ul>
     <li><b>No lost match</b>: every matchmaking match is found, analyzed while the demo exists, and counted in your habits afterwards.</li>
     <li><b>Habits over your whole history</b>: hours when you play best, ideal number of games per session, effect of loss streaks (Routine tab).</li>
     <li><b>Your group</b>: your Steam friends on your team are recognized as your group, even after a single match together.</li>
-    <li><b>Your experience</b>: your playtime sets the priorities of the Progress tab.</li></ul>
+    <li><b>Your experience</b>: your playtime sets the priorities of the Progress tab.</li></ul></details>
    <p class="note">Your codes stay in <code>out/settings.json</code> on this PC: this file is not versioned and the codes only go to Steam's official API. You can remove everything at any time.</p>
-   <div class="btns"><button type="button" id="st-forget">${steamForget?"Confirm: remove the sign-in and the codes":"Disconnect everything"}</button></div></article>${reportCard()}${updateCard(up)}${shareCard(ct)}${D.role==="client"?usageCard(us):""}${reportsCard(rs)}${D.role!=="client"?usageStatsCard(us):""}${growCard(gr)}${refreshCard(rf)}`;
+   <div class="btns"><button type="button" id="st-forget">${steamForget?"Confirm: remove the sign-in and the codes":"Disconnect everything"}</button></div></article>
+  <h3 class="set-h">This app</h3>
+  <article class="card"><h3>Display</h3>
+   <div class="btns" role="group" aria-label="Theme">${[["dark","Dark"],["light","Light"],["system","Your system's"]].map(([k,l])=>`<button type="button" data-theme-set="${k}" aria-pressed="${(store("theme")||"dark")===k}">${l}</button>`).join("")}</div>
+   <p class="note">The theme of the app on this browser. Dark is the default; "your system's" follows Windows.</p></article>${reportCard()}${updateCard(up)}${D.role==="client"?shareCard(ct)+usageCard(us):""}
+  ${D.role!=="client"?`<h3 class="set-h">The base and the players' apps</h3>${growCard(gr)}${refreshCard(rf)}${shareCard(ct)}${reportsCard(rs)}${usageStatsCard(us)}`:""}`;
   wireRefresh(v);if(rf&&rf.running)pollRefresh(v);
   const msg=$("#st-msg",v),sid=st.steamid;
   const vmsg=$("#v-msg",v),vcall=async(path,body)=>{try{await api(path,Object.assign({sid},body||{}));renderSettings()}catch(e){if(vmsg)vmsg.textContent=e.message}};

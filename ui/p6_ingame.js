@@ -504,6 +504,13 @@ function nowPanel(p,g,following,opt){const noBuy=opt&&opt.noBuy;
       out.push(nadeLive(p,g))}}
   else if(ph==="over"&&ct)out.push(tsideLive(p,g));
   return out.filter(Boolean).join("")||`<div class="now-empty"><b>Round ${g.round}</b><span class="mini">${ph==="over"?"5 s: why did this round go that way? Then one long exhale.":"Nothing to flag right now."}</span></div>`}
+// Live without a match (07/10, the user: "je ne vois pas l'intérêt de cette page"): what it will show, nothing to
+// browse. The map sheets are Prepare's; this page comes to life when CS2 sends a map.
+function igWaiting(){return `<div class="ig-wait"><h3>Waiting for your match</h3>
+  <p>As soon as CS2 loads a map, this page follows the game by itself and shows, round by round, only what matters now:</p>
+  <ul><li>at the buy time: what to buy, with your team's money;</li><li>on T: the way in that wins most against this team, its stuff and when to be on the site;</li>
+   <li>on CT: where the Ts go this half, rushes included, and when to throw your grenades;</li><li>your calls and Wily's orders, live.</li></ul>
+  <p class="note">Keep it on a second screen. Your sheet for each map is in Prepare.</p></div>`}
 function renderIngame(){
   const p=P(),v=$("#v-ingame"),PL=p.advice.plan||{},live=gsiFresh(),refs=PL.map_refs||{},mine=mapsOf(p);
   const maps=bombFirst([...mine,...Object.keys(refs).filter(k=>!mine.some(x=>x.map===k)).sort().map(k=>({map:k,n:0}))],x=>x.map);
@@ -531,6 +538,7 @@ function renderIngame(){
      <div class="ig-hud">${liveBar()}<span class="hudbtns"><button type="button" class="close" id="sidebtn" aria-pressed="${side}">${side?"◀ Hide panel":"▶ Show panel"}</button><button type="button" class="close" id="fsbtn">${document.fullscreenElement?"Exit full screen":"⛶ Full screen"}</button><button type="button" class="close" id="igfull">Normal view</button></span></div>
      ${side?"":toast}
      <div class="now ig-side" id="now">${side?toast:""}${nowVisual(p,gsiLast,following)}</div></div>`}
+  else if(D.local&&!(live&&gsiLast&&gsiLast.map))v.innerHTML=`${liveBar()}${missNote(p)}${igWaiting()}`;   // no match: no map to browse (07/10, Prepare has the sheets)
   else v.innerHTML=`${liveBar()}
    ${following?"":missNote(p)}
    ${following&&focus?"":`<div class="ig-top">
@@ -544,7 +552,7 @@ function renderIngame(){
    ${tabs(v,"Map guide",TABS,tab)}
    <div class="tabpanel" role="tabpanel">${body}</div>`;
   copyBtn(v);
-  if(typeof slotMeasure==="function")slotMeasure($("#now",v));   // the panel's slots keep their room
+  {const nw=$("#now",v);if(nw&&typeof slotMeasure==="function")slotMeasure(nw)}   // the panel's slots keep their room (none while waiting for a match)
   const fbt=$("#igfull",v);if(fbt)fbt.onclick=()=>{store("igfull",!full);renderIngame()};
   const fsb=$("#fsbtn",v);if(fsb)fsb.onclick=async()=>{try{if(document.fullscreenElement)await document.exitFullscreen();else await document.documentElement.requestFullscreen()}catch(e){}renderIngame()};
   const sbt=$("#sidebtn",v);if(sbt)sbt.onclick=()=>{store("igside",store("igside")===false);renderIngame()};
@@ -569,6 +577,7 @@ function renderIngame(){
     if(following&&gsiLast.side==="CT"&&gsiLast.round)mark(gsiLast.round,on?null:s,{site_t:on?null:el_()});else renderIngame()});   // also marks the round for the history
   $$("[data-mic]",v).forEach(b=>b.onclick=async()=>{b.disabled=true;try{await api("/api/voice/"+b.dataset.mic,{sid:p.steamid});gsiLast=Object.assign(gsiLast||{},{mic:b.dataset.mic==="start"});renderIngame()}catch(e){b.textContent=e.message}});
   $$("[data-team]",v).forEach(b=>b.onclick=async()=>{b.disabled=true;try{const t=(await api("/api/voice/team",{on:b.dataset.team==="on"})).team||{};gsiLast=Object.assign(gsiLast||{},{team_rec:t.on?"on":t.pending?"pending":null});renderIngame()}catch(e){b.textContent=e.message}});
+  if(!$(".radar-box",v))return;   // waiting for a match: no radar on screen
   // radar: your data, or the base's positions; plant spots when the bomb site is known
   const plantSpots=()=>{const TS=PL.tside,M=TS&&TS.maps&&TS.maps[S.map],site=following&&(igEv.site||null);if(!M||!site||!(M.evidence||{}).plants)return [];
     return (((M.evidence.plants||{})[site]||{}).spots||[]).map(s=>({px:s.px,level:s.level,label:`plant ${s.share}%`,color:"var(--bad)",title:`Plant spot on ${site}: ${s.share}% of plants, Ts win ${s.t_win}% after it`}))};
