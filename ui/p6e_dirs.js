@@ -11,7 +11,7 @@ function tdirsOf(map){if(!map||!D.local)return null;if(TDIRS[map]!==undefined)re
   return null}
 // the plan of this round: numpad 1-2-3 (or said to Wily) the way, 4-5-6 the tempo; a key after the round's end counts for the next
 function tdirSel(g){const t=g&&g.tdir;return t&&t.round===g.round?{dir:t.dir||null,via:t.via||null,tempo:t.tempo||null,src:t.src||null}:{dir:null,via:null,tempo:null,src:null}}
-const TEMPO_EN={rush:"RUSH",slow:"SLOW",control:"MAP CONTROL"},TEMPO_SAY={rush:"Rush",slow:"Slow",control:"Map control, then"};
+const TEMPO_EN={rush:"RUSH",slow:"SLOW",control:"MAP CONTROL"},TEMPO_SAY={rush:"Rush",slow:"Slow",control:"Map control"};
 const DIR_EN={A:"A",MID:"MID",B:"B"};
 const lgt=p=>Math.log(p/(1-p)),sgm=x=>1/(1+Math.exp(-x)),clp=p=>Math.min(.97,Math.max(.03,p));
 const shrinkTo=(nw,p0,k)=>nw&&nw[0]?(nw[1]+k*p0)/(nw[0]+k):p0;   // few rounds: closer to the way's own mean
@@ -71,12 +71,15 @@ function vDir(p,g,opt){if(g.side!=="T"||isHostage(g.map))return "";const more=op
   return `<div class="vdir"><div class="vdir-h">${head}</div><div class="vrows">${R.rows.map((r,i)=>`<div class="vrow" style="--c:${r.col}${i?`;opacity:${[1,.82,.68][i]}`:""}"><span>${i===0?"★ ":""}${esc(r.label)}</span><i><u style="width:${Math.max(4,Math.round(100*r.wr/mx))}%"></u></i><b>${r.wr}%</b></div>`).join("")}</div>
     ${dead?"":vDirCurve(p,g,top)}${dead||!more&&g.round_phase==="live"&&(g.elapsed||0)>(sel.tempo==="slow"||sel.tempo==="control"?95:Math.max(50,(top.hit_med||35)+15))?"":vDirUtil(p,g,top,more||(g.round_phase==="live"?2:3))}</div>`}   // the stuff stays until the way's usual hit (a slow round: until 0:20)
 // the team chat lines of numpad 1-6 for this round (T): the best way onto A, mid, B for the tempo picked, the tempo with the way picked
+// what the keys say in the team chat (07/10, the user: "si la touche veut dire A tu ne peux pas écrire A from Ramp: les
+// seules infos que tu envoies c'est les combos A/B/mid avec rush/slow/map control"): your direction and your tempo, the
+// last of each you pressed this round, nothing the app picked (the way in stays on your screen, in Live)
+const DIR_SAY={A:"A",MID:"mid",B:"B"};
+function sayCombo(dir,tempo){const d=DIR_SAY[dir]||"";if(!tempo)return d?d.charAt(0).toUpperCase()+d.slice(1):"";
+  return tempo==="control"?`Map control${d?", then "+d:""}`:`${TEMPO_SAY[tempo]}${d?" "+d:""}`}
 function dirTexts(p,g){const TD=tdirsOf(g.map);if(!TD||g.side!=="T"||isHostage(g.map))return null;const sel=tdirSel(g);
-  const best=f=>{const ds=TD.dirs.filter(d=>d.n>=25&&f(d)).map(d=>({...d,wr:dirOdds(p,g,d,sel.tempo).wr})).sort((a,b)=>b.wr-a.wr);return ds[0]||null};
-  const a=best(d=>d.site==="A"),b=best(d=>d.site==="B"),m=best(d=>d.mid),pre=sel.tempo&&sel.tempo!=="control"?TEMPO_SAY[sel.tempo]+" ":"";
-  const pick=sel.dir==="A"?a:sel.dir==="B"?b:sel.dir==="MID"?m:null,say=d=>d?d.label.replace("Mid → ","mid to "):"";
-  return {paths:[{rank:1,site:"A",text:a?pre+say(a):"A"},{rank:2,site:null,text:m?`${pre}Mid control - ${say(m)}`:"Mid"},{rank:3,site:"B",text:b?pre+say(b):"B"}],
-    tempo:{rush:`Rush${pick?" "+say(pick):""}`,slow:`Slow${pick?" "+say(pick):", default"}`,ctrl:`Map control first${pick?", then "+say(pick):""}`}}}
+  return {paths:[{rank:1,site:"A",text:sayCombo("A",sel.tempo)},{rank:2,site:null,text:sayCombo("MID",sel.tempo)},{rank:3,site:"B",text:sayCombo("B",sel.tempo)}],
+    tempo:{rush:sayCombo(sel.dir,"rush"),slow:sayCombo(sel.dir,"slow"),ctrl:sayCombo(sel.dir,"control")}}}
 // their money (06/10: "au début du round, l'argent des joueurs en face"): the game never sends it to a player. Rebuilt
 // from the rounds of this half with CS2's rules ($800 at the pistol, $3,250 a win, $3,500 by the bomb, a loss $1,400
 // + $500 a loss in a row up to $3,400, one step down after a win, the half starting one step up; $800 to the Ts when

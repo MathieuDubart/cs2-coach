@@ -1,7 +1,7 @@
 """Your team's plan with one key (06/10, the user: "un bind pour A, un bind pour mid, un bind pour B, un bind pour rush,
-un bind pour slow, un bind pour contrôle map"): numpad 1, 2, 3 say the way (A, mid, B: the way in Live picks for this
-round, "A via Ramp"), 4, 5, 6 the tempo (rush, slow, map control) in the team chat, and tell Wily: Live then shows that
-way, its odds and its grenades, with a ping. On CT the same keys only tell Wily (1-2-3 where you play, 4-5-6 what the
+un bind pour slow, un bind pour contrôle map"): numpad 1, 2, 3 say the direction (A, mid, B), 4, 5, 6 the tempo (rush,
+slow, map control) in the team chat, only what you pressed ("Rush A", 07/10: "si la touche veut dire A tu ne peux pas
+écrire A from Ramp"), and tell Wily: Live then shows the way in that wins most, its odds and its grenades, with a ping. On CT the same keys only tell Wily (1-2-3 where you play, 4-5-6 what the
 Ts do): nothing in the chat.
 
 CS2 runs a config file each time a key bound to `exec` is pressed, and reads it from the disk again: the app rewrites
