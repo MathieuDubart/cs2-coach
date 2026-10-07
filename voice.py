@@ -501,16 +501,52 @@ def delete(rid):
 
 
 # ---------- analysis ----------
-# how many, in French and in English (04/10: "two short", "three mid" did not count as complete calls in English lobbies)
+# how many, in French and in English (04/10: "two short", "three mid" did not count as complete calls in English lobbies).
+# 07/10 (the Nuke match of 00:28, "pas dingue": its "best calls" were "je me suis réveillé à 9h", "j'ai refait une nuit,
+# ça m'a dégoûté"): a count is one only next to a place ("un B", "3 outside": "une nuit" is an article), a damage only
+# in its call forms ("il est à 20", "80 HP": never a time, "à 9h")
 NUM = r"\b(un|une|deux|trois|quatre|cinq|[1-5]|tous|toute l'équipe|full|personne|seul|one|two|three|four|five|both|nobody|alone|everyone)\b"
-DMG = r"\b(touch[ée]|tagged|lit|one ?shot|one|il est à|à \d+|\d+ ?(hp|pv)|moins \d+|low|bas|cramé)\b"
-UTIL = r"\b(flash|flashe|smoke|smok|molo|molotov|incendiaire|he|grenade|stuff|nade|decoy|déco)\b"
+NUM_STRONG = re.compile(r"^(deux|trois|quatre|cinq|[2-5]|two|three|four|five|full|stack|tous|both|everyone)$")
+NUM_WEAK = re.compile(r"^(un|une|one|1|seul|personne|nobody|alone|aucun|last|dernier|dernière)$")
+DMG = (r"(?<!pas )\btouch[ée]e?s?\b|\btagged\b|\bone ?shot\b|\b(?:he'?s|is|il est|very|one|more) low\b|\blow hp\b|"
+       r"\b(?:il est|elle est|est|reste|il lui reste|lui reste)\s+(?:à\s+)?\d{1,3}\b(?!\s*(?:h\b|heures?|min|sec|s\b|%|ans?\b))|"
+       r"\b\d{1,3}\s*(?:hp|pv)\b|\bmoins\s+\d{2,3}\b")
+UTIL = r"\b(flash|flashe|flashes|smoke|smokes|smok|molo|molotov|incendiaire|grenade|stuff|nade|decoy|une he|la he|ma he|he grenade)\b"
 PLAN = r"\b(on (va|part|joue|fait|rush|push|exec|tourne|save|sauve|reste)|rush|push|exec|default|split|fake|save|sauve|éco|eco|force|full ?buy|drop|stack|retake|rotate|tourne|rotation|attends|go)\b"
 TILT = r"\b(putain|bordel|merde|nuls?|c'est pas possible|sérieux|fdp|ta gueule|ff|abusé|n'importe quoi)\b"
 GENERIC_POS = ["a", "b", "mid", "milieu", "site", "long", "short", "court", "banane", "banana", "apps", "pit", "arch", "connector", "palace", "jungle",
                "window", "fenêtre", "ramp", "rampe", "heaven", "hell", "outside", "lobby", "silo", "hut", "squeaky", "secret", "vent", "vents", "mini",
                "garage", "rafters", "catwalk", "tunnel", "tunnels", "canal", "bridge", "pont", "ruins", "alley", "spawn", "ct", "t", "boîte", "box",
                "car", "voiture", "truck", "camion", "tree", "arbre", "sun", "stairs", "escalier", "back", "fond", "top", "bas", "haut", "upper", "lower"]
+
+
+# places only in their call forms: alone they are French words ("il a", "t'as", "car" = because, "en bas", "c'est long")
+AMBIG = {"a", "b", "t", "car", "court", "fond", "bas", "haut", "long", "top", "back", "site", "main"}
+CALL_FORMS = [
+    (re.compile(r"\b(?:en|d'en|par en) (haut|bas)\b"), r"en\1"),
+    (re.compile(r"\b(?:(?:le|en|sur|au|du|de|vers|par) long|long (?:sitea|siteb|doors?|corner|coin|a|b))\b"), "long_"),
+    (re.compile(r"\b(?:(?:le|en|sur|au|du|de) court|court (?:sitea|siteb|a|b))\b"), "court_"),
+    (re.compile(r"\b(?:(?:le|sur|en|du|au|on|dans le) site|site (?:sitea|siteb|a|b)|(?:sitea|siteb) site)\b"), "site_"),
+    (re.compile(r"\btop (?:main|mid|milieu|ramp|rampe|site|of \w+)\b"), "top_"),
+    (re.compile(r"\b(?:back (?:site|sitea|siteb|a|b|plat|plateau))\b"), "back_"),
+    (re.compile(r"\b(?:au|le) fond (?:du site|de site|site|sitea|siteb)\b"), "fond_"),
+    (re.compile(r"\b(?:t spawn|spawn t|côté t|t side)\b"), "tspawn_"),
+    (re.compile(r"\b(?:(?:a|b) main|main (?:a|b))\b"), "main_"),
+]
+SITE_LOWER = re.compile(r"\b(?:site|rush|go|push|exec|full|stack|côté|cote|sur|vers|long|short)\s+([ab])\b|\b([ab])\s+(?:site|long|short|main|ramp|rampe)\b|\ben b\b")
+
+
+def _call_text(text):
+    """The phrase as the call analysis reads it: the sites A and B marked when the transcription wrote them as sites
+    (capital letters, "site A", "rush B", "on part à"), the places that are French words kept in their call forms only."""
+    t = re.sub(r"(?<![\w'’])([AB])(?![\w'’])", lambda m: f" site{m.group(1).lower()} ", text)   # "rush B", "Last B", "un B"
+    t = normalize(t)
+    t = re.sub(r"\b(part|va|joue|fait|rush|push|exec|tourne|sur|en)\s+à(?=\s*(?:[,.!?;]|$|\s+(?:long|short|site|main|direct|rush|go)\b))", r"\1 sitea", t)
+    t = SITE_LOWER.sub(lambda m: m.group(0).replace(" a", " sitea").replace(" b", " siteb").replace("a ", "sitea ", 1) if m.group(2) else
+                       m.group(0)[:-1] + "site" + m.group(0)[-1], t)
+    for rx, rep in CALL_FORMS:
+        t = rx.sub(lambda m: " " + re.sub(r"\W+", "_", m.group(0)) + "_ ", t) if rep.endswith("_") else rx.sub(rep, t)
+    return t
 
 
 def _pos_re(map_name):
@@ -523,7 +559,9 @@ def _pos_re(map_name):
                     words.add(w)
     except Exception:
         pass
-    return re.compile(r"\b(" + "|".join(sorted(map(re.escape, words), key=len, reverse=True)) + r")\b", re.I)
+    words = {w for w in words if w not in AMBIG} | {"sitea", "siteb", "enhaut", "enbas"}
+    # a call form ("long_a_", "top_main_", "site_b_") is one token: any word that ends with "_"
+    return re.compile(r"\b(" + "|".join(sorted(map(re.escape, words), key=len, reverse=True)) + r"|\w+_)(?![\w])", re.I)
 
 
 def normalize(text):
@@ -535,11 +573,31 @@ def normalize(text):
 
 
 def classify(text, pos_re):
-    t = normalize(text)
-    pos, num, dmg = bool(pos_re.search(t)), bool(re.search(NUM, t)), bool(re.search(DMG, t))
-    dmg_value = bool(re.search(r"à \d+|\d+ ?(hp|pv)|one ?shot|touch[ée]|tagged", t))
-    return {"info": pos or dmg, "complete": (pos and (num or dmg)) or dmg_value, "util": bool(re.search(UTIL, t)),
-            "plan": bool(re.search(PLAN, t)), "tilt": bool(re.search(TILT, t))}
+    """info: a place or a damage; complete: where AND how many (the count next to the place: "deux B", "3 outside",
+    "un silo, un rampe") or the damage; util: a grenade named."""
+    t = _call_text(text)
+    toks = re.findall(r"[\w']+", t)
+    at = [i for i, w in enumerate(toks) if pos_re.fullmatch(w)]
+    dmg = bool(re.search(DMG, t))
+    near = lambda i, k: any(abs(i - j) <= k for j in at)
+    counted = any((NUM_STRONG.match(w) and near(i, 4)) or (NUM_WEAK.match(w) and near(i, 2)) for i, w in enumerate(toks))
+    tn = normalize(text)
+    return {"info": bool(at) or dmg, "complete": (bool(at) and counted) or dmg, "util": bool(re.search(UTIL, tn)) or bool(re.search(r"(?<![\w'])HE(?![\w'])", text)),
+            "plan": bool(re.search(PLAN, tn)), "tilt": bool(re.search(TILT, tn))}
+
+
+def _examples(utts, n=4):
+    """The best calls of a match: complete and short (a call is a few words; a long phrase is talk), the shortest
+    first, each once."""
+    seen, out = set(), []
+    for u in sorted((u for u in utts if u["complete"] and 1 <= len(u["text"].split()) <= 12), key=lambda u: (len(u["text"].split()), u["start"])):
+        k = re.sub(r"\W+", " ", u["text"].lower()).strip()
+        if k and k not in seen:
+            seen.add(k)
+            out.append(u["text"].strip())
+        if len(out) >= n:
+            break
+    return out
 
 
 # what a phrase says about how you feel. Said on purpose: "coach" then one word ("coach, perdu", "coach confiant");
@@ -610,7 +668,7 @@ def mood_all(text):
     return [m] if m else []
 
 
-ANALYSIS_V = 4   # bump when the analysis changes: mood_stats analyzes the older ones again
+ANALYSIS_V = 5   # bump when the analysis changes: mood_stats analyzes the older ones again (5: real calls only, 07/10)
 
 
 def mood_of(text):
@@ -742,7 +800,7 @@ def analyze(rid, sid):
            "silent_deaths": sum(1 for r in deaths if not r["info_before_death"]), "deaths": len(deaths),
            "clutch_talk_rounds": sum(1 for r in rr if r["clutch_talk"]), "clutch_rounds": sum(1 for r in rr if r["round"] in clutch_windows),
            "throws": thr, "announced": sum(r["announced"] for r in rr),
-           "examples": [u["text"] for u in utts if u["complete"]][:4],
+           "examples": _examples(utts),
            "tilt_rounds": [r["round"] for r in rr if any(x["kind"] == "tilt" for x in r["texts"])][:6],
            "moods": {k: sum(1 for u in utts for mo in u.get("moods") or [] if mo["kind"] == k) for k in MOODS + ("note",)}}
     if mid and live:
