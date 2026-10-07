@@ -211,17 +211,72 @@ def run_all(log=print, force=False):
     return n
 
 
-def load():
-    fs = [os.path.join(OUT, f) for f in os.listdir(OUT) if f.endswith(".parquet")] if os.path.exists(OUT) else []
+# 07/10, the user: "qu'est-ce qui prend autant de temps ?": a plan read the base's 3,049 per-match files from the hard
+# disk 3 or 4 times (its situations, the Live checks, the teammates' spots), 2 min each. Now one consolidated file per
+# state of the base (its files' count and newest date), and the table kept in memory for the next callers (15 min idle)
+ALL = os.path.join(config.OUT, "population", "tside_all.parquet")
+_MEM = {}
+
+
+def _base_state():
+    try:
+        fs = [f for f in os.listdir(OUT) if f.endswith(".parquet")]
+    except OSError:
+        return None, []
+    newest = max((os.path.getmtime(os.path.join(OUT, f)) for f in fs), default=0.0)
+    return f"{len(fs)}:{newest:.0f}", fs
+
+
+def _raw(state, fs):
+    """Every match's rounds in one table: the consolidated file when it matches the base, else read and written."""
+    import json
+    side = ALL + ".json"
+    try:
+        if json.load(open(side, encoding="utf-8")).get("state") == state:
+            return pd.read_parquet(ALL)
+    except (OSError, ValueError):
+        pass
     dfs = []
     for f in fs:
-        x = pd.read_parquet(f)
+        x = pd.read_parquet(os.path.join(OUT, f))
         if len(x):
-            x["match"] = os.path.basename(f)[:-8]
+            x["match"] = f[:-8]
             dfs.append(x)
     if not dfs:
         return pd.DataFrame()
     df = pd.concat(dfs, ignore_index=True)
+    try:
+        tmp = ALL + f".{os.getpid()}.tmp"
+        df.to_parquet(tmp)
+        os.replace(tmp, ALL)
+        json.dump({"state": state}, open(side, "w", encoding="utf-8"))
+    except Exception as e:   # a column parquet refuses: the next call reads the files again
+        print("tside: no consolidated copy:", e, flush=True)
+    return df
+
+
+def load():
+    """The base's T side, round by round, with its directions, dynamics and sequences (a copy: callers may change it)."""
+    import threading
+    state, fs = _base_state()
+    hit = _MEM.get("df")
+    if hit is None or hit[0] != state:
+        hit = (state, _load(state, fs))
+        _MEM["df"] = hit
+    t = _MEM.get("timer")
+    if t:
+        t.cancel()
+    t = threading.Timer(900, lambda: _MEM.pop("df", None))   # the memory back after 15 min without a caller
+    t.daemon = True
+    t.start()
+    _MEM["timer"] = t
+    return hit[1].copy()
+
+
+def _load(state, fs):
+    df = _raw(state, fs)
+    if not len(df):
+        return pd.DataFrame()
     zs = zone_sites(df)
     try:   # kept for the round-by-round story of a single match (no need to load the whole base)
         import json
