@@ -332,9 +332,11 @@ def set_tdir(what, src="key", toggle=True, via=None):
             return False
         cur.update(t=now, src=src)
         STATE["tdir"] = cur
-        mp = STATE.get("map")
+        mp, bomb = STATE.get("map"), STATE.get("bomb")
     log_event({"map": mp, "round": int(rnd), "tdir": {k: cur.get(k) for k in ("dir", "via", "tempo", "src")}})
-    if what in ("A", "B"):   # CT: the site you play; bomb down: its site (what numpad 7 / 9 say)
+    # CT: the site you play. Bomb down, only numpad 7 / 9 say its site (07/10, the user: "garde bien le 7 ou 9 pour le
+    # post-plant"): 1, 2 or 3 then say where you are, the start of your rotation
+    if what in ("A", "B") and not (bomb == "planted" and ph != "over"):
         set_site_key(what)
     return True
 

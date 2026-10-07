@@ -55,6 +55,11 @@ def todo(mp):
     for U in (M.get("ct_util") or {}).values():
         for u in U:
             add("CT", u)
+    for side, key in (("T", "util_dt"), ("CT", "ct_util_t")):   # the stuff of a direction and a tempo (07/10)
+        for T_ in (M.get(key) or {}).values():
+            for U in T_.values():
+                for u in U:
+                    add(side, u)
     return sorted(out, key=lambda x: -x["n"])
 
 

@@ -222,7 +222,7 @@ function liveRadar(box,p,map,level,g,o){
   const FN=o.following&&g?focusN(g):0;   // the path you pressed: the only one drawn
   const TDR=!HMAP&&att&&o.following&&g&&typeof tdirsOf==="function"&&tdirsOf(map)?dirRank(p,g,tdirsOf(map)):null;   // 06/10: the ways in (A via Ramp...)
   if(TDR&&on("paths")&&!planted&&(g.round_phase==="freezetime"||(live&&(g.elapsed||0)<45))&&TDR.rows.length){dirPaths(Lrot,Ltop,TDR,level);
-    if(!dead&&dirNades(Lnades,Ltop,TDR,level,tdirsOf(map)))legend.push(`<span>the way's stuff: thrown from the white dot, lands on the icon</span>`);
+    if(!dead&&dirNades(Lnades,Ltop,TDR,level,tdirsOf(map),g))legend.push(`<span>the way's stuff: thrown from the white dot, lands on the icon</span>`);
     legend.push(`<span>${SW.tpath}the way in from the spawn, % = rounds won by it this round (your buy and theirs${TDR.sel.tempo?`, ${TEMPO_EN[TDR.sel.tempo].toLowerCase()}`:""}); numpad 1-2-3 = A / mid / B, 4-5-6 = rush / slow / map control, minus drops them</span>`)}
   const TDx=!HMAP&&o.following&&g&&typeof tdirsOf==="function"?tdirsOf(map):null;if(TDx)pingMark(Ltop,g,TDR,level,TDx);   // A, B or mid pressed or said: a ping
   if(TDx&&typeof wilyRadar==="function")wilyRadar(p,g,level,Lnades,Ltop,legend);   // what you asked Wily, on the map
@@ -294,12 +294,18 @@ function liveRadar(box,p,map,level,g,o){
     Object.entries((E&&E.types)||{}).forEach(([type,T])=>(T.post||[]).filter(x=>x.to_px&&Math.hypot(x.to_px[0]-S_[0],x.to_px[1]-S_[1])<=230&&(!held||held[type]>0)).slice(0,1)
       .forEach(x=>drawNade({...x,type},`retake ${nadeName(type,"CT")}`,`Retake ${nadeName(type,"CT")}: ${x.from} → ${x.to}. ${x.how||""}`)));
     legend.push(`<span>${SW.nade}retake grenade: from the white dot to its icon</span>`)}
-  if(ct&&on("nades")&&PLs){const NN=nadesNow(PL,map,g,PLs,live);
+  const CDP=ct&&!planted&&o.following&&g&&typeof ctDirStuff==="function"&&tdirSel(g).dir?ctDirStuff(g):null;   // a site said (numpad 1-3, 07/10): the card's stuff
+  if(CDP&&on("nades")&&stuffArcs(Lnades,Ltop,CDP,level))legend.push(`<span>${SW.nade}your stuff for the site you said: from the white dot to its icon</span>`);
+  if(ct&&!planted&&o.following&&g&&g.round_phase==="freezetime"&&tdirSel(g).dir&&typeof ctBoostPick==="function"){const b=ctBoostPick(p,g,tdirSel(g).dir);
+    if(b&&b.px&&(!b.level||!level||b.level===level)){const gg=el("g",{},Ltop);el("circle",{cx:b.px[0],cy:b.px[1],r:11,style:"fill:var(--good);fill-opacity:.35;stroke:var(--good);stroke-width:2.4"},gg);
+      el("text",{x:b.px[0],y:b.px[1]+5,"text-anchor":"middle",class:"pbt"},gg).textContent="⤴";obstacle(Ltop,b.px[0],b.px[1],24,24);
+      tip(gg,`Boost ${b.place||""}: you trained it; ${b.kills} kills from up there in the base`);legend.push(`<span>⤴ a boost you trained</span>`)}}
+  if(ct&&on("nades")&&PLs&&!CDP){const NN=nadesNow(PL,map,g,PLs,live);
     NN.forEach(x=>drawNade(x,`${nadeName(x.type,"CT")} → ${vShort(x.to||"?")}${/jump|run/i.test(x.how||"")?` · ${String(x.how).match(/jump|run/i)[0].toLowerCase()}`:""}${x.role==="anti_rush"?" · anti-rush":x.role==="block"?" · block":x.role==="flash"?" · as they push":""}`,
       `${nadeName(x.type,"CT")} ${x.from} → ${x.to}: ${x.why}. ${x.how||""}${x.click?`, ${x.click} click`:""}${x.yours?"":" (from a spot you don't play)"}`));
     o.nadesOut&&o.nadesOut(NN);
     if(NN.length)legend.push(`<span>${SW.nade}grenade worth throwing ${live?"now":"this round"}: from the white dot to its icon (cloud smoke, flame molotov, burst flash, HE)</span>`)}
-  if(att&&on("nades")&&o.following&&typeof vNadePicks==="function"){const NP=vNadePicks(p,g).filter(x=>x.x);
+  if(att&&on("nades")&&o.following&&typeof vNadePicks==="function"&&!(TDR&&TDR.rows.length)){const NP=vNadePicks(p,g).filter(x=>x.x);   // the ways' card draws its own stuff
     NP.forEach(n=>drawNade({...n.x,type:n.type},`${nadeName(n.type,"T")} → ${vShort(n.x.to||"?")}${n.x.pop?" · pop":""}`+(/jump|run/i.test(n.x.how||"")?` · ${String(n.x.how).match(/jump|run/i)[0].toLowerCase()}`:"")+({site:` · site ${FN||1}`,way:` · path ${FN||1}`}[n.x.way]||""),`${nadeName(n.type,"T")} ${n.x.from} → ${n.x.to}${n.x.how?`. ${n.x.how}`:""}`));
     NP.filter(n=>n.alt&&n.alt.to_px&&n.alt.from_px&&here({px:n.alt.to_px,level:n.alt.land_level||n.alt.level})).forEach(n=>{const a=n.alt,gg=el("g",{style:"opacity:.45"},Lnades);   // the other good throw, faint
       nadeArc(gg,a.from_px[0],a.from_px[1],a.to_px[0],a.to_px[1],n.type);tip(el("circle",{cx:a.to_px[0],cy:a.to_px[1],r:9,style:`fill:var(--${n.type});fill-opacity:.6;stroke:#0b0f14`},gg),`Other ${nadeName(n.type,"T")}: ${a.from} → ${a.to}`)});
@@ -307,16 +313,19 @@ function liveRadar(box,p,map,level,g,o){
   // after the plant: the way to the site from where you are, and where the bomb usually is
   const you=o.following&&g&&g.pos&&GEO?worldPx(GEO,g.pos):null;
   // before the plant, when the read leans hard to one site (70%+): the rotation from the other one (you may be holding it)
-  let rotSite=planted?site:null,rotFrom=null;
+  let rotSite=planted?site:null,rotFrom=null,said=false;
+  // after the plant, a way said this round (numpad 1-2-3, 07/10: "tu me donnes les chemins de rota depuis le mid pour le B"): from there, both sides
+  const SD=planted&&site&&o.following&&g&&typeof tdirSel==="function"?tdirSel(g).dir:null,SX=SD&&M?rotFromDir(M,site,SD,map):null;
+  if(SX){rotFrom=SX.from;said=true}
   if(ct&&!planted&&live&&o.following&&g&&(g.elapsed||0)>=15&&(g.elapsed||0)<=80&&M&&M.plays){const r_=tsidePredict(TS,map,g,evFor(g));
     if(r_&&Math.max(r_.A,r_.B)>=70){rotSite=r_.A>r_.B?"A":"B";rotFrom=`${rotSite==="A"?"B":"A"} Site`}}
-  if(ct&&on("rot")&&rotSite&&M&&GEO){const site=rotSite,from=rotFrom||(you?nearestZone(GEO,you.px,you.level):(SP[0]||{}).name),R=rotationFor(M,site,from,GEO);
+  if((ct||said)&&on("rot")&&rotSite&&M&&GEO){const site=rotSite,from=rotFrom||(you?nearestZone(GEO,you.px,you.level):(SP[0]||{}).name),R=rotationFor(M,site,from,GEO);
     if(R&&R.routes){R.routes.slice().reverse().forEach((rt,j)=>{const i=R.routes.length-1-j,col=rt.died>=40?"var(--bad)":rt.died>=20?"#e0a526":"var(--good)";let m_;
         if(rt.pts&&rt.pts.length>2){   // the walk of the base (the corridors)
-          const w=you&&i===0&&you.level===level?[[you.px[0],you.px[1],you.level],...rt.pts]:rt.pts,sg=rotPath(Lrot,w,col,i===0,level);if(!sg.length)return;
+          const w=you&&i===0&&you.level===level&&!said?[[you.px[0],you.px[1],you.level],...rt.pts]:rt.pts,sg=rotPath(Lrot,w,col,i===0,level);if(!sg.length)return;
           const lng=sg.reduce((a,b)=>b.length>a.length?b:a);m_=lng[Math.floor(lng.length/2)]}
         else{const pts=[GEO.zones[R.from],...rt.route.map(z=>GEO.zones[z]),GEO.sites[site]].filter(Boolean).map(z=>z.px);
-          if(you&&i===0)pts.unshift(you.px);if(pts.length<2)return;rotPath(Lrot,pts.map(q=>[q[0],q[1],null]),col,i===0,null);m_=pts[Math.floor(pts.length/2)]}
+          if(you&&i===0&&!said)pts.unshift(you.px);if(pts.length<2)return;rotPath(Lrot,pts.map(q=>[q[0],q[1],null]),col,i===0,null);m_=pts[Math.floor(pts.length/2)]}
         tip(rtag(Ltop,m_[0],m_[1]-18,`⏱ ${rt.travel!=null?`${Math.round(rt.travel)} s · `:""}${rt.died}% die`,col,"rot"),`From ${R.from} to ${site}: ${rt.route.join(" > ")} (${rt.n} rotations in the base, ${rt.died}% died on the way)`)});
       legend.push(`<span>${SW.route}rotation to ${site} from ${esc(R.from)} (green = safe, red = players often die on the way; dashed = the other way)</span>`)}}
   cap.innerHTML=legend.join("");flushLabels(Ltop);   // the legend first: its box is known when the labels are placed
