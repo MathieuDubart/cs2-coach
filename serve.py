@@ -143,7 +143,9 @@ def publish_partial(sid):
 
 
 # the app's addresses (like csrep's): the page is served there, and reads them
-APP_PAGES = re.compile(r"/(?:player/\d{17}(?:/[a-z]+)?|match/[A-Za-z0-9-]{1,40}|team|players|pros|settings|live|prepare|review)/?")
+# 07/10: the menus' words (/review, /profile/reads, /profile/maps/nuke, /matches/<code>...), another player's under /player/<id>
+APP_PAGES = re.compile(r"/(?:player/\d{17}(?:/[A-Za-z0-9_-]{1,40}){0,3}|match/[A-Za-z0-9-]{1,40}|"
+                       r"(?:profile|matches|review|prepare|live|settings|team|players|pros)(?:/[A-Za-z0-9_-]{1,40}){0,2})/?")
 
 
 def match_info(code):

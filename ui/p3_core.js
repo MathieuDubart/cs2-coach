@@ -471,6 +471,7 @@ function renderMaps(){
     ["Hurt: fall back","Under 50 HP, call your HP, fall back one angle and cover a healthy teammate's trade."],
     ["Shot next to you = move","If a teammate dies near you, back off a meter: the enemy pre-aims the standard angle."],
     ["Play the advantage","At 5v4, move up with your team to take space. Don't hold alone."]];
+  if(S.cmapSlug){const f=maps.find(x=>mapSlug(x.map)===S.cmapSlug);if(f)S.cmap=f.map;S.cmapSlug=null}   // /profile/maps/<map>
   if(!S.cmap||!maps.some(x=>x.map===S.cmap))S.cmap=maps[0]?.map;
   v.innerHTML=`<div class="head"><div style="display:grid;gap:4px"><span class="eyebrow">${esc(p.name)} · ${c.totals.my_duels} duels compared with ${c.totals.others_duels} duels of other players</span><h2>Maps and grenades</h2></div></div>
   ${secNav([["mp-sheet","Map sheet"],["lus","Lineups"],["mp-duels","Your duels"],["mp-tech","Techniques"]])}
@@ -482,7 +483,7 @@ function renderMaps(){
   <details><summary style="cursor:pointer;font-family:var(--f-display);font-size:20px;font-weight:600">Every duel context</summary>
     <div class="tbl" style="margin-top:10px"><table><thead><tr><th>Situation</th><th class="n">Your duels</th><th class="n">You</th><th class="n">Others</th></tr></thead><tbody>${c.contexts.map(g=>`<tr><td class="grp" colspan="4">${esc(g.name)}</td></tr>`+g.rows.map(r=>{const d=(r.win??0)-(r.others_win??0),k=r.n>=15?(d>=8?"good":d<=-8?"bad":""):"";return `<tr><td class="wrap">${esc(r.label)}</td><td class="n">${r.n}</td><td class="n ${k}">${r.win==null?"—":r.win+"%"}</td><td class="n">${r.others_win==null?"—":r.others_win+"%"}</td></tr>`}).join("")).join("")}</tbody></table></div></details>
   <p class="note">General zones, best spots and lineups come from every demo of the map in the base. Your zones come from your matches only.</p>`;
-  $$("[data-cmap]",v).forEach(b=>b.onclick=()=>{S.cmap=b.dataset.cmap;press(v,"[data-cmap]",b);mapSheet()});
+  $$("[data-cmap]",v).forEach(b=>b.onclick=()=>{S.cmap=b.dataset.cmap;press(v,"[data-cmap]",b);mapSheet();syncUrl()});   // the map in the address
   mapSheet();
   function mapSheet(){
     const m=crossMap(p,S.cmap),host=$("#cmap",v);if(!m){host.innerHTML="";return}

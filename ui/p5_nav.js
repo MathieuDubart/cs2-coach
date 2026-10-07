@@ -45,10 +45,12 @@ function focusOf(p){const A=p&&p.advice;if(!A)return null;const F=(A.plan||{}).f
 // same on each of its pages, instead of cards that each led somewhere else
 const PTABS=[["profile","Overview"],["analysis","Reads"],["midround","Mid-round"],["maps","Maps"],["progress","Weapons & buys"],["routine","Habits"]];
 function navUpdate(view){const g=GROUP[view]||view;
-  $$("nav a, .gear").forEach(a=>{if(a.dataset.view===g)a.setAttribute("aria-current","page");else a.removeAttribute("aria-current")});
+  $$("nav a, .gear").forEach(a=>{if(a.dataset.view===g)a.setAttribute("aria-current","page");else a.removeAttribute("aria-current");
+    if(D.local&&typeof viewPath==="function"){a.setAttribute("href",viewPath(a.dataset.view));a.dataset.go=a.dataset.view}});   // real addresses (07/10)
   const sn=$("#subnav"),items=SUB[g],inProf=PTABS.some(([k])=>k===view);sn.hidden=!items;
-  if(items)sn.innerHTML=`<div class="sn-row">${items.map(([k,t])=>`<a href="#${k}" ${k===view||(k==="profile"&&inProf)?'aria-current="page"':""}>${t}</a>`).join("")}</div>`
-    +(inProf?`<div class="sn-row sn-2" aria-label="Your profile">${PTABS.map(([k,t])=>`<a href="#${k}" ${k===view?'aria-current="page"':""}>${t}</a>`).join("")}</div>`:"");
+  const hr=k=>D.local&&typeof viewPath==="function"?`href="${viewPath(k)}" data-go="${k}"`:`href="#${k}"`;
+  if(items)sn.innerHTML=`<div class="sn-row">${items.map(([k,t])=>`<a ${hr(k)} ${k===view||(k==="profile"&&inProf)?'aria-current="page"':""}>${t}</a>`).join("")}</div>`
+    +(inProf?`<div class="sn-row sn-2" aria-label="Your profile">${PTABS.map(([k,t])=>`<a ${hr(k)} ${k===view?'aria-current="page"':""}>${t}</a>`).join("")}</div>`:"");
   // another profile on screen: said by the views, with the way back to yours (yours: the account on the right says it)
   const w=$("#whochip"),p=S.player&&D.players[S.player],other=!!(p&&D.own&&S.player!==D.own);
   const fav=other&&D.local&&favs().includes(S.player);

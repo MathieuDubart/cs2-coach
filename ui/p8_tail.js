@@ -131,40 +131,64 @@ $("#search").addEventListener("submit",async e=>{e.preventDefault();const q=$("#
 
 // ---------- routing ----------
 const RENDER={ingame:renderIngame,prepare:renderPrepare,review:renderReview,profile:renderProfile,analysis:renderAnalysis,routine:renderRoutine,midround:renderMidround,progress:renderProgress,team:renderTeam,matches:renderMatches,maps:renderMaps,players:renderPlayers,pros:renderPros,settings:renderSettings};
-// The local app has addresses like csrep's: /player/<steamid> (their first view: In game for you, Analysis for the others),
-// /player/<steamid>/<view>, /match/<share code, or match id when it has none>[?as=<steamid>: seen as someone else than
-// you], /team, /players, /pros, /settings; old links (/#review) still open. The published page (one file) keeps #view.
-// 07/10, the user ("je ne vois pas l'intérêt de cette page", Live outside a match): Review first; Live opens itself when
-// CS2 starts (serve.py) and from the bar
+// The addresses (07/10, the user: "rends les URLs et la gestion de la navigation par URL plus UX"): the menus' own words,
+// yours short, another player's the same under /player/<steamid>, and what you chose in them:
+//   /review[?period=7d|week|month|30d] · /profile · /profile/reads · /profile/mid-round · /profile/maps/<map> ·
+//   /profile/weapons · /profile/habits · /matches[/<share code>] · /prepare · /live · /settings
+//   /player/<steamid>[/<the same>] (their Profile first)
+// Older ones still open: /player/<steamid>/<view> (analysis, midround, progress, routine, ingame...), /match/<code>[?as=],
+// /#review. The published page (one file) keeps #view.
+// 07/10: Review first; Live opens itself when CS2 starts (serve.py) and from the bar
 const GLOBAL=["team","players","pros","settings"],homeView=sid=>sid&&sid===D.own?"review":"profile";
+const VSLUG={ingame:"live",prepare:"prepare",review:"review",profile:"profile",analysis:"profile/reads",midround:"profile/mid-round",
+  maps:"profile/maps",progress:"profile/weapons",routine:"profile/habits",matches:"matches"};
+const SLUGV=Object.fromEntries(Object.entries(VSLUG).map(([v,s])=>[s,v]));
+const mapSlug=m=>String(m||"").replace(/^(de|cs|ar)_/,"");   // de_nuke -> nuke
+const VTITLE={ingame:"Live",prepare:"Prepare",review:"Review",profile:"Profile",analysis:"Reads",midround:"Mid-round",maps:"Maps",progress:"Weapons & buys",
+  routine:"Habits",matches:"Matches",settings:"Settings",players:"Players",pros:"Pros",team:"Team"};
 let navAt=0,navQuiet=0,afterJob=null,CODES={};   // CODES: match id -> share code
-// /live: your In game page, the address to keep open during a match (a second screen, OBS) (04/10)
-function pathNow(){const v=S.view;if(GLOBAL.includes(v))return "/"+v;if(!S.player)return "/";if(v==="ingame"&&S.player===D.own)return "/live";
-  if((v==="prepare"||v==="review")&&S.player===D.own)return "/"+v;   // your three moments: /live, /prepare, /review
+// a view's address for a player (you: no prefix)
+function viewPath(v,sid){sid=sid===undefined?S.player:sid;if(GLOBAL.includes(v))return "/"+v;
+  const mine=!sid||sid===D.own,base=mine?"":`/player/${sid}`;
+  if(!mine&&v===homeView(sid))return base;
+  return `${base}/${VSLUG[v]||v}`}
+function pathNow(){const v=S.view;if(GLOBAL.includes(v))return "/"+v;if(!S.player)return "/";
+  let u=viewPath(v);
+  if(v==="maps"&&S.cmap)u+="/"+mapSlug(S.cmap);
   const m=v==="matches"&&S.mpin&&P()?P().matches[S.match]:null;
-  return m?`/match/${CODES[m.id]||m.id}${S.player!==D.own?"?as="+S.player:""}`:`/player/${S.player}${v===homeView(S.player)?"":"/"+v}`}
+  if(m)u+="/"+(CODES[m.id]||m.id);
+  if(v==="review"){const per=store("revper");if(per&&per!=="session")u+="?period="+per}
+  return u}
+function setTitle(){const v=S.view,p=S.player&&D.players[S.player],who=p&&S.player!==D.own?p.name+" · ":"";
+  const mp=v==="maps"&&S.cmap?" · "+MAPN(S.cmap):"";document.title=`${who}${VTITLE[v]||"Wily"}${mp} · Wily`}
 // the address of what is on screen: a new history entry for each move of yours (back works), the same entry for the
 // steps of one move (a profile loading, then its view) and when the address itself led here
 function syncUrl(){
   if(!D.local){if(location.hash.slice(1)!==S.view)history.replaceState(null,"",location.pathname+location.search+"#"+S.view);return}
   let u=pathNow();
-  if(navQuiet){const k=[...new URLSearchParams(location.search)].filter(([n])=>n!=="as"&&n!=="q");if(k.length)u+=(u.includes("?")?"&":"?")+new URLSearchParams(k)}   // ?steam=… (back from Steam) stays for its page
+  if(navQuiet){const k=[...new URLSearchParams(location.search)].filter(([n])=>n!=="as"&&n!=="q"&&n!=="period");if(k.length)u+=(u.includes("?")?"&":"?")+new URLSearchParams(k)}   // ?steam=… (back from Steam) stays for its page
+  setTitle();
   if(location.pathname+location.search+location.hash===u)return;
   const now=Date.now();if(navQuiet||now-navAt<500)history.replaceState(null,"",u);else{history.pushState(null,"",u);navAt=now}}
 function defPlayer(){const sp=store("player");return sp&&IDX()[sp]?sp:(D.own&&IDX()[D.own]?D.own:(D.local&&D.own?null:(D.default||(D.index[0]||{}).steamid||null)))}
 // the address -> what to show
 async function route(){
-  const path=location.pathname.replace(/\/+$/,"")||"/",as=new URLSearchParams(location.search).get("as");
+  const path=location.pathname.replace(/\/+$/,"")||"/",qs=new URLSearchParams(location.search),as=qs.get("as");
   const h=ALIAS[location.hash.slice(1)]||location.hash.slice(1),hv=RENDER[h]?h:null;   // an old link (/#review), or a #view link opened in a new tab
-  let m;
-  if((m=path.match(/^\/match\/([A-Za-z0-9-]+)$/)))return openMatch(m[1],as);
-  if((m=path.match(/^\/player\/(\d{17})(?:\/([a-z]+))?$/))){const sid=m[1],v=ALIAS[m[2]]||m[2];
-    if(!IDX()[sid])return notYet(`This player (SteamID ${sid}) isn't analyzed yet.`,sid);
-    S.view=hv||(RENDER[v]&&!GLOBAL.includes(v)?v:homeView(sid));return setPlayer(sid)}
-  if(path==="/live"&&D.own&&IDX()[D.own]){S.view="ingame";return setPlayer(D.own)}
-  if((path==="/prepare"||path==="/review")&&D.own&&IDX()[D.own]){S.view=hv||path.slice(1);return setPlayer(D.own)}
-  m=path.match(/^\/([a-z]+)$/);const g=m&&(ALIAS[m[1]]||m[1]),p=defPlayer();
-  S.view=hv||(GLOBAL.includes(g)?g:homeView(p));return setPlayer(p)}
+  let m,sid,rest=path;
+  if((m=path.match(/^\/match\/([A-Za-z0-9-]+)$/)))return openMatch(m[1],as);   // the older match addresses
+  if((m=path.match(/^\/player\/(\d{17})(\/.*)?$/))){sid=m[1];rest=m[2]||"";
+    if(!IDX()[sid])return notYet(`This player (SteamID ${sid}) isn't analyzed yet.`,sid)}
+  else sid=defPlayer();
+  const seg=rest.split("/").filter(Boolean).map(x=>x.toLowerCase());
+  if(seg[0]&&GLOBAL.includes(ALIAS[seg[0]]||seg[0])&&!m){S.view=ALIAS[seg[0]]||seg[0];return setPlayer(sid)}
+  let v=null;
+  if(seg[0]==="profile"){v=seg[1]?SLUGV["profile/"+seg[1]]||null:"profile";if(v==="maps"&&seg[2])S.cmapSlug=seg[2]}
+  else if(seg[0]==="matches"){if(seg[1])return openMatch(seg[1],sid);v="matches"}
+  else if(seg[0]){const o=ALIAS[seg[0]]||seg[0];v=SLUGV[o]||(RENDER[o]&&!GLOBAL.includes(o)?o:null)}   // review, prepare, live; analysis, midround, ingame…
+  if(v==="review"||(!v&&!seg.length&&homeView(sid)==="review")){const per=qs.get("period");store("revper",["7d","week","month","30d"].includes(per)?per:"session")}   // the address says the period (back and forward too)
+  if(seg.length&&!v&&!hv)return notYet(`Nothing at this address: ${esc(path)}.`);
+  S.view=hv||v||homeView(sid);return setPlayer(sid)}
 // /match/<id or share code>: that match, seen as the player of the address (?as=), else you, else an analyzed player in it
 async function openMatch(code,as){
   let j=null;try{const r=await fetch("/api/match?code="+encodeURIComponent(code));if(r.ok)j=await r.json()}catch(e){}
@@ -185,7 +209,7 @@ function notYet(msg,q,after){
   const b=$("#nyet",v);if(b)b.onclick=()=>{b.disabled=true;partialShown=null;startAnalysis(q,after)}}
 function go(view){view=ALIAS[view]||view;if(!D.local&&location.hash!=="#"+view)history.replaceState(null,"",location.pathname+location.search+"#"+view);show(view)}
 function show(view){view=ALIAS[view]||view;if(!RENDER[view])view="review";if(view!=="ingame")document.body.classList.remove("igfull");
-  S.view=view;$$("main>.view").forEach(x=>x.hidden=x.id!=="v-"+view);
+  S.view=view;$$("main>.view").forEach(x=>x.hidden=x.id!=="v-"+view);setTitle();
   if(!D.local||GLOBAL.includes(view)||!S.player||D.players[S.player])syncUrl();   // a profile still loading: its address once it is in
   navUpdate(view);usageView(view);if(view!=="ingame")clearTimeout(gsiTimer);
   if(view==="players"){renderPlayers();return}
@@ -196,6 +220,7 @@ function show(view){view=ALIAS[view]||view;if(!RENDER[view])view="review";if(vie
   if(!S.player){if(view==="ingame"||view==="review"||!Object.keys(IDX()).length)welcome($("#v-"+view));else $("#v-"+view).innerHTML=`<div class="empty">Show me a profile first: yours from the home page, or anyone from your menu (top right).</div>`;return}
   if(!D.players[S.player]){$("#v-"+view).innerHTML=`<div class="empty"><span class="spin" aria-hidden="true"></span>Loading the profile…</div>`;return}
   RENDER[view]();navUpdate(view);window.scrollTo(0,0);
+  if(view==="maps"&&D.local){navQuiet++;try{syncUrl()}finally{navQuiet--}}   // the map is known once the page is drawn: /profile/maps/<map>
   if(view==="prepare"&&D.local)prepWatch();   // CS2 loads a map: Live takes over
   if(view==="ingame"&&D.local){if(!gsiStatus)fetch("/api/gsi/status").then(r=>r.json()).then(j=>{gsiStatus=j;if(S.view==="ingame"&&D.players[S.player])renderIngame()}).catch(()=>{});gsiPoll()}}
 async function setPlayer(id,force){S.player=id;store("player",id);S.match=0;S.mpin=false;if(!id){show(S.view);return}
@@ -224,3 +249,8 @@ if(D.local){
   if(q0){history.replaceState(null,"",location.pathname+location.hash);$("#q").value=q0;$("#search").requestSubmit()}
   else fetch("/api/job").then(r=>r.json()).then(j=>{if(j.running)poll()}).catch(()=>{});
 }
+
+// a link of the app's (data-go: a view of the player on screen): followed in the page; a middle click or ctrl+click
+// opens its real address in a new tab
+document.addEventListener("click",e=>{const a=e.target.closest&&e.target.closest("a[data-go]");if(!a||e.defaultPrevented||e.button!==0||e.metaKey||e.ctrlKey||e.shiftKey||e.altKey||!D.local)return;
+  e.preventDefault();const v=a.dataset.go;if(v==="matches"){S.mpin=false}go(v)});

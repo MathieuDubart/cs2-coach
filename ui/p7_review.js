@@ -175,7 +175,7 @@ function renderReview(){const p=P(),v=$("#v-review"),PL=p.advice.plan||{},RP=PL.
    ${comms?`<section class="tier" id="tier3"><div class="tier-h"><b>3</b><h3>Your comms</h3>${itip("Your calls, what you heard and what you called of it, your mood: from your microphone's recordings, lined up with the rounds.")}</div>${comms}</section>`:""}
    ${facts?`<section class="tier" id="tier4"><div class="tier-h"><b>${comms?4:3}</b><h3>Teamplay</h3>${itip("Blocks, flashes and team flashes, from the demos of your last matches.")}</div>${facts}</section>`:""}
 `;
-  $$("[data-per]",v).forEach(b=>b.onclick=()=>{store("revper",b.dataset.per);renderReview()});
+  $$("[data-per]",v).forEach(b=>b.onclick=()=>{store("revper",b.dataset.per);renderReview();syncUrl()});   // ?period= in the address
   $$("[data-msort]",v).forEach(b=>b.onclick=()=>{const k=b.dataset.msort,o=store("mapsort")||{k:"rating",up:false};store("mapsort",{k,up:o.k===k?!o.up:false});
     const y=$("#tier2",v)?$("#tier2",v).getBoundingClientRect().top:null;renderReview();const t2=$("#tier2",v);if(t2&&y!=null)window.scrollBy(0,t2.getBoundingClientRect().top-y)});   // stays where you are
   wireFocus(v,p,renderReview);
