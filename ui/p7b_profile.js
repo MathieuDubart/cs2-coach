@@ -20,8 +20,7 @@ function renderProfile(){
   v.innerHTML=`<div class="head"><div style="display:grid;gap:4px"><span class="eyebrow">${esc(p.name)}${PL.level?` · ${levelLine(PL.level)}`:""}</span><h2>Your profile</h2></div>
     ${ms.length?`<div class="record"><span>${win}<small>wins</small></span><span>${draw}<small>draws</small></span><span>${loss}<small>losses</small></span></div>`:""}</div>
    <p class="note">What stays true over weeks${ms.length?`, from ${ms.length} analyzed matches`:""}${role?` · your role: <b>${esc(role)}</b>`:""}.</p>
-   <h3>Your axes, ranked</h3>
-   <p class="note">What costs you the most rounds, in my order (my priority score: the bar). One list for the whole app: the first is your focus of the week unless you picked another${F&&F.until&&!isNaN(new Date(F.until))?` (until ${new Date(F.until).toLocaleDateString("en-US",{weekday:"short",month:"short",day:"numeric"})})`:""}. What works for you is in the evidence, part by part, below.</p>
+   <h3>Your axes, ranked ${itip(`What costs you the most rounds, in my order (my priority score: the bar). One list for the whole app: the first is your focus of the week unless you picked another${F&&F.until&&!isNaN(new Date(F.until))?` (until ${new Date(F.until).toLocaleDateString("en-US",{weekday:"short",month:"short",day:"numeric"})})`:""}. What works for you is in the evidence, part by part, below.`)}</h3>
    ${rules.length?`<div class="axes-list">${rules.map((r,i)=>{const isF=F&&F.id===r.id;return `<article class="axis${isF?" is-focus":""}">
      <div class="ax-n">${i+1}</div>
      <div class="ax-b"><h4>${esc(r.short||r.title)}</h4>${r.short&&r.title&&r.short!==r.title?`<p class="note">${esc(r.title)}</p>`:""}
@@ -34,7 +33,7 @@ function renderProfile(){
      <div class="ev-h"><b>${esc(t)}</b><span class="note">${esc(sub)}</span></div>
      ${li(o.works)?`<p class="lab good">Works</p><ul>${li(o.works)}</ul>`:""}${li(o.fix)?`<p class="lab bad">Costs</p><ul>${li(o.fix)}</ul>`:""}${o.next?`<p class="note"><b>To try:</b> ${o.next}</p>`:""}
      <a href="#${view}" class="ev-go"${mp?` data-evmap="${esc(mp)}"`:""}>${esc(VIEW_LABEL[view]||t)} in detail →</a></article>`).join("")}</div>`:""}
-   ${X?`<h3>Your tests</h3><p class="note">You start a test and play normally: I compare your next matches with your previous 15 and gives a verdict once there is enough data.${D.local?"":" Starting or ending one happens in the local app."}</p>
+   ${X?`<h3>Your tests ${itip(`You start a test and play normally: I compare your next matches with your previous 15 and give a verdict once there is enough data.${D.local?"":" Starting or ending one happens in the local app."}`)}</h3>
     ${act.length?`<div class="exps">${act.map(expCard).join("")}</div>`:`<p class="note">No test running.</p>`}
     ${sug.length?`<span class="lbl4" style="color:var(--muted)">Worth testing</span><div class="exps">${sug.slice(0,4).map(suggestCard).join("")}</div>`:""}
     <p class="note" id="xmsg" role="status"></p>`:""}

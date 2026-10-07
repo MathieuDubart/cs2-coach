@@ -463,3 +463,43 @@ def build(sid, stats, mid_rows, ctx, exps, adv, mb=None, period="session"):
                                      "score": r["score"], "rating": round(r["rating"], 2)} for r in recent]},
             "n_before": len(before), "changes": changes, "stable": stable, "axes": axes, "next": nxt,
             "tests": {"active": active, "done": done[-4:], "suggested": ex.get("suggested", [])[:3]}}
+
+
+def write_periods(sid):
+    """The Review's windows of a player computed again from their saved analysis and written to their page (the plan's
+    other parts untouched): for the profiles whose plan was built before the periods (07/10)."""
+    import config
+    import midround
+    import build_app
+    sid = int(sid)
+    pdir = config.player_dir(sid)
+    f = os.path.join(pdir, "advice.json")
+    adv = json.load(open(f, encoding="utf-8"))
+    PL = adv.get("plan") or {}
+    stats = []
+    mdir = os.path.join(pdir, "matches")
+    for mid in os.listdir(mdir) if os.path.exists(mdir) else []:
+        g = os.path.join(mdir, mid, "stats.json")
+        if os.path.exists(g):
+            st = json.load(open(g, encoding="utf-8"))
+            if not st.get("error"):
+                stats.append(st)
+    mid_rows = {}
+    for st in stats:
+        g = os.path.join(midround.OUT, f"{st['match']['match_id']}.parquet")
+        if os.path.exists(g):
+            r = pd.read_parquet(g)
+            r = r[r.steamid == sid]
+            if len(r):
+                mid_rows[st["match"]["match_id"]] = r.iloc[0].to_dict()
+    P = periods(sid, stats, mid_rows, PL.get("context"), PL.get("experiments"), adv, (PL.get("mid") or {}).get("bench"))
+    adv.setdefault("plan", {})["review_periods"] = P
+    config.write_json(f, adv, indent=1, default=str)
+    build_app.write_player(str(sid))
+    return {k: (v or {}).get("label") for k, v in P.items()}
+
+
+if __name__ == "__main__":
+    import sys
+    for s in sys.argv[1:]:
+        print(s, write_periods(s))

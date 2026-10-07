@@ -18,6 +18,9 @@ function applyTheme(t){t=t||store("theme")||"dark";if(t==="system")delete docume
 applyTheme();
 // ≈ HLTV Rating 2.0 (flashed.gg's regression, the same as context.rating)
 const rating2=(k,d,a,adr,kast,r)=>{r=Math.max(r||0,1);const kpr=k/r,dpr=d/r,apr=a/r,imp=2.13*kpr+.42*apr-.41;return .0073*kast+.3591*kpr-.5329*dpr+.2372*imp+.0032*adr+.1587};
+// how to read a block, in a discreet "i" (07/10): the page keeps the data, the explanations open on hover or focus;
+// r: the bubble opens leftwards (a block on the right of the page)
+const itip=(html,r)=>html?`<span class="itip${r?" r":""}" tabindex="0" aria-label="${esc(String(html).replace(/<[^>]+>/g,""))}"><span aria-hidden="true">i</span><span class="itip-b" aria-hidden="true">${html}</span></span>`:"";
 function press(scope,sel,b){$$(sel,scope).forEach(x=>x.setAttribute("aria-pressed",x===b))}
 function copyBtn(root){$$(".cmd button",root).forEach(b=>b.onclick=e=>{e.stopPropagation();const code=$("code",b.parentNode);
   const sel=()=>{const r=document.createRange();r.selectNodeContents(code);const s=getSelection();s.removeAllRanges();s.addRange(r)};

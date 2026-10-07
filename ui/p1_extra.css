@@ -547,3 +547,12 @@ svg.radar .ping .ping-t{font:800 15px var(--f-mono);fill:#ffd34d;paint-order:str
 .bar-search{max-width:none;width:100%;flex:none}
 @media (max-width:900px){.bar-in{grid-template-columns:minmax(0,1fr) auto}.bar-search{grid-column:1/-1;grid-row:2}}
 .per-pick{align-self:end;flex-wrap:wrap}.per-pick button:disabled{opacity:.4;cursor:not-allowed}
+/* the "i" of a block (07/10): its explanation on hover or focus, not on the page */
+.itip{position:relative;display:inline-grid;place-items:center;width:17px;height:17px;margin-left:6px;border-radius:50%;border:1px solid var(--line);color:var(--muted);font:600 10.5px/1 var(--f-mono);font-style:normal;text-transform:none;letter-spacing:0;cursor:help;vertical-align:middle;flex:none}
+.itip:hover,.itip:focus-visible{color:var(--ink);border-color:var(--ct);outline:none}
+.itip-b{display:none;position:absolute;top:calc(100% + 8px);left:-12px;z-index:35;width:max-content;max-width:min(380px,80vw);padding:10px 12px;background:var(--panel);border:1px solid var(--line);border-radius:6px;box-shadow:0 10px 30px rgba(0,0,0,.35);font:400 13px/1.5 var(--f-body);color:var(--ink);text-align:left;white-space:normal}
+.itip.r .itip-b{left:auto;right:-12px}
+.itip:hover .itip-b,.itip:focus .itip-b{display:block}
+.spark-box{position:relative}.spark-box>.itip{position:absolute;top:10px;right:10px;margin:0;z-index:2}
+.msort{margin-left:auto;align-items:center;gap:4px}.msort .note{margin-right:4px}
+.itip-b strong{font-weight:600}.itip-b b{all:revert;font-weight:600}
