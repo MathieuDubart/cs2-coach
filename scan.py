@@ -52,13 +52,13 @@ def _r(v, n=1):
     return None if v != v else round(v, n)
 
 
-def scan_demo(mid):
-    """The boosts and the kills of one demo (cached)."""
+def scan_demo(mid, src=None):
+    """The boosts and the kills of one demo (cached). src: a copy of the demo to read instead (run(): on the SSD)."""
     got = load(mid)
     if got:
         return got
     from demoparser2 import DemoParser
-    p = DemoParser(os.path.join(config.CACHE, mid + ".dem"))
+    p = DemoParser(src or os.path.join(config.CACHE, mid + ".dem"))
     T = p.parse_ticks(["CCSPlayerPawn.m_hGroundEntity", "CCSPlayerController.m_hPlayerPawn", "X", "Y", "Z", "yaw", "pitch", "team_num",
                        "is_alive", "last_place_name", "total_rounds_played", "ducking"], ticks=list(range(0, 700000, STEP)))
     T = T.rename(columns={"CCSPlayerPawn.m_hGroundEntity": "g", "CCSPlayerController.m_hPlayerPawn": "pawn"})
@@ -123,51 +123,77 @@ def kills(mid):
     return pd.DataFrame(d["kills"], columns=d["kcols"]).assign(match=mid)
 
 
-def _one(mid, low=True):
+def _one(mid, low=True, src=None):
     if low:   # the CPU the game doesn't use (a run while he plays); his go (06/10, "je ne joue pas"): full speed
         config.low_priority()
     t = time.time()
     try:
-        d = scan_demo(mid)
+        d = scan_demo(mid, src)
         return mid, len(d["boosts"]), len(d["kills"]), round(time.time() - t, 1), None
     except Exception as e:
         return mid, 0, 0, round(time.time() - t, 1), str(e)[:200]
+    finally:
+        if src and os.path.dirname(src) == TMP:
+            try:
+                os.remove(src)
+            except OSError:
+                pass
+
+
+TMP = os.path.join(os.environ.get("TEMP") or os.path.expanduser("~"), "wily_scan")   # on the SSD (C:) here
 
 
 def run(maps=None, workers=3, per_map=PER_MAP, low=True, log=print):
-    import tside
-    from concurrent.futures import ProcessPoolExecutor
-    from functools import partial
-    todo_maps = maps or [m for m, ds in sorted(tside._map_dirs().items(), key=lambda kv: -len(kv[1])) if len(ds) >= 10]
+    """The maps' demos not scanned yet. The demos sit on a hard disk (06/10: 200 MB each; 10 parsers reading them at once
+    made the disk seek all the time: 17 demos a minute, 1.3 cores busy of 24): one thread copies them one after the
+    other (one sequential read, the disk's best) to the SSD, the workers parse the copies and delete them; a few copies
+    ahead at most."""
+    import queue
+    import shutil
     import threading
-    for mp in todo_maps:
-        ds = [d for d in demos(mp, per_map) if not load(d)]
-        t0, nb, nk, bad = time.time(), 0, 0, 0
-        # the demos sit on a hard disk (06/10: 200 MB each, 10 readers at once made it seek all the time: 16 demos a
-        # minute): one thread reads them in the workers' order, 14 ahead, the workers then parse them from memory
-        done, stop = [0], threading.Event()
+    import tside
+    from concurrent.futures import FIRST_COMPLETED, ProcessPoolExecutor, wait
+    os.makedirs(TMP, exist_ok=True)
+    for f in os.listdir(TMP):   # copies left by a stopped run
+        try:
+            os.remove(os.path.join(TMP, f))
+        except OSError:
+            pass
+    todo_maps = maps or [m for m, ds in sorted(tside._map_dirs().items(), key=lambda kv: -len(kv[1])) if len(ds) >= 10]
+    with ProcessPoolExecutor(workers) as ex:
+        for mp in todo_maps:
+            ds = [d for d in demos(mp, per_map) if not load(d)]
+            t0, tot = time.time(), {"b": 0, "k": 0, "bad": 0}
+            q = queue.Queue(maxsize=4)
 
-        def pre():
-            for i, mid in enumerate(ds):
-                while i > done[0] + 14 and not stop.is_set():
-                    time.sleep(0.2)
-                if stop.is_set():
-                    return
-                try:
-                    with open(os.path.join(config.CACHE, mid + ".dem"), "rb") as f:
-                        while f.read(16 << 20):
-                            pass
-                except OSError:
-                    pass
-        threading.Thread(target=pre, daemon=True).start()
-        with ProcessPoolExecutor(workers) as ex:
-            for mid, b, k, s, err in ex.map(partial(_one, low=low), ds):
-                done[0] += 1
-                nb += b
-                nk += k
-                bad += bool(err)
-        stop.set()
-        log(f"{mp}: {len(demos(mp, per_map))} demos scanned ({len(ds)} new: {nb} boost episodes, {nk} kills, {bad} unreadable) in {time.time() - t0:.0f} s", flush=True)
+            def copier():
+                for mid in ds:
+                    src, dst = os.path.join(config.CACHE, mid + ".dem"), os.path.join(TMP, mid + ".dem")
+                    try:
+                        shutil.copyfile(src, dst)
+                    except OSError:
+                        dst = src   # no room on the SSD: read it where it is
+                    q.put((mid, dst))
+                q.put(None)
+            threading.Thread(target=copier, daemon=True).start()
+
+            def take(fs):
+                for f in fs:
+                    mid, b, k, s_, err = f.result()
+                    tot["b"] += b
+                    tot["k"] += k
+                    tot["bad"] += bool(err)
+            pending = set()
+            while True:
+                item = q.get()
+                if item is None:
+                    break
+                pending.add(ex.submit(_one, item[0], low, item[1]))
+                while len(pending) >= workers + 2:
+                    done_, pending = wait(pending, return_when=FIRST_COMPLETED)
+                    take(done_)
+            take(pending)
+            log(f"{mp}: {len(demos(mp, per_map))} demos scanned ({len(ds)} new: {tot['b']} boost episodes, {tot['k']} kills, {tot['bad']} unreadable) in {time.time() - t0:.0f} s", flush=True)
 
 
 if __name__ == "__main__":
