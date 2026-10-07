@@ -293,8 +293,42 @@ def _mean_sd(xs):
     return m, (None if sd is None or math.isnan(sd) else float(sd)), len(xs)
 
 
-def build(sid, stats, mid_rows, ctx, exps, adv, mb=None):
-    """-> the review, or None without at least 3 dated matches with a demo."""
+# the windows the Review can show (07/10, the user: "la dernière session exactement comme tu fais, mais un bouton pour
+# changer en last 7 days, this week, this month"): each compared with as many matches just before it (12 at least)
+PERIODS = {"7d": "the last 7 days", "week": "this week", "month": "this month", "30d": "the last 30 days"}
+
+
+def _window(rows, period, now=None):
+    """The matches of a period (rows sorted by time): the last session, or a span of the calendar until now."""
+    now = now or dt.datetime.now()
+    if period == "7d":
+        start = now - dt.timedelta(days=7)
+    elif period == "30d":
+        start = now - dt.timedelta(days=30)
+    elif period == "week":   # since Monday
+        start = (now - dt.timedelta(days=now.weekday())).replace(hour=0, minute=0, second=0, microsecond=0)
+    elif period == "month":
+        start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    else:
+        return None
+    return [r for r in rows if r["time"] >= start]
+
+
+def periods(sid, stats, mid_rows, ctx, exps, adv, mb=None):
+    """The other windows of the Review, by key (None: fewer than 2 matches in it)."""
+    out = {}
+    for k in PERIODS:
+        try:
+            out[k] = build(sid, stats, mid_rows, ctx, exps, adv, mb, period=k)
+        except Exception as e:
+            print(f"review {k}: {e}", flush=True)
+            out[k] = None
+    return out
+
+
+def build(sid, stats, mid_rows, ctx, exps, adv, mb=None, period="session"):
+    """-> the review, or None without at least 3 dated matches with a demo. period: "session" (the last session, or
+    the last 3 matches) or a key of PERIODS."""
     rows, by_id = [], {}
     for st in stats:
         t = (st.get("match") or {}).get("time")
@@ -306,23 +340,29 @@ def build(sid, stats, mid_rows, ctx, exps, adv, mb=None):
     rows.sort(key=lambda r: r["time"])
     if len(rows) < 3:
         return None
-    # recent window: the last session when it has 2 games or more, else the last 3 matches
     ms = (ctx or {}).get("matches") or []
-    sess_of = {m["id"]: (m.get("index"), m.get("start")) for m in ms}
-    last = rows[-1]
-    recent = [last]
-    for r in reversed(rows[:-1]):
-        gap = (recent[-1]["time"] - r["time"]).total_seconds() / 3600
-        if gap <= 3.5:
-            recent.append(r)
-        else:
-            break
-    recent = list(reversed(recent))
-    if len(recent) < 2:
-        recent = rows[-3:]
-    before = [r for r in rows if r["time"] < recent[0]["time"]][-12:]
-    label = (f"your last session ({len(recent)} games, on {recent[0]['time']:%m/%d})" if len(recent) >= 2 and
-             (recent[-1]["time"] - recent[0]["time"]).total_seconds() < 6 * 3600 else f"your last {len(recent)} matches")
+    if period in PERIODS:   # a span of the calendar, against as many matches just before it
+        recent = _window(rows, period)
+        if not recent or len(recent) < 2:
+            return None
+        before = [r for r in rows if r["time"] < recent[0]["time"]][-max(12, len(recent)):]
+        label = f"{PERIODS[period]} ({len(recent)} games)"
+    else:
+        # recent window: the last session when it has 2 games or more, else the last 3 matches
+        last = rows[-1]
+        recent = [last]
+        for r in reversed(rows[:-1]):
+            gap = (recent[-1]["time"] - r["time"]).total_seconds() / 3600
+            if gap <= 3.5:
+                recent.append(r)
+            else:
+                break
+        recent = list(reversed(recent))
+        if len(recent) < 2:
+            recent = rows[-3:]
+        before = [r for r in rows if r["time"] < recent[0]["time"]][-12:]
+        label = (f"your last session ({len(recent)} games, on {recent[0]['time']:%m/%d})" if len(recent) >= 2 and
+                 (recent[-1]["time"] - recent[0]["time"]).total_seconds() < 6 * 3600 else f"your last {len(recent)} matches")
     # context of each window, for the reasons
     def share_late(win):
         return sum(1 for r in win if r["time"].hour >= 23 or r["time"].hour < 6) / max(len(win), 1)
@@ -340,7 +380,7 @@ def build(sid, stats, mid_rows, ctx, exps, adv, mb=None):
     if before and share_late(recent) >= 0.5 and share_late(before) < 0.3:
         n = sum(1 for r in recent if r["time"].hour >= 23 or r["time"].hour < 6)
         reasons_bad.append(f"{n} of these {len(recent)} games after 11pm")
-    if len(recent) >= 4:
+    if len(recent) >= 4 and period not in PERIODS:   # a span of days is not one sitting
         reasons_bad.append(f"a session of {len(recent)} games in a row: fatigue builds up after each game")
     half = max(2, math.ceil(len(recent) / 2))
     if worst_map and sum(1 for r in recent if r["map"] == worst_map) >= half:
@@ -412,10 +452,11 @@ def build(sid, stats, mid_rows, ctx, exps, adv, mb=None):
     trend = [{"id": r["id"], "time": r["time"].isoformat(timespec="minutes"), "map": r["map"], "result": r["result"],
               "rating": round(r["rating"], 2), "recent": r in recent} for r in before + recent]
     try:
-        pro = pro_summary(sid, [by_id[r["id"]] for r in recent if r["id"] in by_id], mb, (adv or {}).get("bench"))
+        # the session's matches get their reads from their demo when they miss them; a longer span reads what is there
+        pro = reads(sid, [by_id[r["id"]] for r in recent if r["id"] in by_id], mb, (adv or {}).get("bench"), catch_up=period not in PERIODS)
     except Exception as e:   # a bonus: never the review's end
         pro = {"matches": 0, "items": [], "error": str(e)[:200]}
-    return {"label": label, "since": recent[0]["time"].isoformat(timespec="minutes"),
+    return {"label": label, "period": period, "since": recent[0]["time"].isoformat(timespec="minutes"),
             "trend": trend, "maps": map_briefs(recent, by_id, adv), "pro": pro,
             "session": {"games": len(recent), "wins": wins, "losses": losses,
                         "matches": [{"id": r["id"], "time": r["time"].isoformat(timespec="minutes"), "map": r["map"], "result": r["result"],

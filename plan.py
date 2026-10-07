@@ -601,4 +601,10 @@ def build(steamid, adv, cross=None, deep=None, light=False):
     except Exception as e:  # the review is a bonus: never block the plan
         plan["review"] = None
         _miss(plan, "session review", e)
+    try:   # the Review's other windows: the last 7 days, this week, this month, the last 30 days (07/10)
+        import review
+        plan["review_periods"] = review.periods(sid, stats, mid_rows, ctx, plan["experiments"], adv, mb)
+    except Exception as e:
+        plan["review_periods"] = None
+        _miss(plan, "review periods", e)
     return plan

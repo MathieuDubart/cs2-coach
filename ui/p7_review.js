@@ -129,7 +129,7 @@ function reviewBrief(R,f){const T=R.trend||[],rec=T.filter(x=>x.recent),bef=T.fi
   const works=[...R.changes.filter(c=>c.better).map(chg),...PI.filter(i=>i.severity==="positive").map(rd)];
   const watch=[...R.changes.filter(c=>!c.better).map(chg),...PI.filter(i=>i.severity!=="positive").map(rd)];
   const n=(R.pro||{}).matches;
-  return `<section class="tier" id="tier1"><div class="tier-h"><b>1</b><h3>The session</h3><span class="note">${R.session.games} game${R.session.games>1?"s":""}, against your ${bef.length} matches before</span></div>
+  return `<section class="tier" id="tier1"><div class="tier-h"><b>1</b><h3>${esc(PER_NAME[R.period]||"The session")}</h3><span class="note">${R.session.games} game${R.session.games>1?"s":""}, against your ${bef.length} matches before</span></div>
    <div class="brief">
     <div class="tiles">
      <div class="tile"><span class="eyebrow">Record</span><b class="num big">${R.session.wins}-${R.session.losses}</b><span class="note">${R.session.games} game${R.session.games>1?"s":""}</span></div>
@@ -137,12 +137,11 @@ function reviewBrief(R,f){const T=R.trend||[],rec=T.filter(x=>x.recent),bef=T.fi
      <div class="tile"><span class="eyebrow">ADR</span><b class="num big">${adr==null?"—":adr.toFixed(1)}</b><span class="note">damage per round</span></div>
      <div class="tile"><span class="eyebrow">Maps</span><b class="num big">${M.length}</b><span class="note">${M.map(m=>esc(MAPN(m.map))).join(" · ")}</span></div>
     </div>
-    <div class="spark-box">${ratingSpark(T)}<span class="note">Your rating match by match: this session on the band, the ${bef.length} matches before dimmed. Green won, red lost.</span></div>
+    <div class="spark-box">${ratingSpark(T)}<span class="note">Your rating match by match: ${R.period&&R.period!=="session"?"this period":"this session"} on the band, the ${bef.length} matches before dimmed. Green won, red lost.</span></div>
    </div>
-   <div class="brief3">
+   <div class="brief3 brief2">
     <article class="card b-good"><span class="eyebrow">What works</span>${works.length?`<div class="blist">${works.join("")}</div>`:`<p class="note">Nothing stands out above your usual level.</p>`}</article>
     <article class="card b-bad"><span class="eyebrow">Watch out</span>${watch.length?`<div class="blist">${watch.join("")}</div>`:`<p class="note">Nothing slips: your numbers hold.</p>`}</article>
-    ${focusCard(P(),R.next&&/^Fix what is slipping/.test(R.next)?`<p class="note">Also this session: ${esc(R.next)}</p>`:"")}
    </div>
    <p class="note">${n?`An item opens its evidence: the reasons, the rounds (one opens it in the 2D replay), you against the base and the pros (${n} demo${n>1?"s":""} read). `:""}${R.stable.length?`Stable: ${R.stable.map(esc).join(" · ")}.`:""}</p></section>`}
 // 2 · map by map: each map of the session, with its matches (one opens it)
@@ -153,9 +152,17 @@ function reviewMaps(R){const M=R.maps||[];if(!M.length)return "";const ms=R.sess
   return `<section class="tier" id="tier2"><div class="tier-h"><b>2</b><h3>Map by map</h3><span class="note">round wins per side, what to play and to avoid there, the matches</span></div>
    <div class="mapcards">${M.map(m=>`<article class="mapcard"><div class="mc-h"><b>${esc(MAPN(m.map))}</b><span class="res ${m.wins>m.losses?"win":m.wins<m.losses?"loss":"draw"}">${m.wins}-${m.losses}</span>
      ${rtBadge(m.rating)}<span class="note num">ADR ${m.adr}</span></div>${side(m,"T")}${side(m,"CT")}
-     <div class="mc-matches">${ms.filter(x=>x.map===m.map).map(x=>`<button type="button" class="mc-m" data-mid="${x.id}" title="Open this match"><span>${esc(fmtDate(x.time))}</span><span class="res ${x.result}">${x.score.me}-${x.score.them}</span>${rtBadge(x.rating)}</button>`).join("")}</div></article>`).join("")}</div></section>`}
-function renderReview(){const p=P(),v=$("#v-review"),PL=p.advice.plan||{},R=reviewOf(PL);
-  const head=`<div class="head"><div style="display:grid;gap:4px"><span class="eyebrow">${esc(p.name)}${R?` · ${esc(R.label)}, compared with your previous ${R.n_before} matches`:""}</span><h2>Review</h2></div></div>`;
+     <div class="mc-matches">${(xs=>xs.slice(-6).reverse().map(x=>`<button type="button" class="mc-m" data-mid="${x.id}" title="Open this match"><span>${esc(fmtDate(x.time))}</span><span class="res ${x.result}">${x.score.me}-${x.score.them}</span>${rtBadge(x.rating)}</button>`).join("")+(xs.length>6?`<span class="note">+${xs.length-6} earlier</span>`:""))(ms.filter(x=>x.map===m.map))}</div></article>`).join("")}</div></section>`}
+// the window of the Review (07/10, the user: "la dernière session exactement comme tu fais, mais un bouton pour changer
+// en last 7 days, this week, this month"): the last session first, the others computed with the plan (review_periods)
+const PER=[["session","Last session"],["7d","Last 7 days"],["week","This week"],["month","This month"],["30d","Last 30 days"]],
+  PER_NAME={session:"The session","7d":"The last 7 days",week:"This week",month:"This month","30d":"The last 30 days"};
+function renderReview(){const p=P(),v=$("#v-review"),PL=p.advice.plan||{},RP=PL.review_periods||{};
+  let per=store("revper")||"session";if(per!=="session"&&!RP[per])per="session";
+  const R=per==="session"?reviewOf(PL):RP[per];
+  const pick=Object.keys(RP).length?`<div class="btns per-pick" role="group" aria-label="Period">${PER.map(([k,t])=>{const ok=k==="session"?!!reviewOf(PL):!!RP[k];
+    return `<button type="button" data-per="${k}" aria-pressed="${k===per}" ${ok?"":`disabled title="Fewer than 2 analyzed matches in it"`}>${t}</button>`}).join("")}</div>`:"";
+  const head=`<div class="head"><div style="display:grid;gap:4px"><span class="eyebrow">${esc(p.name)}${R?` · ${esc(R.label)}, compared with your previous ${R.n_before} matches`:""}</span><h2>Review</h2></div>${pick}</div>`;
   if(!R){v.innerHTML=head+`<div class="empty">The review compares your latest matches with the previous ones: it takes at least 3 matches analyzed with their demo.${p.light?" This profile has no demo yet.":""}</div>`;return}
   const f=(x,u)=>fmtU(x,u);
   const comms=callsBlock(PL)+moodBlock(PL),facts=factsBlock(PL);   // 07/10: no suspects table, no live check (the user: "enlève ça")
@@ -165,6 +172,7 @@ function renderReview(){const p=P(),v=$("#v-review"),PL=p.advice.plan||{},R=revi
    ${comms?`<section class="tier" id="tier3"><div class="tier-h"><b>3</b><h3>Your comms</h3><span class="note">your calls, what you heard and called, your mood, from your recordings</span></div>${comms}</section>`:""}
    ${facts?`<section class="tier" id="tier4"><div class="tier-h"><b>${comms?4:3}</b><h3>Teamplay</h3><span class="note">from the demos of your last matches</span></div>${facts}</section>`:""}
 `;
+  $$("[data-per]",v).forEach(b=>b.onclick=()=>{store("revper",b.dataset.per);renderReview()});
   wireFocus(v,p,renderReview);
   $$("[data-mid]",v).forEach(r=>{r.onclick=()=>{const i=p.matches.findIndex(x=>x.id===r.dataset.mid);S.match=i<0?0:i;S.mpin=i>=0;go("matches")}});
 }
