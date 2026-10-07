@@ -22,6 +22,8 @@ public class Spot
     [JsonPropertyName("at")] public float At { get; set; }   // prefire: when it peeks (s after the start)
     [JsonPropertyName("poly")] public List<float[]> Poly { get; set; } = new();   // defend: the place's ground outline (06/10)
     [JsonPropertyName("duck")] public bool Duck { get; set; }   // prefire: an angle held crouched
+    [JsonPropertyName("seq")] public int Seq { get; set; } = -1;   // prefire: its rank in the order the way shows them (07/10)
+    [JsonPropertyName("li")] public int Li { get; set; }   // prefire: the gold line's point from where it is seen first
 }
 
 public class Drill
@@ -101,6 +103,7 @@ public partial class CoachReplay
     readonly List<double> reacts = new();
     int aimNext, aimSpawn, aimHs, frags, deaths, plants, lastHud;
     readonly Dictionary<int, float> peekAt = new();   // prefire: the bots still hidden, and when they peek
+    int lineAt, lastPeek;   // prefire: how far along the gold line you got (its point), the last one that peeked (tick)
     // stuff: three throws, the camera on your grenade, then from their side
     int attempts;
     bool nadeWait;
@@ -641,6 +644,9 @@ public partial class CoachReplay
 
     static float YawTo(Vector3 a, Vector3 b) => MathF.Atan2(b.Y - a.Y, b.X - a.X) * 180 / MathF.PI;
 
+    // a prefire's bot: its spot in the drill (its track is "target<k>")
+    Spot? BotSpot(Track t) => drill != null && int.TryParse(t.Sid.Replace("target", ""), out var k) && k >= 0 && k < drill.Bots.Count ? drill.Bots[k] : null;
+
     // a target of the aim map down: another one on a free spot of their side, turned to you
     void RangeAgain(int g, int slot)
     {
@@ -774,12 +780,15 @@ public partial class CoachReplay
             aimOrder.Clear();
             aimOrder.AddRange(bots.Keys);
             peekAt.Clear();
-            if (drill.Mode == "prefire")   // the ones that peek later wait, hidden, for their timing
-                foreach (var (slot, t) in bots)
+            lineAt = 0; lastPeek = Server.TickCount;
+            if (drill.Mode == "prefire")   // the ones that peek later wait, hidden, for their turn (07/10: one after the other, in the
+                foreach (var (slot, t) in bots)   // order your way shows them, not three at once in front of you)
                 {
-                    var k = int.TryParse(t.Sid.Replace("target", ""), out var i) ? i : -1;
-                    var at = k >= 0 && k < drill.Bots.Count ? drill.Bots[k].At : 0f;
-                    if (at > 0.3f) { peekAt[slot] = at; Utilities.GetPlayerFromSlot(slot)?.PlayerPawn.Value?.CommitSuicide(false, true); }
+                    var b = BotSpot(t);
+                    var ordered = drill.Bots.Any(x => x.Seq >= 0);
+                    var at = b?.At ?? 0f;
+                    if (ordered ? (b == null || b.Seq > 0 || b.Li > 1 || at > 0.3f) : at > 0.3f)
+                    { peekAt[slot] = at; Utilities.GetPlayerFromSlot(slot)?.PlayerPawn.Value?.CommitSuicide(false, true); }
                 }
         }
         else if (cur.Kind == "aim")
@@ -951,8 +960,27 @@ public partial class CoachReplay
             var mp = mo == null ? (Vector3?)null : new Vector3(mo.X, mo.Y, mo.Z);
             var fewLeft = drill.Mode == "prefire" && aimOrder.Count - frags <= 2;
             bool Near(int sl) => mp != null && bots.TryGetValue(sl, out var tt) && Vector3.Distance(Pos(tt, 0), mp.Value) < 1100;
-            foreach (var slot in peekAt.Where(kv => kv.Value <= el || fewLeft || Near(kv.Key)).Select(kv => kv.Key).ToList())
+            var ordered = drill.Mode == "prefire" && drill.Bots.Any(x => x.Seq >= 0);
+            if (ordered && mp != null && drill.Line.Count > 1)
+            {   // how far along the line you got: its nearest point within 300 u (same floor), never back
+                for (int k = lineAt; k < drill.Line.Count; k++)
+                {
+                    var q = drill.Line[k];
+                    if (MathF.Abs(q[2] - mp.Value.Z) < 120 && new Vector2(q[0] - mp.Value.X, q[1] - mp.Value.Y).Length() < 300) lineAt = Math.Max(lineAt, k);
+                }
+            }
+            IEnumerable<int> due;
+            if (ordered)
+            {   // the next one in the way's order: at its time, or when you reach the line where it's seen; never two at once
+                var next = peekAt.Keys.Select(sl => (sl, b: bots.TryGetValue(sl, out var tt) ? BotSpot(tt) : null)).Where(x => x.b != null)
+                    .OrderBy(x => x.b!.Seq).FirstOrDefault();
+                var ready = next.b != null && Server.TickCount - lastPeek >= 48 && (next.b.At <= el || lineAt >= next.b.Li - 1 || fewLeft);
+                due = ready ? new[] { next.sl } : Array.Empty<int>();
+            }
+            else due = peekAt.Where(kv => kv.Value <= el || fewLeft || Near(kv.Key)).Select(kv => kv.Key).ToList();
+            foreach (var slot in due.ToList())
             {   // its time: it peeks
+                lastPeek = Server.TickCount;
                 peekAt.Remove(slot);
                 if (!bots.TryGetValue(slot, out var t)) continue;
                 var c = Utilities.GetPlayerFromSlot(slot);

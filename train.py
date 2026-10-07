@@ -315,7 +315,11 @@ def _cells(P, cell=110):
     P = np.asarray(P, float)
     key = np.stack([np.floor(P[:, 0] / cell), np.floor(P[:, 1] / cell), np.floor(P[:, 2] / 90)], 1)
     _, inv, cnt = np.unique(key, axis=0, return_inverse=True, return_counts=True)
-    out = [(int(cnt[k]), np.median(P[inv.ravel() == k], axis=0)) for k in range(len(cnt))]
+    out = []
+    for k in range(len(cnt)):
+        C = P[inv.ravel() == k]
+        med = np.median(C, axis=0)
+        out.append((int(cnt[k]), C[int(np.argmin(np.linalg.norm(C - med, axis=1)))]))   # a real position, not a blend
     return sorted(out, key=lambda x: -x[0])
 
 
@@ -347,7 +351,7 @@ def site_data(mp):
         cache = {}
     dirs = _map_dirs(mp)
     # computed again when the map has a quarter more matches (the base grows by itself: not at every Play)
-    if mp in cache and cache[mp].get("v") == 5 and cache[mp].get("n", 0) >= 0.8 * len(dirs):
+    if mp in cache and cache[mp].get("v") == 6 and cache[mp].get("n", 0) >= 0.8 * len(dirs):
         return cache[mp]
     cols = ["t", "killer_side", "victim_side", "killer_zone", "victim_zone", "killer_crouch", "victim_crouch",
             "killer_X", "killer_Y", "killer_Z", "victim_X", "victim_Y", "victim_Z"]
@@ -409,7 +413,7 @@ def site_data(mp):
             ents.sort(key=lambda e: -e["n"])
             spot = _spread(_cells(S[["ctx", "cty", "ctz"]].to_numpy(float)), 1)[0][1]   # the CTs' favourite spot on the site
             sites[z] = {"center": [round(float(v), 1) for v in cen], "defend": [round(float(v), 1) for v in spot], "entrances": ents[:4]}
-    cache[mp] = {"n": len(dirs), "v": 5, "sites": sites}
+    cache[mp] = {"n": len(dirs), "v": 6, "sites": sites}
     json.dump(cache, open(SITES_F, "w", encoding="utf-8"))
     return cache[mp]
 
@@ -657,6 +661,31 @@ def _jumps(z):
     return int(np.sum(up[1:] & ~up[:-1]) + (1 if len(up) and up[0] else 0))
 
 
+def _no_returns(P, r=90.0):
+    """A walked way without its loops and its returns (07/10, the user: "le chemin qui fait des allers-retours,
+    useless"): from each point, on to the last later point back within r of it (same floor), so a trip there and back
+    is cut out."""
+    Q = np.asarray(P, float)
+    if len(Q) < 3:
+        return Q
+    out, i, n = [0], 0, len(Q)
+    while i < n - 1:
+        R = Q[i + 1:]
+        back = np.where((np.hypot(R[:, 0] - Q[i, 0], R[:, 1] - Q[i, 1]) < r) & (np.abs(R[:, 2] - Q[i, 2]) < 60))[0]
+        i = i + 1 + int(back[-1]) if len(back) else i + 1
+        out.append(i)
+    return Q[out]
+
+
+def _detour(P):
+    """How much longer than the straight way a walked way is (1: straight)."""
+    Q = np.asarray(P, float)[:, :2]
+    if len(Q) < 2:
+        return 1.0
+    walk = float(np.linalg.norm(np.diff(Q, axis=0), axis=1).sum())
+    return walk / max(1.0, float(np.linalg.norm(Q[-1] - Q[0])))
+
+
 def _rdp(Q, eps):
     """The points that keep the way's shape within eps (Ramer-Douglas-Peucker)."""
     keep, stack = {0, len(Q) - 1}, [(0, len(Q) - 1)]
@@ -700,6 +729,65 @@ def _ground_line(P, mp=None):
     return [[round(float(v), 1) for v in Q[i]] for i in keep]
 
 
+_DUEL_POS = {}
+
+
+def _duel_spots(mp):
+    """Where the map's players stood in duels (killers and victims, all the base's demos of it): (n, 3), cached."""
+    if mp not in _DUEL_POS:
+        parts = []
+        for d in _map_dirs(mp):
+            try:
+                D = pd.read_parquet(os.path.join(config.OUT, "deep", d, "duels.parquet"),
+                                    columns=["killer_X", "killer_Y", "killer_Z", "victim_X", "victim_Y", "victim_Z"])
+            except Exception:
+                continue
+            parts += [D[["killer_X", "killer_Y", "killer_Z"]].to_numpy(float), D[["victim_X", "victim_Y", "victim_Z"]].to_numpy(float)]
+        _DUEL_POS[mp] = np.concatenate(parts) if parts else np.zeros((0, 3))
+    return _DUEL_POS[mp]
+
+
+def real_boost(mp, b):
+    """A boost only a boost reaches (07/10, the user on Overpass's Walkway: "on peut avoir accès sans boost"): its top
+    spot is not where the base's players fight on their own, more than its boosts' own kills and deaths would put them."""
+    Q = _duel_spots(mp)
+    if not len(Q):
+        return True
+    top, base = np.asarray(b["pos"], float), np.asarray(b["base"], float)
+    near = np.hypot(Q[:, 0] - top[0], Q[:, 1] - top[1]) < 80
+    up = int((near & (np.abs(Q[:, 2] - top[2]) < 20)).sum())   # fights at the top's height around it
+    down = int((near & (np.abs(Q[:, 2] - base[2]) < 20)).sum())   # and on the floor below
+    # a floor of its own (as many fights up there as below, beyond the boosters' own): Walkway 7 up / 5 below; a real
+    # boost: Inferno's B site 19 up / 479 below
+    return not (up > b.get("kills", 0) + b.get("deaths", 0) + 3 and up > 0.2 * down)
+
+
+def _prefire_boost(mp, S, P, line):
+    """A CT boost of the base near this site whose top player killed Ts on this way: [top, base] as prefire holds (fs:
+    the way's first point near one of its victims), or None."""
+    try:
+        import boosts
+        B = [b for b in boosts.load(mp) if b.get("side") == "CT" and b.get("victims") and b.get("kills", 0) >= 2
+             and math.dist(b["pos"][:2], S["defend"][:2]) < 1500 and real_boost(mp, b)]
+    except Exception:
+        return None
+    W = np.asarray(P, float)
+    for b in sorted(B, key=lambda b: -b["kills"]):
+        V = np.array(b["victims"], float).reshape(-1, 3)
+        near = (np.hypot(W[:, None, 0] - V[None, :, 0], W[:, None, 1] - V[None, :, 1]) < 200) & (np.abs(W[:, None, 2] - V[None, :, 2]) < 110)
+        if not near.any():
+            continue
+        fs = int(np.argmax(near.any(1)))
+        w = W[fs]
+        li = int(np.argmin([math.dist(w[:2], q[:2]) for q in line])) if line else 0
+        top, base = list(b["pos"]), list(b["base"])
+        ang = _angle([top[0], top[1], top[2] + 64], [w[0], w[1], w[2] + 56])
+        return [{"pos": top, "ang": ang, "zone": f"{b['place']} (boost)", "n": b["kills"], "fs": fs, "li": li, "unc": False, "t": float(b.get("t_med") or 60)},
+                {"pos": base, "ang": [0, ang[1]], "zone": f"{b['place']} (boost, below)", "crouch": 1.0 if b.get("dz", 72) < 63 else 0.0,
+                 "n": b["kills"], "fs": fs, "li": li, "unc": False, "t": float(b.get("t_med") or 60)}]
+    return None
+
+
 def practice_drills(sid, mp):
     """Prefire (you T from an entrance, bots on every angle the CTs really hold, they don't shoot: clear them fast) and
     defense (you CT on the site, attackers keep coming from the real entrances for 90 s: as many frags as you can)."""
@@ -723,13 +811,15 @@ def practice_drills(sid, mp):
             frm = replay_zone(e["zone"], mp)
             # a real hit through that entrance, from far: its way is the route (start, places, the line drawn in the game)
             way = sorted([t for t in hits if frm in (t.get("zones") or [])], key=lambda t: -t.get("from", 0))[:6]
-            if way:   # one of the ones from furthest, with the fewest jumps (boxes: a line hard to follow)
+            if way:   # one of the ones from furthest, with the fewest jumps (boxes: a line hard to follow), the most direct
                 jumps = {id(t): _jumps(np.array(t["path"], float).reshape(-1, 5)[:, 2]) for t in way}
                 way = [t for t in way if jumps[id(t)] == min(jumps.values())]
+                det = {id(t): _detour(_no_returns(np.array(t["path"], float).reshape(-1, 5)[:, :3])) for t in way}
+                way = [t for t in way if det[id(t)] <= 1.25 * min(det.values())]
             hit = random.choice(way) if way else None
             if not hit:
                 continue
-            P = np.array(hit["path"], float).reshape(-1, 5)[:, :3] if hit else None
+            P = _no_returns(np.array(hit["path"], float).reshape(-1, 5)[:, :3]) if hit else None
             start = [round(float(v), 1) for v in P[0]] if hit else e["start"]
             # the CT angles seen from that very way (06/10, the user: "le dernier, je le croise jamais... je veux juste
             # qu'il soit visible depuis le chemin que je prends"): the base's duels put Ts on this way fighting a CT on
@@ -754,6 +844,22 @@ def practice_drills(sid, mp):
             route = hit["zones"] if hit else [frm, site]
             first = min(keep, key=lambda h: math.dist(h["pos"], start))
             line = _ground_line(P, mp) if hit else []   # the way drawn on the ground
+            ats = dict(zip(map(id, keep), _timings(keep)))
+            for h in keep:
+                fs = _first_seen(h, P)
+                h["fs"] = fs if fs >= 0 else len(P)
+                w = P[min(h["fs"], len(P) - 1)]
+                h["li"] = int(np.argmin([math.dist(w[:2], q[:2]) for q in line])) if line else 0
+            keep = sorted(keep, key=lambda h: (h["fs"], ats[id(h)]))
+            # now and then a CT boost of the base on that way (07/10: "il peut y avoir des positions de boost, pas souvent
+            # certes"): the two of them, the top one where the base's boosters stood and killed Ts on this way
+            boost = _prefire_boost(mp, S, P, line) if random.random() < 0.35 else None
+            if boost:
+                keep = keep[:10 - len(boost)]
+                at = max([ats[id(h)] for h in keep] or [0.0]) * 0.6
+                for h in boost:
+                    ats[id(h)] = at
+                keep = sorted(keep + boost, key=lambda h: (h["fs"], ats[id(h)]))
             out.append({"id": f"prefire:{mp}:{z}:{e['zone']}", "kind": "aim", "mode": "prefire", "map": mp,
                         "title": f"PREFIRE {site} via {frm}", "team": 2, "route": route, "line": line,
                         "tip": f"follow the gold line: {' → '.join(route)} · the angles CTs hold there, at their real timings"
@@ -761,8 +867,8 @@ def practice_drills(sid, mp):
                                + " · they don't move, they don't shoot",
                         "me": {"pos": start, "ang": _angle(start, line[1] if len(line) > 1 else first["pos"])},
                         "weapons": ["weapon_knife", RIFLE[2]], "bot_weapons": ["weapon_knife", RIFLE[3]],
-                        "bots": [{"pos": h["pos"], "ang": h["ang"], "zone": h.get("zone") or site, "at": at, "duck": h.get("crouch", 0) >= 0.35}
-                                 for h, at in zip(keep, _timings(keep))],
+                        "bots": [{"pos": h["pos"], "ang": h["ang"], "zone": h.get("zone") or site, "at": ats[id(h)], "duck": h.get("crouch", 0) >= 0.35,
+                                  "seq": i, "li": h["li"]} for i, h in enumerate(keep)],
                         # the round's clock as when these angles get fought (06/10: "le vrai temps in-game, pas 58 minutes")
                         "clock": round(max(15.0, 115 - max(0.0, min(h["t"] for h in keep) - 8)), 1),
                         "seconds": 90, "weight": 2 + min(1.0, e["n"] / 400)})
@@ -1420,7 +1526,7 @@ def boost_drills(sid, mp):
     import boosts
     out = []
     for b in boosts.load(mp):
-        if b["kills"] < 2 or not b.get("victims"):
+        if b["kills"] < 2 or not b.get("victims") or not real_boost(mp, b):
             continue
         team = 2 if b["side"] == "T" else 3
         top, base = b["pos"], b["base"]
