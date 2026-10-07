@@ -55,6 +55,8 @@ MAP_MIN = 175   # a map keeps a defense and a prefire at least, or it is left ou
 
 
 def aim_seconds(minutes):
+    if minutes <= 5:   # 07/10, the user: "sur 5 min pas d'aim et 1 map max"
+        return 0
     return int(min(300, max(120, minutes * 60 * 0.15)))
 
 
@@ -64,7 +66,7 @@ def parts_for(minutes, chosen, has=lambda mp, k: True, first=None):
     total = int(minutes * 60)
     aim = aim_seconds(minutes)
     left = max(0, total - aim)
-    keep = list(chosen)
+    keep = list(chosen)[:1] if minutes <= 5 else list(chosen)
     while len(keep) > 1 and left / len(keep) < MAP_MIN:   # too short for every map: the first ones
         keep.pop()
     out = []
@@ -1725,15 +1727,15 @@ def build(sid, minutes=20, where="random", difficulty=2):
     else:
         w = np.array([mine[m] * (1 + 2 * hard[m]) for m in names], float)
         chosen = [str(np.random.choice(names, p=w / w.sum()))]
-    warm = minutes <= WARMUP_MIN   # a quick warm-up before a game: the hands only (aim, defense, prefire), no stuff, no situation
+    warm = minutes <= WARMUP_MIN   # a quick warm-up before a game: no aim, one map (07/10), its defense, prefire and stuff
     first = lambda mp: next(("defend" if x["side"] == "CT" else "push" for x in S if x["map"] == mp), None)   # your weak side there first
     aim_s, parts = parts_for(minutes, chosen, lambda mp, k: not (k in ("defend", "push") and mp.startswith("cs_")), first)
     plan_of = dict(parts)
     chosen = [mp for mp, _ in parts]   # a short warm-up keeps the first maps only
     all_sc = [] if not any(k == "situation" for ps in plan_of.values() for k, _ in ps) else replay.scenarios(sid, n=40)
     blocks, todo = [], []
-    # the aim first, on the aim map, for all the maps' share (06/10)
-    blocks.append({"map": aim_map(), "kind": "aim", "seconds": aim_s, "drills": aim_range_drills(sid, aim_s)})
+    if aim_s:   # the aim first, on the aim map, for all the maps' share (06/10); none in 5 min
+        blocks.append({"map": aim_map(), "kind": "aim", "seconds": aim_s, "drills": aim_range_drills(sid, aim_s)})
     for mp in chosen:
         pr = practice_drills(sid, mp)
         fns = {"defend": lambda s_, m_: [d for d in pr if d.get("mode") == "defend"],
@@ -1829,7 +1831,7 @@ def preview(sid, minutes=20, where="random"):
         S = []
     first = lambda mp: next(("defend" if x["side"] == "CT" else "push" for x in S if x["map"] == mp), None)
     aim, parts = parts_for(minutes, chosen, has, first)
-    out = [{"map": aim_map(), "kind": "aim", "seconds": aim}]   # the aim first, on the aim map (06/10)
+    out = [{"map": aim_map(), "kind": "aim", "seconds": aim}] if aim else []   # the aim first, on the aim map (06/10)
     for mp, ps in parts:
         out += [{"map": mp, "kind": k, "seconds": secs} for k, secs in ps]
     return out
@@ -2046,7 +2048,7 @@ def play(sid, minutes=20, where="random", difficulty=2):
 
 def _play(sid, minutes, where, difficulty):
     import threading
-    first = aim_map()   # every warm-up starts with the aim
+    first = aim_map() if aim_seconds(minutes) else next((m for m in str(where).split(",") if m in maps(sid)), None)   # 5 min: no aim, straight to the map
     if not _game_running():   # CS2 comes up while the session is built (its menu is needed before a connect)
         _launch_game()
     pre = threading.Thread(target=lambda: _quiet_start(first), daemon=True) if first else None
