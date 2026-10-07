@@ -783,7 +783,7 @@ def voice_watch(every=15):
     """Stops an automatic recording when the game is gone, refreshes the plan once a transcription is done, and
     transcribes again the recordings a match stopped, one by one, while no map is loaded."""
     import time
-    done, failed = set(), set()
+    seen, failed = set(), {}   # failed: recording -> when; a match stopping it is no failure, a failure is tried again after 30 min
     while True:
         time.sleep(every)
         try:
@@ -793,16 +793,16 @@ def voice_watch(every=15):
             import replay
             replay.idle_check()   # the training server stops itself 20 min after you left it
             p = voice.JOB.get("proc")
-            if p and p.poll() is not None and voice.JOB.get("id") not in done:
-                done.add(voice.JOB["id"])
-                if p.returncode != 0:
-                    failed.add(voice.JOB["id"])
+            if p and p.poll() is not None and p.pid not in seen:
+                seen.add(p.pid)
+                if p.returncode != 0 and not config.in_match():   # 06/10: two evening recordings stopped by the next match stayed untranscribed
+                    failed[voice.JOB["id"]] = time.time()
                 sid = config.settings().get("own_steamid")
                 if sid and p.returncode == 0 and not LOCK.locked():
                     refresh_plan(sid)
             gs = gsi.state() or {}
             if not gs.get("map") or gs.get("age", 0) > 120:   # the game in its menu or closed: what a match stopped, now
-                voice.resume_pending(failed)
+                voice.resume_pending({r for r, t in failed.items() if time.time() - t < 1800})
         except Exception as e:
             print("microphone watch:", e, flush=True)
 
