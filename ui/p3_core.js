@@ -146,8 +146,7 @@ const SKILL=["","Silver I","Silver II","Silver III","Silver IV","Silver Elite","
 function benchSection(p){const B=p.advice.bench;if(!B||!B.metrics)return "";
   const rows=Object.entries(B.metrics).filter(([k,m])=>m.you!=null&&m.percentile!=null&&!(READ_BENCH.has(k)&&readsOf().all)).sort((a,b)=>a[1].percentile-b[1].percentile);
   const col=q=>q<30?"var(--bad)":q<60?"var(--warn)":"var(--good)";
-  return `<h3>You against the reference base</h3>
-  <p class="note">Base: ${B.n_players} players, ${B.n_rows} player-match records from ${B.n_matches} demos (your matches, searched players and randomly collected players).${B.my_rank?` Your median competitive rank: ${SKILL[B.my_rank]||B.my_rank} (${B.n_same} players of your level, ${B.n_higher} higher-ranked in the base).`:""} The bar shows your percentile: further right, you do better than most players. The line marks the median.</p>
+  return `<h3>You against the reference base ${itip(`Base: ${B.n_players} players, ${B.n_rows} player-match records from ${B.n_matches} demos (your matches, searched players and randomly collected players).${B.my_rank?` Your median competitive rank: ${SKILL[B.my_rank]||B.my_rank} (${B.n_same} players of your level, ${B.n_higher} higher-ranked in the base).`:""} The bar shows your percentile: further right, you do better than most players. The line marks the median.`)}</h3>
   <div class="card bench">${rows.map(([k,m])=>`<div class="row"><span class="lb">${esc(m.label[0].toUpperCase()+m.label.slice(1))}</span>
     <div class="pbar" title="Better than ${Math.round(m.percentile)}% of players"><i style="width:${Math.max(2,m.percentile)}%;background:${col(m.percentile)}"></i><b></b></div>
     <span class="v">you ${fmtU(m.you,m.unit)} · med. ${fmtU(m.median,m.unit)}${m.higher_rank_median!=null?` · higher ranks ${fmtU(m.higher_rank_median,m.unit)}`:""}</span></div>`).join("")}</div>`}
@@ -196,14 +195,12 @@ function proCard(x,metric,label){return `<div class="pro"><div class="top"><b>${
   <span>${x.steamid?`<a href="#pros" data-openpro="${esc(x.steamid)}">Pro sheet</a> · `:""}${x.hltv?`<a href="${esc(x.hltv)}" target="_blank" rel="noopener">HLTV</a>`:""}</span></div>`}
 document.addEventListener("click",e=>{const a=e.target.closest("[data-openpro]");if(a){e.preventDefault();openPro(a.dataset.openpro)}});
 function prosBlock(p){const X=p.advice.pros;if(!X||!X.similar||!X.similar.length)return "";
-  return `<article class="card"><h3>Pros who play like you</h3>
-   <p class="note">${X.n_pros} pro players analyzed on ${X.n_maps} maps of recent matches (HLTV demos). Similarity = average closeness over 15 style indicators. Watch their demos or POVs to see your role played at the highest level.</p>
+  return `<article class="card"><h3>Pros who play like you ${itip(`${X.n_pros} pro players analyzed on ${X.n_maps} maps of recent matches (HLTV demos). Similarity = average closeness over 15 style indicators. Watch their demos or POVs to see your role played at the highest level.`)}</h3>
    <div class="pros">${X.similar.map(x=>proCard(x,"similarity")).join("")}</div>
    ${X.same_role.length?`<h3 style="margin-top:8px">Pros with the same archetype (${esc(X.role_name)})</h3><div class="pros">${X.same_role.map(x=>proCard(x,"similarity")).join("")}</div>`:""}</article>`}
 function deepCard(p){const X=p.deep;if(!X)return "";const r=X.reaction,a=X.preaim,su=X.surprised;
   const fmtS=v=>v==null?"—":Math.round(v*1000)+" ms";
-  return `<article class="card"><h3>Deep analysis</h3>
-   <p class="note">From the visibility recorded in the demos (who sees whom, at every moment), over ${X.engagements} opened duels and ${X.deaths} deaths. Compared with the ${X.n_ref_players} other players of your matches.</p>
+  return `<article class="card"><h3>Deep analysis ${itip(`From the visibility recorded in the demos (who sees whom, at every moment), over ${X.engagements} opened duels and ${X.deaths} deaths. Compared with the ${X.n_ref_players} other players of your matches.`)}</h3>
    <div class="gauge">
     <div><b>${fmtS(r.you)}</b><span>reaction time: from the enemy appearing to your first damage</span><span>others' median ${fmtS(r.median_others)} · faster than ${r.better_than_pct??"—"}% · ${r.share_under_350ms}% of your duels under 350 ms</span></div>
     <div><b>${a.you}°</b><span>crosshair offset when the enemy appears</span><span>others' median ${a.median_others}° · better than ${a.better_than_pct??"—"}%</span></div>
@@ -214,8 +211,7 @@ function deepCard(p){const X=p.deep;if(!X)return "";const r=X.reaction,a=X.preai
     ${(()=>{const row=z=>`<tr><td>${MAPN(z.map)}</td><td>${z.side}</td><td>${esc(z.zone)}</td><td class="n">${z.my_duels}</td><td class="n ${z.my_duels>=8?(z.my_win-z.pro_win>=8?"good":z.my_win-z.pro_win<=-10?"bad":""):""}">${z.my_win}%</td><td class="n">${z.pro_win}% <span class="note">(${z.pro_duels})</span></td><td class="n">${z.my_hold}% / ${z.pro_hold}%</td></tr>`,
       main=X.zones_vs_pros.filter(z=>z.my_duels>=6),rest=X.zones_vs_pros.filter(z=>z.my_duels<6);
       return main.map(row).join("")+(rest.length?`</tbody></table></div><details><summary>${rest.length} zones with under 6 duels of yours (too few to judge)</summary><div class="tbl"><table><tbody>${rest.map(row).join("")}`:"")})()}
-    </tbody></table></div>${X.zones_vs_pros.some(z=>z.my_duels<6)?"</details>":""}<p class="note">Duels won in the zone, per side. Colored from 8 duels of yours. Pros come from the analyzed HLTV demos.</p>`:""}
-   <p class="note">The 2D replay of every round is in the Matches tab. Pro grenades to add to your game are in the Maps tab.</p></article>`}
+    </tbody></table></div>${X.zones_vs_pros.some(z=>z.my_duels<6)?"</details>":""}<p class="note">Duels won in the zone, per side. Colored from 8 duels of yours. Pros come from the analyzed HLTV demos.</p>`:""}</article>`}
 function midCard(p){const M0=(p.advice.plan||{}).mid;if(!M0)return "";const own=x=>!(READ_MID.has(x.id)&&readsOf().all),M={weak:M0.weak.filter(own),strong:M0.strong.filter(own)};
   if(!M.weak.length&&!M.strong.length)return "";
   return `<article class="card"><h3>Mid-round at a glance</h3><ul>${M.weak.slice(0,3).map(w=>`<li>${esc(w.text)}${w.fix?` <b>${esc(w.fix)}</b>`:""}</li>`).join("")}${M.strong.slice(0,2).map(s=>`<li class="good">${esc(s.text)}</li>`).join("")}</ul>
@@ -263,7 +259,7 @@ function matchReads(m){const R=m.reads;if(!R)return "";const M=readsOf().meta||{
     return `<li class="${t}"><span class="rd-t">${esc((M[k]||{}).title||k)}</span><span class="rd-v"><b>${x.value}</b> ${READ_LINE[k](x)}${ref&&ref.median!=null?`<span class="note"> · base ${pc0(ref.median)}</span>`:""}</span>${rchips(x.rounds)}</li>`});
   const sp=Object.entries(R.spots||{}).filter(([k,c])=>c>=2).slice(0,2).map(([k,c])=>`<li><span class="rd-t">Death spot</span><span class="rd-v"><b>${c}</b> deaths at ${esc(k)}</span></li>`);
   if(!rows.length&&!sp.length)return "";
-  return `<section class="mreads"><h3>Analyst reads</h3><p class="note">What a team's analyst points at in this demo. A round opens it in the 2D replay below; "base" is the median player of the base.</p><ul class="rd-list">${rows.join("")}${sp.join("")}</ul></section>`}
+  return `<section class="mreads"><h3>Analyst reads ${itip(`What a team's analyst points at in this demo. A round opens it in the 2D replay below; "base" is the median player of the base.`)}</h3><ul class="rd-list">${rows.join("")}${sp.join("")}</ul></section>`}
 // one read over several matches: you against the base, higher ranks and pros, the fix, where it happened, the sources
 function readCard(i,M,bench){const mt=M[i.id]||{},ref=i.ref||{},hb=mt.higher_better,pct=i.pct;
   if(i.id==="spot")return `<article class="rd-card sev-medium"><div class="rd-h"><span class="tag">habit</span><h4>You keep dying at ${esc(i.place)} (${esc(MAPN(i.map))})</h4></div>
@@ -280,7 +276,7 @@ function readCard(i,M,bench){const mt=M[i.id]||{},ref=i.ref||{},hb=mt.higher_bet
    ${(i.where||[]).length?`<div class="where">${i.where.map(x=>`<span><span class="note">${esc(fmtDate(x.time).split(",").slice(0,2).join(","))} · ${esc(MAPN(x.map))}</span>${rchips(x.rounds.slice(0,6),x.id)}</span>`).join("")}</div>`:""}
    ${(mt.src||[]).length?`<p class="src">Sources: ${mt.src.map(x=>`<a href="${esc(x.url)}" target="_blank" rel="noopener">${esc(x.label)}</a>`).join(" · ")}</p>`:""}</article>`}
 function readsSection(p,set,title,note){if(!set||!set.matches||!(set.items||[]).length)return "";const M=readsOf().meta||{};
-  return `<h3>${title}</h3><p class="note">${note} On each bar: the black tick is the base median, the gold one the pros.</p><div class="rd-cards">${set.items.map(i=>readCard(i,M,p.advice.bench)).join("")}</div>`}
+  return `<h3>${title} ${itip(`${note} On each bar: the black tick is the base median, the gold one the pros.`)}</h3><div class="rd-cards">${set.items.map(i=>readCard(i,M,p.advice.bench)).join("")}</div>`}
 // a round button (R7): the match's 2D replay at that round (another match: opened first)
 document.addEventListener("click",e=>{const b=e.target.closest&&e.target.closest("[data-goround]");if(!b)return;const n=+b.dataset.goround,mid=b.dataset.mid,p=P();if(!p)return;
   if(mid&&(S.view!=="matches"||((p.matches[S.match]||{}).id!==mid))){const i=p.matches.findIndex(x=>x.id===mid);if(i<0)return;S.match=i;S.mpin=true;S.goRound=n;go("matches");return}
@@ -322,25 +318,20 @@ function mapBrief(p,m){const ms=p.matches.filter(x=>x.map===m.map),w=ms.filter(x
 function renderAnalysis(){
   const p=P(),v=$("#v-analysis"),ms=p.matches;const rec={win:0,draw:0,loss:0};ms.forEach(m=>rec[m.result]++);
   const auto=p.advice.rules.map((r,i)=>({level:i<2?"high":"mid",title:r.title,evidence:r.why,fix:r.do,standing:r.standing,target:r.target,bench:r.bench,drills:r.drills,sources:r.sources}));
-  v.innerHTML=`<div class="head"><div style="display:grid;gap:4px"><span class="eyebrow">${esc(p.name)} · ${ms.length} matches analyzed</span><h2>Full analysis</h2></div>
-    <div class="record"><span>${rec.win}<small>wins</small></span><span>${rec.draw}<small>draws</small></span><span>${rec.loss}<small>losses</small></span></div></div>
+  v.innerHTML=`<div class="head"><div style="display:grid;gap:4px"><span class="eyebrow">${esc(p.name)} · ${ms.length} matches analyzed</span><h2>Full analysis</h2></div></div>
     ${missNote(p)}
-    ${secNav([["an-brief","Brief"],["an-coach","Coach"],readsOf().all?["an-reads","Analyst reads"]:null,p.advice.bench?["an-base","Vs the base"]:null,["an-role","Role and deep analysis"],p.advice.pros?["an-pros","Pros like you"]:null,ms.length?["an-matches","Matches"]:null])}
+    ${secNav([readsOf().all?["an-reads","Analyst reads"]:null,p.advice.bench?["an-base","Vs the base"]:null,["an-role","Role and deep analysis"],p.advice.pros?["an-pros","Pros like you"]:null])}
     ${analysisBrief(p,auto)}
     ${D.local&&p.steamid!==D.own?`<article class="card form" id="follow-card"><h3>Follow ${esc(p.name)}'s matches</h3><p class="note">Loading…</p></article>`:""}
-    ${anchor("an-coach")}${auto.length?`<h3>What I see · ${ms.length} matches</h3>`:""}
-    ${findings(auto)}
     ${anchor("an-reads")}${readsSection(p,readsOf().all,`What an analyst points at · ${ms.length} matches`,"Read in your demos like a team's analyst would, each against the base (its median player, the players ranked above you) and pros when their demos tell. A round opens the match's 2D replay.")}
     ${p.overall?`<details class="old-notes"><summary style="cursor:pointer;font-family:var(--f-display);font-size:18px;font-weight:600">Earlier hand-written analysis${p.overall.scope?` · ${esc(p.overall.scope)}`:""}</summary>
       <p class="note" style="margin:8px 0">Written from those matches only: its numbers are from that time. The list above covers all your matches and is the one to follow.</p>
       <p style="max-width:75ch">${p.overall.summary}</p>${findings(p.overall.priorities)}</details>`:""}
     ${anchor("an-base")}${benchSection(p)}
     ${anchor("an-role")}${archCard(p)}
-    ${midCard(p)}
     ${deepCard(p)}
     ${anchor("an-pros")}${prosBlock(p)}
     ${extrasBlock(p)}
-    ${anchor("an-matches")}${ms.length?`<h3>Match by match</h3><div class="tbl"><table>${TREND_HEAD}<tbody>${trendRows(ms,-1)}</tbody></table></div>`:""}
     ${leetBlock(p)}`;
   $$("tr.click",v).forEach(r=>{r.onclick=()=>{S.match=+r.dataset.i;S.mpin=true;go("matches")};r.onkeydown=e=>{if(e.key==="Enter")r.click()}});
   copyBtn(v);
@@ -366,7 +357,7 @@ function storyBlock(m){const side={};m.per_round.forEach(r=>side[r.round]=r.side
   const att=s=>{if(s.site!=="A"&&s.site!=="B")return "<b>No clear attack</b>";
     const b=[s.play_name?`<b>${esc(s.play_name)}</b>${/^Rush/.test(s.play_name)?"":` · ${esc(DYN_EN[s.dyn]||"")}`}`:`<b>${s.site} · ${esc(DYN_EN[s.dyn]||"")}</b>`];
     if(s.at!=null)b.push(`${s.in?"on the site":"stopped"} at ${clock(s.at)}${s.grp?`, ${pl(s.grp,"T","Ts")}`:""}`);if(s.plant)b.push(`bomb ${clock(s.plant[1])}`);if(s.lurk)b.push("a T stayed near the other site");if(s.bunch)b.push(`3 Ts down in 10 s at ${esc(s.bunch[0])}`);return b.join("<br>")};
-  return `<h3>How each round went</h3><p class="note">From the demo: where the Ts went and how fast, who died where and when. A T killed with no teammate close (about 25 m) and not traded is marked <i>alone</i>. Clock times as in game.</p>
+  return `<h3>How each round went ${itip("From the demo: where the Ts went and how fast, who died where and when. A T killed with no teammate close (about 25 m) and not traded is marked <i>alone</i>. Clock times as in game.")}</h3>
    <ul class="big-list">${sum(ct,"The Ts you faced")}${sum(tt,"Your team as T")}</ul>
    <div class="tbl"><table class="story"><thead><tr><th>Round</th><th>The Ts</th><th>Who died where</th><th>Won by</th></tr></thead><tbody>
    ${rows.map(s=>`<tr><td><b>${s.r}</b><br><span class="note">you ${side[s.r]}</span></td><td class="wrap">${att(s)}</td><td class="wrap feed">${feed(s)}</td><td>${s.tw?"Ts":"CTs"}</td></tr>`).join("")}</tbody></table></div>`}
@@ -422,7 +413,7 @@ function renderMatches(){
   $("#mzt").innerHTML=md.zones.map(z=>({z,g:md.general[z.key]})).filter(x=>x.g&&x.g.duels).sort((a,b)=>b.g.duels-a.g.duels).slice(0,16)
     .map(({z,g})=>`<tr><td>${esc(z.name)}</td><td class="n">${g.duels}</td><td class="n">${kd(g.T.kd)}${pill(g.T.kd)}</td><td class="n">${kd(g.CT.kd)}${pill(g.CT.kd)}</td><td class="n">${myZ[z.key]?myZ[z.key].k+"-"+myZ[z.key].d:"—"}</td></tr>`).join("");
   draw();
-  const rh=document.createElement("section");rh.id="m-replay";rh.style.cssText="display:grid;gap:10px;scroll-margin-top:150px";rh.innerHTML=`<h3>2D replay</h3><p class="note">Every round replayed on the radar (every 0.5 s): your dot has a white ring, crosses are deaths, colored circles are grenades.</p><div class="rp-host"></div>`;
+  const rh=document.createElement("section");rh.id="m-replay";rh.style.cssText="display:grid;gap:10px;scroll-margin-top:150px";rh.innerHTML=`<h3>2D replay ${itip("Every round replayed on the radar (every 0.5 s): your dot has a white ring, crosses are deaths, colored circles are grenades.")}</h3><div class="rp-host"></div>`;
   v.appendChild(rh);replayBlock($(".rp-host",rh),p,m);
 }
 
@@ -482,7 +473,7 @@ function renderMaps(){
     ["Play the advantage","At 5v4, move up with your team to take space. Don't hold alone."]];
   if(!S.cmap||!maps.some(x=>x.map===S.cmap))S.cmap=maps[0]?.map;
   v.innerHTML=`<div class="head"><div style="display:grid;gap:4px"><span class="eyebrow">${esc(p.name)} · ${c.totals.my_duels} duels compared with ${c.totals.others_duels} duels of other players</span><h2>Maps and grenades</h2></div></div>
-  ${secNav([["mp-brief","Brief"],["mp-sheet","Map sheet"],["lus","Lineups"],["mp-duels","Your duels"],["mp-tech","Techniques"]])}
+  ${secNav([["mp-sheet","Map sheet"],["lus","Lineups"],["mp-duels","Your duels"],["mp-tech","Techniques"]])}
   <div class="chips" role="group" aria-label="Map">${maps.map((x,i)=>`${chipSep(maps,i,y=>y.map)}<button type="button" data-cmap="${x.map}" aria-pressed="${x.map===S.cmap}">${MAPN(x.map)}<small>${x.n}</small></button>`).join("")}</div>
   <div id="cmap"></div>
   ${anchor("mp-duels")}<h3>How your duels go</h3>

@@ -556,3 +556,4 @@ svg.radar .ping .ping-t{font:800 15px var(--f-mono);fill:#ffd34d;paint-order:str
 .spark-box{position:relative}.spark-box>.itip{position:absolute;top:10px;right:10px;margin:0;z-index:2}
 .msort{margin-left:auto;align-items:center;gap:4px}.msort .note{margin-right:4px}
 .itip-b strong{font-weight:600}.itip-b b{all:revert;font-weight:600}
+.ax-more{margin-top:6px}.ax-more>summary{cursor:pointer;font:600 13px var(--f-body);color:var(--muted)}.ax-more[open]>summary{margin-bottom:6px}.ax-more .standing{margin:4px 0}

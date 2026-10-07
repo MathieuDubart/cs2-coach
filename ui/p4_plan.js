@@ -6,11 +6,13 @@ async function api(path,body){const r=await fetch(path,{method:"POST",headers:{"
 async function reloadPlayer(){const id=S.player;delete D.players[id];await loadPlayer(id,true);RENDER[S.view]()}
 const lc=s=>s?s.charAt(0).toLowerCase()+s.slice(1):s;
 const WNAME={awp:"AWP",scout:"Scout",rifle:"Rifles",rifle_eco:"Galil / FAMAS",smg:"SMG",shotgun:"Shotguns",pistol:"Pistol",heavy:"Machine gun",auto:"Auto-sniper",pro_awp:"Pro AWPers"};
-function levelLine(L){if(!L)return "";const bits=[];
-  if(L.rating)bits.push(`Premier ${esc(L.season||"")}: ${L.rating.toLocaleString("en-US")}`);
-  if(L.comp)bits.push(`${esc(L.comp)} in Competitive`);
+// short (the Profile's line): the level and the hours; Premier, ranks, wins and the account's age are the Full analysis'
+// public profile (07/10: said once)
+function levelLine(L,short){if(!L)return "";const bits=[];
+  if(L.rating&&!short)bits.push(`Premier ${esc(L.season||"")}: ${L.rating.toLocaleString("en-US")}`);
+  if(L.comp&&!short)bits.push(`${esc(L.comp)} in Competitive`);
   const xp=[L.hours!=null?`${L.hours.toLocaleString("en-US")} h of CS2${L.two_weeks_h!=null?`, ${L.two_weeks_h} h in the last 2 weeks`:""}`:"",
-    L.wins?`${L.wins} Competitive wins`:"",L.premier_wins?`${L.premier_wins} in Premier`:"",L.since?`Steam account since ${L.since}`:""].filter(Boolean).join(", ");
+    L.wins&&!short?`${L.wins} Competitive wins`:"",L.premier_wins&&!short?`${L.premier_wins} in Premier`:"",L.since&&!short?`Steam account since ${L.since}`:""].filter(Boolean).join(", ");
   return `${L.name?`level ${esc(L.name)}`:"unknown level"}${bits.length?` · ${bits.join(" · ")}`:""} · ${esc(L.experience)} player${xp?` (${xp})`:""}`}
 
 // ---------- view: routine ----------
@@ -82,8 +84,8 @@ function routineBrief(PL){const C=PL.context,ph=(PL.phases||[])[0],first=ph&&ph.
     worksNone:"No situation where you clearly play better yet.",fixNone:"No situation where you clearly play worse yet."})}
 function renderRoutine(){
   const p=P(),v=$("#v-routine"),PL=p.advice.plan;if(!PL)return noPlan(v);
-  v.innerHTML=`<div class="head"><div style="display:grid;gap:4px"><span class="eyebrow">${esc(p.name)} · ${levelLine(PL.level)}</span><h2>Routine: before, during, after</h2></div></div>
-   ${secNav([["rt-brief","Brief"],["rt-habits","Habits"],["rt-phases","Before, during, after"],PL.party?["rt-group","Group"]:null,PL.meta&&PL.meta.length?["rt-meta","State of the game"]:null])}
+  v.innerHTML=`<div class="head"><div style="display:grid;gap:4px"><span class="eyebrow">${esc(p.name)}</span><h2>Routine: before, during, after</h2></div></div>
+   ${secNav([["rt-habits","Habits"],["rt-phases","Before, during, after"],PL.party?["rt-group","Group"]:null,PL.meta&&PL.meta.length?["rt-meta","State of the game"]:null])}
    ${routineBrief(PL)}${anchor("rt-habits")}
    <div class="pg-grid2">${P().steamid===D.own?checkinCard((PL.context||{}).journal_n):""}${PL.context?contextBlock(PL.context):`<article class="card"><h3>Your playing habits</h3><p class="note">No dated match for this player: habits (times, sessions, group) need demos or a Leetify history.</p></article>`}</div>
    ${anchor("rt-phases")}<div class="phases">${PL.phases.map(phaseCard).join("")}</div>
@@ -139,7 +141,7 @@ function renderMidround(){
   if(!wpSide||!ws.includes(wpSide))wpSide=ws.includes(S.side)?S.side:ws[0];
   const B=M&&M.bench;
   v.innerHTML=`<div class="head"><div style="display:grid;gap:4px"><span class="eyebrow">${esc(p.name)}${B?` · ${B.matches} matches · compared with ${B.n_players} players of the base and ${B.n_pros} pros`:""}</span><h2>Mid-round: movement and decisions</h2></div></div>
-   ${secNav([["mr-brief","Brief"],M?["mr-decisions","Your decisions"]:null,["mr-reflexes","Reflexes"],maps.length?["mr-maps","Per map"]:null])}
+   ${secNav([M?["mr-decisions","Your decisions"]:null,["mr-reflexes","Reflexes"],maps.length?["mr-maps","Per map"]:null])}
    ${midBrief(PL)}${anchor("mr-decisions")}
    ${M?`${M.weak.length?`<div class="insights">${M.weak.map(w=>`<article class="card"><h3>${w.id==="note"?"What pros do":esc(w.label[0].toUpperCase()+w.label.slice(1))}</h3>
        <p>${w.id==="note"?esc(w.text):`<span class="num">you ${fmtU(w.you,w.unit)}</span> · base median ${fmtU(w.median,w.unit)}${w.pro!=null?` · pros ${fmtU(w.pro,w.unit)}`:""}`}</p>
@@ -202,10 +204,10 @@ function renderProgress(){
   const L=PL.level,T=PL.training,X=PL.experiments,Wp=PL.weapons,K=PL.kpis||[];
   const ex=(X&&X.experiments)||[],act=ex.filter(e=>e.status==="active"),old=ex.filter(e=>e.status!=="active");
   v.innerHTML=`<div class="head"><div style="display:grid;gap:4px"><span class="eyebrow">${esc(p.name)}</span><h2>Progress</h2></div></div>
-   ${secNav([["pg-brief","Brief"],["pg-level","Level and role"],X?["pg-exp","Experiments"]:null,Wp?["pg-weapons","Weapons"]:null,PL.buys&&PL.buys.types?["pg-buys","Buys"]:null,K.length?["pg-kpis","Indicators"]:null])}
+   ${secNav([["pg-level","Level and role"],X?["pg-exp","Experiments"]:null,Wp?["pg-weapons","Weapons"]:null,PL.buys&&PL.buys.types?["pg-buys","Buys"]:null,K.length?["pg-kpis","Indicators"]:null])}
    ${progBrief(PL)}${anchor("pg-level")}
    <div class="insights">
-    <article class="card"><h3>Your level</h3><p>${levelLine(L)}</p>${L&&L.focus.length?`<div class="fix"><h4>At this level, work on</h4><ol>${L.focus.map(f=>`<li>${esc(f)}</li>`).join("")}</ol></div>`:""}${srcLinks(L&&L.src,true)}</article>
+    <article class="card"><h3>Your level${L&&L.name?`: ${esc(L.name)}`:""}</h3>${L&&L.focus.length?`<div class="fix"><h4>At this level, work on</h4><ol>${L.focus.map(f=>`<li>${esc(f)}</li>`).join("")}</ol></div>`:""}${srcLinks(L&&L.src,true)}</article>
     ${PL.role?`<article class="card"><h3>Your role: ${esc((p.advice.archetype||{}).name||PL.role.role)}</h3><ul>${PL.role.items.map(t=>`<li>${esc(t)}</li>`).join("")}</ul>${srcLinks(PL.role.src,true)}</article>`:""}
    </div>
    ${T||D.local&&p.steamid===D.own?`<p class="note">Today's warm-up and the training server are in <a href="#prepare" style="color:var(--ct)">Prepare</a>, with your map sheets.</p>`:""}
