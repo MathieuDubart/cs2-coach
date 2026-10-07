@@ -369,7 +369,8 @@ function reportCard(){if(D.role!=="client")return "";
    <div class="btns"><button type="button" class="primary" data-report="bug">Report a bug</button><button type="button" data-report="idea">Suggest an idea</button></div></article>`}
 // the coach's PC: what players reported, the newest first
 function reportsCard(rs){if(D.role==="client"||!Array.isArray(rs))return "";
-  const open=rs.filter(r=>!r.done),one=r=>`<li class="rep${r.done?" done":""}"><div><b>${r.kind==="idea"?"💡 Idea":"🐞 Bug"}</b> · ${when(r.at)} · ${esc(r.app||"?")}${r.email?` · <a href="mailto:${esc(r.email)}">${esc(r.email)}</a>`:""}</div>
+  const fbk=r=>r.kind==="feedback"||/^\[feedback/.test(r.text||""),face=r=>{const m=/(\d)\/5\]/.exec(r.text||"");const n=r.rating||(m?+m[1]:0);return n?" "+["😖","😕","😐","🙂","🤩"][n-1]:""};
+  const open=rs.filter(r=>!r.done),one=r=>`<li class="rep${r.done?" done":""}"><div><b>${fbk(r)?`💬 Feedback${face(r)}`:/^\[in-game !report/.test(r.text||"")?"🎮 In-game report":r.kind==="idea"?"💡 Idea":"🐞 Bug"}</b> · ${when(r.at)} · ${esc(r.app||"?")}${r.email?` · <a href="mailto:${esc(r.email)}">${esc(r.email)}</a>`:""}</div>
      <p>${esc(r.text||"")}</p>${r.expected?`<p class="note">Expected: ${esc(r.expected)}</p>`:""}<p class="note">${esc(r.page||"")}</p>
      <div class="btns">${r.has_diag?`<button type="button" data-rdiag="${esc(r.id)}">Technical details</button>`:""}<button type="button" data-rdone="${esc(r.id)}" data-v="${r.done?0:1}">${r.done?"Reopen":"Done"}</button></div><pre class="rdiag" hidden></pre></li>`;
   return `<article class="card" id="rp-card"><h3>Bug reports ${open.length?`<span class="pill strong">${open.length} open</span>`:""}</h3>
@@ -466,6 +467,7 @@ async function renderSettings(){
    <p class="note">This is Valve's Game State Integration, the official feature used by HUDs and RGB keyboards. During a match, CS2 only sends your own info, never the enemies'.${gs&&gs.path?` File: <code>${esc(gs.path)}</code>.`:""}${gs&&gs.installed?(gs.receiving?" CS2 is sending its data.":" Restart CS2 so it picks it up."):""}</p>
    <div class="btns">${gs&&gs.installed?`<button type="button" id="gsi-off">Turn detection off</button>`:`<button type="button" class="primary" id="gsi-on" ${gs&&gs.cfg_dir?"":"disabled"}>Turn detection on</button>`}${gs&&!gs.cfg_dir?`<span class="note">CS2 folder not found on this PC.</span>`:""}</div>
    <div class="row"><label style="display:flex;gap:8px;align-items:center;font-size:14px"><input type="checkbox" id="o-cs2" ${!gs||gs.open_on_cs2!==false?"checked":""}> Open my In game page when CS2 starts (when no Wily page is open yet)</label></div>
+   <div class="row"><label style="display:flex;gap:8px;align-items:center;font-size:14px"><input type="checkbox" id="o-fb" ${!gs||gs.feedback_prompts!==false?"checked":""}> Ask me how it went after a warm-up and after a match (the closed alpha's feedback)</label></div>
    <p class="note">CS2 lets nothing write in its lobby's chat, so I open myself instead: the page first, CS2's window comes up over it. It needs me running: I start with Windows when a shortcut to me is in your Startup folder (Win+R, shell:startup).</p></article>
   <article class="card"><h3>Your plan with the numpad (1 to 6) ${ok(cc&&cc.bound&&cc.tempo_bound)}</h3>
    <p>Numpad <b>1</b> = A, <b>2</b> = mid, <b>3</b> = B; <b>4</b> = rush, <b>5</b> = slow, <b>6</b> = map control; <b>minus</b> drops them. On T, the key says only what you pressed in the team chat: your direction and your tempo ("A", "Rush B", "Map control, then mid"; on A and B with CS2's own "Go A" / "Go B" of the chat wheel, the order bots follow). It tells me too: Live then shows you the way in that wins most, its odds this round, when to be on the site and its stuff, with a ping on the map; that stays on your screen. On CT, the keys only tell me: 1-2-3 where you play, 4-5-6 what the Ts do.</p>
@@ -548,6 +550,7 @@ async function renderSettings(){
   $("#st-sync",v).onclick=async()=>{msg.textContent="";try{await api("/api/steam/sync",{sid});poll()}catch(e){msg.textContent=e.message}};
   const au=$("#st-auto",v);if(au)au.onchange=async()=>{try{await api("/api/steam/options",{sid,auto_sync:au.checked})}catch(e){msg.textContent=e.message}};
   const oc=$("#o-cs2",v);if(oc)oc.onchange=async()=>{try{await api("/api/app/options",{open_on_cs2:oc.checked})}catch(e){}};
+  const ofb=$("#o-fb",v);if(ofb)ofb.onchange=async()=>{try{await api("/api/app/options",{feedback_prompts:ofb.checked})}catch(e){}};
   $$("[data-theme-set]",v).forEach(b=>b.onclick=()=>{store("theme",b.dataset.themeSet);applyTheme(b.dataset.themeSet);$$("[data-theme-set]",v).forEach(x=>x.setAttribute("aria-pressed",x===b))});
   wireUpdate(v);wireShare(v);wireReports(v);wireUsage(v);
   const grb=$("#gr-go",v);if(grb)grb.onclick=async()=>{grb.disabled=true;try{await api(gr.on?"/api/grow/stop":"/api/grow/start",{target:+($("#gr-n",v)||{}).value||gr.target})}catch(e){}renderSettings()};

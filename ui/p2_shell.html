@@ -34,6 +34,18 @@
   <p class="note" id="bug-msg" role="status"></p>
   <div class="btns"><button type="button" class="primary" id="bug-send">Send</button><button type="button" id="bug-close">Close</button></div>
 </form></dialog>
+<dialog class="bugdlg fbdlg" id="fbdlg" aria-labelledby="fb-h"><form method="dialog">
+  <h3 id="fb-h">How was it?</h3>
+  <p class="fb-sum" id="fb-sum"></p>
+  <p class="note">Wily is in <b>closed alpha</b>: a handful of players and one developer. What you say here goes straight to him and decides what gets fixed and built next. A tap on a face is enough; a sentence helps even more.</p>
+  <div class="fb-rate" id="fb-rate" role="group" aria-label="How it went"></div>
+  <div class="chips fb-tags" id="fb-tags" role="group" aria-label="What it was about"></div>
+  <label><span>What worked, what didn't, what you'd want next <span class="note">(optional)</span></span><textarea id="fb-text" rows="3" maxlength="6000"></textarea></label>
+  <p class="note" id="fb-hint">In game, <b>!report</b> followed by a few words sends a note with the drill you're on.</p>
+  <p class="note" id="fb-msg" role="status"></p>
+  <div class="btns"><button type="button" class="primary" id="fb-send">Send</button><button type="button" id="fb-later">Not now</button></div>
+  <label class="chk note"><input type="checkbox" id="fb-stop"> Don't ask after each warm-up and match (Settings turns it back on)</label>
+</form></dialog>
 <div class="usage-note" id="usage-note" role="region" aria-label="Usage statistics" hidden><p><b>Heads up: I count, anonymously, how I'm used.</b> Which pages you open and for how long, which buttons you use, the errors I run into, per day. No identifier, no SteamID, no name, nothing you write. It tells my author what to improve and what to cut.</p>
   <div class="btns"><button type="button" class="primary" id="un-ok">OK</button><button type="button" id="un-off">Turn it off</button><button type="button" id="un-more">What is sent</button></div></div>
 <div class="jobpanel" id="job" hidden><div class="in" role="status" aria-live="polite"></div></div>

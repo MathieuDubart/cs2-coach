@@ -144,6 +144,7 @@ public partial class CoachReplay
     void RegisterSession()
     {
         AddCommand("css_session", "start a training session: css_session <id>", (p, c) => CmdSession(p, c));
+        AddCommand("css_report", "tell Wily's author what's wrong or what you'd want, from where you are: !report <text>", (p, c) => Report(p, c.ArgString));
         AddCommand("css_again", "the last session's drills again: !again <number>[,<number>], missed or all", (p, c) => Again(p, c.ArgString));
         RegisterEventHandler<EventSmokegrenadeDetonate>((e, _) => { NadeHit(e.Userid, e.X, e.Y); return HookResult.Continue; });
         RegisterEventHandler<EventFlashbangDetonate>((e, _) => { NadeHit(e.Userid, e.X, e.Y); return HookResult.Continue; });
@@ -484,12 +485,36 @@ public partial class CoachReplay
             Maps = blocks.Select(b => b.Map).Distinct().ToList(), Blocks = blocks });
     }
 
+    // 07/10, the user: "fais une commande report sur le serveur d'entraînement aussi": a note to Wily's author with the
+    // drill and where you stand (coach/reports.jsonl; the app sends it within half a minute)
+    void Report(CCSPlayerController? p, string? text)
+    {
+        text = (text ?? "").Trim().Trim('"').Trim();
+        if (text.Length == 0) { Say(p, "!report <what's wrong, or what you'd want>: it goes to Wily's author with this drill and where you stand"); return; }
+        var pw = p?.PlayerPawn.Value;
+        var o = pw?.AbsOrigin;
+        var a = pw?.EyeAngles;
+        var rec = new Dictionary<string, object?>
+        {
+            ["t"] = DateTimeOffset.UtcNow.ToUnixTimeSeconds(), ["text"] = text.Length > 2000 ? text[..2000] : text,
+            ["session"] = sess?.Id, ["block"] = sess != null && blockIdx >= 0 && blockIdx < sess.Blocks.Count ? sess.Blocks[blockIdx].Kind : null,
+            ["drill"] = drill?.Id, ["drill_title"] = drill?.Title ?? cur?.Title, ["map"] = Server.MapName, ["phase"] = phase,
+            ["pos"] = o == null ? null : new[] { o.X, o.Y, o.Z }, ["ang"] = a == null ? null : new[] { a.X, a.Y }
+        };
+        try
+        {
+            File.AppendAllText(System.IO.Path.Combine(Dir, "reports.jsonl"), JsonSerializer.Serialize(rec) + "\n");
+            Say(p, "📨 noted: it goes to Wily's author with this drill and where you stand. Thanks!");
+        }
+        catch (Exception e) { Logger.LogInformation("report: {m}", e.Message); Say(p, "couldn't keep it, sorry: the app's \"alpha · report\" works too"); }
+    }
+
     void Welcome()
     {
         if (sess == null) return;
         var order = string.Join(" → ", sess.Blocks.Select(b => KindName[b.Kind]).Distinct());
         Html($"<font color='#e0a030'>TRAINING · {sess.Minutes} MIN</font><br><font class='fontSize-l'>{string.Join(" · ", sess.Maps.Select(MapName))}</font><br>{order}", 4);
-        All($"Training {sess.Minutes} min · {string.Join(", ", sess.Maps.Select(MapName))} · {order}. !n skips a drill, !stop ends.");
+        All($"Training {sess.Minutes} min · {string.Join(", ", sess.Maps.Select(MapName))} · {order}. !n skips a drill, !stop ends, !report <text> tells Wily's author.");
     }
 
     // after a map change, or when you join the server

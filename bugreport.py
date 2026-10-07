@@ -94,7 +94,7 @@ def send(text, expected="", email="", include=True, page=None, errors=None, kind
     if email and not EMAIL_RE.fullmatch(email):
         raise ValueError("That email address does not look right.")
     v = config.read_json(os.path.join(config.HERE, "VERSION.json"), {}) or {}
-    payload = {"install": contrib.state()["install_id"], "app": v.get("app") or "", "kind": kind if kind in ("bug", "idea") else "bug",
+    payload = {"install": contrib.state()["install_id"], "app": v.get("app") or "", "kind": kind if kind in ("bug", "idea", "feedback") else "bug",
                "text": text[:15000], "expected": (expected or "").strip()[:6000], "email": email,
                "page": (page or "")[:120], "diag": diagnostics(page, errors) if include else None}
     try:

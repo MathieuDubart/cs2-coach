@@ -271,7 +271,14 @@ class Handler(BaseHTTPRequestHandler):
             return self.send(200, {"keys": dict(sorted(gsi.RAW["keys"].items())), "samples": gsi.RAW["samples"]})
         if u.path == "/api/gsi/status":
             import gsi
-            return self.send(200, gsi.status() | {"open_on_cs2": bool(config.settings().get("open_on_cs2", True))})
+            return self.send(200, gsi.status() | {"open_on_cs2": bool(config.settings().get("open_on_cs2", True)),
+                                                  "feedback_prompts": config.settings().get("feedback_prompts", True) is not False})
+        if u.path == "/api/feedback/pending":   # how it went: after a warm-up, after a match with the In game page (07/10)
+            import feedback
+            try:
+                return self.send(200, feedback.pending())
+            except Exception as e:
+                return self.send(200, {"error": f"{type(e).__name__}"})
         if u.path == "/api/train/status":   # installed, installing, running (Prepare's warm-up asks before offering it)
             import replay
             return self.send(200, replay.status())
@@ -648,12 +655,28 @@ class Handler(BaseHTTPRequestHandler):
             threading.Thread(target=run_job, args=("re-analysis of the match", lambda: cs2coach.reanalyze_match(sid, mid)),
                              kwargs={"extra": {"view": "matches", "match": mid}}, daemon=True).start()
             return self.send(200, {"started": True})
+        if u.path in ("/api/feedback/send", "/api/feedback/dismiss"):   # the popup's answer (07/10, the closed alpha)
+            import feedback
+            try:
+                if u.path.endswith("dismiss"):
+                    if body.get("stop"):   # "don't ask after each one": off (Settings turns it back on)
+                        s = config.settings()
+                        s["feedback_prompts"] = False
+                        config.save_settings(s)
+                    return self.send(200, feedback.dismiss(body.get("id")))
+                return self.send(200, feedback.send(str(body.get("kind") or ""), str(body.get("id") or ""), body.get("rating"),
+                                                    body.get("tags") if isinstance(body.get("tags"), list) else [], str(body.get("text") or ""),
+                                                    str(body.get("summary") or "")[:200]))
+            except ValueError as e:
+                return self.send(400, {"error": str(e)})
         if u.path == "/api/app/options":   # Settings' switches of the app itself
             s = config.settings()
             if "open_on_cs2" in body:
                 s["open_on_cs2"] = bool(body["open_on_cs2"])
+            if "feedback_prompts" in body:
+                s["feedback_prompts"] = bool(body["feedback_prompts"])
             config.save_settings(s)
-            return self.send(200, {"ok": True, "open_on_cs2": bool(s.get("open_on_cs2", True))})
+            return self.send(200, {"ok": True, "open_on_cs2": bool(s.get("open_on_cs2", True)), "feedback_prompts": s.get("feedback_prompts", True) is not False})
         if u.path in ("/api/gsi/install", "/api/gsi/uninstall"):
             import gsi
             try:
@@ -899,6 +922,8 @@ if __name__ == "__main__":
             print("game detection:", e)
         threading.Thread(target=auto_sync, daemon=True).start()
         threading.Thread(target=voice_watch, daemon=True).start()
+        import feedback
+        threading.Thread(target=feedback.watch, daemon=True).start()   # !report in the training server's chat (07/10)
         import chatcalls
         threading.Thread(target=chatcalls.watch, daemon=True).start()   # numpad keys of the paths: the focus
         if config.role() != "client" and (config.read_json(GROW_CTL, {}) or {}).get("on"):   # the base was growing: it goes on

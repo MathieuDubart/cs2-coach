@@ -911,6 +911,15 @@ svg.radar .ping .ping-t{font:800 15px var(--f-mono);fill:#ffd34d;paint-order:str
 .fold[open]>summary::before{transform:rotate(90deg)}
 .fold-b{display:grid;gap:12px;margin-top:12px}
 .rd-where>summary{cursor:pointer;font:500 13px var(--f-body);color:var(--muted);margin-top:4px}
+/* how it went (07/10, the closed alpha) */
+.fbdlg .fb-sum{font:600 14px var(--f-body);color:var(--muted)}
+.fbdlg .fb-sum:empty{display:none}
+.fb-rate{display:flex;gap:8px}
+.fb-rate button{font-size:26px;line-height:1;padding:6px 10px;background:transparent;border:1px solid var(--line);border-radius:8px;cursor:pointer;filter:grayscale(.6);opacity:.75}
+.fb-rate button[aria-pressed="true"]{filter:none;opacity:1;border-color:var(--ink);background:var(--panel-2,rgba(255,255,255,.06))}
+.fb-tags{display:flex;flex-wrap:wrap;gap:6px}
+.fb-tags .chip{font-size:13px;padding:4px 10px}
+.fb-tags .chip[aria-pressed="true"]{border-color:var(--ink);color:var(--ink);background:var(--panel-2,rgba(255,255,255,.06))}
 </style>
 
 <div class="bar"><div class="bar-in">
@@ -948,6 +957,18 @@ svg.radar .ping .ping-t{font:800 15px var(--f-mono);fill:#ffd34d;paint-order:str
   <details id="bug-prev"><summary>See exactly what is sent</summary><pre id="bug-pre">…</pre></details>
   <p class="note" id="bug-msg" role="status"></p>
   <div class="btns"><button type="button" class="primary" id="bug-send">Send</button><button type="button" id="bug-close">Close</button></div>
+</form></dialog>
+<dialog class="bugdlg fbdlg" id="fbdlg" aria-labelledby="fb-h"><form method="dialog">
+  <h3 id="fb-h">How was it?</h3>
+  <p class="fb-sum" id="fb-sum"></p>
+  <p class="note">Wily is in <b>closed alpha</b>: a handful of players and one developer. What you say here goes straight to him and decides what gets fixed and built next. A tap on a face is enough; a sentence helps even more.</p>
+  <div class="fb-rate" id="fb-rate" role="group" aria-label="How it went"></div>
+  <div class="chips fb-tags" id="fb-tags" role="group" aria-label="What it was about"></div>
+  <label><span>What worked, what didn't, what you'd want next <span class="note">(optional)</span></span><textarea id="fb-text" rows="3" maxlength="6000"></textarea></label>
+  <p class="note" id="fb-hint">In game, <b>!report</b> followed by a few words sends a note with the drill you're on.</p>
+  <p class="note" id="fb-msg" role="status"></p>
+  <div class="btns"><button type="button" class="primary" id="fb-send">Send</button><button type="button" id="fb-later">Not now</button></div>
+  <label class="chk note"><input type="checkbox" id="fb-stop"> Don't ask after each warm-up and match (Settings turns it back on)</label>
 </form></dialog>
 <div class="usage-note" id="usage-note" role="region" aria-label="Usage statistics" hidden><p><b>Heads up: I count, anonymously, how I'm used.</b> Which pages you open and for how long, which buttons you use, the errors I run into, per day. No identifier, no SteamID, no name, nothing you write. It tells my author what to improve and what to cut.</p>
   <div class="btns"><button type="button" class="primary" id="un-ok">OK</button><button type="button" id="un-off">Turn it off</button><button type="button" id="un-more">What is sent</button></div></div>
@@ -1561,6 +1582,40 @@ function usageNotice(){const n=$("#usage-note");if(!n||!D.local||D.role!=="clien
   n.hidden=false;
   const done=async on=>{n.hidden=true;try{const r=await api("/api/usage/set",{noticed:true,...(on===false?{on:false}:{})});D.usage={on:r.on,noticed:true}}catch(e){}};
   $("#un-ok",n).onclick=()=>done();$("#un-off",n).onclick=()=>done(false);$("#un-more",n).onclick=()=>{done();go("settings")}}
+// ---------- how it went: after a warm-up, after a match with the In game page (07/10, the closed alpha) ----------
+// The user: "pour encourager les feedback, à chaque fin d'entraînement et à chaque fin de session live avec Wily, une
+// popup de feedback en expliquant que c'est une alpha fermée". The app says what to ask (/api/feedback/pending: once
+// each, never during a match); a face, a few tags, a sentence if you like; "Not now" and Escape count as an answer.
+const FB_TAGS={training:["Aim","Prefire","Defense","Stuff","Situations","Bots","Lines & zones","Connection","Too long","Too short"],
+  live:["Calls","Radar","Economy","Reminders","Numpad keys","Too much on screen","Missed something","Too slow","Useful"]};
+const FB_FACES=[["😖","Bad"],["😕","Meh"],["😐","OK"],["🙂","Good"],["🤩","Great"]];
+let FB=null,fbTimer=null;
+function openFeedback(p){const d=$("#fbdlg");if(!d||d.open||!p||!p.id)return;FB={...p,rating:0,tags:new Set()};
+  $("#fb-h").textContent=p.title||"How was it?";$("#fb-sum").textContent=p.summary||"";
+  $("#fb-rate").innerHTML=FB_FACES.map(([f,t],i)=>`<button type="button" data-fbr="${i+1}" aria-pressed="false" aria-label="${t}" title="${t}">${f}</button>`).join("");
+  $("#fb-tags").innerHTML=(FB_TAGS[p.kind]||[]).map(t=>`<button type="button" class="chip" data-fbt="${esc(t)}" aria-pressed="false">${esc(t)}</button>`).join("");
+  $("#fb-text").value="";$("#fb-msg").textContent="";$("#fb-stop").checked=false;$("#fb-send").disabled=false;
+  $("#fb-hint").hidden=p.kind!=="training";
+  $$("[data-fbr]",d).forEach(b=>b.onclick=()=>{FB.rating=+b.dataset.fbr;$$("[data-fbr]",d).forEach(x=>x.setAttribute("aria-pressed",String(x===b)))});
+  $$("[data-fbt]",d).forEach(b=>b.onclick=()=>{const t=b.dataset.fbt,on=!FB.tags.has(t);on?FB.tags.add(t):FB.tags.delete(t);b.setAttribute("aria-pressed",String(on))});
+  if(typeof d.showModal==="function")d.showModal();else d.setAttribute("open","")}
+async function fbDismiss(){const d=$("#fbdlg");if(!FB)return;const id=FB.id,stop=$("#fb-stop").checked;FB=null;if(d&&d.open)d.close();
+  try{await api("/api/feedback/dismiss",{id,stop})}catch(e){}}
+function wireFeedback(){const d=$("#fbdlg");if(!d||d.dataset.wired)return;d.dataset.wired="1";
+  $("#fb-later").onclick=fbDismiss;
+  d.addEventListener("cancel",e=>{e.preventDefault();fbDismiss()});   // Escape: not now
+  $("#fb-send").onclick=async()=>{if(!FB)return;const m=$("#fb-msg"),t=$("#fb-text").value.trim();
+    if(!FB.rating&&!FB.tags.size&&!t){m.textContent="A face, a tag or a few words first.";return}
+    const b=$("#fb-send");b.disabled=true;m.textContent="Sending…";
+    try{const r=await api("/api/feedback/send",{kind:FB.kind,id:FB.id,rating:FB.rating||null,tags:[...FB.tags],text:t,summary:FB.summary||""});
+      if($("#fb-stop").checked)try{await api("/api/app/options",{feedback_prompts:false})}catch(e){}
+      m.textContent=r.ok?"Thank you: it goes straight to the author.":"The site can't be reached right now: kept on this PC, sent as soon as it can.";
+      FB=null;setTimeout(()=>{if(d.open)d.close()},1800)}
+    catch(e){m.textContent=e.message;b.disabled=false}}}
+// asked every 20 s while the page is in front of you (the app decides when: a warm-up just over, a match just over)
+async function fbPoll(){clearTimeout(fbTimer);fbTimer=setTimeout(fbPoll,20000);
+  if(!D.local||document.visibilityState!=="visible"||FB)return;
+  try{const p=await (await fetch("/api/feedback/pending")).json();if(p&&p.id)openFeedback(p)}catch(e){}}
 
 // ---------- shared: sources, local API ----------
 const srcLinks=(l,sm,lab)=>l&&l.length?`<div class="srcs${sm?" sm":""}"><span class="note">${lab||"Sources:"}</span>${l.map(x=>`<a href="${esc(x.url)}" target="_blank" rel="noopener">${esc(x.label)}</a>`).join("")}</div>`:"";
@@ -1932,7 +1987,8 @@ function reportCard(){if(D.role!=="client")return "";
    <div class="btns"><button type="button" class="primary" data-report="bug">Report a bug</button><button type="button" data-report="idea">Suggest an idea</button></div></article>`}
 // the coach's PC: what players reported, the newest first
 function reportsCard(rs){if(D.role==="client"||!Array.isArray(rs))return "";
-  const open=rs.filter(r=>!r.done),one=r=>`<li class="rep${r.done?" done":""}"><div><b>${r.kind==="idea"?"💡 Idea":"🐞 Bug"}</b> · ${when(r.at)} · ${esc(r.app||"?")}${r.email?` · <a href="mailto:${esc(r.email)}">${esc(r.email)}</a>`:""}</div>
+  const fbk=r=>r.kind==="feedback"||/^\[feedback/.test(r.text||""),face=r=>{const m=/(\d)\/5\]/.exec(r.text||"");const n=r.rating||(m?+m[1]:0);return n?" "+["😖","😕","😐","🙂","🤩"][n-1]:""};
+  const open=rs.filter(r=>!r.done),one=r=>`<li class="rep${r.done?" done":""}"><div><b>${fbk(r)?`💬 Feedback${face(r)}`:/^\[in-game !report/.test(r.text||"")?"🎮 In-game report":r.kind==="idea"?"💡 Idea":"🐞 Bug"}</b> · ${when(r.at)} · ${esc(r.app||"?")}${r.email?` · <a href="mailto:${esc(r.email)}">${esc(r.email)}</a>`:""}</div>
      <p>${esc(r.text||"")}</p>${r.expected?`<p class="note">Expected: ${esc(r.expected)}</p>`:""}<p class="note">${esc(r.page||"")}</p>
      <div class="btns">${r.has_diag?`<button type="button" data-rdiag="${esc(r.id)}">Technical details</button>`:""}<button type="button" data-rdone="${esc(r.id)}" data-v="${r.done?0:1}">${r.done?"Reopen":"Done"}</button></div><pre class="rdiag" hidden></pre></li>`;
   return `<article class="card" id="rp-card"><h3>Bug reports ${open.length?`<span class="pill strong">${open.length} open</span>`:""}</h3>
@@ -2029,6 +2085,7 @@ async function renderSettings(){
    <p class="note">This is Valve's Game State Integration, the official feature used by HUDs and RGB keyboards. During a match, CS2 only sends your own info, never the enemies'.${gs&&gs.path?` File: <code>${esc(gs.path)}</code>.`:""}${gs&&gs.installed?(gs.receiving?" CS2 is sending its data.":" Restart CS2 so it picks it up."):""}</p>
    <div class="btns">${gs&&gs.installed?`<button type="button" id="gsi-off">Turn detection off</button>`:`<button type="button" class="primary" id="gsi-on" ${gs&&gs.cfg_dir?"":"disabled"}>Turn detection on</button>`}${gs&&!gs.cfg_dir?`<span class="note">CS2 folder not found on this PC.</span>`:""}</div>
    <div class="row"><label style="display:flex;gap:8px;align-items:center;font-size:14px"><input type="checkbox" id="o-cs2" ${!gs||gs.open_on_cs2!==false?"checked":""}> Open my In game page when CS2 starts (when no Wily page is open yet)</label></div>
+   <div class="row"><label style="display:flex;gap:8px;align-items:center;font-size:14px"><input type="checkbox" id="o-fb" ${!gs||gs.feedback_prompts!==false?"checked":""}> Ask me how it went after a warm-up and after a match (the closed alpha's feedback)</label></div>
    <p class="note">CS2 lets nothing write in its lobby's chat, so I open myself instead: the page first, CS2's window comes up over it. It needs me running: I start with Windows when a shortcut to me is in your Startup folder (Win+R, shell:startup).</p></article>
   <article class="card"><h3>Your plan with the numpad (1 to 6) ${ok(cc&&cc.bound&&cc.tempo_bound)}</h3>
    <p>Numpad <b>1</b> = A, <b>2</b> = mid, <b>3</b> = B; <b>4</b> = rush, <b>5</b> = slow, <b>6</b> = map control; <b>minus</b> drops them. On T, the key says only what you pressed in the team chat: your direction and your tempo ("A", "Rush B", "Map control, then mid"; on A and B with CS2's own "Go A" / "Go B" of the chat wheel, the order bots follow). It tells me too: Live then shows you the way in that wins most, its odds this round, when to be on the site and its stuff, with a ping on the map; that stays on your screen. On CT, the keys only tell me: 1-2-3 where you play, 4-5-6 what the Ts do.</p>
@@ -2111,6 +2168,7 @@ async function renderSettings(){
   $("#st-sync",v).onclick=async()=>{msg.textContent="";try{await api("/api/steam/sync",{sid});poll()}catch(e){msg.textContent=e.message}};
   const au=$("#st-auto",v);if(au)au.onchange=async()=>{try{await api("/api/steam/options",{sid,auto_sync:au.checked})}catch(e){msg.textContent=e.message}};
   const oc=$("#o-cs2",v);if(oc)oc.onchange=async()=>{try{await api("/api/app/options",{open_on_cs2:oc.checked})}catch(e){}};
+  const ofb=$("#o-fb",v);if(ofb)ofb.onchange=async()=>{try{await api("/api/app/options",{feedback_prompts:ofb.checked})}catch(e){}};
   $$("[data-theme-set]",v).forEach(b=>b.onclick=()=>{store("theme",b.dataset.themeSet);applyTheme(b.dataset.themeSet);$$("[data-theme-set]",v).forEach(x=>x.setAttribute("aria-pressed",x===b))});
   wireUpdate(v);wireShare(v);wireReports(v);wireUsage(v);
   const grb=$("#gr-go",v);if(grb)grb.onclick=async()=>{grb.disabled=true;try{await api(gr.on?"/api/grow/stop":"/api/grow/start",{target:+($("#gr-n",v)||{}).value||gr.target})}catch(e){}renderSettings()};
@@ -4900,7 +4958,8 @@ let updFrom=null;
     catch(e){if(/already running/i.test(e.message||""))poll();else{ub.disabled=false;updFrom=null;jobPanel(`<b>${esc(e.message||"Update impossible")}</b>`,"err")}}}}}
 if(D.local)fetch("/api/update").then(r=>r.json()).then(gearDot).catch(()=>{});   // a dot on the gear: an update is there
 usageNotice();
-{const at=$("#alphatag");if(at&&D.local&&D.role==="client"){at.hidden=false;at.onclick=()=>openReport("bug")}wireReport()}   // the alpha: a report from any page
+{const at=$("#alphatag");if(at&&D.local&&D.role==="client"){at.hidden=false;at.onclick=()=>openReport("bug")}wireReport()}
+if(D.local){wireFeedback();setTimeout(fbPoll,4000)}   // how it went: after a warm-up, after a match (07/10, the closed alpha)   // the alpha: a report from any page
 if(D.local){navQuiet++;route().finally(()=>navQuiet--);
   fetch("/api/codes").then(r=>r.json()).then(c=>{CODES={...c,...CODES};if(S.view==="matches"&&S.mpin){navQuiet++;try{syncUrl()}finally{navQuiet--}}}).catch(()=>{})}
 else setPlayer(defPlayer());

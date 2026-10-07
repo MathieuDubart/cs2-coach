@@ -570,3 +570,12 @@ svg.radar .ping .ping-t{font:800 15px var(--f-mono);fill:#ffd34d;paint-order:str
 .fold[open]>summary::before{transform:rotate(90deg)}
 .fold-b{display:grid;gap:12px;margin-top:12px}
 .rd-where>summary{cursor:pointer;font:500 13px var(--f-body);color:var(--muted);margin-top:4px}
+/* how it went (07/10, the closed alpha) */
+.fbdlg .fb-sum{font:600 14px var(--f-body);color:var(--muted)}
+.fbdlg .fb-sum:empty{display:none}
+.fb-rate{display:flex;gap:8px}
+.fb-rate button{font-size:26px;line-height:1;padding:6px 10px;background:transparent;border:1px solid var(--line);border-radius:8px;cursor:pointer;filter:grayscale(.6);opacity:.75}
+.fb-rate button[aria-pressed="true"]{filter:none;opacity:1;border-color:var(--ink);background:var(--panel-2,rgba(255,255,255,.06))}
+.fb-tags{display:flex;flex-wrap:wrap;gap:6px}
+.fb-tags .chip{font-size:13px;padding:4px 10px}
+.fb-tags .chip[aria-pressed="true"]{border-color:var(--ink);color:var(--ink);background:var(--panel-2,rgba(255,255,255,.06))}

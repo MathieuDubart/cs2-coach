@@ -31,9 +31,11 @@ $diag = $r['diag'] ?? null;
 if ($diag !== null && !is_array($diag)) {
     reply(400, ['ok' => false, 'error' => 'bad details']);
 }
-$kind = in_array($r['kind'] ?? 'bug', ['bug', 'idea'], true) ? $r['kind'] ?? 'bug' : 'bug';
+$kind = in_array($r['kind'] ?? 'bug', ['bug', 'idea', 'feedback'], true) ? $r['kind'] ?? 'bug' : 'bug';
 $d = data_dir();
-if (!count_up($d, 'report:' . $install, 10) || !count_up($d, ip_key($d) . ':report', 20)) {
+// a feedback after each warm-up or match (07/10): its own allowance, larger
+$lim = $kind === 'feedback' ? [30, 60] : [10, 20];
+if (!count_up($d, ($kind === 'feedback' ? 'feedback:' : 'report:') . $install, $lim[0]) || !count_up($d, ip_key($d) . ':' . ($kind === 'feedback' ? 'feedback' : 'report'), $lim[1])) {
     reply(429, ['ok' => false, 'error' => 'enough reports for today, thank you']);
 }
 if (!is_dir("$d/reports")) {
