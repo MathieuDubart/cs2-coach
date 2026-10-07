@@ -95,6 +95,11 @@ public class Scenario
     // ennemis"), and where the players went before it (the doors and the vents they opened or broke)
     [JsonPropertyName("dead")] public List<Dead> Dead { get; set; } = new();
     [JsonPropertyName("trail")] public List<float[]> Trail { get; set; } = new();
+    // where it happens (07/10): its place's outline on the ground, the gold line only up to it; play it your way there
+    [JsonPropertyName("zone_name")] public string ZoneName { get; set; } = "";
+    [JsonPropertyName("zone_at")] public float[]? ZoneAt { get; set; }
+    [JsonPropertyName("zone_poly")] public List<float[]> ZonePoly { get; set; } = new();
+    [JsonPropertyName("lost")] public string Lost { get; set; } = "";   // lost in advance (no kit, no time): skipped
 }
 
 public class Dead

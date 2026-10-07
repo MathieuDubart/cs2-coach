@@ -10,6 +10,7 @@ take your own spot again (actor) or watch it all (spectator: a bot plays your sp
   plugin CoachReplay (plugin/CoachReplay) plays the scenario and appends each try to coach/results.jsonl.
 Nothing here touches the game: the server is its own copy, and the game joins it like any community server."""
 import json
+import math
 import os
 import secrets
 import shutil
@@ -93,6 +94,10 @@ def scenarios(sid, n=15):
     lost round, then the rest (1v3, deaths with one of the three)."""
     sid = str(sid)
     out = []
+    try:
+        lost = set(json.load(open(LOST_F, encoding="utf-8")))
+    except (OSError, ValueError):
+        lost = set()
     for mid, mp in _own_matches(sid, n):
         deep = os.path.join(config.OUT, "deep", mid)
         D = pd.read_parquet(os.path.join(deep, "duels.parquet"))
@@ -130,7 +135,7 @@ def scenarios(sid, n=15):
                         "t": round(float(last.t), 1), "side": side, "zone": last.victim_zone, "vs": foes,
                         "mine": me.primary.get(r) or me.pistol.get(r), "won": False, "score": {1: 5, 2: 4}.get(foes, 3)})
     # a match without its demo (the player's history): only the situations built on the coach's PC
-    out = [s for s in out if _has_demo(s["mid"]) or _prebuilt(s["mid"], s["round"], s["kind"])]
+    out = [s for s in out if (_has_demo(s["mid"]) or _prebuilt(s["mid"], s["round"], s["kind"])) and s["id"] not in lost]
     return sorted(out, key=lambda s: (-s["score"], -int(s["mid"]), s["round"]))
 
 
@@ -181,6 +186,9 @@ def build(sid, mid, rnd, kind="death", t=None):
                     break
         except Exception as e:
             print("start", mid, rnd, e, flush=True)
+    # a bit more of the round before it (07/10, the user: "commencer la situation un peu plus tôt, un peu avant la
+    # situation", "un peu plus de recul sur le round")
+    start = max(t0 + 16, start - (3 if kind == "clutch" else 4) * 64)
     if start - t0 < 12 * 64:   # very early in the round: from the spawn (06/10: "fais-moi partir quasiment du spawn")
         start = t0 + 16
     ticks = list(range(start, end + 1, STEP))
@@ -261,6 +269,55 @@ def build(sid, mid, rnd, kind="death", t=None):
     except Exception as e:
         print("line", mid, rnd, e, flush=True)
         line = []
+    # 07/10, the user: "plutôt que de mettre le chemin exact dans les situations, une zone dans laquelle la situation se
+    # passe pour que j'aie la possibilité de la jouer différemment", and for a retake "la route jusqu'à où elle est":
+    # the place where it happens drawn on the ground (the bomb's site once planted, else where you died or where the
+    # clutch was), the gold line only up to it
+    zone_name, zone_at, zone_poly = "", None, []
+    try:
+        import train
+        P = np.array(me["path"], float).reshape(-1, 5)
+        if bomb and (bomb["f"] == 0 or kind == "clutch"):
+            zone_at = bomb["pos"]
+            zone_name = "B Site" if bomb.get("site") == 1 else "A Site"
+            zone_name = train.replay_zone("Bombsite" + zone_name[0], mp) or zone_name
+        elif kind == "death" and len(md):
+            k0 = md.iloc[0]
+            zone_at = [float(k0.victim_X), float(k0.victim_Y), float(k0.victim_Z)]
+            zone_name = train.replay_zone(k0.victim_zone, mp) or ""
+        elif len(P):
+            kf = min(len(P) - 1, max(0, (key - start) // STEP))
+            zone_at = [float(v) for v in P[kf, :3]]
+            pl = T[(T.steamid == sid)].sort_values("tick").last_place_name.fillna("")
+            zone_name = train.replay_zone(pl.iloc[min(kf, len(pl) - 1)], mp) if len(pl) else ""
+        if zone_at:
+            zone_poly = train.zone_outline(mp, zone_name, zone_at) if zone_name else []
+            inside = None
+            if len(zone_poly) >= 3:
+                from matplotlib.path import Path as _MPath
+                poly = _MPath(np.array(zone_poly, float)[:, :2])
+                inside = [i for i, q in enumerate(line) if poly.contains_point(q[:2])]
+            else:
+                inside = [i for i, q in enumerate(line) if math.dist(q[:2], zone_at[:2]) < 300]
+            line = line[:inside[0] + 1] if inside else line
+            if len(line) < 2:
+                line = []
+    except Exception as e:
+        print("zone", mid, rnd, e, flush=True)
+    # a defuse you can't make (07/10: "quand je n'ai pas de kit, c'est injouable: soit j'avais un kit dans la démo et
+    # c'est jouable, soit la situation est perdue d'avance, autant pas me la faire jouer"): 10 s to defuse without a kit
+    lost = ""
+    if me["team"] == 3 and bomb and bomb["f"] == 0 and not me.get("kit"):
+        foes = sum(1 for q in players if q["team"] != me["team"])
+        if bomb["left"] < 12 + 4 * foes:
+            lost = f"no kit (10 s to defuse), {bomb['left']:.0f} s left, {foes} to kill first: lost in advance"
+            try:
+                L = json.load(open(LOST_F, encoding="utf-8"))
+            except (OSError, ValueError):
+                L = []
+            sid_ = f"{mid}_r{rnd}_{kind[0]}"
+            if sid_ not in L:
+                config.write_json(LOST_F, L + [sid_])
     # who died before the window, where, when (06/10: "il me faut du contexte: savoir où mes alliés meurent pour savoir
     # où sont les ennemis"), and where everyone went before it (the doors they opened, the vents they broke)
     dead, trail = [], []
@@ -286,7 +343,8 @@ def build(sid, mid, rnd, kind="death", t=None):
           "title": f"{mp.replace('de_', '').replace('cs_', '').title()} R{rnd} · {'clutch' if kind == 'clutch' else 'death'}"
                    f"{' · ' + zone if zone else ''}", "players": players, "nades": _nades(p, start, end, teams),
           "danger": danger, "goal": goal, "bomb": bomb, "plant": plant, "line": line,
-          "clock": round(max(0.0, ROUND_S - (start - t0) / 64), 1), "dead": dead, "trail": trail}
+          "clock": round(max(0.0, ROUND_S - (start - t0) / 64), 1), "dead": dead, "trail": trail,
+          "zone_name": zone_name, "zone_at": zone_at, "zone_poly": zone_poly, "lost": lost}
     os.makedirs(SCEN, exist_ok=True)
     f = os.path.join(SCEN, f"{sc['id']}.json")
     json.dump(sc, open(f, "w", encoding="utf-8"), ensure_ascii=False, separators=(",", ":"))
@@ -294,6 +352,7 @@ def build(sid, mid, rnd, kind="death", t=None):
 
 
 C4_TIMER = 40   # mp_c4timer (competitive)
+LOST_F = os.path.join(config.OUT, "train_lost.json")   # situations lost in advance (no kit, no time): never proposed again
 ROUND_S = 115   # a round's time after the freeze time (Premier, competitive: 1:55)
 
 

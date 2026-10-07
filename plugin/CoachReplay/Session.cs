@@ -214,6 +214,25 @@ public partial class CoachReplay
     }
     void ClearLine() { foreach (var b in beams) if (b.IsValid) b.Remove(); beams.Clear(); }
 
+    // a situation's zone: its place's outline (or a ring when the place is unknown), light blue
+    void DrawZone(Scenario s)
+    {
+        var blue = System.Drawing.Color.FromArgb(255, 90, 180, 255);
+        if (s.ZonePoly.Count >= 3)
+            for (int i = 0; i < s.ZonePoly.Count; i++)
+            {
+                var a = s.ZonePoly[i]; var b = s.ZonePoly[(i + 1) % s.ZonePoly.Count];
+                Beam(new Vector3(a[0], a[1], a[2] + 6), new Vector3(b[0], b[1], b[2] + 6), blue, 4f);
+            }
+        else if (s.ZoneAt is { Length: >= 3 } at)
+            for (int i = 0; i < 24; i++)
+            {
+                float a0 = i * MathF.PI / 12, a1 = (i + 1) * MathF.PI / 12;
+                Beam(new Vector3(at[0] + 250 * MathF.Cos(a0), at[1] + 250 * MathF.Sin(a0), at[2] + 6),
+                     new Vector3(at[0] + 250 * MathF.Cos(a1), at[1] + 250 * MathF.Sin(a1), at[2] + 6), blue, 3f);
+            }
+    }
+
     void Beam(Vector3 a, Vector3 b2, System.Drawing.Color c, float w)
     {
         var b = Utilities.CreateEntityByName<CBeam>("beam");
@@ -531,6 +550,14 @@ public partial class CoachReplay
         }
         waitFile = 0;
         if (s == null) { Logger.LogInformation("drill {id}: nothing to play", d.Id); NextDrill(); return; }
+        if (!string.IsNullOrEmpty(s.Lost))
+        {   // 07/10: "la situation est perdue d'avance, autant pas me la faire jouer"
+            All($"\x10SITUATION\x01 {d.Title}: {s.Lost} · skipped");
+            Html($"<font color='#e0a030'>SKIPPED</font> · {d.Title}<br>{s.Lost}", 3);
+            var g2 = sessGen;
+            AddTimer(3f, () => { if (g2 == sessGen) NextDrill(); });
+            return;
+        }
         cur = s;
         if (d.Kind != "situation" && d.Clock > 0) cur.Clock = d.Clock + (d.Rush ? rushDelay : 0);   // a rush's wait: its arrival stays on the real clock
         rushIn = -1;
@@ -746,6 +773,7 @@ public partial class CoachReplay
         }
         if (!string.IsNullOrEmpty(cur?.Plant)) lines.Add($"💣 {cur!.Plant}");   // planted or not: what you have to do (04/10)
         if (!string.IsNullOrEmpty(cur?.Danger)) lines.Add($"⚠ {cur!.Danger}");
+        if (!string.IsNullOrEmpty(cur?.ZoneName) || cur?.ZonePoly.Count >= 3) lines.Add($"🔵 it happens in {(string.IsNullOrEmpty(cur!.ZoneName) ? "the blue zone" : cur.ZoneName + " (blue)")}: play it your way");
         return string.Join("<br>", lines);
     }
 
@@ -773,7 +801,8 @@ public partial class CoachReplay
     // Place() is done: the aim targets but the first wait (dead) for their turn
     void SessionPlaced()
     {
-        if (cur is { Kind: "death" or "clutch" } && cur.Line.Count > 1) DrawLine(cur.Line);   // your way in the match, on the ground
+        if (cur is { Kind: "death" or "clutch" } && cur.Line.Count > 1) DrawLine(cur.Line);   // your way in the match, up to the zone
+        if (cur is { Kind: "death" or "clutch" }) DrawZone(cur);
         if (cur is { Kind: "death" or "clutch" })   // the allies dead before it: where they fell
             foreach (var x in cur.Dead.Where(x => x.Team == cur.Team && x.Pos.Length >= 3)) DrawX(new Vector3(x.Pos[0], x.Pos[1], x.Pos[2]));
         if (sess == null || cur == null) return;
@@ -1018,7 +1047,7 @@ public partial class CoachReplay
             if (bombLive)   // the bomb's clock, and what it asks of you
                 foreach (var c4 in Utilities.FindAllEntitiesByDesignerName<CPlantedC4>("planted_c4"))
                     bomb = $"<br><font color='#ff5a5a'>💣 {(c4.BombSite == 1 ? "B" : "A")} · {Math.Max(0, c4.C4Blow - Server.CurrentTime):F0} s</font>{(cur.Team == 3 ? " · defuse it" : " · keep it ticking")}";
-            var way = cur.Line.Count > 1 ? "your route in the match: the gold line" : "your route in the match";
+            var way = cur.Line.Count > 1 ? "the gold line takes you to the blue zone" : "your route in the match";
             SetMain($"<font color='#e0a030'>{drill?.Title}</font>{bomb}{(next != null ? $"<br>→ {next} <font class='fontSize-s'>({way})</font>" : "")}");
         }
         if (cur.Kind == "aim" && string.IsNullOrEmpty(drill?.Mode))
