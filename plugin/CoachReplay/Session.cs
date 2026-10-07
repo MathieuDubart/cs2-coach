@@ -118,6 +118,7 @@ public partial class CoachReplay
     float theirsFlash;
     (bool ok, string outcome, int pts, string detail)? theirsRes;
     DateTime attemptEnd;
+    readonly List<float[]> nadePops = new();   // stuff: where your throws of this drill popped (the app learns the lineups that don't land)
     static readonly Random Rng = new();
     string introHtml = "";
     // the blocks: defending a site (CT), the push routes (T), aim on hostage maps, the stuff, the situations
@@ -344,7 +345,15 @@ public partial class CoachReplay
         if (cp != null) AddTimer(0.4f, () => { if (cp.IsValid) cp.Remove(); });
     }
 
-    // from their side: you stand where the enemies it is for stand, turned to it, and the same grenade comes again
+    // the smokes and fires on the ground: gone (a missed throw's, your own before their side's)
+    static void ClearNades()
+    {
+        foreach (var cls in new[] { "smokegrenade_projectile", "molotov_projectile", "incendiarygrenade_projectile", "inferno" })
+            foreach (var e in Utilities.FindAllEntitiesByDesignerName<CBaseEntity>(cls))
+                if (e.IsValid) e.Remove();
+    }
+
+    // from their side: you stand where the enemies it is for stand, on the line they hold there, and the same grenade comes again
     void Theirs((bool ok, string outcome, int pts, string detail) res)
     {
         if (drill == null || drill.Victims.Count == 0) { DrillDone(res.ok, res.outcome, res.pts, res.detail); return; }
@@ -363,9 +372,7 @@ public partial class CoachReplay
         {
             if (g != sessGen || nadeStage != "theirs") return;
             // your own throw's smoke or fire goes first: only the one coming at you (04/10: "a double smoke")
-            foreach (var cls in new[] { "smokegrenade_projectile", "molotov_projectile", "inferno" })
-                foreach (var e in Utilities.FindAllEntitiesByDesignerName<CBaseEntity>(cls))
-                    if (e.IsValid) e.Remove();
+            ClearNades();
             Server.ExecuteCommand("sv_cheats 1");   // only for this: the same grenade again
             Server.ExecuteCommand("sv_rethrow_last_grenade");
             Server.ExecuteCommand("sv_cheats 0");
@@ -529,6 +536,8 @@ public partial class CoachReplay
         rushIn = -1;
         mode = "actor";
         aimOrder.Clear(); reacts.Clear(); aimHs = 0; aimNext = 0; attempts = 0; nadeWait = false; frags = deaths = plants = 0;
+        nadePops.Clear();
+        if (d.Kind == "nade") ClearNades();
         cameAt.Clear(); strafe.Clear(); lastKill = 0;
         // the targets that must stay still idle: a prefire's, a wallbang's, the aim map's flicks and strafers (06/10)
         Zombie(d.Kind == "aim" && (d.Mode == "prefire" || d.Id.StartsWith("wallbang") || d.Id.StartsWith("boost") || (d.Mode == "range" && d.Variant != "duel")));
@@ -547,8 +556,8 @@ public partial class CoachReplay
         {
             0 or 1 when d.Rush => $"{d.How} · {d.Click} — a real rush gets to the blue ring at {RoundClock(d.RushAt)}: your {d.Type} must be up before · the grenade comes at GO",
             _ when d.Rush => $"they rush: your {d.Type} up on its spot in time · the grenade comes at GO",
-            0 or 1 => $"{d.How} · {d.Click} — crosshair on the green cross · it must land in the blue ring · stand in the green ring",
-            _ => "find the aim and the throw",
+            0 or 1 => $"<font color='#ffd34d' class='fontSize-l'>{d.How.ToUpper()}</font> · {d.Click}<br>crosshair on the green cross · it must land in the blue ring · stand in the green ring",
+            _ => $"<font color='#ffd34d' class='fontSize-l'>{d.How.ToUpper()}</font> · {d.Click} · find the aim",
         };
         var again = tries > 0 ? " · AGAIN" : "";
         introHtml = $"<font color='{KindColor[d.Kind]}'>{KindName[d.Kind]}{again}</font> · {Left()} · ⭐ {points}<br><font class='fontSize-l'>{d.Title}</font><br>{how}";
@@ -1187,6 +1196,7 @@ public partial class CoachReplay
         if (sess == null || drill == null || cur?.Kind != "nade" || phase is not ("live" or "countdown") || !nadeWait || u == null || !u.IsValid || u.IsBot) return;
         var tg = drill.Target;
         if (tg == null || tg.Length < 2) return;
+        nadePops.Add(new[] { (float)Math.Round(x), (float)Math.Round(y) });
         NadeResult(Math.Sqrt((x - tg[0]) * (x - tg[0]) + (y - tg[1]) * (y - tg[1])));
     }
 
@@ -1232,6 +1242,7 @@ public partial class CoachReplay
         var show = attempts >= 1 && drill.Level >= 1;   // the aim from the first miss (04/10: "it lacks cues")
         Html($"<font color='#ff5a5a'>{q}</font> {away}<br>throw {attempts + 1}/3{(show ? " · here is the aim" : "")}", 2);
         nadeWait = false;
+        AddTimer(1.2f, ClearNades);
         var g = sessGen;
         AddTimer(1.5f, () =>
         {
@@ -1313,8 +1324,10 @@ public partial class CoachReplay
         doneN++;
         var di = sessDone.FindIndex(x => x.d == drill);   // the recap: each drill's last try
         if (di >= 0) sessDone[di] = (drill, ok, outcome); else sessDone.Add((drill, ok, outcome));
-        Write(new Dictionary<string, object> { ["session"] = sess.Id, ["drill"] = drill.Id, ["kind"] = drill.Kind, ["map"] = drill.Map, ["ok"] = ok,
-            ["outcome"] = outcome, ["points"] = pts, ["detail"] = detail, ["try"] = tries + 1, ["level"] = drill.Level, ["t"] = DateTimeOffset.UtcNow.ToUnixTimeSeconds() });
+        var rec = new Dictionary<string, object> { ["session"] = sess.Id, ["drill"] = drill.Id, ["kind"] = drill.Kind, ["map"] = drill.Map, ["ok"] = ok,
+            ["outcome"] = outcome, ["points"] = pts, ["detail"] = detail, ["try"] = tries + 1, ["level"] = drill.Level, ["t"] = DateTimeOffset.UtcNow.ToUnixTimeSeconds() };
+        if (drill.Kind == "nade" && nadePops.Count > 0 && drill.Target != null) { rec["pops"] = nadePops.ToList(); rec["target"] = drill.Target; }
+        Write(rec);
         var st = streak >= 2 ? $" · 🔥 x{mult:F1}" : "";
         var shown = outcome switch { "kill" => "KILL, THEN DEAD", "passive" => "NO KILL", "exploded" => "BOMB EXPLODED", _ => outcome.ToUpper() };
         Html(ok ? $"<font color='#5ad15a'>✔ {shown}</font> +{pts}{st}<br>{detail}<br>⭐ {points}"

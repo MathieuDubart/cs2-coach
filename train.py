@@ -110,6 +110,9 @@ def ingest():
             it["box"] = 0
             it["next"] = n   # the next session
         it["last"] = r.get("outcome")
+        if r.get("pops") and r.get("target"):   # a lineup: where your throws popped (07/10)
+            it["pops"] = (it.get("pops") or [])[-8:] + [list(map(float, q[:2])) for q in r["pops"]]
+            it["target"] = [float(v) for v in r["target"][:2]]
     p["read"] = len(lines)
     _save(p)
     return p
@@ -1126,7 +1129,7 @@ def _victims(mp, team, typ, land, me, side=None, t_med=None):
     ones beyond it from where you throw); a molotov: in its fire, turned to where it came from."""
     if not land or len(land) < 3:
         return []
-    key = f"{mp}|{typ}|{team}|{round(me[0])}|{round(me[1])}|{round(land[0])}|{round(land[1])}"
+    key = f"v3|{mp}|{typ}|{team}|{round(me[0])}|{round(me[1])}|{round(land[0])}|{round(land[1])}"
     try:
         VC = json.load(open(VICTIMS_F, encoding="utf-8"))
     except (OSError, ValueError):
@@ -1146,19 +1149,53 @@ def _victims(mp, team, typ, land, me, side=None, t_med=None):
 VICTIMS_F = os.path.join(config.OUT, "train_victims.json")
 
 
+def _real_line(mp, side, p, heads=()):
+    """The line a player on that spot holds (07/10, the user: "quand je subis la flash, je regarde une ligne qui existe
+    vraiment ... une ligne que tu connais déjà parce qu'il y a la data des pre-fires"): where the players there were
+    heading; a CT on a spot the base's CTs fight from: where their foes stood (the prefires' data), else the entrance
+    nearest it; a T: the site nearest it. None: unknown."""
+    ys = [y for q, y in heads if math.dist(q[:2], p[:2]) < 120]
+    if ys:
+        a = np.radians(ys)
+        return [0.0, round(float(np.degrees(np.arctan2(np.sin(a).mean(), np.cos(a).mean()))), 1)]
+    sites = list((site_data(mp).get("sites") or {}).values())
+    eye = [p[0], p[1], p[2] + 64]
+    if side == "CT":
+        best = None
+        for S in sites:
+            for h in _site_holds(S):
+                d = math.dist(h["pos"][:2], p[:2])
+                if d < 300 and abs(h["pos"][2] - p[2]) < 90 and (h.get("seen") or []) and (best is None or d < best[0]):
+                    best = (d, h)
+        if best:
+            Q = np.array(best[1]["seen"], float).reshape(-1, 3)
+            return _angle(eye, list(np.median(Q, axis=0) + [0, 0, 56]))
+        ent = [e["start"] for S in sites for e in S.get("entrances") or [] if e.get("start")]
+        ent = [q for q in ent if math.dist(q[:2], p[:2]) < 2500]
+        if ent:
+            q = min(ent, key=lambda q: math.dist(q[:2], p[:2]))
+            return [0.0, round(math.degrees(math.atan2(q[1] - p[1], q[0] - p[0])), 1)]
+        return None
+    tg = [S["defend"] for S in sites if S.get("defend") and math.dist(S["defend"][:2], p[:2]) < 3000]
+    if tg:
+        q = min(tg, key=lambda q: math.dist(q[:2], p[:2]))
+        return [0.0, round(math.degrees(math.atan2(q[1] - p[1], q[0] - p[0])), 1)]
+    return None
+
+
 def _victims_of(mp, team, typ, land, me):
     lx, ly, lz = land[:3]
     reach = {"he": 350, "molotov": 220, "flash": 650, "smoke": 900}.get(typ, 500)
     foe = "CT" if team == 2 else "T"
     _land(mp, typ, me)   # the base's throws of the map, loaded
-    N, hits = _LANDS.get(mp), []
+    N, hits, heads = _LANDS.get(mp), [], []
     if N is not None and len(N):
         m = N[(N.type == typ) & ((N.X - me[0]).abs() < 24) & ((N.Y - me[1]).abs() < 24)]
         for mid, rnd in list(dict.fromkeys(zip(m["match"].astype(str), m["round"])))[:10]:
             try:
                 G = pd.read_parquet(os.path.join(config.OUT, "deep", mid, "grenades.parquet"),
                                     columns=["round", "type", "X", "Y", "t", "flight_s", "land_X", "land_Y", "land_Z", "enemies_blind", "damage"])
-                Sm = pd.read_parquet(os.path.join(config.OUT, "deep", mid, "samples.parquet"), columns=["round", "t", "side", "X", "Y", "Z", "health"])
+                Sm = pd.read_parquet(os.path.join(config.OUT, "deep", mid, "samples.parquet"), columns=["round", "t", "side", "steamid", "X", "Y", "Z", "health"])
             except Exception:
                 continue
             g = G[(G["round"] == rnd) & (G.type == typ) & ((G.X - me[0]).abs() < 24) & ((G.Y - me[1]).abs() < 24)
@@ -1171,16 +1208,21 @@ def _victims_of(mp, team, typ, land, me):
                     continue   # that time it hurt nobody
                 tl = float(r.t) + (float(r.flight_s) if r.flight_s == r.flight_s else 1.5)
                 q = Sm[(Sm["round"] == rnd) & ((Sm.t - tl).abs() <= 0.5) & (Sm.side == foe) & (Sm.health > 0)]
-                near = sorted((math.hypot(x - lx, y - ly) + 2 * abs(z - lz), (x, y, z)) for x, y, z in zip(q.X, q.Y, q.Z)
-                              if math.hypot(x - lx, y - ly) <= reach and lo <= z - lz <= hi)
-                hits += [p for _, p in near[:2]]   # the closest: the ones it was for
+                q0 = Sm[(Sm["round"] == rnd) & ((Sm.t - (tl - 0.8)).abs() <= 0.4) & (Sm.side == foe)]
+                before = dict(zip(q0.steamid.astype(str), zip(q0.X, q0.Y)))
+                near = sorted((math.hypot(x - lx, y - ly) + 2 * abs(z - lz), (x, y, z), before.get(str(s)))
+                              for x, y, z, s in zip(q.X, q.Y, q.Z, q.steamid) if math.hypot(x - lx, y - ly) <= reach and lo <= z - lz <= hi)
+                for _, p, b in near[:2]:   # the closest: the ones it was for; where they were heading (their line)
+                    hits.append(p)
+                    if b and math.hypot(p[0] - b[0], p[1] - b[1]) > 40:
+                        heads.append((p, math.degrees(math.atan2(p[1] - b[1], p[0] - b[0]))))
     look = [lx, ly, lz + (0 if typ == "flash" else 40)]
     out = []
     if len(hits) >= 2:
         for n, p in _cells(np.array(hits, float), cell=64):
             if all(math.dist(p, o["pos"]) > 200 for o in out):
                 pp = [round(float(v), 1) for v in p]
-                out.append({"pos": pp, "ang": _angle([pp[0], pp[1], pp[2] + 64], look)})
+                out.append({"pos": pp, "ang": _real_line(mp, foe, pp, heads) or _angle([pp[0], pp[1], pp[2] + 64], look)})
             if len(out) >= 2:
                 break
         return out
@@ -1201,7 +1243,7 @@ def _victims_of(mp, team, typ, land, me):
         return (ax * bx + ay * by) / (an * (math.hypot(bx, by) or 1.0)) >= cone
     for x, y, z, n in _spots(mp)["CT" if team == 2 else "T"]:   # the most held first
         if math.hypot(x - lx, y - ly) <= reach and lo_z < z - lz < hi_z and beyond(x, y) and all(math.dist([x, y, z], o["pos"]) > 250 for o in out):
-            out.append({"pos": [x, y, z], "ang": _angle([x, y, z + 64], look)})
+            out.append({"pos": [x, y, z], "ang": _real_line(mp, foe, [x, y, z]) or _angle([x, y, z + 64], look)})
             if len(out) >= 2:
                 break
     return out
@@ -1237,6 +1279,48 @@ def _my_setup(sid, mp):
 REPEATABLE = ("standing still", "jumpthrow", "crouching", "jumpthrow + crouching")
 
 
+def _lands_for_you(it):
+    """False when your throws of a lineup keep popping together far from its spot (07/10, the smoke to Sniper's Nest:
+    three throws 600 u away, 70 u apart: the lineup is not what the demos say, not your hand)."""
+    P = np.array((it or {}).get("pops") or [], float).reshape(-1, 2)
+    tg = (it or {}).get("target")
+    if len(P) < 2 or not tg:
+        return True
+    c = np.median(P, axis=0)
+    together = float(np.median(np.linalg.norm(P - c, axis=1))) < 120
+    return not (together and math.dist(c, tg[:2]) > 400)
+
+
+_DUEL_PAIRS = {}
+
+
+def _duel_pairs(mp):
+    """The map's duels: (killer xyz, victim xyz), cached."""
+    if mp not in _DUEL_PAIRS:
+        K, V = [], []
+        for d in _map_dirs(mp):
+            try:
+                D = pd.read_parquet(os.path.join(config.OUT, "deep", d, "duels.parquet"),
+                                    columns=["killer_X", "killer_Y", "killer_Z", "victim_X", "victim_Y", "victim_Z"])
+            except Exception:
+                continue
+            K.append(D[["killer_X", "killer_Y", "killer_Z"]].to_numpy(float))
+            V.append(D[["victim_X", "victim_Y", "victim_Z"]].to_numpy(float))
+        _DUEL_PAIRS[mp] = (np.concatenate(K), np.concatenate(V)) if K else (np.zeros((0, 3)), np.zeros((0, 3)))
+    return _DUEL_PAIRS[mp]
+
+
+def _exposed(mp, spot, land):
+    """How many duels of the base had one player at a throw's spot and the other where it lands: they see each other
+    (07/10, the user: "je suis sur une ligne où la personne qui subit mon stuff peut me voir")."""
+    K, V = _duel_pairs(mp)
+    if not len(K):
+        return 0
+    def near(A, p, r, dz):
+        return (np.hypot(A[:, 0] - p[0], A[:, 1] - p[1]) < r) & (np.abs(A[:, 2] - p[2]) < dz)
+    return int((near(K, spot, 120, 90) & near(V, land, 450, 220)).sum() + (near(V, spot, 120, 90) & near(K, land, 450, 220)).sum())
+
+
 def nade_drills(sid, mp):
     """The lineups for where you play: thrown from the spots you hold 15-30 s into your rounds, or landing where your
     enemies come from when you hold them (04/10: "I'm an Apps player, I don't play long: this smoke changes nothing for
@@ -1261,13 +1345,20 @@ def nade_drills(sid, mp):
                 rel = top.get(x["from_key"], 0) / n_su + 0.5 * hot.get(x["to_key"], 0) / n_fa
                 if rel > 0:
                     cands.append((rel * (0.5 + float(x.get("score") or 0)), rel, typ, x))
-        for w, rel, typ, x in sorted(cands, key=lambda c: -c[0])[:12]:
+        items = (progress().get("items") or {})
+        for w, rel, typ, x in sorted(cands, key=lambda c: -c[0])[:16]:
             sp = (x.get("setpos") or "").replace(";", " ").split()
             try:
                 pos = [float(v) for v in sp[1:4]]
                 ang = [float(sp[5]), float(sp[6])]
             except (IndexError, ValueError):
                 continue
+            did = f"nade:{mp}:{side}:{typ}:{x['from_key']}>{x['to_key']}"
+            if not _lands_for_you(items.get(did)):
+                continue
+            land0 = _land(mp, typ, pos) or _world(mp, *x["to_px"]) if x.get("to_px") else None
+            if land0 and len(land0) >= 2 and _exposed(mp, pos, land0 if len(land0) >= 3 else [land0[0], land0[1], pos[2]]) >= 3:
+                continue   # 07/10: "je suis visible de là où j'envoie la grenade ... tu peux me faire tuer alors que je suis en train de stuff"
             item = NADE_ITEM[typ][team] if typ == "molotov" else NADE_ITEM.get(typ)
             if not item or not x.get("to_px"):
                 continue
@@ -1275,7 +1366,7 @@ def nade_drills(sid, mp):
             land = _land(mp, typ, pos) or _world(mp, *x["to_px"])
             mine = x["from_key"] in top
             why = f"from {x['from']}, your spot" if mine else f"onto {x['to']}, where they come at you from your spot"
-            out.append({"id": f"nade:{mp}:{side}:{typ}:{x['from_key']}>{x['to_key']}", "kind": "nade", "map": mp,
+            out.append({"id": did, "kind": "nade", "map": mp,
                         "title": f"{name} → {x['to']}", "tip": f"{why} · {x.get('timer') or ''}".strip(" ·"),
                         "team": team, "type": typ, "item": item, "how": x.get("how") or "standing still",
                         "click": {"right": "right click", "both": "left + right click"}.get(x.get("click"), "left click"),
