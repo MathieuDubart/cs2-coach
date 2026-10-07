@@ -3005,7 +3005,8 @@ function igWaiting(){return `<div class="ig-wait"><h3>Waiting for your match</h3
   <p>As soon as CS2 loads a map, this page follows the game by itself and shows, round by round, only what matters now:</p>
   <ul><li>at the buy time: what to buy, with your team's money;</li><li>on T: the way in that wins most against this team, its stuff and when to be on the site;</li>
    <li>on CT: where the Ts go this half, rushes included, and when to throw your grenades;</li><li>your calls and Wily's orders, live.</li></ul>
-  <p class="note">Keep it on a second screen. Your sheet for each map is in Prepare.</p></div>`}
+  <p class="note">Keep it on a second screen. Your sheet for each map is in Prepare.</p>
+  ${gsiStatus&&!gsiStatus.installed?`<p><b>Game detection is off:</b> turn it on in <a href="#settings" style="color:var(--ct)">Settings</a> and I'll follow your match by myself.</p>`:""}</div>`}
 function renderIngame(){
   const p=P(),v=$("#v-ingame"),PL=p.advice.plan||{},live=gsiFresh(),refs=PL.map_refs||{},mine=mapsOf(p);
   const maps=bombFirst([...mine,...Object.keys(refs).filter(k=>!mine.some(x=>x.map===k)).sort().map(k=>({map:k,n:0}))],x=>x.map);
@@ -3033,7 +3034,7 @@ function renderIngame(){
      <div class="ig-hud">${liveBar()}<span class="hudbtns"><button type="button" class="close" id="sidebtn" aria-pressed="${side}">${side?"◀ Hide panel":"▶ Show panel"}</button><button type="button" class="close" id="fsbtn">${document.fullscreenElement?"Exit full screen":"⛶ Full screen"}</button><button type="button" class="close" id="igfull">Normal view</button></span></div>
      ${side?"":toast}
      <div class="now ig-side" id="now">${side?toast:""}${nowVisual(p,gsiLast,following)}</div></div>`}
-  else if(D.local&&!(live&&gsiLast&&gsiLast.map))v.innerHTML=`${liveBar()}${missNote(p)}${igWaiting()}`;   // no match: no map to browse (07/10, Prepare has the sheets)
+  else if(D.local&&!(live&&gsiLast&&gsiLast.map))v.innerHTML=`${missNote(p)}${igWaiting()}`;   // no match: no map to browse (07/10, Prepare has the sheets), no status bar
   else v.innerHTML=`${liveBar()}
    ${following?"":missNote(p)}
    ${following&&focus?"":`<div class="ig-top">
