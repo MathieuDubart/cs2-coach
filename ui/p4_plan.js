@@ -24,20 +24,18 @@ function phaseCard(ph){return `<article class="phase"><h3>${esc(ph.title)}</h3>$
 function contextBlock(C){
   const pf=v=>v==null?"—":v.toFixed(2),recs=C.recs||[];
   const src=Object.entries(C.sources_count||{}).map(([k,n])=>`${n} ${k==="demo"?"with a demo":k==="steam"?"from the Steam history":"from Leetify"}`).join(", ");
-  return `<article class="card"><h3>Your playing habits</h3>
-   <p class="note">${C.n} dated matches (${src}) · ${C.sessions.n} session${C.sessions.n>1?"s":""} of ${C.sessions.avg_games} game(s) on average, ${C.sessions.max_games} at most · ${C.sessions.games_after_2_losses} game(s) started after 2 losses in a row · journal: ${C.journal_n} entr${C.journal_n===1?"y":"ies"}.
-   "Rating": match rating on the HLTV 2.0 model (1.00 = average player of the lobby). Your average: ${pf(C.overall.perf)}.</p>
+  return `<article class="card"><h3>Your playing habits ${itip(`${C.n} dated matches (${src}) · ${C.sessions.n} session${C.sessions.n>1?"s":""} of ${C.sessions.avg_games} game(s) on average, ${C.sessions.max_games} at most · ${C.sessions.games_after_2_losses} game(s) started after 2 losses in a row · journal: ${C.journal_n} entr${C.journal_n===1?"y":"ies"}. "Rating": match rating on the HLTV 2.0 model (1.00 = average player of the lobby). Your average: ${pf(C.overall.perf)}.`)}</h3>
    ${D.local&&!(C.sources_count||{}).steam?`<p class="note">To measure your habits over your whole history (not only demos), connect your Steam history: <a href="#settings" style="color:var(--ct)">Settings</a>.</p>`:""}
    ${recs.length?`<ul class="pl-list">${recs.map(r=>`<li class="coach">${esc(r.text)} <span class="lvl ${lvlCls(r.level)}">${esc(LVL[r.level]||r.level)}</span></li>`).join("")}</ul>`
      :`<p>No reliable personal rule yet: it takes more matches. Meanwhile, apply the general rules of "After the game".</p>`}
-   <div class="tbl"><table><thead><tr><th>Situation</th><th class="n">Games</th><th class="n">W-L</th><th class="n">Wins</th><th class="n">Rating</th><th class="n">Rating gap</th><th>Reliability</th></tr></thead><tbody>
+   ${fold(`Every situation: time of day, game of the session, after a loss, group, rest (${C.n} games)`,`<div class="tbl"><table><thead><tr><th>Situation</th><th class="n">Games</th><th class="n">W-L</th><th class="n">Wins</th><th class="n">Rating</th><th class="n">Rating gap</th><th>Reliability</th></tr></thead><tbody>
    ${C.factors.map(f=>`<tr><td class="grp" colspan="7">${esc(f.title)}</td></tr>`+f.rows.map(r=>`<tr><td>${esc(r.group)}</td><td class="n">${r.n}</td><td class="n">${r.w}-${r.l}</td>
      <td class="n">${r.winrate==null?"—":r.winrate+"%"}</td><td class="n">${pf(r.perf)}</td>
      <td class="n ${lvlCls(r.level)&&r.delta!=null?(r.delta>0?"good":"bad"):""}">${r.delta==null?"—":(r.delta>0?"+":"")+pf(r.delta)}</td>
      <td><span class="lvl ${lvlCls(r.level)}">${esc(LVL[r.level]||r.level)}</span></td></tr>`).join("")).join("")}
    </tbody></table></div>
    ${C.partners&&C.partners.length?`<p><b>Regular partners</b> (seen on your team in at least 2 matches): ${C.partners.map(x=>`${esc(x.name)} ${x.w}W-${x.l}L, rating ${pf(x.perf)} over ${x.n} games`).join(" · ")}</p>`:""}
-   ${srcLinks([C.rating_source],true)}</article>`}
+   ${srcLinks([C.rating_source],true)}`,"rt-table")}</article>`}
 // your journal: only on your own profile; folded until it becomes a habit (3 entries), with its count
 function checkinCard(nj){
   if(!D.local)return `<article class="card"><h3>Pre-session journal</h3><p class="note">The journal (sleep, energy, warm-up) is filled in the local app: double-click <code>Wily.bat</code>.</p></article>`;
@@ -84,13 +82,12 @@ function routineBrief(PL){const C=PL.context,ph=(PL.phases||[])[0],first=ph&&ph.
     worksNone:"No situation where you clearly play better yet.",fixNone:"No situation where you clearly play worse yet."})}
 function renderRoutine(){
   const p=P(),v=$("#v-routine"),PL=p.advice.plan;if(!PL)return noPlan(v);
-  v.innerHTML=`<div class="head"><div style="display:grid;gap:4px"><span class="eyebrow">${esc(p.name)}</span><h2>Routine: before, during, after</h2></div></div>
-   ${secNav([["rt-habits","Habits"],["rt-phases","Before, during, after"],PL.party?["rt-group","Group"]:null,PL.meta&&PL.meta.length?["rt-meta","State of the game"]:null])}
+  v.innerHTML=`<div class="head"><div style="display:grid;gap:4px"><span class="eyebrow">${esc(p.name)}</span><h2>Your habits</h2></div></div>
    ${routineBrief(PL)}${anchor("rt-habits")}
    <div class="pg-grid2">${P().steamid===D.own?checkinCard((PL.context||{}).journal_n):""}${PL.context?contextBlock(PL.context):`<article class="card"><h3>Your playing habits</h3><p class="note">No dated match for this player: habits (times, sessions, group) need demos or a Leetify history.</p></article>`}</div>
-   ${anchor("rt-phases")}<div class="phases">${PL.phases.map(phaseCard).join("")}</div>
-   ${PL.party?anchor("rt-group"):""}${partyBlock(PL)}
-   ${PL.meta&&PL.meta.length?anchor("rt-meta"):""}${metaBlock(PL)}`;
+   ${fold("Your routine: before, during and after the game",`<div class="phases">${PL.phases.map(phaseCard).join("")}</div>`,"rt-phases")}
+   ${fold("Depending on your group",partyBlock(PL),"rt-group")}
+   ${fold("What changed in the game lately",metaBlock(PL),"rt-meta")}`;
   wireCheckin(v,p);
   $$("[data-party]",v).forEach(b=>b.onclick=()=>{partySel=b.dataset.party;renderRoutine()});
 }
@@ -139,28 +136,28 @@ function renderMidround(){
   if(!midMap||!maps.includes(midMap))midMap=maps.includes(S.map)&&!HOST(S.map)?S.map:maps[0];
   const R=(PL.routes||{})[midMap]||{},W=(PL.weapon_positions||{})[midMap],ws=W?Object.keys(W).sort():[];
   if(!wpSide||!ws.includes(wpSide))wpSide=ws.includes(S.side)?S.side:ws[0];
-  const B=M&&M.bench;
+  const B=M&&M.bench,pbCard=x=>`<article class="pbc ${isBoth(x)?"":x.side}">${x.prio>0?`<span class="you">Priority for you</span>`:""}<span class="eyebrow">${isBoth(x)?"CT and T":x.side}</span>
+     <span class="if">If ${esc(lc(x.if))}</span><span>→ ${esc(x.then)}</span><span class="why">${esc(x.why)}</span>${srcLinks(x.src,true)}</article>`;
   v.innerHTML=`<div class="head"><div style="display:grid;gap:4px"><span class="eyebrow">${esc(p.name)}${B?` · ${B.matches} matches · compared with ${B.n_players} players of the base and ${B.n_pros} pros`:""}</span><h2>Mid-round: movement and decisions</h2></div></div>
-   ${secNav([M?["mr-decisions","Your decisions"]:null,["mr-reflexes","Reflexes"],maps.length?["mr-maps","Per map"]:null])}
    ${midBrief(PL)}${anchor("mr-decisions")}
    ${M?`${M.weak.length?`<div class="insights">${M.weak.map(w=>`<article class="card"><h3>${w.id==="note"?"What pros do":esc(w.label[0].toUpperCase()+w.label.slice(1))}</h3>
        <p>${w.id==="note"?esc(w.text):`<span class="num">you ${fmtU(w.you,w.unit)}</span> · base median ${fmtU(w.median,w.unit)}${w.pro!=null?` · pros ${fmtU(w.pro,w.unit)}`:""}`}</p>
        ${w.fix?`<div class="fix"><h4>What to do</h4><p>${esc(w.fix)}</p></div>`:""}${w.percentile!=null?`<span class="note">You do better than ${w.percentile}% of the players of the base.</span>`:""}</article>`).join("")}</div>`:""}
      ${M.strong.length?`<div class="strengths">${M.strong.map(s=>`<span>${esc(s.text)}</span>`).join("")}</div>`:""}
-     ${B?`<details><summary style="cursor:pointer;font-family:var(--f-display);font-size:20px;font-weight:600">All your mid-round indicators</summary><p class="note" style="margin:8px 0">Bar: your percentile in the base (further right, you do better than most; the line marks the median). "Indicative": neither good nor bad in itself, read it with the rest.</p>${midMetricRows(B)}</details>`:""}`
+     ${B?fold("All your mid-round indicators",`<p class="note">Bar: your percentile in the base (further right, you do better than most; the line marks the median). "Indicative": neither good nor bad in itself, read it with the rest.</p>${midMetricRows(B)}`,"mr-all"):""}`
      :`<div class="empty">Mid-round indicators need demos of this player. The reflexes below apply to everyone.</div>`}
    ${anchor("mr-reflexes")}<h3>If… then…: mid-round reflexes</h3>
    <div class="btns" role="group" aria-label="Filter the reflexes">${[...(anyMe?[["me","Priority for you"]]:[]),["all","All"],["CT","CT"],["T","T"]].map(([k,t])=>`<button type="button" data-pb="${k}" aria-pressed="${pbSide===k}">${t}</button>`).join("")}</div>
-   <div class="pb">${pb.map(x=>`<article class="pbc ${isBoth(x)?"":x.side}">${x.prio>0?`<span class="you">Priority for you</span>`:""}<span class="eyebrow">${isBoth(x)?"CT and T":x.side}</span>
-     <span class="if">If ${esc(lc(x.if))}</span><span>→ ${esc(x.then)}</span><span class="why">${esc(x.why)}</span>${srcLinks(x.src,true)}</article>`).join("")}</div>
-   ${maps.length?`${anchor("mr-maps")}<h3>Per map: rotations and positions by weapon</h3>
+   <div class="pb">${pb.slice(0,4).map(pbCard).join("")}</div>
+   ${fold(`${pb.length-4} more reflexes`,pb.length>4?`<div class="pb">${pb.slice(4).map(pbCard).join("")}</div>`:"","mr-reflexes")}
+   ${maps.length?fold("Per map: rotations, and where to play with your weapon",`
    <div class="chips" role="group" aria-label="Map">${maps.map((m,i)=>`${chipSep(maps,i)}<button type="button" data-mm="${m}" aria-pressed="${m===midMap}">${MAPN(m)}</button>`).join("")}</div>
    ${Object.keys(R).length?`<div class="rot">${Object.entries(R).sort().map(([s,r])=>rotCard(s,r)).join("")}</div>
      <p class="note">"Leave": seconds between at least 2 Ts reaching the site and you leaving toward it (negative: you had left before). "Travel": from leaving to arriving. Routes: the first 3 zones crossed.</p>`
      :`<p class="note">No rotation of yours found on ${MAPN(midMap)}.</p>`}
    ${W?`<h3>Where to play with your weapon on ${MAPN(midMap)}</h3><div class="btns side" role="group" aria-label="Side">${ws.map(s=>`<button type="button" data-wps="${s}" aria-pressed="${s===wpSide}">${s}</button>`).join("")}</div>${wpBlock(W,wpSide)}
      <p class="note">Position of each player between ${clock(15)} and ${clock(25)} on the clock, depending on their weapon that round (matchmaking base). "Duels won": their duels in that zone. Pro AWPers: players who got an AWP kill in the round (HLTV demos).</p>`:""}
-   ${(PL.videos||{})[midMap]?`${srcLinks(PL.videos[midMap],false,`Videos on ${MAPN(midMap)}:`)}`:""}`:""}`;
+   ${(PL.videos||{})[midMap]?`${srcLinks(PL.videos[midMap],false,`Videos on ${MAPN(midMap)}:`)}`:""}`,"mr-maps"):""}`;
   $$("[data-pb]",v).forEach(b=>b.onclick=()=>{pbSide=b.dataset.pb;renderMidround()});
   $$("[data-mm]",v).forEach(b=>b.onclick=()=>{midMap=b.dataset.mm;renderMidround()});
   $$("[data-wps]",v).forEach(b=>b.onclick=()=>{wpSide=b.dataset.wps;renderMidround()});
@@ -185,41 +182,27 @@ function kpiCard(k){const vals=k.series.map(x=>x[1]),W=200,H=40,mn=Math.min(...v
    <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="Trend over ${vals.length} matches"><polyline points="${pts}" fill="none" stroke="var(--ct)" stroke-width="2" vector-effect="non-scaling-stroke"/></svg>
    <span class="note">last 3 ${fmtU(k.recent,k.unit)} · before ${fmtU(k.before,k.unit)} · ${vals.length} matches</span></div>`}
 function weaponsBlock(W){const RD=W.ref_duels||{};
-  return `<h3>Your weapons</h3>${W.suggestions.length?`<ul class="pl-list">${W.suggestions.map(s=>`<li class="${s.kind==="weapon_weak"?"avoid":/strong/.test(s.kind)?"exploit":"coach"}">${esc(s.text)}</li>`).join("")}</ul>`:""}
-   <div class="tbl"><table><thead><tr><th>Main weapon of the round</th><th class="n">Rounds</th><th class="n">Kills / round</th><th class="n">Damage / round</th><th class="n">Survival</th><th class="n">Rounds won</th><th class="n">Duels won: you · base</th></tr></thead><tbody>
+  return `<h3>Your weapons ${itip(`Over ${W.n_rounds} analyzed rounds. Duels: kills and deaths with the weapon in hand, compared with every player of the base.`)}</h3>${W.suggestions.length?`<ul class="pl-list">${W.suggestions.map(s=>`<li class="${s.kind==="weapon_weak"?"avoid":/strong/.test(s.kind)?"exploit":"coach"}">${esc(s.text)}</li>`).join("")}</ul>`:""}
+   ${fold(`Every weapon you played: kills, damage, survival and duels (${W.by_weapon.length})`,`<div class="tbl"><table><thead><tr><th>Main weapon of the round</th><th class="n">Rounds</th><th class="n">Kills / round</th><th class="n">Damage / round</th><th class="n">Survival</th><th class="n">Rounds won</th><th class="n">Duels won: you · base</th></tr></thead><tbody>
    ${W.by_weapon.map(x=>{const d=W.duels[x.key],r=RD[x.key];return `<tr><td>${esc(x.key)}</td><td class="n">${x.rounds}</td><td class="n">${f1(x.kpr)}</td><td class="n">${x.adr}</td><td class="n">${x.survival}%</td><td class="n">${x.win}%</td>
      <td class="n ${d&&r!=null&&d.n>=10?(d.win>=r+8?"good":d.win<=r-8?"bad":""):""}">${d?`${d.win}% <span class="note">(${d.n})</span>`:"—"} · ${r!=null?r+"%":"—"}</td></tr>`}).join("")}
    </tbody></table></div>
-   ${W.force&&W.force.length?`<p class="note"><b>On force-buys:</b> ${W.force.filter(x=>x.rounds>=2).map(x=>`${esc(x.key)} ${x.adr} damage/round (${x.rounds} rounds)`).join(" · ")}</p>`:""}
-   <p class="note">Over ${W.n_rounds} analyzed rounds. Duels: kills and deaths with the weapon in hand, compared with every player of the base.</p>`}
+   ${W.force&&W.force.length?`<p class="note"><b>On force-buys:</b> ${W.force.filter(x=>x.rounds>=2).map(x=>`${esc(x.key)} ${x.adr} damage/round (${x.rounds} rounds)`).join(" · ")}</p>`:""}`,"pg-wtable")}`}
 function buysBlock(B){if(!B||!B.types)return "";const T=B.types,p=P(),sw=s=>typeof expSwapTxt==="function"?expSwapTxt(p,s):s;
-  const cell=s=>{const b=s&&s.kits&&s.kits[0];return b?`<b>${esc(sw(b.key))}</b><br><span class="note">${b.why.map(esc).join(" · ")}</span>${s.kits.length>1?`<br><span class="note">or ${s.kits.slice(1).map(y=>esc(sw(y.key))).join(", ")}</span>`:""}`:'<span class="note">not enough rounds</span>'};
-  return `<h3>Your buys by type of round</h3>
-   <p class="note">Adapted to you: your rounds first, then players of your profile (${(B.profile||[]).map(esc).join(", ")}), then the whole base, per side. All maps together; the detail per map is in "In game". Eco: the weapon only, what keeps your next full buy.${(typeof expSwaps==="function"?expSwaps(p):[]).length?" 🧪 = the weapon of your running experiment.":""}</p>
+  const cell=(s,r)=>{const b=s&&s.kits&&s.kits[0];return b?`<b>${esc(sw(b.key))}</b> ${itip(b.why.map(esc).join(" · "),r)}${s.kits.length>1?`<br><span class="note">or ${s.kits.slice(1).map(y=>esc(sw(y.key))).join(", ")}</span>`:""}`:'<span class="note">not enough rounds</span>'};
+  return `<h3>Your buys by type of round ${itip(`Adapted to you: your rounds first, then players of your profile (${(B.profile||[]).map(esc).join(", ")}), then the whole base, per side. All maps together; the detail per map is in "In game". Eco: the weapon only, what keeps your next full buy.${(typeof expSwaps==="function"?expSwaps(p):[]).length?" 🧪 = the weapon of your running experiment.":""}`)}</h3>
    <div class="tbl"><table><thead><tr><th>Round</th><th class="n">Your rounds</th><th class="n">Won: you · your profile</th><th>As T</th><th>As CT</th></tr></thead><tbody>
    ${["pistol","eco","force","full","anti-eco"].filter(k=>T[k]).map(k=>{const x=T[k],S2=x.sides||{};return `<tr><td><b>${esc(x.label)}</b></td><td class="n">${x.rounds}</td><td class="n">${x.win??"—"}% · ${x.peer_win??"—"}%</td>
-     <td class="wrap">${cell(S2.T||(S2.CT?null:x))}</td><td class="wrap">${cell(S2.CT)}</td></tr>`}).join("")}</tbody></table></div>`}
+     <td class="wrap">${cell(S2.T||(S2.CT?null:x))}</td><td class="wrap">${cell(S2.CT,true)}</td></tr>`}).join("")}</tbody></table></div>`}
 function renderProgress(){
   const p=P(),v=$("#v-progress"),PL=p.advice.plan;if(!PL)return noPlan(v);
-  const L=PL.level,T=PL.training,X=PL.experiments,Wp=PL.weapons,K=PL.kpis||[];
-  const ex=(X&&X.experiments)||[],act=ex.filter(e=>e.status==="active"),old=ex.filter(e=>e.status!=="active");
-  v.innerHTML=`<div class="head"><div style="display:grid;gap:4px"><span class="eyebrow">${esc(p.name)}</span><h2>Progress</h2></div></div>
-   ${secNav([["pg-level","Level and role"],X?["pg-exp","Experiments"]:null,Wp?["pg-weapons","Weapons"]:null,PL.buys&&PL.buys.types?["pg-buys","Buys"]:null,K.length?["pg-kpis","Indicators"]:null])}
-   ${progBrief(PL)}${anchor("pg-level")}
-   <div class="insights">
-    <article class="card"><h3>Your level${L&&L.name?`: ${esc(L.name)}`:""}</h3>${L&&L.focus.length?`<div class="fix"><h4>At this level, work on</h4><ol>${L.focus.map(f=>`<li>${esc(f)}</li>`).join("")}</ol></div>`:""}${srcLinks(L&&L.src,true)}</article>
-    ${PL.role?`<article class="card"><h3>Your role: ${esc((p.advice.archetype||{}).name||PL.role.role)}</h3><ul>${PL.role.items.map(t=>`<li>${esc(t)}</li>`).join("")}</ul>${srcLinks(PL.role.src,true)}</article>`:""}
-   </div>
-   ${T||D.local&&p.steamid===D.own?`<p class="note">Today's warm-up and the training server are in <a href="#prepare" style="color:var(--ct)">Prepare</a>, with your map sheets.</p>`:""}
-   ${X?`${anchor("pg-exp")}<h3>Experiments</h3><p class="note">You start a test and play normally: I compare your next matches with your previous 15 and gives a verdict once there is enough data (difference significant at 90%).${D.local?"":" Starting or ending an experiment happens in the local app."}</p>
-    ${act.length?`<span class="lbl4" style="color:var(--muted)">Running</span><div class="exps">${act.map(expCard).join("")}</div>`:""}
-    ${X.suggested.length?`<span class="lbl4" style="color:var(--muted)">Suggested for you</span><div class="exps">${X.suggested.map(suggestCard).join("")}</div>`:""}
-    ${old.length?`<details><summary style="cursor:pointer">Finished experiments (${old.length})</summary><div class="exps" style="margin-top:10px">${old.map(expCard).join("")}</div></details>`:""}
-    <p class="note" id="xmsg" role="status"></p>`:""}
+  const L=PL.level,Wp=PL.weapons,K=PL.kpis||[];
+  v.innerHTML=`<div class="head"><div style="display:grid;gap:4px"><span class="eyebrow">${esc(p.name)}</span><h2>Weapons and buys</h2></div></div>
+   ${progBrief(PL)}
    ${Wp?anchor("pg-weapons")+weaponsBlock(Wp):""}
    ${PL.buys&&PL.buys.types?anchor("pg-buys"):""}${buysBlock(PL.buys)}
-   ${K.length?`${anchor("pg-kpis")}<h3>Tracking your indicators</h3><p class="note">Match by match. In color: the trend of your last 3 matches against the previous ones.</p><div class="kpis">${K.map(kpiCard).join("")}</div>`:""}`;
-  wireExp(v,X,p);
+   ${fold(`At your level${L&&L.name?` (${esc(L.name)})`:""}, work on`,L&&L.focus.length?`<ol>${L.focus.map(f=>`<li>${esc(f)}</li>`).join("")}</ol>${srcLinks(L.src,true)}`:"","pg-level")}
+   ${K.length?fold("Your indicators, match by match",`<p class="note">In color: the trend of your last 3 matches against the previous ones.</p><div class="kpis">${K.map(kpiCard).join("")}</div>`,"pg-kpis"):""}`;
 }
 // ---------- training: your situations played again on the local server (bots on the recorded paths) ----------
 const TRAIN={map:null,timer:null};

@@ -179,7 +179,7 @@ async function route(){
   if((m=path.match(/^\/match\/([A-Za-z0-9-]+)$/)))return openMatch(m[1],as);   // the older match addresses
   if((m=path.match(/^\/player\/(\d{17})(\/.*)?$/))){sid=m[1];rest=m[2]||"";
     if(!IDX()[sid])return notYet(`This player (SteamID ${sid}) isn't analyzed yet.`,sid)}
-  else sid=defPlayer();
+  else sid=D.own&&IDX()[D.own]?D.own:defPlayer();   // an address without /player/<id> is yours, whoever you looked at last
   const seg=rest.split("/").filter(Boolean).map(x=>x.toLowerCase());
   if(seg[0]&&GLOBAL.includes(ALIAS[seg[0]]||seg[0])&&!m){S.view=ALIAS[seg[0]]||seg[0];return setPlayer(sid)}
   let v=null;

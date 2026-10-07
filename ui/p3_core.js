@@ -21,6 +21,11 @@ const rating2=(k,d,a,adr,kast,r)=>{r=Math.max(r||0,1);const kpr=k/r,dpr=d/r,apr=
 // how to read a block, in a discreet "i" (07/10): the page keeps the data, the explanations open on hover or focus;
 // r: the bubble opens leftwards (a block on the right of the page)
 const itip=(html,r)=>html?`<span class="itip${r?" r":""}" tabindex="0" aria-label="${esc(String(html).replace(/<[^>]+>/g,""))}"><span aria-hidden="true">i</span><span class="itip-b" aria-hidden="true">${html}</span></span>`:"";
+// a block one click away (07/10, the user: "il y a trop d'infos sur tout et dans tous les sens"): each tab shows its
+// essentials, the rest folded under a line that says what is inside
+const FOLD_OPEN=new Set();
+const fold=(title,html,id)=>html&&String(html).trim()?`<details class="fold"${id?` data-fold="${id}"${FOLD_OPEN.has(id)?" open":""}`:""}><summary>${title}</summary><div class="fold-b">${html}</div></details>`:"";
+document.addEventListener("toggle",e=>{const d=e.target;if(d&&d.dataset&&d.dataset.fold){if(d.open)FOLD_OPEN.add(d.dataset.fold);else FOLD_OPEN.delete(d.dataset.fold)}},true);
 function press(scope,sel,b){$$(sel,scope).forEach(x=>x.setAttribute("aria-pressed",x===b))}
 function copyBtn(root){$$(".cmd button",root).forEach(b=>b.onclick=e=>{e.stopPropagation();const code=$("code",b.parentNode);
   const sel=()=>{const r=document.createRange();r.selectNodeContents(code);const s=getSelection();s.removeAllRanges();s.addRange(r)};
@@ -146,10 +151,12 @@ const SKILL=["","Silver I","Silver II","Silver III","Silver IV","Silver Elite","
 function benchSection(p){const B=p.advice.bench;if(!B||!B.metrics)return "";
   const rows=Object.entries(B.metrics).filter(([k,m])=>m.you!=null&&m.percentile!=null&&!(READ_BENCH.has(k)&&readsOf().all)).sort((a,b)=>a[1].percentile-b[1].percentile);
   const col=q=>q<30?"var(--bad)":q<60?"var(--warn)":"var(--good)";
-  return `<h3>You against the reference base ${itip(`Base: ${B.n_players} players, ${B.n_rows} player-match records from ${B.n_matches} demos (your matches, searched players and randomly collected players).${B.my_rank?` Your median competitive rank: ${SKILL[B.my_rank]||B.my_rank} (${B.n_same} players of your level, ${B.n_higher} higher-ranked in the base).`:""} The bar shows your percentile: further right, you do better than most players. The line marks the median.`)}</h3>
-  <div class="card bench">${rows.map(([k,m])=>`<div class="row"><span class="lb">${esc(m.label[0].toUpperCase()+m.label.slice(1))}</span>
+  const row=([k,m])=>`<div class="row"><span class="lb">${esc(m.label[0].toUpperCase()+m.label.slice(1))}</span>
     <div class="pbar" title="Better than ${Math.round(m.percentile)}% of players"><i style="width:${Math.max(2,m.percentile)}%;background:${col(m.percentile)}"></i><b></b></div>
-    <span class="v">you ${fmtU(m.you,m.unit)} · med. ${fmtU(m.median,m.unit)}${m.higher_rank_median!=null?` · higher ranks ${fmtU(m.higher_rank_median,m.unit)}`:""}</span></div>`).join("")}</div>`}
+    <span class="v">you ${fmtU(m.you,m.unit)} · med. ${fmtU(m.median,m.unit)}${m.higher_rank_median!=null?` · higher ranks ${fmtU(m.higher_rank_median,m.unit)}`:""}</span></div>`;
+  const top=rows.length>9?[...rows.slice(0,4),...rows.slice(-3)]:rows,rest=rows.filter(r=>!top.includes(r));
+  return `<h3>You against the reference base ${itip(`Base: ${B.n_players} players, ${B.n_rows} player-match records from ${B.n_matches} demos (your matches, searched players and randomly collected players).${B.my_rank?` Your median competitive rank: ${SKILL[B.my_rank]||B.my_rank} (${B.n_same} players of your level, ${B.n_higher} higher-ranked in the base).`:""} The bar shows your percentile: further right, you do better than most players. The line marks the median.`)}</h3>
+  <div class="card bench">${top.map(row).join("")}</div>${fold(`The ${rest.length} other indicators`,rest.length?`<div class="card bench">${rest.map(row).join("")}</div>`:"")}`}
 const cls=(v,good,bad,higher=true)=>v==null?"":(higher?(v>=good?"good":v<=bad?"bad":""):(v<=good?"good":v>=bad?"bad":""));
 // green / red against the base, match by match: in its best quarter / its worst quarter (fixed thresholds made
 // nearly every match red on grenades, where the whole base is). Fixed thresholds only without base data.
@@ -261,7 +268,7 @@ function matchReads(m){const R=m.reads;if(!R)return "";const M=readsOf().meta||{
   if(!rows.length&&!sp.length)return "";
   return `<section class="mreads"><h3>Analyst reads ${itip(`What a team's analyst points at in this demo. A round opens it in the 2D replay below; "base" is the median player of the base.`)}</h3><ul class="rd-list">${rows.join("")}${sp.join("")}</ul></section>`}
 // one read over several matches: you against the base, higher ranks and pros, the fix, where it happened, the sources
-function readCard(i,M,bench){const mt=M[i.id]||{},ref=i.ref||{},hb=mt.higher_better,pct=i.pct;
+function readCard(i,M,bench,foldWhere){const mt=M[i.id]||{},ref=i.ref||{},hb=mt.higher_better,pct=i.pct;
   if(i.id==="spot")return `<article class="rd-card sev-medium"><div class="rd-h"><span class="tag">habit</span><h4>You keep dying at ${esc(i.place)} (${esc(MAPN(i.map))})</h4></div>
     <p class="fix"><b class="num">${i.value}</b> of your ${i.of} deaths on ${esc(MAPN(i.map))}: the enemies can expect you there. Change the angle or the timing.</p></article>`;
   const lab={high:"priority",medium:"watch",positive:"strength"}[i.severity]||"",mx=Math.max(pct,ref.median||0,ref.pro||0,ref.higher_rank||0,5)*1.25,w=x=>Math.min(100,100*x/mx);
@@ -273,10 +280,10 @@ function readCard(i,M,bench){const mt=M[i.id]||{},ref=i.ref||{},hb=mt.higher_bet
    <p class="note">${refs.join(" · ")||"no base reference yet"}${cw&&cw.you!=null?` · 1v2+ won: you ${pc0(cw.you)}, base ${pc0(cw.median)}`:""}</p>
    <p class="what">${esc(mt.what||"")}${hb?" (higher is better)":""}.</p>
    ${i.severity&&i.severity!=="positive"&&mt.fix?`<p class="fix"><b>Fix</b> ${esc(mt.fix)}</p>`:""}
-   ${(i.where||[]).length?`<div class="where">${i.where.map(x=>`<span><span class="note">${esc(fmtDate(x.time).split(",").slice(0,2).join(","))} · ${esc(MAPN(x.map))}</span>${rchips(x.rounds.slice(0,6),x.id)}</span>`).join("")}</div>`:""}
+   ${(i.where||[]).length?(w=>foldWhere?`<details class="rd-where"><summary>Where it happened (${i.where.length} match${i.where.length>1?"es":""})</summary>${w}</details>`:w)(`<div class="where">${i.where.map(x=>`<span><span class="note">${esc(fmtDate(x.time).split(",").slice(0,2).join(","))} · ${esc(MAPN(x.map))}</span>${rchips(x.rounds.slice(0,6),x.id)}</span>`).join("")}</div>`):""}
    ${(mt.src||[]).length?`<p class="src">Sources: ${mt.src.map(x=>`<a href="${esc(x.url)}" target="_blank" rel="noopener">${esc(x.label)}</a>`).join(" · ")}</p>`:""}</article>`}
 function readsSection(p,set,title,note){if(!set||!set.matches||!(set.items||[]).length)return "";const M=readsOf().meta||{};
-  return `<h3>${title} ${itip(`${note} On each bar: the black tick is the base median, the gold one the pros.`)}</h3><div class="rd-cards">${set.items.map(i=>readCard(i,M,p.advice.bench)).join("")}</div>`}
+  return `<h3>${title} ${itip(`${note} On each bar: the black tick is the base median, the gold one the pros.`)}</h3><div class="rd-cards">${set.items.map(i=>readCard(i,M,p.advice.bench,true)).join("")}</div>`}
 // a round button (R7): the match's 2D replay at that round (another match: opened first)
 document.addEventListener("click",e=>{const b=e.target.closest&&e.target.closest("[data-goround]");if(!b)return;const n=+b.dataset.goround,mid=b.dataset.mid,p=P();if(!p)return;
   if(mid&&(S.view!=="matches"||((p.matches[S.match]||{}).id!==mid))){const i=p.matches.findIndex(x=>x.id===mid);if(i<0)return;S.match=i;S.mpin=true;S.goRound=n;go("matches");return}
@@ -320,18 +327,14 @@ function renderAnalysis(){
   const auto=p.advice.rules.map((r,i)=>({level:i<2?"high":"mid",title:r.title,evidence:r.why,fix:r.do,standing:r.standing,target:r.target,bench:r.bench,drills:r.drills,sources:r.sources}));
   v.innerHTML=`<div class="head"><div style="display:grid;gap:4px"><span class="eyebrow">${esc(p.name)} · ${ms.length} matches analyzed</span><h2>Full analysis</h2></div></div>
     ${missNote(p)}
-    ${secNav([readsOf().all?["an-reads","Analyst reads"]:null,p.advice.bench?["an-base","Vs the base"]:null,["an-role","Role and deep analysis"],p.advice.pros?["an-pros","Pros like you"]:null])}
     ${analysisBrief(p,auto)}
     ${D.local&&p.steamid!==D.own?`<article class="card form" id="follow-card"><h3>Follow ${esc(p.name)}'s matches</h3><p class="note">Loading…</p></article>`:""}
     ${anchor("an-reads")}${readsSection(p,readsOf().all,`What an analyst points at · ${ms.length} matches`,"Read in your demos like a team's analyst would, each against the base (its median player, the players ranked above you) and pros when their demos tell. A round opens the match's 2D replay.")}
-    ${p.overall?`<details class="old-notes"><summary style="cursor:pointer;font-family:var(--f-display);font-size:18px;font-weight:600">Earlier hand-written analysis${p.overall.scope?` · ${esc(p.overall.scope)}`:""}</summary>
-      <p class="note" style="margin:8px 0">Written from those matches only: its numbers are from that time. The list above covers all your matches and is the one to follow.</p>
-      <p style="max-width:75ch">${p.overall.summary}</p>${findings(p.overall.priorities)}</details>`:""}
     ${anchor("an-base")}${benchSection(p)}
-    ${anchor("an-role")}${archCard(p)}
-    ${deepCard(p)}
-    ${anchor("an-pros")}${prosBlock(p)}
-    ${extrasBlock(p)}
+    ${anchor("an-role")}${fold(`Your role${(p.advice.archetype||{}).name?`: ${esc(p.advice.archetype.name)}`:""} · weapons, score per role, how to play it`,archCard(p))}
+    ${fold("Deep analysis · reaction time, crosshair placement, your zones against pros",deepCard(p))}
+    ${anchor("an-pros")}${fold(`Pros who play like you${((p.advice.pros||{}).similar||[]).length?` · ${p.advice.pros.similar.slice(0,3).map(x=>esc(x.handle||x.name||"")).join(", ")}…`:""}`,prosBlock(p))}
+    ${fold("Public profile and rankings · Premier, Competitive, ranks per map",extrasBlock(p))}
     ${leetBlock(p)}`;
   $$("tr.click",v).forEach(r=>{r.onclick=()=>{S.match=+r.dataset.i;S.mpin=true;go("matches")};r.onkeydown=e=>{if(e.key==="Enter")r.click()}});
   copyBtn(v);
@@ -474,14 +477,9 @@ function renderMaps(){
   if(S.cmapSlug){const f=maps.find(x=>mapSlug(x.map)===S.cmapSlug);if(f)S.cmap=f.map;S.cmapSlug=null}   // /profile/maps/<map>
   if(!S.cmap||!maps.some(x=>x.map===S.cmap))S.cmap=maps[0]?.map;
   v.innerHTML=`<div class="head"><div style="display:grid;gap:4px"><span class="eyebrow">${esc(p.name)} · ${c.totals.my_duels} duels compared with ${c.totals.others_duels} duels of other players</span><h2>Maps and grenades</h2></div></div>
-  ${secNav([["mp-sheet","Map sheet"],["lus","Lineups"],["mp-duels","Your duels"],["mp-tech","Techniques"]])}
   <div class="chips" role="group" aria-label="Map">${maps.map((x,i)=>`${chipSep(maps,i,y=>y.map)}<button type="button" data-cmap="${x.map}" aria-pressed="${x.map===S.cmap}">${MAPN(x.map)}<small>${x.n}</small></button>`).join("")}</div>
   <div id="cmap"></div>
-  ${anchor("mp-duels")}<h3>How your duels go</h3>
-  <div class="insights">${INS.map(([t,r])=>`<article class="card"><h3>${t}</h3>${cmp(r)}</article>`).join("")}</div>
-  ${anchor("mp-tech")}<h3>Techniques to use during the round</h3><div class="tech">${TECH.map(([a,b])=>`<div><b>${a}</b>${b}</div>`).join("")}</div>
-  <details><summary style="cursor:pointer;font-family:var(--f-display);font-size:20px;font-weight:600">Every duel context</summary>
-    <div class="tbl" style="margin-top:10px"><table><thead><tr><th>Situation</th><th class="n">Your duels</th><th class="n">You</th><th class="n">Others</th></tr></thead><tbody>${c.contexts.map(g=>`<tr><td class="grp" colspan="4">${esc(g.name)}</td></tr>`+g.rows.map(r=>{const d=(r.win??0)-(r.others_win??0),k=r.n>=15?(d>=8?"good":d<=-8?"bad":""):"";return `<tr><td class="wrap">${esc(r.label)}</td><td class="n">${r.n}</td><td class="n ${k}">${r.win==null?"—":r.win+"%"}</td><td class="n">${r.others_win==null?"—":r.others_win+"%"}</td></tr>`}).join("")).join("")}</tbody></table></div></details>
+  ${fold("Techniques to use during the round",`<div class="tech">${TECH.map(([a,b])=>`<div><b>${a}</b>${b}</div>`).join("")}</div>`)}
   <p class="note">General zones, best spots and lineups come from every demo of the map in the base. Your zones come from your matches only.</p>`;
   $$("[data-cmap]",v).forEach(b=>b.onclick=()=>{S.cmap=b.dataset.cmap;press(v,"[data-cmap]",b);mapSheet();syncUrl()});   // the map in the address
   mapSheet();
@@ -500,18 +498,20 @@ function renderMaps(){
       $("#zl",host).innerHTML=`${note?`<div class="card"><h3>${esc(note.title)}</h3><ul>${note.plan.map(t=>`<li>${t}</li>`).join("")}</ul></div>`:""}
         ${ex.length?`<div class="zl ex"><h4>Play these more</h4><ul>${ex.map(li).join("")}</ul></div>`:""}
         ${av.length?`<div class="zl av"><h4>Avoid, or play them differently</h4><ul>${av.map(li).join("")}</ul></div>`:""}
+        <details class="fold" id="zl-more"><summary>More on ${esc(MAPN(m.map))} as ${st.side} · your most played zones, what works there, pro grenades</summary><div class="fold-b" id="zl-more-b">
         <div class="zl fr"><h4>Your most played zones</h4><ul>${fr.map(z=>`<li><b>${esc(z.name)}</b> · ${Math.round(z.presence)}% of your time · ${z.k}-${z.d} · 1st contact around ${z.early_contact_s==null?"—":clock(z.early_contact_s)}</li>`).join("")}</ul></div>
         ${(Sd.pool_zones||[]).length?`<div><h4 class="lbl4" style="color:var(--muted);margin-bottom:6px">What works for ${st.side}s on ${MAPN(m.map)} · base of ${m.pool||m.matches} demos</h4>
           <div class="tbl"><table><thead><tr><th>Zone</th><th class="n">Duels won</th><th class="n">Duels</th><th class="n">Players' time</th><th class="n">Holding</th><th class="n">Moment</th><th class="n">You</th></tr></thead><tbody>
           ${Sd.pool_zones.filter(z=>z.k+z.d>=20).map(z=>`<tr><td>${esc(z.name)}</td><td class="n ${z.win>=56?"good":z.win<=42?"bad":""}">${z.win}%</td><td class="n">${z.k+z.d}</td><td class="n">${Math.round(z.others_presence)}%</td><td class="n">${z.hold_pct==null?"—":z.hold_pct+"%"}</td><td class="n">${clock(z.t_med)}</td><td class="n">${Math.round(z.my_presence)}%</td></tr>`).join("")}
-          </tbody></table></div><p class="note">"Duels won": duels won by ${st.side}s standing in the zone. "Holding": share of those duels started without moving. "Moment": the game clock at the duel (median). Zones with at least 20 duels.</p></div>`:""}`;
+          </tbody></table></div><p class="note">"Duels won": duels won by ${st.side}s standing in the zone. "Holding": share of those duels started without moving. "Moment": the game clock at the duel (median). Zones with at least 20 duels.</p></div>`:""}</div></details>`;
+      const more=$("#zl-more-b",host);
       const GA=((p.deep||{}).grenades||{})[m.map],miss=GA?GA.missing.filter(x=>x.side===st.side):[];
-      $("#zl",host).insertAdjacentHTML("beforeend",miss.length?`<div><h4 class="lbl4" style="color:var(--muted);margin-bottom:6px">Pro grenades to add to your ${st.side} game</h4>
+      more.insertAdjacentHTML("beforeend",miss.length?`<div><h4 class="lbl4" style="color:var(--muted);margin-bottom:6px">Pro grenades to add to your ${st.side} game</h4>
         <p class="note">Thrown by pros from the zones you play, to spots you never throw at.</p>
         <div class="lineups">${miss.map(x=>`<article class="lu" data-type="${x.type}"><div class="top"><span class="ty">${TYPE[x.type]} · ${x.pro_uses} pro throws</span><span class="pill">${clock(x.t)}</span></div>
           <div class="route">${esc(x.from)} → ${esc(nTo(x,S.cmap)||"?")}</div><div class="meta">${esc(x.how)} · seen from ${esc(x.by)}</div>
           <div class="cmd"><code>${esc(x.setpos)}</code><button type="button">Copy</button></div></article>`).join("")}</div></div>`:"");
-      const clipHost=document.createElement("div");$("#zl",host).appendChild(clipHost);
+      const clipHost=document.createElement("div");$("#zl",host).insertBefore(clipHost,$("#zl-more",host));   // your clips in view
       clipsReady.then(()=>{const cs=clipsOf(m.map,st.side);if(!cs.length||!clipHost.isConnected)return;
         clipHost.innerHTML=`<h4 class="lbl4" style="color:var(--muted);margin-bottom:6px">From the clips you sent</h4>
           <p class="note">Each clip's grenades found in the base's demos: the exact spot, aim and technique. They come up in your warm-ups on ${esc(MAPN(m.map))}, one after the other. A card draws it on the radar.</p>
@@ -522,7 +522,7 @@ function renderMaps(){
           redraw();c.throws.forEach(y=>y.px&&drawCat(box,y,st.level));$$(".lu",host).forEach(y=>y.classList.toggle("sel",y===cd));box.scrollIntoView({behavior:"smooth",block:"nearest"})};
           cd.onkeydown=e=>{if(e.key==="Enter")cd.click()}});
         copyBtn(clipHost)});
-      const catHost=document.createElement("div");$("#zl",host).appendChild(catHost);
+      const catHost=document.createElement("div");more.appendChild(catHost);
       nadeCat(m.map).then(C=>{if(!C||!catHost.isConnected)return;const xs=C.lineups.filter(x=>x.side===st.side).slice(0,9);if(!xs.length)return;
         catHost.innerHTML=`<h4 class="lbl4" style="color:var(--muted);margin-bottom:6px">Pro catalog lineups, verified in the demos</h4>
           <p class="note">Of the ${C.n_catalog} lineups of <a href="${esc(C.source.url)}" target="_blank" rel="noopener" style="color:var(--ct)">${esc(C.source.label)}</a> on ${esc(MAPN(m.map))}, the ${C.found} found in the base's real throws: their exact aim and technique. The most thrown first; a card draws it on the radar.</p>
@@ -535,13 +535,13 @@ function renderMaps(){
           cd.onkeydown=e=>{if(e.key==="Enter")cd.click()}});
         copyBtn(catHost)});
       const PZ=((p.advice.pros||{}).maps||{})[m.map]||{},pz=PZ[st.side];
-      $("#zl",host).insertAdjacentHTML("beforeend",pz?`<div><h4 class="lbl4" style="color:var(--muted);margin-bottom:6px">Pros who play your zones as ${st.side}</h4>
+      more.insertAdjacentHTML("beforeend",pz?`<div><h4 class="lbl4" style="color:var(--muted);margin-bottom:6px">Pros who play your zones as ${st.side}</h4>
         <p class="note">Your zones: ${pz.mine.map(z=>`${esc(z.zone)} ${z.share}%`).join(" · ")}. The percentage is the share of time spent in the same zones as you.</p>
         <div class="pros">${pz.pros.map(x=>proCard(x,"overlap")).join("")}</div></div>`:"");
       const eff=l=>l.type==="flash"?(l.enemies_blind_avg||0)+(l.kills_after||0)/Math.max(1,l.uses):l.type==="smoke"?(l.uses||0)/100:(l.damage_avg||0)/20,
         low=l=>(l.type==="he"&&(l.damage_avg||0)<5)||(l.type==="flash"&&(l.enemies_blind_avg||0)<.15),TO={smoke:0,flash:1,molotov:2,he:3};
       const LU=Sd.lineups.map((l,i)=>[l,i]).sort((a,b)=>(TO[a[0].type]??9)-(TO[b[0].type]??9)||eff(b[0])-eff(a[0])),okL=LU.filter(([l])=>!low(l)),lowL=LU.filter(([l])=>low(l));
-      $("#lus",host).innerHTML=Sd.lineups.length?okL.map(([l,i])=>lineupCard(l,i)).join("")+(lowL.length?`<details style="grid-column:1/-1"><summary>${lowL.length} lineup${lowL.length>1?"s":""} with almost no effect (under 5 damage, or almost nobody flashed)</summary><div class="lineups">${lowL.map(([l,i])=>lineupCard(l,i)).join("")}</div></details>`:""):`<p class="note">Not enough grenades observed.</p>`;
+      $("#lus",host).innerHTML=Sd.lineups.length?okL.slice(0,6).map(([l,i])=>lineupCard(l,i)).join("")+(okL.length>6?`<details class="fold" style="grid-column:1/-1"><summary>${okL.length-6} more lineups</summary><div class="lineups fold-b">${okL.slice(6).map(([l,i])=>lineupCard(l,i)).join("")}</div></details>`:"")+(lowL.length?`<details class="fold" style="grid-column:1/-1"><summary>${lowL.length} lineup${lowL.length>1?"s":""} with almost no effect (under 5 damage, or almost nobody flashed)</summary><div class="lineups fold-b">${lowL.map(([l,i])=>lineupCard(l,i)).join("")}</div></details>`:""):`<p class="note">Not enough grenades observed.</p>`;
       $$(".lu",host).forEach(cd=>{cd.onclick=()=>{st.sel=+cd.dataset.i;st.layers=["nades"];press(box,"[data-layer]",$('[data-layer="nades"]',box));const l=Sd.lineups[st.sel];
         if(l.level!==st.level&&m.levels.some(x=>x.key===l.level)){st.level=l.level;const b=$(`[data-level="${l.level}"]`,box);if(b)press(box,"[data-level]",b)}
         $$(".lu",host).forEach(x=>x.classList.toggle("sel",x===cd));redraw();box.scrollIntoView({behavior:"smooth",block:"nearest"})};cd.onkeydown=e=>{if(e.key==="Enter")cd.click()}});
