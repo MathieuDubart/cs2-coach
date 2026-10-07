@@ -66,6 +66,23 @@ def save(st):
             time.sleep(0.1)
 
 
+def refresh_everything():
+    """The app updated with the base as it is now (Settings' "Update everything": refresh_all.py, every profile): through
+    the app, whose page follows it; started here when the app doesn't answer."""
+    import subprocess
+    try:
+        req = urllib.request.Request(f"http://127.0.0.1:{PORT}/api/refresh/start", data=b'{"mine": false}',
+                                     headers={"Content-Type": "application/json"}, method="POST")
+        urllib.request.urlopen(req, timeout=30).read()
+        log("target reached: the app's full update with the base started")
+        return
+    except Exception as e:
+        log(f"target reached, the app doesn't answer ({type(e).__name__}): the full update started from here")
+    config.write_json(os.path.join(config.OUT, "refresh_ctl.json"), {"stop": False})
+    subprocess.Popen([sys.executable, "refresh_all.py"], cwd=os.path.dirname(os.path.abspath(__file__)),
+                     creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0) | getattr(subprocess, "BELOW_NORMAL_PRIORITY_CLASS", 0))
+
+
 def status(st, text):
     if st.get("status") != text:
         log(text)
@@ -303,6 +320,9 @@ def main():
             st["n"] = n = analyzed()
             if n >= target:
                 status(st, f"done: {n} matches")
+                if c.get("then") == "refresh":   # 07/10, the user: "stop à 3000 matchs et fais la mise à jour complète de l'app à cette étape"
+                    config.write_json(CTL, {k: v for k, v in c.items() if k != "then"})   # once
+                    refresh_everything()
                 break
             if free_gb() < MIN_FREE_GB:
                 status(st, f"stopped: {MIN_FREE_GB} GB left on the disk")
