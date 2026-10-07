@@ -1702,7 +1702,10 @@ function renderRoutine(){
   const p=P(),v=$("#v-routine"),PL=p.advice.plan;if(!PL)return noPlan(v);
   v.innerHTML=`<div class="head"><div style="display:grid;gap:4px"><span class="eyebrow">${esc(p.name)}</span><h2>Your habits</h2></div></div>
    ${routineBrief(PL)}${anchor("rt-habits")}
-   <div class="pg-grid2">${P().steamid===D.own?checkinCard((PL.context||{}).journal_n):""}${PL.context?contextBlock(PL.context):`<article class="card"><h3>Your playing habits</h3><p class="note">No dated match for this player: habits (times, sessions, group) need demos or a Leetify history.</p></article>`}</div>
+   ${(()=>{   // your journal next to your habits; another player's habits alone, full width (07/10: they sat in the journal's narrow column)
+      const ck=P().steamid===D.own?checkinCard((PL.context||{}).journal_n):"",
+        cx=PL.context?contextBlock(PL.context):`<article class="card"><h3>Your playing habits</h3><p class="note">No dated match for this player: habits (times, sessions, group) need demos or a Leetify history.</p></article>`;
+      return ck?`<div class="pg-grid2">${ck}${cx}</div>`:cx})()}
    ${fold("Your routine: before, during and after the game",`<div class="phases">${PL.phases.map(phaseCard).join("")}</div>`,"rt-phases")}
    ${fold("Depending on your group",partyBlock(PL),"rt-group")}
    ${fold("What changed in the game lately",metaBlock(PL),"rt-meta")}`;
