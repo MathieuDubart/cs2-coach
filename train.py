@@ -14,6 +14,7 @@ import json
 import math
 import os
 import random
+import re
 import time
 from collections import Counter
 
@@ -221,9 +222,13 @@ def aim_drills(sid, mp):
     return out
 
 
-# ---------------------------------------------------------------- the aim block on the game's aim map (06/10)
+# ---------------------------------------------------------------- the aim block on an aim range (06/10)
 
-AIM_MAP = "aim_map"
+# 07/10: not aim_map any more. Its file (maps/aim_map.vpk, 2023, like fy_pool_day.vpk) is the only one of the game's maps
+# without Valve's signature: the game refuses it from a server ("Signature failed for ...aim_map.vpk", then back to the
+# menu at SIGNONSTATE_PRESPAWN; 06/10 19:57 and 07/10 11:31). Pool Day (Arms Race, signed): 16 enabled spawns a side on
+# one level, 600-1,300 u across the pool, a duel's distance; the plugin drops a spot of theirs you can't see
+AIM_MAP = "ar_pool_day"
 
 
 def _my_guns(sid):
@@ -250,7 +255,7 @@ def _my_guns(sid):
 def aim_range_drills(sid, secs):
     """The aim block (06/10, the user: "fais le travail d'aim sur une map d'aim, une map d'entraînement d'aim, et
     ensuite lance les maps que j'ai choisies"; the duel spots on the maps spawned in front of him or behind him and
-    prefired him): on the game's aim_map, targets across the map in front of you: still ones to flick to, strafing
+    prefired him): on an aim range (AIM_MAP), targets across the map in front of you: still ones to flick to, strafing
     ones, then duels that shoot back only after a player's reaction time; your guns. As many as the block's time holds."""
     tr, cr, pi = _my_guns(sid)
     w = lambda n: replay._item(n) or "weapon_ak47"
@@ -1668,6 +1673,25 @@ def _connected_since(start_size):
     return f"Connected to '127.0.0.1:{replay.PORT}'".encode() in t
 
 
+def _refused_since(start_size):
+    """The game gave up loading the server's map since that point of its console log: why, in a few words (07/10: the
+    game refused aim_map's unsigned file and went back to its menu, the server only saw a disconnect by the user)."""
+    f = _console()
+    if not f:
+        return None
+    size = os.path.getsize(f)
+    with open(f, "rb") as fh:
+        fh.seek(0 if size < start_size else start_size)
+        t = fh.read().decode("utf-8", "replace")
+    m = re.search(r"Disconnection during connection phase\. Sign-on state: \d+ \((\w+)\)\. Disconnect reason: (\w+)", t)
+    if not m:
+        return None
+    sig = re.search(r"Signature failed for [^\r\n]*?([\w.-]+\.vpk)", t)
+    if sig:
+        return f"CS2 refused the map file {sig.group(1)} (not signed by Valve) and went back to its menu"
+    return f"CS2 left the server while loading the map ({m.group(2)} at {m.group(1)})"
+
+
 _LAUNCH = {}
 
 
@@ -1692,8 +1716,8 @@ def _connect():
     closed game is started first, the connect waits for its menu. First the game's own connect (Steam passes it to the
     running game), then Steam's: Steam's opens its "game info" window, whose check of the local server fails ("the app
     ID given by the server is invalid", 06/10) while its "Join" button works. Once the game has reached the server it is
-    loading the map: no other connect then, it would cut the load (06/10 19:57: aim_map took more than 30 s, the second
-    connect dropped the game at SIGNONSTATE_SPAWN)."""
+    loading the map: no other connect then, it would cut the load. A map the game refuses (07/10: aim_map's unsigned file,
+    the 06/10 19:57 drop was that too) is said in Prepare (replay.JOIN) instead of waiting."""
     urls = [f"steam://rungame/730/76561202255233023/+connect%20127.0.0.1:{replay.PORT}", f"steam://connect/127.0.0.1:{replay.PORT}"]
     recent = _LAUNCH and time.time() - _LAUNCH.get("t", 0) < 240
     if not _game_running() and not (recent and time.time() - _LAUNCH["t"] < 60):
@@ -1702,6 +1726,8 @@ def _connect():
     elif recent and not _menu_since(_LAUNCH["start"]):
         _wait_menu(_LAUNCH["start"])   # started a moment ago (play()): its menu first
     f = _console()
+    replay.JOIN.clear()
+    replay.JOIN.update(state="joining", t=time.time())
     for url in urls:
         start = os.path.getsize(f) if f else 0
         os.startfile(url)
@@ -1713,11 +1739,20 @@ def _connect():
                 time.sleep(10)   # still there 10 s later: in game (a connect cut while loading drops you before)
                 h = replay.heartbeat()
                 if h and h.get("humans"):
+                    replay.JOIN.update(state="in", t=time.time())
                     return True
             if not loading and _connected_since(start):
                 loading, wait = True, time.time() - t0 + 150   # on the server, the map loading: wait for it, nothing else
+                replay.JOIN.update(state="loading", t=time.time())
+            why = _refused_since(start) if loading else None
+            if why:   # Prepare says it (Rejoin would only do the same again)
+                replay.JOIN.update(state="refused", why=why, t=time.time())
+                print("training join:", why, flush=True)
+                return False
         if loading:
+            replay.JOIN.update(state="failed", why="CS2 reached the server but did not get into the game", t=time.time())
             return False   # it got to the server but not in the game: no second connect (Prepare's Rejoin is there)
+    replay.JOIN.update(state="failed", why="CS2 did not reach the training server", t=time.time())
     return False
 
 

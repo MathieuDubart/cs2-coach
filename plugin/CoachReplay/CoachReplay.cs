@@ -269,8 +269,8 @@ public partial class CoachReplay : BasePlugin
         AddCommand("css_dbgspawns", "the map's spawn points", (p, c) =>
         {
             foreach (var cls in new[] { "info_player_terrorist", "info_player_counterterrorist" })
-                foreach (var e in Utilities.FindAllEntitiesByDesignerName<CBaseEntity>(cls))
-                    Logger.LogInformation("dbgspawns {c} {x:F0} {y:F0} {z:F0} yaw {w:F0}", cls, e.AbsOrigin?.X, e.AbsOrigin?.Y, e.AbsOrigin?.Z, e.AbsRotation?.Y);
+                foreach (var e in Utilities.FindAllEntitiesByDesignerName<SpawnPoint>(cls))
+                    Logger.LogInformation("dbgspawns {c} {x:F0} {y:F0} {z:F0} yaw {w:F0} enabled {on} priority {pr}", cls, e.AbsOrigin?.X, e.AbsOrigin?.Y, e.AbsOrigin?.Z, e.AbsRotation?.Y, e.Enabled, e.Priority);
         });
         AddCommand("css_dbgbreak", "the map's breakables", (p, c) =>
         {

@@ -455,7 +455,7 @@ def status():
     return {"installed": installed(), "install": dict(INSTALL), "path": SERVER, "running": up, "map": (h.get("map") or s.get("map")) if up else None,
             "humans": h.get("humans", 0), "scenario": h.get("scenario"), "state": h.get("state"),
             "session": {k: h.get(k) for k in ("session", "block", "drill", "points", "ok", "done", "streak", "left")} if h.get("session") else None,
-            "connect": f"connect 127.0.0.1:{PORT}"}
+            "connect": f"connect 127.0.0.1:{PORT}", "join": dict(JOIN)}
 
 
 def _update():
@@ -468,6 +468,7 @@ def _update():
 
 
 INSTALL = {"running": False, "log": None, "error": None}
+JOIN = {}   # the game's last way to the server (train._connect): joining, loading, in, refused or failed, and why
 
 
 def install():
@@ -525,6 +526,37 @@ def _above_normal(pid):
         print("server priority:", e, flush=True)
 
 
+def _hide_console(pid):
+    """The server's console window out of sight. CREATE_NEW_CONSOLE with SW_HIDE no longer hides it (07/10, his warm-up
+    video: the server's log over the desktop at each start, where it can take the focus from the game): its window,
+    owned by the server's conhost child, is hidden once it shows. Returns how many were hidden."""
+    try:
+        import ctypes
+        from ctypes import wintypes
+        import psutil
+        u = ctypes.windll.user32
+        pids = {pid} | {c.pid for c in psutil.Process(pid).children(recursive=True)}
+        found = []
+
+        @ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
+        def each(h, _):
+            owner = wintypes.DWORD()
+            u.GetWindowThreadProcessId(h, ctypes.byref(owner))
+            if owner.value in pids and u.IsWindowVisible(h):
+                cls = ctypes.create_unicode_buffer(64)
+                u.GetClassNameW(h, cls, 64)
+                if cls.value == "ConsoleWindowClass":
+                    found.append(h)
+            return True
+        u.EnumWindows(each, 0)
+        for h in found:
+            u.ShowWindow(h, 0)   # SW_HIDE
+        return len(found)
+    except Exception as e:
+        print("server console:", e, flush=True)
+        return 0
+
+
 def start(mp):
     """The server on this map (started hidden, or its map changed); back when it answers."""
     if not installed():
@@ -545,12 +577,17 @@ def start(mp):
     si.wShowWindow = 0   # SW_HIDE: never shown, never takes the focus
     pr = subprocess.Popen(args, cwd=os.path.dirname(EXE), creationflags=subprocess.CREATE_NEW_CONSOLE, startupinfo=si)
     _above_normal(pr.pid)
+    for _ in range(20):   # its console comes up within a second or two
+        if _hide_console(pr.pid):
+            break
+        time.sleep(0.1)
     s.update(pid=pr.pid, map=mp, started=time.time())
     _save_state(s)
     # rcon only once the map runs (the plugin's heartbeat): an early try counts as a failed login and the server then
     # refuses 127.0.0.1
     for _ in range(120):
         time.sleep(1)
+        _hide_console(pr.pid)   # shown again while the server starts: hidden again
         h = heartbeat()
         if h and (h.get("t") or 0) > s["started"]:
             return status()

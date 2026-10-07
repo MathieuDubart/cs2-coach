@@ -126,6 +126,12 @@ public partial class CoachReplay
     readonly Dictionary<int, (int sign, int until)> strafe = new();
     int lastKill;
     List<Vector3> rangeTheirs = new();
+    // 07/10: the aim range left aim_map (an unsigned 2023 file the game no longer loads from a server) for a map with
+    // cover: a spot of theirs you can't see from yours is dropped for the map (a target unseen 3 s moves on)
+    readonly HashSet<int> rangeBlind = new();
+    readonly Dictionary<int, int> rangeSeenAt = new();
+    string rangeMap = "";
+    bool rangeSpots;   // a target has been seen this drill: the game's spotting works for them, so unseen means hidden
     readonly List<(Drill d, bool ok, string outcome)> sessDone = new();   // this session's drills, each one's last try
     readonly List<(Drill d, bool ok, string outcome)> lastDone = new();   // the last session's (!again)
     Session? lastSess;
@@ -571,16 +577,23 @@ public partial class CoachReplay
     Scenario RangeScenario(Drill d)
     {
         var s = new Scenario { Id = d.Id, Map = d.Map, Kind = "aim", Title = d.Title, Team = d.Team, Clock = d.Clock };
-        List<Vector3> Of(string cls) => Utilities.FindAllEntitiesByDesignerName<CBaseEntity>(cls).Where(e => e.AbsOrigin != null)
-            .Select(e => new Vector3(e.AbsOrigin!.X, e.AbsOrigin.Y, e.AbsOrigin.Z)).ToList();
+        List<Vector3> Of(string cls)
+        {   // the spawns the game uses (some maps hold a disabled second set)
+            var all = Utilities.FindAllEntitiesByDesignerName<SpawnPoint>(cls).Where(e => e.AbsOrigin != null).ToList();
+            var on = all.Where(e => e.Enabled).ToList();
+            return (on.Count > 0 ? on : all).Select(e => new Vector3(e.AbsOrigin!.X, e.AbsOrigin.Y, e.AbsOrigin.Z)).ToList();
+        }
         var mine = Of(d.Team == 2 ? "info_player_terrorist" : "info_player_counterterrorist");
         rangeTheirs = Of(d.Team == 2 ? "info_player_counterterrorist" : "info_player_terrorist");
+        if (d.Map != rangeMap) { rangeBlind.Clear(); rangeMap = d.Map; }
+        rangeSeenAt.Clear(); rangeSpots = false;
         var mid = mine.Count > 0 ? new Vector3(mine.Average(p => p.X), mine.Average(p => p.Y), mine.Average(p => p.Z)) : Vector3.Zero;
         var me = mine.Count > 0 ? mine.OrderBy(p => Vector3.Distance(p, mid)).First() : Vector3.Zero;
         var far = rangeTheirs.Count > 0 ? new Vector3(rangeTheirs.Average(p => p.X), rangeTheirs.Average(p => p.Y), rangeTheirs.Average(p => p.Z)) : me + new Vector3(1000, 0, 0);
         s.Players.Add(new Track { Sid = "me", Name = "you", Team = d.Team, Me = true, Hp = 100, Armor = 100, Helmet = true, Weapons = d.Weapons,
             Active = d.Weapons.LastOrDefault(), Path = new[] { me.X, me.Y, me.Z, YawTo(me, far), 0f } });
-        var order = rangeTheirs.OrderBy(_ => Rng.Next()).ToList();
+        var order = rangeTheirs.Where((p, i) => !rangeBlind.Contains(i)).OrderBy(_ => Rng.Next()).ToList();
+        if (order.Count == 0) order = rangeTheirs.OrderBy(_ => Rng.Next()).ToList();
         for (int k = 0; k < Math.Max(1, d.Count); k++)
         {
             var p = order.Count > 0 ? order[k % order.Count] : far;
@@ -601,7 +614,8 @@ public partial class CoachReplay
         if (c == null || !c.IsValid) return;
         var me = Humans().Select(h => h.PlayerPawn.Value?.AbsOrigin).FirstOrDefault(o => o != null) is { } mo ? new Vector3(mo.X, mo.Y, mo.Z) : Pos(cur.Players.First(p => p.Me), 0);
         var taken = bots.Where(b => b.Key != slot && !gone.Contains(b.Value.Sid)).Select(b => Pos(b.Value, 0)).ToList();
-        var free_ = rangeTheirs.Where(p => taken.All(q => Vector3.Distance(p, q) > 120) && Vector3.Distance(p, Pos(t, 0)) > 120).ToList();
+        var free_ = rangeTheirs.Where((p, i) => !rangeBlind.Contains(i) && taken.All(q => Vector3.Distance(p, q) > 120) && Vector3.Distance(p, Pos(t, 0)) > 120).ToList();
+        if (free_.Count == 0) free_ = rangeTheirs.Where((p, i) => !rangeBlind.Contains(i)).ToList();
         if (free_.Count == 0) free_ = rangeTheirs;
         var p = free_.Count > 0 ? free_[Rng.Next(free_.Count)] : Pos(t, 0);
         t.Path = new[] { p.X, p.Y, p.Z, YawTo(p, me), 0f };
@@ -616,6 +630,29 @@ public partial class CoachReplay
 
     // the aim map's strafers: left and right across your line, a stop now and then (counter-strafe practice), 200 u
     // around their spot at most, turned to you
+    // a target nobody can see from your spot (cover between): moved after 3 s, its spot dropped for the map. Only once a
+    // target has been seen this drill (the game's spotting works for these bots: unseen then means hidden)
+    void RangeBlindTick()
+    {
+        var me = Humans().Select(h => h.PlayerPawn.Value).FirstOrDefault(p => p != null && p.IsValid && p.LifeState == (byte)LifeState_t.LIFE_ALIVE);
+        if (me == null) return;
+        var m = me.EntitySpottedState.SpottedByMask;
+        var now = Server.TickCount;
+        foreach (var (slot, t) in bots.ToList())
+        {
+            if (gone.Contains(t.Sid)) continue;
+            if ((m[slot / 32] & (1u << (slot % 32))) != 0) { rangeSeenAt[slot] = now; rangeSpots = true; continue; }
+            if (!rangeSpots) continue;
+            var since = Math.Max(cameAt.GetValueOrDefault(slot, t0), rangeSeenAt.GetValueOrDefault(slot, 0));
+            if (now - since < 3 * 64) continue;
+            var here = Pos(t, 0);
+            var i = rangeTheirs.FindIndex(q => Vector3.Distance(q, here) < 2f);
+            if (i >= 0 && rangeTheirs.Count - rangeBlind.Count > 4) { rangeBlind.Add(i); Logger.LogInformation("range: their spot {i} unseen from yours, dropped ({n} left)", i, rangeTheirs.Count - rangeBlind.Count); }
+            rangeSeenAt[slot] = now;
+            RangeAgain(generation, slot);
+        }
+    }
+
     void StrafeTick()
     {
         var mo = Humans().Select(h => h.PlayerPawn.Value?.AbsOrigin).FirstOrDefault(o => o != null);
@@ -857,6 +894,7 @@ public partial class CoachReplay
         {
             if (el >= drill.Seconds || frags >= drill.Goal * 2) { Finish(frags >= drill.Goal ? "cleared" : "done"); return; }
             if (drill.Variant == "strafe") StrafeTick();
+            RangeBlindTick();
             var avg = reacts.Count > 0 ? $" · {reacts.Average():F2} s" : "";
             var hs = frags > 0 ? $" · {100 * aimHs / frags}% HS" : "";
             SetMain($"<font color='#ff8a3d'>{drill.Title}</font> · ⚔ {frags}/{drill.Goal}{avg}{hs} · {(int)(drill.Seconds - el)} s"
