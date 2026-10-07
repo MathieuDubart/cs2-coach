@@ -4504,7 +4504,6 @@ function moodBlock(PL){const C=(PL.calls||[]).filter(a=>a.aligned&&(a.rounds||[]
 // and the enemies whose kills look odd or who got banned (indicators, not proof)
 function factsBlock(PL){const F=PL.facts;if(!F||!F.matches)return "";const fy=F.flashes.yours,pm=x=>(x/F.matches).toFixed(1),pc=(x,n)=>n?Math.round(100*x/n)+"%":"—";
   const bar=parts=>`<div class="fbar">${parts.filter(x=>x.v>0).map(x=>`<i style="flex:${x.v};background:${x.c}"><title>${esc(x.l)}: ${x.v}</title></i>`).join("")}</div>`;
-  const S=F.suspects||[];
   return `<h3>What the demos say · your last ${F.matches} matches</h3>
    <div class="gauge">
     <div><b>${pm(F.blocks.by_n)} <small>vs ${pm(F.blocks.on_n)}</small></b><span>blocks per match: a teammate blocks you vs you block a teammate${F.blocks.by.length?` (most: ${F.blocks.by.slice(0,2).map(x=>esc(x.name)).join(", ")})`:""}</span></div>
@@ -4513,12 +4512,7 @@ function factsBlock(PL){const F=PL.facts;if(!F||!F.matches)return "";const fy=F.
     <div><b>${pm(F.teamflash.by_n)} <small>vs ${pm(F.teamflash.on_n)}</small></b><span>team flashes per match: on you vs by you</span></div></div>
    ${fy.n?`${bar([{v:fy.mate_used,c:"var(--good)",l:"a teammate shot behind"},{v:fy.self_used,c:"var(--ct)",l:"only you shot"},{v:fy.unused,c:"var(--muted)",l:"nobody shot"}])}
    <div class="vleg"><span><i style="background:var(--good)"></i>a teammate shoots behind</span><span><i style="background:var(--ct)"></i>only you</span><span><i style="background:var(--muted)"></i>nobody: say "flash" before throwing</span></div>`:""}
-   ${S.length?`<h3>Enemies worth a look</h3>
-   <div class="tbl"><table><thead><tr><th>Player</th><th>Match</th><th class="n">Kills</th><th class="n" title="kills on a player the killer never saw in the 3 s before">👁 unseen</th><th class="n" title="through smoke">🌫 smoke</th><th class="n" title="first hits under 0.15 s after first seeing">⚡ fast</th><th>Bans</th></tr></thead><tbody>
-    ${S.map(x=>`<tr><td><a href="https://steamcommunity.com/profiles/${esc(x.steamid)}" target="_blank" rel="noopener" style="color:var(--ct)">${esc(x.name)}</a>${x.flag?' <span class="pill weak">odd</span>':""}</td><td>${MAPN(x.map)} · ${fmtDate(x.time)}</td><td class="n">${x.kills}</td>
-      <td class="n">${x.unseen+x.wallbang_unseen}</td><td class="n">${x.thrusmoke}</td><td class="n">${x.fast==null?"—":x.fast+"%"}</td>
-      <td>${x.vac||x.game?`<span class="pill ${x.ban_after?"weak":""}">${x.vac?`VAC ${x.vac}`:""}${x.vac&&x.game?" · ":""}${x.game?`game ${x.game}`:""} · ${x.ban_after?"since this match":`${x.ban_days} days ago`}</span>`:'<span class="note">none</span>'}</td></tr>`).join("")}</tbody></table></div>
-   <p class="note">Indicators from the demo, not proof: the lobby's usual share of odd kills is high (smokes, prefires). A ban "since this match" says more than anything else. Report in Overwatch rather than during the game.${F.bans_checked?"":" Steam bans not checked: no API key."}</p>`:`<p class="note">No enemy stands out in these matches${F.bans_checked?", and none of them is banned":""}.</p>`}`}
+   `}
 // the review as plan.py builds it; a plan written in the "pro review" format (quick_brief, map_briefs, deep_dive) keeps it
 // whole under raw (04/10: a plan written by a server still running that format crashed this page)
 const reviewOf=PL=>{const R=PL.review;return R&&!R.session&&R.raw&&R.raw.session?R.raw:R&&R.session?R:null};
@@ -4579,13 +4573,13 @@ function renderReview(){const p=P(),v=$("#v-review"),PL=p.advice.plan||{},R=revi
   const head=`<div class="head"><div style="display:grid;gap:4px"><span class="eyebrow">${esc(p.name)}${R?` · ${esc(R.label)}, compared with your previous ${R.n_before} matches`:""}</span><h2>Review</h2></div></div>`;
   if(!R){v.innerHTML=head+`<div class="empty">The review compares your latest matches with the previous ones: it takes at least 3 matches analyzed with their demo.${p.light?" This profile has no demo yet.":""}</div>`;return}
   const f=(x,u)=>fmtU(x,u);
-  const comms=callsBlock(PL)+moodBlock(PL),facts=factsBlock(PL),lc=liveCheckBlock(PL);
+  const comms=callsBlock(PL)+moodBlock(PL),facts=factsBlock(PL);   // 07/10: no suspects table, no live check (the user: "enlève ça")
   v.innerHTML=head+`
    ${reviewBrief(R,f)}
    ${reviewMaps(R)}
    ${comms?`<section class="tier" id="tier3"><div class="tier-h"><b>3</b><h3>Your comms</h3><span class="note">your calls, what you heard and called, your mood, from your recordings</span></div>${comms}</section>`:""}
-   ${facts?`<section class="tier" id="tier4"><div class="tier-h"><b>${comms?4:3}</b><h3>Teamplay and opponents</h3><span class="note">from the demos of your last matches</span></div>${facts}</section>`:""}
-   ${lc?`<details class="tier-more"><summary>Live check: what the Live page showed against what the demos say</summary>${lc}</details>`:""}`;
+   ${facts?`<section class="tier" id="tier4"><div class="tier-h"><b>${comms?4:3}</b><h3>Teamplay</h3><span class="note">from the demos of your last matches</span></div>${facts}</section>`:""}
+`;
   wireFocus(v,p,renderReview);
   $$("[data-mid]",v).forEach(r=>{r.onclick=()=>{const i=p.matches.findIndex(x=>x.id===r.dataset.mid);S.match=i<0?0:i;S.mpin=i>=0;go("matches")}});
 }
