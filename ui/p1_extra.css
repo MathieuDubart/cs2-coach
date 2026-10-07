@@ -540,3 +540,9 @@ svg.radar .ping .ping-t{font:800 15px var(--f-mono);fill:#ffd34d;paint-order:str
 .brief3>.card{align-content:start}
 .set-h{margin:26px 0 2px;font:600 13px var(--f-mono);letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
 .set-more>summary{cursor:pointer;font-weight:600;margin:6px 0}
+/* the bar (07/10): your three moments on the left, a player or a match to open in the middle, your menu on the right */
+.bar-in{display:grid;grid-template-columns:minmax(0,1fr) minmax(260px,500px) minmax(0,1fr);gap:8px 18px}
+.bar-left{display:flex;flex-wrap:wrap;align-items:center;gap:8px 18px;min-width:0}
+.bar-in>.bar-right{justify-self:end;margin-left:0}
+.bar-search{max-width:none;width:100%;flex:none}
+@media (max-width:900px){.bar-in{grid-template-columns:minmax(0,1fr) auto}.bar-search{grid-column:1/-1;grid-row:2}}
