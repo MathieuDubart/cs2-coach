@@ -383,17 +383,7 @@ table.lc{border-collapse:collapse;font-variant-numeric:tabular-nums;min-width:64
 .pnade{font-size:14px;min-width:0}
 .pnade .tag{font:11px var(--f-mono);padding:1px 6px;border-radius:3px;margin-right:6px;border:1px solid var(--line)}
 .pnade .tag.t{color:var(--t)}.pnade .tag.ct{color:var(--ct)}
-.psheets{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,520px),1fr));gap:12px}
-.psheet{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:14px;min-width:0}
-.psh{display:flex;justify-content:space-between;align-items:baseline;gap:10px}
-.psh h3{margin:0;text-transform:uppercase}
-.psides{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:8px}
-@media (max-width:700px){.psides{grid-template-columns:1fr}.pblk{grid-template-columns:48px minmax(0,1fr)}.pact{grid-column:2;justify-items:start}}
-.sside{min-width:0}.sside h4{font-size:17px;margin:0 0 4px}.sside h4.t{color:var(--t)}.sside h4.ct{color:var(--ct)}
-.srow{display:grid;grid-template-columns:62px minmax(0,1fr);gap:8px;padding:5px 0;border-top:1px solid var(--line);font-size:14px}
-.slab{font:11px var(--f-mono);letter-spacing:.08em;text-transform:uppercase;color:var(--muted);padding-top:2px}
-.slab.ok{color:var(--good)}.slab.no{color:var(--bad)}.slab.nade{color:var(--warn)}
-.prep-ready{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr));gap:12px;margin-bottom:18px}
+@media (max-width:700px){.pblk{grid-template-columns:48px minmax(0,1fr)}.pact{grid-column:2;justify-items:start}}
 .btnlink{display:inline-block;font:600 14px var(--f-body);padding:6px 12px;border:1px solid var(--line);border-radius:4px;color:var(--ink);text-decoration:none}
 
 /* Review in three levels (05/10): two-card briefs, the profile's axes and evidence */
@@ -478,7 +468,6 @@ svg.radar .ping .ping-t{font:800 15px var(--f-mono);fill:#ffd34d;paint-order:str
 .vstack .vst-in{display:flex;flex-wrap:wrap;align-items:center;gap:6px}
 .vshot{width:112px;height:auto;aspect-ratio:16/10;object-fit:cover;border-radius:4px;display:block;background:var(--chip)}
 .vnd.prac{color:var(--good)}.vnd b{font:800 12px var(--f-mono);color:var(--good)}
-.pshots{display:grid;gap:6px;margin-top:8px}
 /* Prepare: where you struggle lately (06/10) */
 .pstrug{margin-top:8px}.pstrug-l{margin:4px 0 0;padding-left:18px;display:grid;gap:2px;font:500 14px var(--f-body)}
 /* Prepare's warm-up (06/10): one session on the training server, its parts in order */
@@ -488,7 +477,6 @@ svg.radar .ping .ping-t{font:800 15px var(--f-mono);fill:#ffd34d;paint-order:str
 .pwarm-plan li span{font:700 13px var(--f-mono);color:var(--muted)}
 .pwarm-plan li+li:not(.pwmap)::before{content:"→";margin-right:4px;color:var(--muted)}
 .pwarm-plan li.pwmap{background:none;padding:6px 2px;font:800 13px var(--f-mono);letter-spacing:.06em;text-transform:uppercase;color:var(--t);width:100%}
-.pextra{margin:12px 0}.pextra summary{cursor:pointer;font:600 14px var(--f-body)}
 
 /* CT: the Ts' habits this half, one line (06/10) */
 .vhab{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 8px;font-size:13px;line-height:1.35;margin:2px 0 6px}
