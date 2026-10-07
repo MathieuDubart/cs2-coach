@@ -222,7 +222,7 @@ function liveRadar(box,p,map,level,g,o){
   const FN=o.following&&g?focusN(g):0;   // the path you pressed: the only one drawn
   const TDR=!HMAP&&att&&o.following&&g&&typeof tdirsOf==="function"&&tdirsOf(map)?dirRank(p,g,tdirsOf(map)):null;   // 06/10: the ways in (A via Ramp...)
   if(TDR&&on("paths")&&!planted&&(g.round_phase==="freezetime"||(live&&(g.elapsed||0)<45))&&TDR.rows.length){dirPaths(Lrot,Ltop,TDR,level);
-    if(!dead&&dirNades(Lnades,Ltop,TDR,level,tdirsOf(map),g))legend.push(`<span>the way's stuff: thrown from the white dot, lands on the icon</span>`);
+    if(!dead&&dirNades(Lnades,Ltop,TDR,level,tdirsOf(map),g,p))legend.push(`<span>the way's stuff: thrown from the white dot, lands on the icon</span>`);
     legend.push(`<span>${SW.tpath}the way in from the spawn, % = rounds won by it this round (your buy and theirs${TDR.sel.tempo?`, ${TEMPO_EN[TDR.sel.tempo].toLowerCase()}`:""}); numpad 1-2-3 = A / mid / B, 4-5-6 = rush / slow / map control, minus drops them</span>`)}
   const TDx=!HMAP&&o.following&&g&&typeof tdirsOf==="function"?tdirsOf(map):null;if(TDx)pingMark(Ltop,g,TDR,level,TDx);   // A, B or mid pressed or said: a ping
   if(TDx&&typeof wilyRadar==="function")wilyRadar(p,g,level,Lnades,Ltop,legend);   // what you asked Wily, on the map
@@ -294,7 +294,7 @@ function liveRadar(box,p,map,level,g,o){
     Object.entries((E&&E.types)||{}).forEach(([type,T])=>(T.post||[]).filter(x=>x.to_px&&Math.hypot(x.to_px[0]-S_[0],x.to_px[1]-S_[1])<=230&&(!held||held[type]>0)).slice(0,1)
       .forEach(x=>drawNade({...x,type},`retake ${nadeName(type,"CT")}`,`Retake ${nadeName(type,"CT")}: ${x.from} → ${x.to}. ${x.how||""}`)));
     legend.push(`<span>${SW.nade}retake grenade: from the white dot to its icon</span>`)}
-  const CDP=ct&&!planted&&o.following&&g&&typeof ctDirStuff==="function"&&tdirSel(g).dir?ctDirStuff(g):null;   // a site said (numpad 1-3, 07/10): the card's stuff
+  const CDP=ct&&!planted&&o.following&&g&&typeof ctDirStuff==="function"&&tdirSel(g).dir?ctDirStuff(p,g):null;   // a site said (numpad 1-3, 07/10): the card's stuff
   if(CDP&&on("nades")&&stuffArcs(Lnades,Ltop,CDP,level))legend.push(`<span>${SW.nade}your stuff for the site you said: from the white dot to its icon</span>`);
   if(ct&&!planted&&o.following&&g&&g.round_phase==="freezetime"&&tdirSel(g).dir&&typeof ctBoostPick==="function"){const b=ctBoostPick(p,g,tdirSel(g).dir);
     if(b&&b.px&&(!b.level||!level||b.level===level)){const gg=el("g",{},Ltop);el("circle",{cx:b.px[0],cy:b.px[1],r:11,style:"fill:var(--good);fill-opacity:.35;stroke:var(--good);stroke-width:2.4"},gg);

@@ -28,7 +28,7 @@ import nades
 import tside
 
 OUT = os.path.join(config.OUT, "population", "tdirs.json")
-VERSION = 3   # bump when the output changes shape: the cache is rebuilt (3: the stuff by direction and tempo, 07/10)
+VERSION = 3   # bump when the output changes shape: the cache is rebuilt (3: Nuke's Outside, 07/10)
 RUSH, SLOW = 30.0, 60.0   # on the site in the first 30 s (1:25 on the clock): a rush; after 60 s (0:55): a slow round
 CONTROL_T = (14.0, 26.0)  # Ts spread over two areas or more around 0:20 into the round, then a hit after 35 s: map control first
 MIN_DIR = 25              # rounds for a way to be kept
@@ -37,8 +37,6 @@ GATE_MIN = 0.06           # a doorway takes at least 6 % of the steps on its sit
 STAND_R, STAND_Z, LAND_R = 40.0, 24.0, 120.0   # one lineup: thrown from the same spot (units, same height), landing at the same place
 STACK_R = 80.0            # lineups thrown from within 80 units: one stack
 MAX_UTIL = 12
-MAX_UTIL_T = 8            # the stuff of a way for one tempo (a rush, a slow round, map control)
-MIN_TEMPO = 15            # rounds of a way (or of a site, CT) with that tempo for its own stuff
 MID = re.compile(r"\bmid", re.I)
 # the map's middle as the players call it (07/10, the user: "nuke, c'est outside et pas forcément mid"): numpad 2
 # (its regex, its name, the callouts of the last 8 s that say the way came another way: Nuke's yard is next to the
@@ -387,7 +385,7 @@ def analyze_map(mp, dirs, log=print):
             nt = nt[[w is not None and tt <= w[0] + 2 for w, tt in zip(hit, nt.t)]]
             if len(nt):
                 NN.append(nt.assign(match=mid, won=[want[(mid, int(r))][1] for r in nt["round"]]))
-        nc = n[n.side == "CT"]
+        nc = n[(n.side == "CT") & (n.t <= 45)]
         if len(nc):
             CC.append(nc.assign(match=mid, won=[not won_of.get((mid, int(r)), True) for r in nc["round"]]))
         fd = os.path.join(d, "duels.parquet")
@@ -412,11 +410,9 @@ def analyze_map(mp, dirs, log=print):
             x["zone_h"] = [hum(z, mp) for z in x.zone]
             x["land_zone_h"] = [hum(z, mp) for z in x.land_zone]
         return x
-    N, CA = nades_frame(NN), nades_frame(CC)
-    C = CA[CA.t <= 45] if len(CA) else CA
+    N, C = nades_frame(NN), nades_frame(CC)
     if len(N):
         N["key"] = [keys.get((m, int(r))) for m, r in zip(N.match, N["round"])]
-        N["hit_t"] = [want[(m, int(r))][0] for m, r in zip(N.match, N["round"])]
     G = {x["id"]: x for x in gates}
     out_dirs = []
     for k, x in h.groupby("key"):
@@ -443,31 +439,6 @@ def analyze_map(mp, dirs, log=print):
     out_dirs.sort(key=lambda o: -o["n"])
     # mid control: two Ts or more in mid around 0:20, whatever happens next
     res = {"n": int(len(h)), "gates": gates, "dirs": out_dirs}
-    # the stuff of the combo said (07/10, the user: "c'est le combo qui choisit les stuff à conseiller"): numpad 1-2-3
-    # (A, mid, B: the ways of that direction together, A and B without the ways through mid) with 4-5-6 (the tempo):
-    # the Ts' lineups of those rounds in the tempo's window; a rush: every one before the hit; slow: the execute's
-    # (the last 25 s before the hit); map control: the control's (8 to 35 s into the round)
-    res["util_dt"] = {}
-    if len(N):
-        midk = {k for k, x in G.items() if x["mid"]}
-        hd = h.assign(dirn=["MID" if k in midk else str(k)[0] for k in h.key])
-        for dn, x in hd.groupby("dirn"):
-            Nd = N[N.key.isin(set(x.key))]
-            out_t = {}
-            for tp, xr in (("rush", x[x.hit_t < RUSH]), ("slow", x[x.hit_t >= SLOW]), ("control", x[x.control])):
-                if len(xr) < MIN_TEMPO or not len(Nd):
-                    continue
-                rs = set(zip(xr.match, xr["round"].astype(int)))
-                sub = Nd[[(m, int(r)) in rs for m, r in zip(Nd.match, Nd["round"])]]
-                if tp == "slow":
-                    sub = sub[sub.t >= sub.hit_t - 25]
-                elif tp == "control":
-                    sub = sub[(sub.t >= 8) & (sub.t <= 35)]
-                u = _lineups(sub, xr, min_n=5)[:MAX_UTIL_T] if len(sub) else []   # 5 rounds: then merged with the same throw a few units apart
-                if u:
-                    out_t[tp] = u
-            if out_t:
-                res["util_dt"][dn] = out_t
     ctl = g.assign(spread=[spread.get((m, int(r)), []) for m, r in zip(g.match, g["round"])])
     mc = ctl[["mid" in a for a in ctl.spread]]
     if len(mc) >= MIN_DIR:
@@ -522,47 +493,6 @@ def analyze_map(mp, dirs, log=print):
             Cw = C[near]
             if len(Cw):
                 res["ct_util"][site] = _lineups(Cw, Cw.drop_duplicates(["match", "round"]), min_n=6)
-    # CT by the Ts' tempo (07/10, the user: "en CT... tu me donnes aussi les stuff par rapport à ce que je te dis"): the
-    # CTs' lineups in the rounds hit on a site with that tempo; against a rush, the ones before it (3 s after the hit at
-    # the latest) onto the site's ways in; slow, the ones at the hit (20 s before to 3 s after) onto its ways in or the
-    # site; map control, the early fight (5 to 35 s), anywhere but on the other site
-    res["ct_util_t"] = {}
-    if len(CA):
-        hit_of = {(m, int(r)): (st, float(t)) for m, r, st, t in zip(hits.match, hits["round"], hits.site, hits.hit_t)}
-        ctl_of = {(m, int(r)) for (m, r), a in spread.items() if len(a) >= 2}
-        hk = [hit_of.get((m, int(r))) for m, r in zip(CA.match, CA["round"])]
-        CAh = CA.assign(hsite=[x[0] if x else None for x in hk], hit_t=[x[1] if x else np.nan for x in hk])
-        CAh = CAh[CAh.hsite.notna()]
-        LX, LY = CAh.land_px.to_numpy(float), CAh.land_py.to_numpy(float)
-
-        LS = np.array(["A" if z == "BombsiteA" else "B" if z == "BombsiteB" else areas.get(z) for z in CAh.land_zone], dtype=object)
-
-        def onto(site, d=90):   # onto the site, its doorways, or a zone that leads to it (Mirage's apartments for B)
-            near = LS == site
-            for x in gates:
-                if x["site"] == site:
-                    near |= np.hypot(LX - x["px"][0], LY - x["px"][1]) < d
-            return near
-        hctl = np.array([(m, int(r)) in ctl_of for m, r in zip(hits.match, hits["round"])], dtype=bool)
-        for site in ("A", "B"):
-            other, mine = onto("B" if site == "A" else "A"), onto(site)
-            on_s = (CAh.hsite == site).to_numpy(bool)
-            t, ht = CAh.t.to_numpy(float), CAh.hit_t.to_numpy(float)
-            ctl = np.array([(m, int(r)) in ctl_of for m, r in zip(CAh.match, CAh["round"])], dtype=bool)
-            pick = {"rush": (on_s & (ht < RUSH) & (t <= ht + 3) & mine, hits.hit_t < RUSH),
-                    "slow": (on_s & (ht >= SLOW) & (t >= ht - 20) & (t <= ht + 3) & mine, hits.hit_t >= SLOW),
-                    "control": (on_s & ctl & (ht >= 35) & (t >= 5) & (t <= 35) & ~other, hctl & (hits.hit_t >= 35))}
-            out_t = {}
-            for tp, (m, hm) in pick.items():
-                rr = hits[(hits.site == site) & hm]
-                if len(rr) < MIN_TEMPO or not m.any():
-                    continue
-                rr = rr.assign(won=~rr.T_won.astype(bool))
-                u = _lineups(CAh[m], rr, min_n=5)[:MAX_UTIL_T]   # the CTs throw from anywhere on their site: rarer, as repeatable
-                if u:
-                    out_t[tp] = u
-            if out_t:
-                res["ct_util_t"][site] = out_t
     log(f"{mp}: {len(out_dirs)} ways in, {len(gates)} doorways, {len(h)} hits ({time.time() - t0:.0f} s)")
     return res
 
@@ -604,13 +534,50 @@ def load():
 _MEM = {"mtime": None, "maps": {}}
 
 
+_NADES = {"mtime": None, "maps": {}}
+WINDOWS = ("debut", "prise", "action", "fin", "post")   # nades.py's: 0-20 s, 20-40 s, 40-70 s, after 70 s, after the plant
+
+
+def lineups_page(mp):
+    """The base's lineups of a map for Live's stuff (08/10, the user: "propose-moi des stuff qui s'envoient à peu près
+    depuis le même endroit, et surtout pour l'endroit où je vais, dans le timing que je choisis"): nades.py's groups
+    (thrown from one zone onto another 8 times or more), both sides, compact: its usual spot and where it lands, how
+    many throws by how many players, how many in each window of the round, how it's thrown, what it does."""
+    try:
+        mt = os.path.getmtime(nades.SUMMARY)
+    except OSError:
+        return {}
+    if _NADES["mtime"] != mt:
+        try:
+            maps = json.load(open(nades.SUMMARY, encoding="utf-8")).get("maps") or {}
+        except (OSError, ValueError):
+            maps = {}
+        _NADES.update(mtime=mt, maps=maps)
+    out = {}
+    for side, E_ in (_NADES["maps"].get(mp) or {}).items():
+        L = []
+        for typ, T in (E_.get("types") or {}).items():
+            for x in T.get("groups") or []:
+                if not x.get("from_px") or not x.get("to_px"):
+                    continue
+                L.append({"type": typ, "from": x.get("from"), "to": x.get("to"), "from_key": x.get("from_key"), "to_key": x.get("to_key"),
+                          "from_px": x["from_px"], "to_px": x["to_px"], "level": x.get("level"), "land_level": x.get("land_level"),
+                          "n": int(x.get("n") or 0), "players": int(x.get("players") or 0), "how": x.get("how"),
+                          "w": [int(((x.get("windows") or {}).get(k) or {}).get("n") or 0) for k in WINDOWS],
+                          "eff": x.get("blind") if typ == "flash" else x.get("dmg") if typ in ("he", "molotov") else x.get("per100")})
+        out[side] = L
+    return out
+
+
 def for_page(mp):
-    """What Live gets for a map: its ways, plus the lineups you practiced in training (their keys) and the photos taken."""
+    """What Live gets for a map: its ways, the base's lineups, the lineups you practiced in training (their keys), the
+    boosts you trained and the photos taken."""
     M = load_map(mp)
     if not M:
         return {}
-    out = dict(M)
+    out = {k: v for k, v in M.items() if k not in ("util_dt", "ct_util_t")}   # 07/10's lists, unused since 08/10
     out["mid_name"] = mid_name(mp)
+    out["lineups"] = lineups_page(mp)
     try:
         import train
         items = train.progress().get("items") or {}
