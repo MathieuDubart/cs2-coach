@@ -480,7 +480,9 @@ async function renderSettings(){
   <article class="card"><h3>Game detection ${ok(gs&&gs.installed)}</h3>
    <p>CS2 sends the app the map, your side, the round, the score, your money and your grenades: the "In game" page follows your match on its own and gives the right advice at the right time (buys during freeze time, bomb planted, end of round).</p>
    <p class="note">This is Valve's Game State Integration, the official feature used by HUDs and RGB keyboards. During a match, CS2 only sends your own info, never the enemies'.${gs&&gs.path?` File: <code>${esc(gs.path)}</code>.`:""}${gs&&gs.installed?(gs.receiving?" CS2 is sending its data.":" Restart CS2 so it picks it up."):""}</p>
-   <div class="btns">${gs&&gs.installed?`<button type="button" id="gsi-off">Turn detection off</button>`:`<button type="button" class="primary" id="gsi-on" ${gs&&gs.cfg_dir?"":"disabled"}>Turn detection on</button>`}${gs&&!gs.cfg_dir?`<span class="note">CS2 folder not found on this PC.</span>`:""}</div></article>
+   <div class="btns">${gs&&gs.installed?`<button type="button" id="gsi-off">Turn detection off</button>`:`<button type="button" class="primary" id="gsi-on" ${gs&&gs.cfg_dir?"":"disabled"}>Turn detection on</button>`}${gs&&!gs.cfg_dir?`<span class="note">CS2 folder not found on this PC.</span>`:""}</div>
+   <div class="row"><label style="display:flex;gap:8px;align-items:center;font-size:14px"><input type="checkbox" id="o-cs2" ${!gs||gs.open_on_cs2!==false?"checked":""}> Open my In game page when CS2 starts (when no Wily page is open yet)</label></div>
+   <p class="note">CS2 lets nothing write in its lobby's chat, so I open myself instead: the page first, CS2's window comes up over it. It needs me running: I start with Windows when a shortcut to me is in your Startup folder (Win+R, shell:startup).</p></article>
   <article class="card"><h3>Your plan with the numpad (1 to 6) ${ok(cc&&cc.bound&&cc.tempo_bound)}</h3>
    <p>Numpad <b>1</b> = A, <b>2</b> = mid, <b>3</b> = B; <b>4</b> = rush, <b>5</b> = slow, <b>6</b> = map control; <b>minus</b> drops them. On T, the key says it in the team chat ("Rush A via Ramp", with CS2's own "Go A" / "Go B" of the chat wheel, the order bots follow) and tells me: Live then shows that way, its odds this round, when to be on the site and the stuff of that way, with a ping on the map. On CT, the keys only tell me: 1-2-3 where you play, 4-5-6 what the Ts do. I rewrite the lines whenever the plan changes; you press the key.</p>
    ${cc&&!cc.console?`<p class="note">I read the keys in CS2's console log (game/csgo/console.log, written when CS2 starts with <code>-condebug</code> in its launch options): not found or old.</p>`:""}
@@ -562,6 +564,7 @@ async function renderSettings(){
     catch(e){msg.textContent=e.message;b.disabled=false}};
   $("#st-sync",v).onclick=async()=>{msg.textContent="";try{await api("/api/steam/sync",{sid});poll()}catch(e){msg.textContent=e.message}};
   const au=$("#st-auto",v);if(au)au.onchange=async()=>{try{await api("/api/steam/options",{sid,auto_sync:au.checked})}catch(e){msg.textContent=e.message}};
+  const oc=$("#o-cs2",v);if(oc)oc.onchange=async()=>{try{await api("/api/app/options",{open_on_cs2:oc.checked})}catch(e){}};
   $$("[data-theme-set]",v).forEach(b=>b.onclick=()=>{store("theme",b.dataset.themeSet);applyTheme(b.dataset.themeSet);$$("[data-theme-set]",v).forEach(x=>x.setAttribute("aria-pressed",x===b))});
   wireUpdate(v);wireShare(v);wireReports(v);wireUsage(v);
   const grb=$("#gr-go",v);if(grb)grb.onclick=async()=>{grb.disabled=true;try{await api(gr.on?"/api/grow/stop":"/api/grow/start",{target:+($("#gr-n",v)||{}).value||gr.target})}catch(e){}renderSettings()};

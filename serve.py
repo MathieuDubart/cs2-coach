@@ -253,6 +253,7 @@ class Handler(BaseHTTPRequestHandler):
             return self.send(200, account())
         if u.path == "/api/gsi/state":
             import gsi
+            PAGE["seen"] = time.time()   # the In game page asks a few times a second: a Wily page is open
             s = gsi.state()
             try:
                 import voice
@@ -268,7 +269,7 @@ class Handler(BaseHTTPRequestHandler):
             return self.send(200, {"keys": dict(sorted(gsi.RAW["keys"].items())), "samples": gsi.RAW["samples"]})
         if u.path == "/api/gsi/status":
             import gsi
-            return self.send(200, gsi.status())
+            return self.send(200, gsi.status() | {"open_on_cs2": bool(config.settings().get("open_on_cs2", True))})
         if u.path == "/api/train/status":   # installed, installing, running (Prepare's warm-up asks before offering it)
             import replay
             return self.send(200, replay.status())
@@ -643,6 +644,12 @@ class Handler(BaseHTTPRequestHandler):
             threading.Thread(target=run_job, args=("re-analysis of the match", lambda: cs2coach.reanalyze_match(sid, mid)),
                              kwargs={"extra": {"view": "matches", "match": mid}}, daemon=True).start()
             return self.send(200, {"started": True})
+        if u.path == "/api/app/options":   # Settings' switches of the app itself
+            s = config.settings()
+            if "open_on_cs2" in body:
+                s["open_on_cs2"] = bool(body["open_on_cs2"])
+            config.save_settings(s)
+            return self.send(200, {"ok": True, "open_on_cs2": bool(s.get("open_on_cs2", True))})
         if u.path in ("/api/gsi/install", "/api/gsi/uninstall"):
             import gsi
             try:
@@ -782,6 +789,31 @@ def voice_status():
                      "on": voice.TEAM.running(), "pending": bool(voice.TEAM.pending)}}
 
 
+PAGE = {"seen": 0.0}   # the last time a Wily page asked for the game's state
+
+
+def cs2_page_watch():
+    """CS2 starts and no Wily page is open: Wily opens its In game page (07/10, the user: the reminder "lance Wily" at
+    CS2's start, "dans le chat du lobby": CS2 lets nothing write in its lobby's chat, neither a config nor a command, and
+    Wily already starts with Windows: it opens itself instead). At the game's start, before its window: CS2 comes up over
+    the browser, never a window over a game already running. Settings: "open_on_cs2" (on unless turned off)."""
+    try:
+        import psutil
+    except ImportError:
+        return
+    was = None
+    while True:
+        try:
+            on = any((p.info.get("name") or "").lower() == "cs2.exe" for p in psutil.process_iter(["name"]))
+        except Exception:
+            on = was
+        if on and was is False and time.time() - PAGE["seen"] > 20 and config.settings().get("open_on_cs2", True):
+            print("CS2 starts, no Wily page open: the In game page", flush=True)
+            webbrowser.open(f"http://127.0.0.1:{PORT}/#ingame")
+        was = on
+        time.sleep(3)
+
+
 def voice_watch(every=15):
     """Stops an automatic recording when the game is gone, refreshes the plan once a transcription is done, and
     transcribes again the recordings a match stopped, one by one, while no map is loaded."""
@@ -850,6 +882,8 @@ if __name__ == "__main__":
         sys.exit(0)
     url = f"http://127.0.0.1:{PORT}/#ingame"
     print(f"Wily: {url}  (Ctrl+C to stop)")
+    if not os.environ.get("COACH_TEST"):
+        threading.Thread(target=cs2_page_watch, daemon=True).start()
     if os.environ.get("COACH_TEST"):  # a test copy: leaves the game's settings, the Steam sync and the microphone alone
         print("test copy: game detection, sync and microphone left to the main app")
     else:
