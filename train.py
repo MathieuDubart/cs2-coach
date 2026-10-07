@@ -895,7 +895,7 @@ def practice_drills(sid, mp):
             k = len(posts)
             Q = np.array(h["seen"], float).reshape(-1, 3)   # turned to where its foes stood
             ang = _angle([h["pos"][0], h["pos"][1], h["pos"][2] + 64], np.median(Q, axis=0) + [0, 0, 56]) if len(Q) else h["ang"]
-            posts.append({"pos": h["pos"], "ang": ang, "zone": _post_name(mp, h), "poly": zone_outline(mp, h["zone"], h["pos"]), "t": h.get("t")})
+            posts.append({"pos": h["pos"], "ang": ang, "zone": _post_name(mp, h, letter), "poly": zone_outline(mp, h["zone"], h["pos"]), "t": h.get("t")})
             tracks += [dict(t, post=k) for t in tr]
             if len(posts) >= 2:
                 break
@@ -923,10 +923,12 @@ def practice_drills(sid, mp):
 POST_NAMES = [("de_overpass", -2238.6, -603.1, 260, "Toilets")]
 
 
-def _post_name(mp, h):
+def _post_name(mp, h, letter=""):
     for m, x, y, r, nm in POST_NAMES:
         if m == mp and math.hypot(h["pos"][0] - x, h["pos"][1] - y) < r:
             return nm
+    if letter and h["zone"] in ("Short", "Long", "Ramp", "Main", "Lobby"):   # "Short" of the A site: "Short A"
+        return f"{h['zone']} {letter}"
     return h["zone"]
 
 
@@ -1593,6 +1595,9 @@ def wallbang_drills(sid, mp):
     import wallbangs
     out = []
     for w in wallbangs.load(mp)[:10]:
+        ws = w.get("weapons") or {}
+        if ws and max(ws.values()) < 50:   # 07/10, Mid → Kaffee "c'est nul comme wallbang": 3 kills by an AK, a Negev and a shotgun, sprays
+            continue
         team = 2 if w["side"] == "T" else 3
         wp = next((WB_WEAPON[k] for k in (w.get("weapons") or {}) if k in WB_WEAPON), RIFLE[team])
         name = {v: k for k, v in WB_WEAPON.items()}.get(wp, "rifle").replace("_silencer", "-S").upper()
@@ -1600,7 +1605,7 @@ def wallbang_drills(sid, mp):
         if not vic:
             continue
         out.append({"id": f"wallbang:{mp}:{w['side']}:{w.get('from_key')}>{w.get('to_key')}", "kind": "aim", "map": mp,
-                    "title": f"WALLBANG {w['from']} → {w['to']} ({w['side']})",
+                    "title": f"WALLBANG {w['from']} → {w['to']} ({w['side']}{', AWP line' if wp in ('weapon_awp', 'weapon_ssg08') else ''})",
                     "tip": f"through the wall with the {name}: {w['n']} kills from here in my base, {round(100 * w.get('wall', 1))}% through the wall · they stand still behind it, they don't shoot · a few bullets where they stand",
                     "team": team, "me": {"pos": w["pos"], "ang": _angle(w["pos"], vic[0])}, "weapons": ["weapon_knife", wp],
                     "bot_weapons": ["weapon_knife", RIFLE[5 - team]],
