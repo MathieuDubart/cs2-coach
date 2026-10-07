@@ -975,7 +975,7 @@ const D=__DATA__;
 if(D.local){const f0=window.fetch.bind(window);window.fetch=(u,o)=>f0(typeof u==="string"&&!/^(\/|[a-z]+:)/i.test(u)?"/"+u:u,o)}
 const $=(s,r=document)=>r.querySelector(s), $$=(s,r=document)=>[...r.querySelectorAll(s)];
 const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
-const MAPN=m=>{if(m==="aim_map")return"Aim map";if(m==="ar_pool_day")return"Aim · Pool Day";   // the warm-up's aim range (07/10)
+const MAPN=m=>{if(m==="aim_map")return"Aim map";if(m==="aim_botz")return"Aim Botz";if(m==="ar_pool_day")return"Aim · Pool Day";   // the warm-up's aim range (07/10)
   return m.replace(/^(de|cs|ar)_/,"").split("_").map(w=>w.charAt(0).toUpperCase()+w.slice(1)).join(" ")};
 const fmtDate=t=>t?new Date(t).toLocaleString("en-US",{weekday:"short",day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"}):"—";
 const f1=v=>v==null?"—":String(v);

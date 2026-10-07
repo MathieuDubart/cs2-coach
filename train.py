@@ -228,7 +228,16 @@ def aim_drills(sid, mp):
 # without Valve's signature: the game refuses it from a server ("Signature failed for ...aim_map.vpk", then back to the
 # menu at SIGNONSTATE_PRESPAWN; 06/10 19:57 and 07/10 11:31). Pool Day (Arms Race, signed): 16 enabled spawns a side on
 # one level, 600-1,300 u across the pool, a duel's distance; the plugin drops a spot of theirs you can't see
-AIM_MAP = "ar_pool_day"
+AIM_FALLBACK = "ar_pool_day"
+
+
+def aim_map():
+    """07/10, the user: "j'irai récupérer une nouvelle carte d'aim ... je te donnerai le lien Steam": Aim Botz (Steam
+    Workshop 3070244462) when the game has it (the player subscribed), else Pool Day."""
+    return "aim_botz" if replay.client_workshop(replay.WORKSHOP["aim_botz"]) else AIM_FALLBACK
+
+
+AIM_MAP = AIM_FALLBACK   # the fallback; the session asks aim_map()
 
 
 def _my_guns(sid):
@@ -259,6 +268,8 @@ def aim_range_drills(sid, secs):
     ones, then duels that shoot back only after a player's reaction time; your guns. As many as the block's time holds."""
     tr, cr, pi = _my_guns(sid)
     w = lambda n: replay._item(n) or "weapon_ak47"
+    mp = aim_map()
+    team = 3 if mp == "aim_botz" else 2   # Aim Botz: you on its CT spawn in the middle, the targets on its T spawns
     menu = [
         {"variant": "flick", "gun": tr, "secs": 60, "count": 3, "goal": 25,
          "tip": "still targets across the map: flick to the head, one bullet · they don't shoot"},
@@ -274,8 +285,8 @@ def aim_range_drills(sid, secs):
         m = menu[k % len(menu)]
         k += 1
         name = {"flick": "FLICKS", "strafe": "STRAFE", "duel": "DUELS"}[m["variant"]]
-        out.append({"id": f"range:{m['variant']}:{m['gun']}", "kind": "aim", "mode": "range", "variant": m["variant"], "map": AIM_MAP,
-                    "title": f"{name} · {m['gun']}", "tip": m["tip"], "team": 2,
+        out.append({"id": f"range:{m['variant']}:{m['gun']}", "kind": "aim", "mode": "range", "variant": m["variant"], "map": mp,
+                    "title": f"{name} · {m['gun']}", "tip": m["tip"], "team": team,
                     "weapons": ["weapon_knife", w(m["gun"])] if m["gun"] == pi else ["weapon_knife", "weapon_glock", w(m["gun"])],
                     "bot_weapons": ["weapon_knife", RIFLE[3]], "seconds": m["secs"], "count": m["count"], "goal": m["goal"],
                     "clock": m["secs"]})
@@ -1471,7 +1482,7 @@ def build(sid, minutes=20, where="random", difficulty=2):
     blocks, todo = [], []
     if split.get("aim"):   # the aim first, on the aim map, for all the maps' share (06/10)
         secs = minutes * 60 * split["aim"]
-        blocks.append({"map": AIM_MAP, "kind": "aim", "seconds": int(secs), "drills": aim_range_drills(sid, secs)})
+        blocks.append({"map": aim_map(), "kind": "aim", "seconds": int(secs), "drills": aim_range_drills(sid, secs)})
     for mp in chosen:
         pr = practice_drills(sid, mp)
         fns = {"defend": lambda s_, m_: [d for d in pr if d.get("mode") == "defend"],
@@ -1558,7 +1569,7 @@ def preview(sid, minutes=20, where="random"):
     split, out = splits(minutes), []
     per_map = minutes * 60 / len(chosen)
     if split.get("aim"):   # the aim first, on the aim map (06/10)
-        out.append({"map": AIM_MAP, "kind": "aim", "seconds": int(minutes * 60 * split["aim"])})
+        out.append({"map": aim_map(), "kind": "aim", "seconds": int(minutes * 60 * split["aim"])})
     for mp in chosen:
         share = {k: v for k, v in split.items() if k != "aim"}
         if mp.startswith("cs_"):
@@ -1787,7 +1798,7 @@ def play(sid, minutes=20, where="random", difficulty=2):
 
 def _play(sid, minutes, where, difficulty):
     import threading
-    first = AIM_MAP if splits(minutes).get("aim") else next((m for m in str(where).split(",") if m in maps(sid)), None)
+    first = aim_map() if splits(minutes).get("aim") else next((m for m in str(where).split(",") if m in maps(sid)), None)
     if not _game_running():   # CS2 comes up while the session is built (its menu is needed before a connect)
         _launch_game()
     pre = threading.Thread(target=lambda: _quiet_start(first), daemon=True) if first else None

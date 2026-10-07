@@ -154,7 +154,30 @@ public partial class CoachReplay
         });
     }
 
-    static string MapName(string m) { var n = m.Replace("de_", "").Replace("cs_", ""); return n.Length > 0 ? char.ToUpper(n[0]) + n[1..] : m; }
+    static string MapName(string m)
+    {
+        if (m == "aim_botz") return "Aim Botz";
+        var n = m.Replace("de_", "").Replace("cs_", "").Replace("ar_", "");
+        return string.Join(" ", n.Split('_', StringSplitOptions.RemoveEmptyEntries).Select(w => char.ToUpper(w[0]) + w[1..]));
+    }
+
+    // 07/10, the user's pick for the aim block: Aim Botz (Steam Workshop), loaded by its id. Its own config (run at its
+    // load) sets 123 things for its own play: undone before any other map, and the ones that matter undone by each Setup
+    public static readonly Dictionary<string, string> Workshop = new() { ["aim_botz"] = "3070244462" };
+    static readonly string[] AfterWorkshop = {
+        "game_type 0", "game_mode 1", "sv_cheats 0", "sv_infinite_ammo 0", "bot_all_weapons", "bot_join_team any", "bot_join_delay 0",
+        "mp_humanteam any", "mp_allowspectators 1", "mp_respawn_on_death_ct 0", "mp_respawn_on_death_t 0", "weapon_auto_cleanup_time 0",
+        "weapon_max_before_cleanup 0", "mp_ct_default_primary \"\"", "mp_ct_default_secondary weapon_hkp2000", "mp_t_default_primary \"\"",
+        "mp_t_default_secondary weapon_glock", "mp_t_default_melee weapon_knife", "mp_free_armor 0", "mp_max_armor 2", "mp_buy_anywhere 0",
+        "mp_startmoney 800", "sv_autobuyammo 0", "sv_buy_status_override -1", "mp_weapons_allow_heavyassaultsuit 0", "mp_drop_knife_enable 0",
+        "mp_disconnect_kills_players 0", "mp_force_pick_time 15", "spec_freeze_time 3", "bot_quota 0", "bot_kick" };
+
+    void ChangeMap(string map)
+    {
+        if (Workshop.ContainsKey(Server.MapName) && !Workshop.ContainsKey(map))
+            foreach (var c in AfterWorkshop) Server.ExecuteCommand(c);
+        Server.ExecuteCommand(Workshop.TryGetValue(map, out var id) ? $"host_workshop_map {id}" : $"changelevel {map}");
+    }
 
     // the screen: the drill's line stays all the time (sent again every 0.4 s), an event shows above it for a few seconds
     string hudMain = "", hudFlash = "";
@@ -446,7 +469,7 @@ public partial class CoachReplay
         if (sess == null || !Humans().Any()) return;
         if (blockIdx < 0) { Welcome(); AddTimer(4f, NextBlock); return; }
         var b = sess.Blocks[blockIdx];
-        if (Server.MapName != b.Map) { Server.ExecuteCommand($"changelevel {b.Map}"); return; }
+        if (Server.MapName != b.Map) { ChangeMap(b.Map); return; }
         if (drill != null) RunDrill(drill); else NextDrill();
     }
 
@@ -464,7 +487,7 @@ public partial class CoachReplay
         {
             phase = "setup"; cur = null;
             Html($"<font color='#e0a030'>NEXT MAP</font><br><font class='fontSize-l'>{MapName(b.Map)}</font>", 4);
-            AddTimer(2f, () => Server.ExecuteCommand($"changelevel {b.Map}"));
+            AddTimer(2f, () => ChangeMap(b.Map));
             return;
         }
         NextDrill();
@@ -507,7 +530,8 @@ public partial class CoachReplay
         // the targets that must stay still idle: a prefire's, a wallbang's, the aim map's flicks and strafers (06/10)
         Zombie(d.Kind == "aim" && (d.Mode == "prefire" || d.Id.StartsWith("wallbang") || d.Id.StartsWith("boost") || (d.Mode == "range" && d.Variant != "duel")));
         DontShoot(d.Rush);   // a rush's runners run their way like a situation's players (driven, not idle), and never fire
-        Ammo(d.Mode == "range");
+        BotStop(false);   // Aim Botz's config stops them (07/10)
+        Ammo(d.Kind == "aim");   // 07/10: "chargeur infini dans le sens où ... il faut que je recharge": the reserve never ends
         Intro(d);
         Setup();
     }
@@ -577,19 +601,30 @@ public partial class CoachReplay
     Scenario RangeScenario(Drill d)
     {
         var s = new Scenario { Id = d.Id, Map = d.Map, Kind = "aim", Title = d.Title, Team = d.Team, Clock = d.Clock };
-        List<Vector3> Of(string cls)
+        List<(Vector3 p, float yaw)> Of(string cls)
         {   // the spawns the game uses (some maps hold a disabled second set)
             var all = Utilities.FindAllEntitiesByDesignerName<SpawnPoint>(cls).Where(e => e.AbsOrigin != null).ToList();
             var on = all.Where(e => e.Enabled).ToList();
-            return (on.Count > 0 ? on : all).Select(e => new Vector3(e.AbsOrigin!.X, e.AbsOrigin.Y, e.AbsOrigin.Z)).ToList();
+            return (on.Count > 0 ? on : all).Select(e => (new Vector3(e.AbsOrigin!.X, e.AbsOrigin.Y, e.AbsOrigin.Z), e.AbsRotation?.Y ?? 0f)).ToList();
         }
-        var mine = Of(d.Team == 2 ? "info_player_terrorist" : "info_player_counterterrorist");
-        rangeTheirs = Of(d.Team == 2 ? "info_player_counterterrorist" : "info_player_terrorist");
+        var mineY = Of(d.Team == 2 ? "info_player_terrorist" : "info_player_counterterrorist");
+        var theirsY = Of(d.Team == 2 ? "info_player_counterterrorist" : "info_player_terrorist");
+        var mine = mineY.Select(x => x.p).ToList();
+        rangeTheirs = theirsY.Select(x => x.p).ToList();
         if (d.Map != rangeMap) { rangeBlind.Clear(); rangeMap = d.Map; }
         rangeSeenAt.Clear(); rangeSpots = false;
         var mid = mine.Count > 0 ? new Vector3(mine.Average(p => p.X), mine.Average(p => p.Y), mine.Average(p => p.Z)) : Vector3.Zero;
         var me = mine.Count > 0 ? mine.OrderBy(p => Vector3.Distance(p, mid)).First() : Vector3.Zero;
         var far = rangeTheirs.Count > 0 ? new Vector3(rangeTheirs.Average(p => p.X), rangeTheirs.Average(p => p.Y), rangeTheirs.Average(p => p.Z)) : me + new Vector3(1000, 0, 0);
+        var flat = new Vector2(far.X - me.X, far.Y - me.Y).Length();
+        var face = flat > 200 ? YawTo(me, far) : mineY.FirstOrDefault(x => Vector3.Distance(x.p, me) < 1f).yaw;   // around you: the map's own way
+        if (flat <= 200) far = me + new Vector3(1000 * MathF.Cos(face * MathF.PI / 180), 1000 * MathF.Sin(face * MathF.PI / 180), 0);
+        float Off(Vector3 p) => MathF.Abs(((YawTo(me, p) - face) % 360 + 540) % 360 - 180);
+        foreach (var cone in d.Variant == "duel" ? new[] { 60f, 90f, 120f, 180f } : new[] { 80f, 100f, 130f, 180f })
+        {   // a duel's shooters in front only; enough spots to change places
+            var front = rangeTheirs.Where(p => Off(p) <= cone).ToList();
+            if (front.Count >= 8 || cone >= 180f) { rangeTheirs = front; break; }
+        }
         s.Players.Add(new Track { Sid = "me", Name = "you", Team = d.Team, Me = true, Hp = 100, Armor = 100, Helmet = true, Weapons = d.Weapons,
             Active = d.Weapons.LastOrDefault(), Path = new[] { me.X, me.Y, me.Z, YawTo(me, far), 0f } });
         var order = rangeTheirs.Where((p, i) => !rangeBlind.Contains(i)).OrderBy(_ => Rng.Next()).ToList();
@@ -858,8 +893,13 @@ public partial class CoachReplay
                 float a0 = i * MathF.PI / 8, a1 = (i + 1) * MathF.PI / 8;
                 Beam(at + new Vector3(40 * MathF.Cos(a0), 40 * MathF.Sin(a0), 4), at + new Vector3(40 * MathF.Cos(a1), 40 * MathF.Sin(a1), 4), green, 2.5f);
             }
+        var meT = cur.Players.FirstOrDefault(t => t.Me);
         foreach (var h in Humans())
-            if (h.PawnIsAlive && h.PlayerPawn.Value is { } pw) pw.Teleport(at, new Vector3(0, p.Ang[1], 0), Vector3.Zero);
+            if (h.PawnIsAlive && h.PlayerPawn.Value is { } pw)
+            {
+                pw.Teleport(at, new Vector3(0, p.Ang[1], 0), Vector3.Zero);
+                if (meT != null) Loadout(h, meT, 100);
+            }
         Html($"<font color='#4fc3a1'>HOLD {p.Zone}</font> · {ph + 1}/{drill.Posts.Count}, then free", 3);
     }
 

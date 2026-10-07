@@ -369,7 +369,7 @@ public partial class CoachReplay : BasePlugin
         if (c.ArgCount > 2 && (c.GetArg(2) == "spec" || c.GetArg(2) == "actor")) mode = c.GetArg(2);
         if (c.ArgCount > 3 && int.TryParse(c.GetArg(3), out var d)) difficulty = Math.Clamp(d, 0, 3);
         cur = s;
-        if (Server.MapName != s.Map) { phase = "setup"; Server.ExecuteCommand($"changelevel {s.Map}"); return; }
+        if (Server.MapName != s.Map) { phase = "setup"; ChangeMap(s.Map); return; }
         Setup();
     }
 
@@ -416,6 +416,9 @@ public partial class CoachReplay : BasePlugin
                      "mp_randomspawn 0", "bot_quota_mode normal", $"mp_solid_teammates {(drill?.Id.StartsWith("boost") == true ? 1 : 0)}",   // no teammate's path blocks yours (04/10); a boost: you stand on one
                      "mp_playercashawards 0", "mp_teamcashawards 0",
                      "bot_join_after_player 0", "bot_chatter off", "sv_hibernate_when_empty 0", "sv_falldamage_scale 0",
+                     // Aim Botz's own config (07/10): respawns, knives, a team for bots and you, the ground cleaned in 3 s
+                     "mp_respawn_on_death_ct 0", "mp_respawn_on_death_t 0", "bot_all_weapons", "bot_join_team any", "mp_humanteam any",
+                     "weapon_auto_cleanup_time 0", "weapon_max_before_cleanup 0", "mp_free_armor 0", "mp_buy_anywhere 0",
                      $"bot_difficulty {diff}", "bot_quota 0", "bot_kick" })   // quota 0 first: kicked with the last drill's quota (10), the game added 10 of its own and a prefire got none (06/10)
             Server.ExecuteCommand(cmd);
         var want = cur.Players.Where(t => !t.Me || mode == "spec").ToList();
@@ -568,6 +571,25 @@ public partial class CoachReplay : BasePlugin
     static void Zombie(bool on)
     {
         try { ConVar.Find("bot_zombie")?.SetValue(on); } catch (Exception) { }
+    }
+
+    static void BotStop(bool on)
+    {
+        try { ConVar.Find("bot_stop")?.SetValue(on); } catch (Exception) { }
+    }
+
+    // a kill in an aim drill: the magazine full again, like on aim maps (07/10: "à chaque fois que je tue quelqu'un, je
+    // redeviens full chargeur"); never a sniper's ("au sniper les balles c'est important")
+    static readonly HashSet<string> Snipers = new() { "weapon_awp", "weapon_ssg08", "weapon_g3sg1", "weapon_scar20" };
+
+    static void FullMag(CCSPlayerController h)
+    {
+        var w = h.PlayerPawn.Value?.WeaponServices?.ActiveWeapon.Value;
+        if (w == null || !w.IsValid || Snipers.Contains(w.DesignerName)) return;
+        var max = w.VData?.MaxClip1 ?? 0;
+        if (max <= 0 || w.Clip1 >= max) return;
+        w.Clip1 = max;
+        Utilities.SetStateChanged(w, "CBasePlayerWeapon", "m_iClip1");
     }
 
     // the game's bots never fire (bot_dont_shoot, a cheat setting set the same way): a timing smoke's runners (07/10)
@@ -1008,6 +1030,8 @@ public partial class CoachReplay : BasePlugin
         if (v != null && v.IsValid && bots.TryGetValue(v.Slot, out var t)) gone.Add(t.Sid);
         Logger.LogInformation("death {f}/{s}: {v} by {a} ({w})", (Server.TickCount - t0) / cur.Step, cur.Id, v?.PlayerName, e.Attacker?.PlayerName, e.Weapon);
         if (e.Attacker is { IsValid: true, IsBot: false } && v != null && v.IsBot) kills++;
+        if (drill?.Kind == "aim" && e.Attacker is { IsValid: true, IsBot: false } killer && v is { IsBot: true })
+            AddTimer(0.05f, () => { if (killer.IsValid) FullMag(killer); });
         if (humanDead && v != null && v.IsValid && v.Slot == tradeKiller && Server.TickCount <= tradeUntil) traded = true;   // your killer died right after: traded
         if (cur.Kind is "death" or "clutch" && v is { IsValid: true, IsBot: true } && bots.TryGetValue(v.Slot, out var tv) && tv.Team == cur.Team
             && v.PlayerPawn.Value?.AbsOrigin is { } dp)

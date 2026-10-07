@@ -469,6 +469,61 @@ def _update():
 
 INSTALL = {"running": False, "log": None, "error": None}
 JOIN = {}   # the game's last way to the server (train._connect): joining, loading, in, refused or failed, and why
+# 07/10: Aim Botz (the user's pick, Steam Workshop) for the aim block: the server loads it by its id. The game mounts the
+# player's own subscribed copy (a Workshop addon needs no Valve signature, unlike aim_map's old file)
+WORKSHOP = {"aim_botz": "3070244462"}
+WORKSHOP_BASE = "ar_pool_day"   # the map the server starts on before loading a Workshop one
+# what its own config sets, undone before another map (the plugin does the same when a session moves on)
+AFTER_WORKSHOP = ["game_type 0", "game_mode 1", "sv_cheats 0", "sv_infinite_ammo 0", "bot_all_weapons", "bot_join_team any",
+                  "mp_humanteam any", "mp_respawn_on_death_ct 0", "mp_respawn_on_death_t 0", "weapon_auto_cleanup_time 0",
+                  "weapon_max_before_cleanup 0", "mp_free_armor 0", "mp_buy_anywhere 0", "bot_quota 0", "bot_kick"]
+
+
+def client_workshop(wid):
+    """The player's subscribed copy of a Workshop item (its folder in the game's library), or None."""
+    try:
+        lib = os.path.dirname(os.path.dirname(config.cs2_dir()))   # ...\steamapps
+        d = os.path.join(lib, "workshop", "content", "730", str(wid))
+        return d if os.path.isdir(d) and any(f.endswith("_dir.vpk") or f.endswith(".vpk") for f in os.listdir(d)) else None
+    except Exception:
+        return None
+
+
+def _seed_workshop(wid):
+    """The server's copy of a Workshop item from the player's (no download): its files and its line in the server's
+    workshop manifest. Without the player's copy the server downloads it itself at host_workshop_map."""
+    src = client_workshop(wid)
+    if not src:
+        return False
+    root = os.path.dirname(os.path.dirname(os.path.dirname(CSGO)))   # E:\CS2Server (game\csgo -> root)
+    dst = os.path.join(root, "steamapps", "workshop", "content", "730", str(wid))
+    os.makedirs(dst, exist_ok=True)
+    for f in os.listdir(src):
+        a, b = os.path.join(src, f), os.path.join(dst, f)
+        if os.path.isfile(a) and (not os.path.exists(b) or os.path.getsize(b) != os.path.getsize(a)):
+            shutil.copy2(a, b)   # a copy, not a link: the server's updates never touch the player's files
+    acf = os.path.join(root, "steamapps", "workshop", "appworkshop_730.acf")
+    item = {"size": "0", "timeupdated": "0", "manifest": "0"}
+    try:
+        t = open(os.path.join(os.path.dirname(os.path.dirname(src)), "..", "appworkshop_730.acf"), encoding="utf-8", errors="replace").read()
+        import re
+        m = re.search(r'"%s"\s*\{([^}]*)\}' % wid, t)
+        if m:
+            for k in item:
+                v = re.search(r'"%s"\s*"([^"]*)"' % k, m.group(1))
+                if v:
+                    item[k] = v.group(1)
+    except OSError:
+        pass
+    if not os.path.exists(acf) or f'"{wid}"' not in open(acf, encoding="utf-8", errors="replace").read():
+        open(acf, "w", encoding="utf-8").write(
+            '"AppWorkshop"\n{\n\t"appid"\t\t"730"\n\t"SizeOnDisk"\t\t"%s"\n\t"NeedsUpdate"\t\t"0"\n\t"NeedsDownload"\t\t"0"\n'
+            '\t"TimeLastUpdated"\t\t"0"\n\t"TimeLastAppRan"\t\t"0"\n\t"LastBuildID"\t\t"0"\n'
+            '\t"WorkshopItemsInstalled"\n\t{\n\t\t"%s"\n\t\t{\n\t\t\t"size"\t\t"%s"\n\t\t\t"timeupdated"\t\t"%s"\n\t\t\t"manifest"\t\t"%s"\n\t\t}\n\t}\n'
+            '\t"WorkshopItemDetails"\n\t{\n\t\t"%s"\n\t\t{\n\t\t\t"manifest"\t\t"%s"\n\t\t\t"timeupdated"\t\t"%s"\n\t\t\t"timetouched"\t\t"0"\n'
+            '\t\t\t"latest_timeupdated"\t\t"%s"\n\t\t\t"latest_manifest"\t\t"%s"\n\t\t}\n\t}\n}\n'
+            % (item["size"], wid, item["size"], item["timeupdated"], item["manifest"], wid, item["manifest"], item["timeupdated"], item["timeupdated"], item["manifest"]))
+    return True
 
 
 def install():
@@ -562,16 +617,25 @@ def start(mp):
     if not installed():
         raise RuntimeError("The training server is not installed yet: install it from the Prepare page")
     s = _state()
+    wid = WORKSHOP.get(mp)
+    if wid:
+        _seed_workshop(wid)
     if _pid_alive(s.get("pid")):
         if s.get("map") != mp:
-            rcon(f"changelevel {mp}")
+            if s.get("map") in WORKSHOP and not wid:
+                for c in AFTER_WORKSHOP:
+                    rcon(c)
+            rcon(f"host_workshop_map {wid}" if wid else f"changelevel {mp}")
             s["map"] = mp
             _save_state(s)
             time.sleep(8)
+            if wid:
+                _wait_map(mp)
         return status()
     _update()
     args = [EXE, "-dedicated", "-usercon", "-ip", "127.0.0.1", "-port", str(PORT), "-condebug", "-nohltv",
-            "+sv_lan", "1", "+rcon_password", _password(), "+game_type", "0", "+game_mode", "1", "+map", mp]
+            "+sv_lan", "1", "+rcon_password", _password(), "+game_type", "0", "+game_mode", "1",
+            "+map", WORKSHOP_BASE if wid else mp]   # a Workshop map only once the server runs: given at launch it is ignored (07/10)
     si = subprocess.STARTUPINFO()   # its own console, hidden: without one the server logs a console error every frame
     si.dwFlags |= subprocess.STARTF_USESHOWWINDOW
     si.wShowWindow = 0   # SW_HIDE: never shown, never takes the focus
@@ -590,10 +654,25 @@ def start(mp):
         _hide_console(pr.pid)   # shown again while the server starts: hidden again
         h = heartbeat()
         if h and (h.get("t") or 0) > s["started"]:
+            if wid:   # up on the base map: now the Workshop one
+                rcon(f"host_workshop_map {wid}")
+                _wait_map(mp)
             return status()
         if pr.poll() is not None:
             raise RuntimeError("the training server stopped while starting")
     raise RuntimeError("the training server did not start in 120 s")
+
+
+def _wait_map(mp, secs=90):
+    """The plugin's heartbeat on that map (a Workshop map loads in 20-30 s)."""
+    t0 = time.time()
+    while time.time() - t0 < secs:
+        time.sleep(1)
+        h = heartbeat() or {}
+        if h.get("map") == mp and (h.get("t") or 0) > t0:
+            return True
+    print("training server: still not on", mp, "after", secs, "s", flush=True)
+    return False
 
 
 def stop():
