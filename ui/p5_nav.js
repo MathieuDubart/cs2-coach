@@ -41,11 +41,14 @@ document.addEventListener("keydown",e=>{if(e.key==="Escape"){const am=$("#acctme
 // the focus of the week (focus.py: the coach's first axis, kept 7 days); a profile built before it: the first axis
 function focusOf(p){const A=p&&p.advice;if(!A)return null;const F=(A.plan||{}).focus;if(F&&F.short)return F;
   const r=(A.rules||[])[0];return r?{id:r.id,title:r.title,short:r.short||r.title,do:(r.do||[]).slice(0,2),drills:(r.drills||[]).slice(0,2),others:(A.rules||[]).slice(1,6).map(x=>({id:x.id,short:x.short||x.title}))}:null}
+// your profile in tabs (07/10, the user: "plein de liens différents qui redirigent vers plein de choses"): one row, the
+// same on each of its pages, instead of cards that each led somewhere else
+const PTABS=[["profile","Overview"],["analysis","Reads"],["midround","Mid-round"],["maps","Maps"],["progress","Weapons & buys"],["routine","Habits"]];
 function navUpdate(view){const g=GROUP[view]||view;
   $$("nav a, .gear").forEach(a=>{if(a.dataset.view===g)a.setAttribute("aria-current","page");else a.removeAttribute("aria-current")});
-  const sn=$("#subnav"),items=SUB[g];sn.hidden=!items;
-  if(items)sn.innerHTML=[...items,...(items.some(([k])=>k===view)||!VIEW_LABEL[view]?[]:[[view,VIEW_LABEL[view]]])]   // a detailed page: shown while open
-    .map(([k,t])=>`<a href="#${k}" ${k===view?'aria-current="page"':""}>${t}</a>`).join("");
+  const sn=$("#subnav"),items=SUB[g],inProf=PTABS.some(([k])=>k===view);sn.hidden=!items;
+  if(items)sn.innerHTML=`<div class="sn-row">${items.map(([k,t])=>`<a href="#${k}" ${k===view||(k==="profile"&&inProf)?'aria-current="page"':""}>${t}</a>`).join("")}</div>`
+    +(inProf?`<div class="sn-row sn-2" aria-label="Your profile">${PTABS.map(([k,t])=>`<a href="#${k}" ${k===view?'aria-current="page"':""}>${t}</a>`).join("")}</div>`:"");
   // another profile on screen: said by the views, with the way back to yours (yours: the account on the right says it)
   const w=$("#whochip"),p=S.player&&D.players[S.player],other=!!(p&&D.own&&S.player!==D.own);
   const fav=other&&D.local&&favs().includes(S.player);
@@ -65,3 +68,6 @@ function welcome(v){const own=D.own;
    <p class="note">${D.local?"I work right here on your PC (Steam open, CS2 closed so I can fetch your latest matches): a first look in seconds, your full profile in a few minutes.":"I run in the local app: double-click Wily.bat."}</p></div>`;
   const wo=$("#w-own",v);if(wo)wo.onclick=()=>{partialShown=null;startAnalysis(own)};
   $("#w-form",v).onsubmit=e=>{e.preventDefault();const q=$("#w-q",v).value.trim();if(!q)return;$("#q").value=q;$("#search").requestSubmit()}}
+
+// the bar's height for what sticks under it (a profile page has a second row)
+try{new ResizeObserver(()=>{const b=$(".bar");if(b)document.documentElement.style.setProperty("--bar-h",b.offsetHeight+"px")}).observe($(".bar"))}catch(e){}

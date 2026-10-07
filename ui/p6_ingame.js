@@ -414,7 +414,6 @@ function planColumns(p,m,R0){const {plan,good,bad,tries,timesOk,cGood,cAvoid,str
     ${exps.map(e=>`<div><b>Running experiment</b>${esc(e.title)}</div>`).join("")}
     <div><b>Session rule</b>${recs.length?esc(recs[0].text):"A 10-15 min break after a loss, stop after 2 losses in a row."}</div>
     <div><b>Economy</b>We buy together. Force only if everyone can still full buy next round ($3,700 T, $3,900 CT).</div>
-    ${D.local?`<div><b>Before the 1st game</b><a href="#prepare" style="color:var(--flash)">Prepare: warm-up, journal, map sheets</a></div>`:""}
    </div>`}}
 // T side: what to run (the plays that win on this map for your kind of round, small samples pulled toward the map's
 // average) early in the round, and the clock when no bomb is down (commit, plant, save)

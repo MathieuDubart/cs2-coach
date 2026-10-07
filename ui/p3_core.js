@@ -286,7 +286,7 @@ document.addEventListener("click",e=>{const b=e.target.closest&&e.target.closest
 // here"): the one priority of the app is the focus of the week. BRIEF_CAP collects the briefs for the Profile.
 let BRIEF_CAP=null;
 function tabBrief(o){if(BRIEF_CAP){BRIEF_CAP.push(o);return ""}
-  return "";   // 07/10: the detail pages open on their content; their brief is the Profile's card that leads to them (said once)
+  return "";   // 07/10: a tab opens on its content (a brief on top repeated what follows it: the mid-round's first card)
   const li=xs=>(xs||[]).filter(Boolean).slice(0,3).map(x=>`<li>${x}</li>`).join(""),w=li(o.works),fx=li(o.fix);
   return `<section class="brief3 brief2 tabbrief" id="${o.id||""}" aria-label="Brief">
    <article class="card b-good"><span class="eyebrow">What works here</span>${w?`<ul>${w}</ul>`:`<p class="note">${o.worksNone||"Nothing stands out above the base yet."}</p>`}</article>

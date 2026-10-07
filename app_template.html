@@ -898,6 +898,11 @@ svg.radar .ping .ping-t{font:800 15px var(--f-mono);fill:#ffd34d;paint-order:str
 .msort{margin-left:auto;align-items:center;gap:4px}.msort .note{margin-right:4px}
 .itip-b strong{font-weight:600}.itip-b b{all:revert;font-weight:600}
 .ax-more{margin-top:6px}.ax-more>summary{cursor:pointer;font:600 13px var(--f-body);color:var(--muted)}.ax-more[open]>summary{margin-bottom:6px}.ax-more .standing{margin:4px 0}
+/* the profile's tabs (07/10): a second row under Session · Profile · Matches */
+.subnav{flex-direction:column;align-items:stretch;gap:6px}
+.sn-row{display:flex;flex-wrap:wrap;gap:4px}
+.sn-2{padding-top:6px;border-top:1px solid var(--line)}
+.sn-2 a{border-radius:4px}
 </style>
 
 <div class="bar"><div class="bar-in">
@@ -1245,7 +1250,7 @@ document.addEventListener("click",e=>{const b=e.target.closest&&e.target.closest
 // here"): the one priority of the app is the focus of the week. BRIEF_CAP collects the briefs for the Profile.
 let BRIEF_CAP=null;
 function tabBrief(o){if(BRIEF_CAP){BRIEF_CAP.push(o);return ""}
-  return "";   // 07/10: the detail pages open on their content; their brief is the Profile's card that leads to them (said once)
+  return "";   // 07/10: a tab opens on its content (a brief on top repeated what follows it: the mid-round's first card)
   const li=xs=>(xs||[]).filter(Boolean).slice(0,3).map(x=>`<li>${x}</li>`).join(""),w=li(o.works),fx=li(o.fix);
   return `<section class="brief3 brief2 tabbrief" id="${o.id||""}" aria-label="Brief">
    <article class="card b-good"><span class="eyebrow">What works here</span>${w?`<ul>${w}</ul>`:`<p class="note">${o.worksNone||"Nothing stands out above the base yet."}</p>`}</article>
@@ -2476,11 +2481,14 @@ document.addEventListener("keydown",e=>{if(e.key==="Escape"){const am=$("#acctme
 // the focus of the week (focus.py: the coach's first axis, kept 7 days); a profile built before it: the first axis
 function focusOf(p){const A=p&&p.advice;if(!A)return null;const F=(A.plan||{}).focus;if(F&&F.short)return F;
   const r=(A.rules||[])[0];return r?{id:r.id,title:r.title,short:r.short||r.title,do:(r.do||[]).slice(0,2),drills:(r.drills||[]).slice(0,2),others:(A.rules||[]).slice(1,6).map(x=>({id:x.id,short:x.short||x.title}))}:null}
+// your profile in tabs (07/10, the user: "plein de liens différents qui redirigent vers plein de choses"): one row, the
+// same on each of its pages, instead of cards that each led somewhere else
+const PTABS=[["profile","Overview"],["analysis","Reads"],["midround","Mid-round"],["maps","Maps"],["progress","Weapons & buys"],["routine","Habits"]];
 function navUpdate(view){const g=GROUP[view]||view;
   $$("nav a, .gear").forEach(a=>{if(a.dataset.view===g)a.setAttribute("aria-current","page");else a.removeAttribute("aria-current")});
-  const sn=$("#subnav"),items=SUB[g];sn.hidden=!items;
-  if(items)sn.innerHTML=[...items,...(items.some(([k])=>k===view)||!VIEW_LABEL[view]?[]:[[view,VIEW_LABEL[view]]])]   // a detailed page: shown while open
-    .map(([k,t])=>`<a href="#${k}" ${k===view?'aria-current="page"':""}>${t}</a>`).join("");
+  const sn=$("#subnav"),items=SUB[g],inProf=PTABS.some(([k])=>k===view);sn.hidden=!items;
+  if(items)sn.innerHTML=`<div class="sn-row">${items.map(([k,t])=>`<a href="#${k}" ${k===view||(k==="profile"&&inProf)?'aria-current="page"':""}>${t}</a>`).join("")}</div>`
+    +(inProf?`<div class="sn-row sn-2" aria-label="Your profile">${PTABS.map(([k,t])=>`<a href="#${k}" ${k===view?'aria-current="page"':""}>${t}</a>`).join("")}</div>`:"");
   // another profile on screen: said by the views, with the way back to yours (yours: the account on the right says it)
   const w=$("#whochip"),p=S.player&&D.players[S.player],other=!!(p&&D.own&&S.player!==D.own);
   const fav=other&&D.local&&favs().includes(S.player);
@@ -2500,6 +2508,9 @@ function welcome(v){const own=D.own;
    <p class="note">${D.local?"I work right here on your PC (Steam open, CS2 closed so I can fetch your latest matches): a first look in seconds, your full profile in a few minutes.":"I run in the local app: double-click Wily.bat."}</p></div>`;
   const wo=$("#w-own",v);if(wo)wo.onclick=()=>{partialShown=null;startAnalysis(own)};
   $("#w-form",v).onsubmit=e=>{e.preventDefault();const q=$("#w-q",v).value.trim();if(!q)return;$("#q").value=q;$("#search").requestSubmit()}}
+
+// the bar's height for what sticks under it (a profile page has a second row)
+try{new ResizeObserver(()=>{const b=$(".bar");if(b)document.documentElement.style.setProperty("--bar-h",b.offsetHeight+"px")}).observe($(".bar"))}catch(e){}
 
 // ---------- view: in game (2nd screen, follows the game) ----------
 let igToastOff=null,gsiLast=null,gsiTimer=null,gsiStatus=null,igManual=false,igEv={key:null,contact:null,site:null};
@@ -2916,7 +2927,6 @@ function planColumns(p,m,R0){const {plan,good,bad,tries,timesOk,cGood,cAvoid,str
     ${exps.map(e=>`<div><b>Running experiment</b>${esc(e.title)}</div>`).join("")}
     <div><b>Session rule</b>${recs.length?esc(recs[0].text):"A 10-15 min break after a loss, stop after 2 losses in a row."}</div>
     <div><b>Economy</b>We buy together. Force only if everyone can still full buy next round ($3,700 T, $3,900 CT).</div>
-    ${D.local?`<div><b>Before the 1st game</b><a href="#prepare" style="color:var(--flash)">Prepare: warm-up, journal, map sheets</a></div>`:""}
    </div>`}}
 // T side: what to run (the plays that win on this map for your kind of round, small samples pulled toward the map's
 // average) early in the round, and the clock when no bomb is down (commit, plant, save)
@@ -4626,14 +4636,6 @@ function renderProfile(){
   const win=ms.filter(m=>m.result==="win").length,loss=ms.filter(m=>m.result==="loss").length,draw=ms.length-win-loss;
   const role=(A.archetype||{}).name||((PL.role||{}).role)||null;
   const auto=(A.rules||[]).map((r,i)=>({level:i<2?"high":"mid",title:r.title,evidence:r.why,fix:r.do,standing:r.standing,target:r.target,bench:r.bench,drills:r.drills,sources:r.sources}));
-  // each part of your game: the "works" and "costs" of its detailed page, and the way there
-  const topMaps=mapsOf(p).filter(m=>m.n>0).slice(0,2).map(m=>crossMap(p,m.map)).filter(Boolean);
-  const parts=[["analysis","My reads","your duels and reads, against the base and the pros",ms.length?briefOf(analysisBrief,p,auto):null],
-    ["midround","Mid-round decisions","rotations, executes, after the first duel",PL.mid?briefOf(midBrief,PL):null],
-    ...topMaps.map(m=>["maps",MAPN(m.map),`${m.matches} of your matches there`,briefOf(mapBrief,p,m),m.map]),
-    ["progress","Weapons, buys and trends","your weapons, your buys by kind of round, your indicators",PL.kpis||PL.weapons?briefOf(progBrief,PL):null],
-    ["routine","Habits","time of day, session length, group",PL.context?briefOf(routineBrief,PL):null]].filter(x=>x[3]);
-  const li=xs=>(xs||[]).filter(Boolean).slice(0,2).map(x=>`<li>${x}</li>`).join("");
   v.innerHTML=`<div class="head"><div style="display:grid;gap:4px"><span class="eyebrow">${esc(p.name)}${PL.level?` · ${levelLine(PL.level,true)}`:""}</span><h2>Your profile</h2></div>
     ${ms.length?`<div class="record"><span>${win}<small>wins</small></span><span>${draw}<small>draws</small></span><span>${loss}<small>losses</small></span></div>`:""}</div>
    <p class="note">What stays true over weeks${ms.length?`, from ${ms.length} analyzed matches`:""}${role?` · your role: <b>${esc(role)}</b>`:""}.</p>
@@ -4646,10 +4648,6 @@ function renderProfile(){
      <div class="ax-s"><div class="ax-bar" title="priority ${Math.round(r.score||0)}"><i style="width:${Math.round(100*(r.score||0)/mx)}%"></i></div>
       ${isF?`<span class="pill strong">focus of the week</span>`:own?`<button type="button" data-axfocus="${esc(r.id)}">Make it my focus</button>`:""}</div></article>`}).join("")}</div>`
      :`<p class="note">No axis yet: I rank them once a few of your matches are analyzed with their demo.</p>`}
-   ${parts.length?`<h3>The evidence, part by part</h3><div class="evid">${parts.map(([view,t,sub,o,mp])=>`<article class="card ev">
-     <div class="ev-h"><b>${esc(t)}</b><span class="note">${esc(sub)}</span></div>
-     ${li(o.works)?`<p class="lab good">Works</p><ul>${li(o.works)}</ul>`:""}${li(o.fix)?`<p class="lab bad">Costs</p><ul>${li(o.fix)}</ul>`:""}${o.next?`<p class="note"><b>To try:</b> ${o.next}</p>`:""}
-     <a href="#${view}" class="ev-go"${mp?` data-evmap="${esc(mp)}"`:""}>${esc(VIEW_LABEL[view]||t)} in detail →</a></article>`).join("")}</div>`:""}
    ${X?`<h3>Your tests ${itip(`You start a test and play normally: I compare your next matches with your previous 15 and give a verdict once there is enough data.${D.local?"":" Starting or ending one happens in the local app."}`)}</h3>
     ${act.length?`<div class="exps">${act.map(expCard).join("")}</div>`:`<p class="note">No test running.</p>`}
     ${sug.length?`<span class="lbl4" style="color:var(--muted)">Worth testing</span><div class="exps">${sug.slice(0,4).map(suggestCard).join("")}</div>`:""}
@@ -4660,7 +4658,7 @@ function renderProfile(){
   $$("[data-axfocus]",v).forEach(b=>b.onclick=async()=>{b.disabled=true;
     try{const j=await api("/api/focus",{sid:p.steamid,id:b.dataset.axfocus});const A_=p.advice;A_.plan=A_.plan||{};A_.plan.focus=j.focus;navUpdate(S.view);renderProfile()}
     catch(e){b.disabled=false;b.textContent=e.message}});
-  $$("[data-evmap]",v).forEach(a=>a.onclick=()=>{S.cmap=a.dataset.evmap})}
+}
 
 // ---------- data loading (profiles and radars are separate files) ----------
 D.players={};D.radars={};D.viewboxes={};
