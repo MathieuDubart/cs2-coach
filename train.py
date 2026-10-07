@@ -45,6 +45,50 @@ def splits(minutes):
         return {"aim": 0.15, "defend": 0.15, "push": 0.15, "nade": 0.15, "wallbang": 0.1, "situation": 0.3}
     return {"aim": 0.12, "defend": 0.15, "push": 0.15, "nade": 0.15, "wallbang": 0.12, "situation": 0.31}
 WARMUP = {"defend": 0.5, "push": 0.5, "aim": 1.0}
+# 07/10, the user: "si je change le temps ça change les timing de toutes les parties, certains temps enlèvent ou ajoutent
+# des trucs": the aim first (2 to 5 min), then each map's parts in that order while their least useful time fits (a
+# defense of 100 s, a prefire of 75 s...), the time left shared by weight; a map without room for both is left out
+PART_MIN = {"defend": 100, "push": 75, "nade": 80, "situation": 90, "wallbang": 60}
+PART_W = {"defend": 0.2, "push": 0.2, "nade": 0.2, "situation": 0.3, "wallbang": 0.1}
+PART_ORDER = ["defend", "push", "nade", "situation", "wallbang"]   # how parts come in as the time grows
+MAP_MIN = 175   # a map keeps a defense and a prefire at least, or it is left out
+
+
+def aim_seconds(minutes):
+    return int(min(300, max(120, minutes * 60 * 0.15)))
+
+
+def parts_for(minutes, chosen, has=lambda mp, k: True, first=None):
+    """-> (the aim's seconds, [(map, [(kind, seconds), ...]), ...]) in the session's order. has(map, kind): whether that
+    part has something there (no defense on a hostage map); first(map): the kind to put first (your weak side there)."""
+    total = int(minutes * 60)
+    aim = aim_seconds(minutes)
+    left = max(0, total - aim)
+    keep = list(chosen)
+    while len(keep) > 1 and left / len(keep) < MAP_MIN:   # too short for every map: the first ones
+        keep.pop()
+    out = []
+    for mp in keep:
+        budget = left / len(keep)
+        kinds = [k for k in PART_ORDER if has(mp, k)]
+        f = first(mp) if first else None
+        if f in kinds:
+            kinds.remove(f)
+            kinds.insert(0, f)
+        took, used = [], 0
+        for k in kinds:
+            if used + PART_MIN[k] > budget:
+                break
+            took.append(k)
+            used += PART_MIN[k]
+        if not took and kinds:   # less than any part: the first one anyway
+            took = [kinds[0]]
+            used = PART_MIN[kinds[0]]
+        w = sum(PART_W[k] for k in took) or 1.0
+        extra = max(0.0, budget - used)
+        secs = {k: PART_MIN[k] + extra * PART_W[k] / w for k in took}
+        out.append((mp, [(k, int(secs[k])) for k in ORDER if k in secs]))
+    return aim, out
 WARMUP_MIN = 5
 EST = {"defend": 110, "push": 75, "aim": 85, "nade": 40, "situation": 45, "wallbang": 60}   # seconds a drill takes, about (with a retry)
 RIFLE = {2: "weapon_ak47", 3: "weapon_m4a1"}
@@ -1681,27 +1725,28 @@ def build(sid, minutes=20, where="random", difficulty=2):
     else:
         w = np.array([mine[m] * (1 + 2 * hard[m]) for m in names], float)
         chosen = [str(np.random.choice(names, p=w / w.sum()))]
-    per_map = minutes * 60 / len(chosen)
     warm = minutes <= WARMUP_MIN   # a quick warm-up before a game: the hands only (aim, defense, prefire), no stuff, no situation
-    split = splits(minutes)
-    all_sc = [] if warm else replay.scenarios(sid, n=40)
+    first = lambda mp: next(("defend" if x["side"] == "CT" else "push" for x in S if x["map"] == mp), None)   # your weak side there first
+    aim_s, parts = parts_for(minutes, chosen, lambda mp, k: not (k in ("defend", "push") and mp.startswith("cs_")), first)
+    plan_of = dict(parts)
+    chosen = [mp for mp, _ in parts]   # a short warm-up keeps the first maps only
+    all_sc = [] if not any(k == "situation" for ps in plan_of.values() for k, _ in ps) else replay.scenarios(sid, n=40)
     blocks, todo = [], []
-    if split.get("aim"):   # the aim first, on the aim map, for all the maps' share (06/10)
-        secs = minutes * 60 * split["aim"]
-        blocks.append({"map": aim_map(), "kind": "aim", "seconds": int(secs), "drills": aim_range_drills(sid, secs)})
+    # the aim first, on the aim map, for all the maps' share (06/10)
+    blocks.append({"map": aim_map(), "kind": "aim", "seconds": aim_s, "drills": aim_range_drills(sid, aim_s)})
     for mp in chosen:
         pr = practice_drills(sid, mp)
         fns = {"defend": lambda s_, m_: [d for d in pr if d.get("mode") == "defend"],
                "push": lambda s_, m_: [d for d in pr if d.get("mode") == "prefire"], "nade": lambda s_, m_: nade_drills(s_, m_) + clip_drills(s_, m_),
                "wallbang": lambda s_, m_: wallbang_drills(s_, m_) + boost_drills(s_, m_), "situation": lambda s_, m_: situation_drills(s_, m_, all_sc)}
-        share = {k: v for k, v in split.items() if k != "aim"}
-        if not pr:   # a hostage map: no site to defend or push, the situations take their time
-            share["situation"] = share.get("situation", 0) + share.pop("defend", 0) + share.pop("push", 0)
-        kinds = [(k, fns[k]) for k in ORDER if share.get(k)]
+        secs_of = dict(plan_of.get(mp) or [])
+        if not pr:   # a hostage map with no site: the situations take the defense's and the prefire's time
+            secs_of["situation"] = secs_of.get("situation", 0) + secs_of.pop("defend", 0) + secs_of.pop("push", 0)
+        kinds = [(k, fns[k]) for k in ORDER if secs_of.get(k)]
         bad = {(m_, r_) for x in S if x["map"] == mp for m_, r_ in x["rounds"]}   # the rounds you struggled in
         spare = 0.0   # a part with nothing to train on this map gives its time to the next ones
         for kind, fn in kinds:
-            secs = per_map * share[kind] + spare
+            secs = secs_of[kind] + spare
             cands = fn(sid, mp)
             if not cands:
                 spare = secs
@@ -1772,24 +1817,21 @@ def preview(sid, minutes=20, where="random"):
     sid = str(sid)
     mine = maps(sid) if sid.isdigit() else {}
     chosen = [m for m in str(where).split(",") if m in mine][:3] or [where if where in mine else "random"]
-    split, out = splits(minutes), []
-    per_map = minutes * 60 / len(chosen)
-    if split.get("aim"):   # the aim first, on the aim map (06/10)
-        out.append({"map": aim_map(), "kind": "aim", "seconds": int(minutes * 60 * split["aim"])})
-    for mp in chosen:
-        share = {k: v for k, v in split.items() if k != "aim"}
-        if mp.startswith("cs_"):
-            share["situation"] = share.get("situation", 0) + share.pop("defend", 0) + share.pop("push", 0)
-        spare = 0.0
-        for k in ORDER:
-            if not share.get(k):
-                continue
-            secs = per_map * share[k] + spare
-            if k == "wallbang" and mp != "random" and not wallbangs.load(mp) and not any(x["kills"] >= 2 for x in boosts.load(mp)):   # no wallbang, no boost that kills
-                spare = secs
-                continue
-            spare = 0.0
-            out.append({"map": mp, "kind": k, "seconds": int(secs)})
+    def has(mp, k):
+        if k in ("defend", "push") and mp.startswith("cs_"):   # a hostage map: no site
+            return False
+        if k == "wallbang" and mp != "random":   # no wallbang, no boost that kills
+            return bool(wallbangs.load(mp)) or any(x["kills"] >= 2 and real_boost(mp, x) for x in boosts.load(mp))
+        return True
+    try:
+        S = struggles(sid) if sid.isdigit() else []
+    except Exception:
+        S = []
+    first = lambda mp: next(("defend" if x["side"] == "CT" else "push" for x in S if x["map"] == mp), None)
+    aim, parts = parts_for(minutes, chosen, has, first)
+    out = [{"map": aim_map(), "kind": "aim", "seconds": aim}]   # the aim first, on the aim map (06/10)
+    for mp, ps in parts:
+        out += [{"map": mp, "kind": k, "seconds": secs} for k, secs in ps]
     return out
 
 
@@ -2004,7 +2046,7 @@ def play(sid, minutes=20, where="random", difficulty=2):
 
 def _play(sid, minutes, where, difficulty):
     import threading
-    first = aim_map() if splits(minutes).get("aim") else next((m for m in str(where).split(",") if m in maps(sid)), None)
+    first = aim_map()   # every warm-up starts with the aim
     if not _game_running():   # CS2 comes up while the session is built (its menu is needed before a connect)
         _launch_game()
     pre = threading.Thread(target=lambda: _quiet_start(first), daemon=True) if first else None
