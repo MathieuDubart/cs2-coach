@@ -506,13 +506,15 @@ async function renderSettings(){
       :`<p>Sign in through Steam's official page: it confirms your account to me. I never see your password, only your SteamID.</p>`}
     <p><a class="primary" style="display:inline-block;text-decoration:none" href="/api/steam/login">${st.login?"Sign in with Steam again":"Sign in with Steam"}</a></p>
     ${st.pc_account&&st.pc_account.steamid?`<p class="note">Steam account open on this PC: ${esc(st.pc_account.name||"")} <span class="num">${esc(st.pc_account.steamid)}</span>.</p>`:""}</article>
-  <article class="card form"><h3>2. Full, automatic history ${ok(st.has_key&&st.has_auth)}</h3>
-   <p>Valve only gives your <b>last 8 matches</b> and deletes demos after about <b>a month</b>. With these two codes, I find <b>every new match</b>, even if it hasn't run for weeks. It analyzes the demos still available and keeps the date, score, your kills and deaths and your teammates for all the others: your times, sessions, streaks and group become measurable over your whole history.</p>
-   <div class="row"><span class="f">Steam API key ${ok(st.has_key)}</span><input id="st-key" type="password" autocomplete="off" spellcheck="false" placeholder="${st.has_key?"already saved · paste a new key to replace it":"32 characters"}" style="flex:1;min-width:220px;font:14px var(--f-mono);background:var(--bg);color:var(--ink);border:1px solid var(--line);border-radius:3px;padding:5px 8px"></div>
-   <p class="note">Create it on <a href="${esc(L.key)}" target="_blank" rel="noopener" style="color:var(--ct)">steamcommunity.com/dev/apikey</a> (signed in to your Steam account). Domain name: write <code>localhost</code>.</p>
+  <article class="card form"><h3>2. Full, automatic history ${ok(st.has_auth)}</h3>
+   <p>Valve only gives your <b>last 8 matches</b> and deletes demos after about <b>a month</b>. With your history code, I find <b>every new match</b>, even if it hasn't run for weeks. It analyzes the demos still available and keeps the date, score, your kills and deaths and your teammates for all the others: your times, sessions, streaks and group become measurable over your whole history.</p>
    <div class="row"><span class="f">Authentication code ${ok(st.has_auth)}</span><input id="st-auth" type="password" autocomplete="off" spellcheck="false" placeholder="${st.has_auth?"already saved":"XXXX-XXXXX-XXXX"}" style="width:220px;font:14px var(--f-mono);background:var(--bg);color:var(--ink);border:1px solid var(--line);border-radius:3px;padding:5px 8px">
      <input id="st-known" type="text" autocomplete="off" spellcheck="false" placeholder="Code of your last match CSGO-… (optional)" style="flex:1;min-width:240px;font:14px var(--f-mono)"></div>
    <p class="note">On <a href="${esc(L.auth)}" target="_blank" rel="noopener" style="color:var(--ct)">Steam's CS2 help page</a> (signed in to your account): "Create authentication code". The same page shows the code of your last match. If it's empty, I find it from your last 8 matches (Steam open, CS2 closed).</p>
+   <details class="set-more"${st.has_key?" open":""}><summary>Your own Steam API key (optional)</summary>
+   <div class="row"><span class="f">Steam API key ${ok(st.has_key)}</span><input id="st-key" type="password" autocomplete="off" spellcheck="false" placeholder="${st.has_key?"already saved · paste a new key to replace it":"32 characters"}" style="flex:1;min-width:220px;font:14px var(--f-mono);background:var(--bg);color:var(--ink);border:1px solid var(--line);border-radius:3px;padding:5px 8px"></div>
+   <p class="note">Without one, Wily's site asks Steam for you. To use your own: create it on <a href="${esc(L.key)}" target="_blank" rel="noopener" style="color:var(--ct)">steamcommunity.com/dev/apikey</a> (signed in to your Steam account). Domain name: write <code>localhost</code>.</p>
+   </details>
    <div class="row"><button type="button" class="primary" id="st-save">Save and check</button>
      <button type="button" class="primary" id="st-sync" ${st.has_auth?"":"disabled"}>Sync now</button><span class="note" id="st-msg" role="status"></span></div>
    ${st.has_auth?`<div class="row"><label style="display:flex;gap:8px;align-items:center;font-size:14px"><input type="checkbox" id="st-auto" ${st.auto_sync?"checked":""}> Sync automatically when the app starts, then every 30 minutes (off: "Update my matches" in your menu, top right, does it when you want)</label></div>
@@ -522,7 +524,7 @@ async function renderSettings(){
     <li><b>Habits over your whole history</b>: hours when you play best, ideal number of games per session, effect of loss streaks (Routine tab).</li>
     <li><b>Your group</b>: your Steam friends on your team are recognized as your group, even after a single match together.</li>
     <li><b>Your experience</b>: your playtime sets the priorities of the Progress tab.</li></ul></details>
-   <p class="note">Your codes stay in <code>out/settings.json</code> on this PC: this file is not versioned and the codes only go to Steam's official API. You can remove everything at any time.</p>
+   <p class="note">Your codes stay in <code>out/settings.json</code> on this PC (not versioned). They go to Steam's official API; without a key of your own, through Wily's site, which passes the request to Steam and keeps nothing. You can remove everything at any time.</p>
    <div class="btns"><button type="button" id="st-forget">${steamForget?"Confirm: remove the sign-in and the codes":"Disconnect everything"}</button></div></article>
   <h3 class="set-h">This app</h3>
   <article class="card"><h3>Display</h3>

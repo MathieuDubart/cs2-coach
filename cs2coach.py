@@ -73,7 +73,7 @@ def collect(args, own_id):
     if args.authcode and args.knowncode:
         key = s.get("steam_api_key")
         if not key:
-            log("steam_api_key is missing from out/settings.json to browse the history.")
+            log("steam_api_key is missing from out/settings.json to browse the history from the command line.")
         else:
             codes += [args.knowncode] + matchlist.history_codes(key, args.steamid, args.authcode, args.knowncode)
             s.setdefault("players", {}).setdefault(str(args.steamid), {}).update(
@@ -676,16 +676,15 @@ def sync_steam(sid=None):
         log(f"Steam history unavailable: {e}")
         codes = []
     key = s.get("steam_api_key")
-    if key:
-        try:
-            steamlink.friends(key, sid, refresh=True)
-            pt = steamlink.owned_cs2(key, sid)
-            if pt:
-                s = config.settings()
-                s.setdefault("players", {}).setdefault(str(sid), {})["playtime"] = pt
-                config.save_settings(s)
-        except steamlink.SteamError as e:
-            log(f"Steam: {e}")
+    try:
+        steamlink.friends(key, sid, refresh=True)   # no key of your own: through Wily's site (08/10)
+        pt = steamlink.owned_cs2(key, sid) if key else None   # without a key: this PC's Steam says the playtime
+        if pt:
+            s = config.settings()
+            s.setdefault("players", {}).setdefault(str(sid), {})["playtime"] = pt
+            config.save_settings(s)
+    except steamlink.SteamError as e:
+        log(f"Steam: {e}")
     before = registry()
     args = SimpleNamespace(steamid=sid, sharecode=codes, authcode=None, knowncode=None, no_fetch=False, own=(sid == own_id))
     reg = collect(args, own_id)

@@ -1,5 +1,5 @@
 # only the two endpoints are reachable: the configuration and the shared code never
 Options -Indexes
-<FilesMatch "^(config\.php|_lib\.php|config\.sample\.php)$">
+<FilesMatch "^(config\.php|_lib\.php|config\.sample\.php|steam_key\.php)$">
     Require all denied
 </FilesMatch>

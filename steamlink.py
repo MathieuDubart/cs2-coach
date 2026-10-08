@@ -2,11 +2,13 @@
 
 - Sign in through Steam (OpenID 2.0): Steam's own page confirms who you are; the app never sees a password.
 - Local Steam data of this PC (no login): CS2 playtime of the accounts that used this PC.
-- Steam Web API key + match-history authentication code (both created by the player on Steam's site):
-  every new match is found automatically (GetNextMatchSharingCode), even weeks later, and Steam friends
-  help detect who you queue with.
+- The match-history authentication code (created by the player on Steam's site): every new match is found
+  automatically (GetNextMatchSharingCode), even weeks later, and Steam friends help detect who you queue with.
+  Steam asks for a Steam Web API key too: the player's own when they gave one, else Wily's site asks Steam with the
+  coach's key (web/api/steam.php, 08/10: one code to paste instead of a key to create on a developer page).
 
-Keys and codes stay in out/settings.json (not versioned) and are only sent to Steam's official API.
+Keys and codes stay in out/settings.json (not versioned). They go to Steam's official API, or, without a key of your
+own, through Wily's site, which passes the request to Steam and keeps nothing.
 """
 import datetime as dt
 import json
@@ -27,6 +29,7 @@ KEY_RE = re.compile(r"^[0-9A-Fa-f]{32}$")
 AUTH_RE = re.compile(r"^[A-Za-z0-9]{4}-[A-Za-z0-9]{5}-[A-Za-z0-9]{4}$")
 CODE_RE = re.compile(r"^CSGO(-[A-Za-z0-9]{5}){5}$")
 FRIENDS_DIR = os.path.join(config.OUT, "steam")
+RELAY = "https://wily.valentingassend.com/api/steam.php"
 
 
 # ---------- sign in through Steam (OpenID 2.0) ----------
@@ -112,6 +115,25 @@ def api_key():
     return config.settings().get("steam_api_key")
 
 
+def _relay(op, **body):
+    """Wily's site asks Steam with its own key (web/api/steam.php): for a player with no key of their own. The body is
+    sent by POST (never in an address the host logs); the site keeps nothing. -> (Steam's status, the site's answer)."""
+    req = urllib.request.Request(RELAY, data=json.dumps(dict(body, op=op)).encode(), method="POST",
+                                 headers={"Content-Type": "application/json", "User-Agent": "wily-app"})
+    try:
+        with urllib.request.urlopen(req, timeout=30) as r:
+            j = json.loads(r.read() or b"{}")
+    except urllib.error.HTTPError as e:
+        if e.code == 429:
+            raise SteamError("Enough Steam requests through Wily's site for today: try again tomorrow, or add your own Steam API key in Settings.")
+        if e.code == 503:
+            raise SteamError("Wily's Steam relay isn't available: add your own Steam API key in Settings.")
+        raise SteamError(f"Wily's site answered {e.code} to the Steam request.")
+    except Exception as e:
+        raise SteamError(f"Wily's site is not responding ({e})")
+    return int(j.get("status") or 0), j
+
+
 def check_key(key, sid):
     code, j = _api("ISteamUser/GetPlayerSummaries/v2/", key=key, steamids=sid)
     if code in (401, 403):
@@ -123,8 +145,12 @@ def check_key(key, sid):
 
 
 def next_code(key, sid, auth, known):
-    """-> next share code, or None when there is no newer match."""
-    code, j = _api("ICSGOPlayers_730/GetNextMatchSharingCode/v1", key=key, steamid=sid, steamidkey=auth, knowncode=known)
+    """-> next share code, or None when there is no newer match. No key of your own: through Wily's site."""
+    if key:
+        code, j = _api("ICSGOPlayers_730/GetNextMatchSharingCode/v1", key=key, steamid=sid, steamidkey=auth, knowncode=known)
+    else:
+        code, r = _relay("next", steamid=str(sid), auth=auth, known=known)
+        j = {"result": {"nextcode": r.get("nextcode")}}
     if code == 403:
         raise SteamError("Authentication code rejected: generate it again on Steam's help page.")
     if code == 412:
@@ -153,8 +179,12 @@ def friends(key, sid, refresh=False):
         c = json.load(open(f, encoding="utf-8"))
         if (dt.datetime.now() - dt.datetime.fromisoformat(c["time"])).total_seconds() < 86400:
             return c["friends"]
-    code, j = _api("ISteamUser/GetFriendList/v1/", key=key, steamid=sid, relationship="friend")
-    ids = [int(x["steamid"]) for x in ((j or {}).get("friendslist") or {}).get("friends", [])] if code == 200 else None
+    if key:
+        code, j = _api("ISteamUser/GetFriendList/v1/", key=key, steamid=sid, relationship="friend")
+        ids = [int(x["steamid"]) for x in ((j or {}).get("friendslist") or {}).get("friends", [])] if code == 200 else None
+    else:   # no key of your own: through Wily's site
+        code, r = _relay("friends", steamid=str(sid))
+        ids = [int(x) for x in r.get("friends") or [] if str(x).isdigit()] if code == 200 else None
     json.dump({"time": dt.datetime.now().isoformat(timespec="minutes"), "friends": ids}, open(f, "w", encoding="utf-8"))
     return ids
 
@@ -165,8 +195,15 @@ def names(ids):
     key = s.get("steam_api_key")
     known = {i: (s.get("players", {}).get(str(i)) or {}).get("name") for i in ids}
     ask = [str(i) for i, n in known.items() if not n]
-    if key and ask:
-        code, j = _api("ISteamUser/GetPlayerSummaries/v2/", key=key, steamids=",".join(ask[:100]))
+    if ask:
+        try:
+            if key:
+                code, j = _api("ISteamUser/GetPlayerSummaries/v2/", key=key, steamids=",".join(ask[:100]))
+            else:   # no key of your own: through Wily's site
+                code, r = _relay("names", steamids=ask[:100])
+                j = {"response": {"players": r.get("players") or []}}
+        except SteamError:
+            code, j = 0, None
         for p in ((j or {}).get("response") or {}).get("players", []) if code == 200 else []:
             known[p["steamid"]] = p.get("personaname")
             s.setdefault("players", {}).setdefault(p["steamid"], {})["name"] = p.get("personaname")
@@ -201,9 +238,7 @@ def set_credentials(sid, key=None, auth=None, known=None):
             raise SteamError("The authentication code looks like XXXX-XXXXX-XXXX.")
         if known and not CODE_RE.match(known):
             raise SteamError("The match code looks like CSGO-xxxxx-xxxxx-xxxxx-xxxxx-xxxxx.")
-        k = s.get("steam_api_key")
-        if not k:
-            raise SteamError("Add your Steam API key first: it is used to query your history.")
+        k = s.get("steam_api_key")   # none: Wily's site asks Steam (08/10)
         start = known or (s.get("players", {}).get(sid, {}).get("last_code"))
         if not start:
             start = oldest_recent_code(sid)
@@ -258,7 +293,7 @@ def new_codes(sid, log=print, limit=200):
     s = config.settings()
     p = s.get("players", {}).get(sid, {})
     key, auth, cur = s.get("steam_api_key"), p.get("authcode"), p.get("last_code")
-    if not (key and auth and cur):
+    if not (auth and cur):   # no key of your own: Wily's site asks Steam
         return list(p.get("pending_codes") or [])
     found = []
     for _ in range(limit):
@@ -300,7 +335,7 @@ def status(sid):
             "login": login if login.get("steamid") == sid else None,
             "pc_account": {"steamid": str(own) if own else None, "name": own_name},
             "playtime": local_playtime(sid),
-            "has_key": bool(s.get("steam_api_key")), "has_auth": bool(p.get("authcode")),
+            "has_key": bool(s.get("steam_api_key")), "has_auth": bool(p.get("authcode")), "relay": True,
             "last_code": p.get("last_code"), "last_sync": p.get("last_sync"), "pending": len(p.get("pending_codes") or []),
             "auto_sync": bool(p.get("auto_sync")), "known_matches": reg_n, "friends": len(fr) if fr else None,
             "links": {"key": KEY_URL, "auth": AUTH_URL}}

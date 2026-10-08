@@ -230,14 +230,13 @@ async function fillFollow(p){const box=$("#follow-card");if(!box)return;let st;
   const inp="font:14px var(--f-mono);background:var(--bg);color:var(--ink);border:1px solid var(--line);border-radius:3px;padding:5px 8px";
   box.innerHTML=`<h3>Follow ${esc(p.name)}'s matches ${st.has_auth?'<span class="pill" style="color:var(--good)">on</span>':""}</h3>
    <p>Only the matches already on this PC are analyzed for ${esc(p.name)}: the ones you played together. To find <b>every match ${esc(p.name)} plays, even without you</b>, they can give you two codes from <a href="${esc((st.links||{}).auth||"https://help.steampowered.com/en/wizard/HelpWithGameIssue/?appid=730&issueid=128")}" target="_blank" rel="noopener" style="color:var(--ct)">Steam's CS2 help page</a> (signed in to <b>their own</b> account): their authentication code, and the code of one of their matches. For a single match, they can also send you its share code (CSGO-…): paste it in the search bar.</p>
-   ${st.has_key?"":`<p class="note">First add your own Steam API key in <a href="#settings" style="color:var(--ct)">Settings</a>: it is used to read everyone's history.</p>`}
    <div class="row"><input id="fo-auth" type="password" autocomplete="off" spellcheck="false" placeholder="${st.has_auth?"already saved":"Their authentication code XXXX-XXXXX-XXXX"}" style="width:270px;${inp}">
      <input id="fo-known" type="text" autocomplete="off" spellcheck="false" placeholder="Code of one of their matches CSGO-…" style="flex:1;min-width:240px;${inp}"></div>
-   <div class="row"><button type="button" class="primary" id="fo-save" ${st.has_key?"":"disabled"}>Save and check</button>
+   <div class="row"><button type="button" class="primary" id="fo-save">Save and check</button>
      <button type="button" class="primary" id="fo-sync" ${st.has_auth?"":"disabled"}>Find their new matches</button>
      ${st.has_auth?`<button type="button" class="close" id="fo-forget">Stop following</button>`:""}<span class="note" id="fo-msg" role="status"></span></div>
    ${st.has_auth?`<p class="note">Checked automatically when the app starts, then every 30 minutes. Last check: ${st.last_sync?fmtDate(st.last_sync):"never"}${st.pending?` · ${st.pending} match(es) waiting (Steam must be open and CS2 closed)`:""}.</p>`:""}
-   <p class="note">Their codes stay in <code>out/settings.json</code> on this PC (not versioned) and only go to Steam's official API. Ask them first: these codes let you read their match history.</p>`;
+   <p class="note">Their codes stay in <code>out/settings.json</code> on this PC (not versioned) and go to Steam's official API (through Wily's site when you have no key of your own: it keeps nothing). Ask them first: these codes let you read their match history.</p>`;
   const msg=$("#fo-msg",box),sid=p.steamid;
   $("#fo-save",box).onclick=async()=>{const b=$("#fo-save",box);b.disabled=true;msg.textContent="Checking with Steam…";
     try{const j=await api("/api/steam/credentials",{sid,auth_code:$("#fo-auth",box).value.trim(),known_code:$("#fo-known",box).value.trim()});

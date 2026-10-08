@@ -11,6 +11,9 @@ function cfg(): array
         $f = __DIR__ . '/config.php';
         $c = is_file($f) ? (require $f) : [];
         $c += ['token_sha256' => '', 'max_bytes' => 25 * 1024 * 1024, 'per_day' => 40, 'per_ip_day' => 80, 'data' => null];
+        // the coach's Steam Web API key for steam.php (08/10): written at the site's build from his settings, never versioned
+        $k = __DIR__ . '/steam_key.php';
+        $c += ['steam_key' => is_file($k) ? (string)(require $k) : ''];
     }
     return $c;
 }

@@ -9,6 +9,7 @@ are the app's, under the SIL Open Font License)."""
 import html
 import json
 import os
+import re
 import shutil
 import sys
 import time
@@ -20,7 +21,7 @@ OUT = os.path.join(HERE, "dist", "site_wily")
 SITE = "https://wily.valentingassend.com"
 PUBLISHER = "Valentin Gassend"
 CONTACT = "contact@valentingassend.com"
-UPDATED = {"en": "5 October 2026", "fr": "5 octobre 2026"}
+UPDATED = {"en": "8 October 2026", "fr": "8 octobre 2026"}
 HOST = ("Infomaniak Network SA, Rue Eugène-Marziano 25, 1227 Les Acacias (GE), Switzerland · +41 22 820 35 44 · "
         "https://www.infomaniak.com")
 
@@ -135,7 +136,7 @@ HOME = {
 <p class="note">Needs Windows 10 or 11 (64-bit), CS2 on Steam, 8 GB of RAM, and disk space for your demos (about 250 MB per match).</p>
 <h2>Fair play and privacy</h2>
 <div class="grid">
- <article class="card"><h3>Only what Valve provides</h3><p>Game State Integration (the game's official feature for HUDs and RGB keyboards), the console log CS2 writes, the Steam Web API with your own key, the demos of your matches. I never read the game's memory or network traffic and I never play for you. The training server is a local copy of the game that only you join.</p></article>
+ <article class="card"><h3>Only what Valve provides</h3><p>Game State Integration (the game's official feature for HUDs and RGB keyboards), the console log CS2 writes, the Steam Web API, the demos of your matches. I never read the game's memory or network traffic and I never play for you. The training server is a local copy of the game that only you join.</p></article>
  <article class="card"><h3>Your data stays on your PC</h3><p>Your matches, profile, keys and voice stay on your PC. The base I come with is anonymized. If you choose to, your new matches can join the base anonymized: no SteamID, no name, no match id. <a href="privacy.html">Privacy policy</a></p></article>
  <article class="card"><h3>Free alpha</h3><p>Free while it is tested. It's the first version open to all players: tell me what breaks with the <b>alpha · report</b> tag at the top of my page (you see what is sent), or by email. My updates are signed by my author, and I check them before installing anything. Questions or bugs: <a href="mailto:{CONTACT}">{CONTACT}</a>.</p></article>
 </div>
@@ -160,7 +161,7 @@ HOME = {
 <p class="note">Il faut Windows 10 ou 11 (64 bits), CS2 sur Steam, 8 Go de RAM et de la place pour tes démos (environ 250 Mo par match). L'app est en anglais.</p>
 <h2>Fair-play et vie privée</h2>
 <div class="grid">
- <article class="card"><h3>Seulement ce que Valve fournit</h3><p>Le Game State Integration (la fonction officielle du jeu pour les HUD et les claviers RGB), le journal de console que CS2 écrit, l'API Steam avec ta propre clé, les démos de tes matchs. Je ne lis jamais la mémoire du jeu ni son trafic réseau, et je ne joue jamais à ta place. Le serveur d'entraînement est une copie locale du jeu que toi seul rejoins.</p></article>
+ <article class="card"><h3>Seulement ce que Valve fournit</h3><p>Le Game State Integration (la fonction officielle du jeu pour les HUD et les claviers RGB), le journal de console que CS2 écrit, l'API Steam, les démos de tes matchs. Je ne lis jamais la mémoire du jeu ni son trafic réseau, et je ne joue jamais à ta place. Le serveur d'entraînement est une copie locale du jeu que toi seul rejoins.</p></article>
  <article class="card"><h3>Tes données restent sur ton PC</h3><p>Tes matchs, ton profil, tes clés et ta voix restent sur ton PC. La base qui vient avec moi est anonymisée. Si tu le choisis, tes nouveaux matchs peuvent rejoindre la base anonymisés : sans SteamID, sans pseudo, sans identifiant de match. <a href="confidentialite.html">Politique de confidentialité</a></p></article>
  <article class="card"><h3>Alpha gratuite</h3><p>Gratuite pendant les tests. C'est la première version ouverte à tous les joueurs : dis-moi ce qui casse avec l'étiquette <b>alpha · report</b> en haut de ma page (tu vois ce qui est envoyé), ou par e-mail. Mes mises à jour sont signées par mon auteur, et je les vérifie avant d'installer quoi que ce soit. Questions ou bugs : <a href="mailto:{CONTACT}">{CONTACT}</a>.</p></article>
 </div>
@@ -170,7 +171,7 @@ HOME = {
 PRIVACY = {
 "en": f"""<div class="doc"><h1>Privacy policy</h1><p class="note">Last updated: {UPDATED['en']}</p>
 <p><b>Who we are.</b> Wily is a free app published by {PUBLISHER} (France), contact: <a href="mailto:{CONTACT}">{CONTACT}</a>. This website is hosted by Infomaniak Network SA (Switzerland).</p>
-<p><b>In short.</b> The app runs on your PC: your matches, your profile, your voice recordings and your Steam keys stay there. There are no accounts. What reaches this website: the app's update checks, anonymous usage counters (you can turn them off), the bug reports you choose to send, and your matches, anonymized, if you choose to share them. This website sets no cookies and has no analytics, advertising or tracking.</p>
+<p><b>In short.</b> The app runs on your PC: your matches, your profile, your voice recordings and your Steam codes stay there (without a Steam key of your own, the app lists your matches through this site, which keeps nothing: see 6). There are no accounts. What reaches this website: the app's update checks, anonymous usage counters (you can turn them off), the bug reports you choose to send, and your matches, anonymized, if you choose to share them. This website sets no cookies and has no analytics, advertising or tracking.</p>
 <h2>1. This website</h2>
 <p>When you visit it or download the app, the host's servers record technical logs (IP address, date and time, page or file requested, browser) for security and operation. The host keeps them for a limited time; we do not use them for anything else. The site loads nothing from other servers.</p>
 <h2>2. Update checks</h2>
@@ -195,21 +196,25 @@ PRIVACY = {
 <ul><li>A day once over is sent to this site, added to that day's totals for all players, and the report itself is thrown away: only sums per day are kept, which cannot be linked to anyone. Your IP address is not kept (see 3 for the daily salted hash used to limit sending).</li>
 <li><b>Legal basis:</b> our legitimate interest in measuring the use of the app, under the conditions the CNIL sets for exempted audience measurement (anonymous statistics only, for the publisher alone). <b>You can object at any time</b>: Settings → Usage statistics → Turn it off; nothing more is counted or sent. The app tells you about it the first time it opens.</li>
 <li><b>Retention:</b> the daily totals, at most 25 months; the counters kept on your PC, 30 days.</li></ul>
-<h2>6. What the app does on your PC (not sent to us)</h2>
-<ul><li><b>Steam Web API key and match history code:</b> stored in <code>out/settings.json</code> on your PC and sent only to Valve's Steam Web API, to list your matches.</li>
+<h2>6. Listing your matches through this site (when you have no Steam key of your own)</h2>
+<p>To find your new matches, the app asks Valve's Steam Web API for the next match of your history. That needs a Steam Web API key: if you added your own in the app, the app asks Valve directly. If not, it sends this site, in the body of an encrypted request, your SteamID, your match history code and the code of the last match it knows; the site passes them to Valve with its own key and returns Valve's answer. The same way, the app can ask for the public Steam names of SteamIDs and a public friend list (to recognize your group).</p>
+<ul><li><b>Nothing is kept:</b> the codes are used for that request only, never written to a file or a log by the site. Only a counter per day limits the volume (your address as a hash with a salt of the day, deleted after two days, see 3).</li>
+<li><b>Legal basis:</b> the performance of the service you ask for (Article 6(1)(b) GDPR). To avoid it entirely, add your own key in Settings.</li></ul>
+<h2>7. What the app does on your PC (not sent to us)</h2>
+<ul><li><b>Match history code (and your own Steam Web API key, if you add one):</b> stored in <code>out/settings.json</code> on your PC, sent to Valve's Steam Web API to list your matches, directly with your key or through this site (see 6).</li>
 <li><b>Your matches' demos</b> (downloaded from Valve's servers through your Steam client) and what the app extracts from them, including the other players of your matches (their SteamIDs and in-game names, as in any demo): processed on your PC to coach you, kept on your PC.</li>
 <li><b>Voice (optional, off by default):</b> the app can record your microphone during matches and transcribe it on your PC. Recording your teammates (your PC's sound output) needs their agreement for each match; the app starts it only after you confirm it in game. Recordings never leave your PC.</li>
 <li><b>Services the app contacts from your PC</b> when you use the related feature, under their own privacy policies: Valve (Steam Web API, Steam Community, the game coordinator through your Steam client, demo servers), Leetify's public API (statistics of the players you analyze), GitHub (map radars, a lineup book), Hugging Face (the speech recognition model, if you use voice).</li></ul>
-<h2>7. The base that comes with the app</h2>
+<h2>8. The base that comes with the app</h2>
 <p>The app ships reference tables computed from Counter-Strike 2 matchmaking demos. Every player in them has a made-up identifier and no name. Professional matches (from public demos published by HLTV.org) keep the players' public names; if you are one of them and want a data point removed, contact us.</p>
-<h2>8. Your rights</h2>
+<h2>9. Your rights</h2>
 <p>Under the GDPR you have the right to access, rectify and erase your personal data, to restrict or object to its processing, to data portability and to withdraw your consent. Contact: <a href="mailto:{CONTACT}">{CONTACT}</a>. You can also lodge a complaint with the CNIL (<a href="https://www.cnil.fr">www.cnil.fr</a>) or the supervisory authority of your country.</p>
-<h2>9. Where the data is</h2>
+<h2>10. Where the data is</h2>
 <p>The host is in Switzerland, which the European Commission recognizes as providing adequate protection. The publisher's computer is in France.</p>
-<h2>10. Changes</h2><p>This page changes when the app's use of data changes; the date at the top is the last update.</p></div>""",
+<h2>11. Changes</h2><p>This page changes when the app's use of data changes; the date at the top is the last update.</p></div>""",
 "fr": f"""<div class="doc"><h1>Politique de confidentialité</h1><p class="note">Dernière mise à jour : {UPDATED['fr']}</p>
 <p><b>Qui sommes-nous.</b> Wily est une application gratuite éditée par {PUBLISHER} (France), contact : <a href="mailto:{CONTACT}">{CONTACT}</a>. Ce site est hébergé par Infomaniak Network SA (Suisse).</p>
-<p><b>En bref.</b> L'application tourne sur ton PC : tes matchs, ton profil, tes enregistrements de voix et tes clés Steam y restent. Il n'y a pas de compte. Ce qui arrive sur ce site : les vérifications de mise à jour de l'application, des compteurs d'usage anonymes (tu peux les désactiver), les signalements de bug que tu choisis d'envoyer, et tes matchs, anonymisés, si tu choisis de les partager. Ce site ne dépose aucun cookie et n'a ni statistiques de visite, ni publicité, ni pistage.</p>
+<p><b>En bref.</b> L'application tourne sur ton PC : tes matchs, ton profil, tes enregistrements de voix et tes codes Steam y restent (sans ta propre clé Steam, l'application liste tes matchs par ce site, qui ne garde rien : voir 6). Il n'y a pas de compte. Ce qui arrive sur ce site : les vérifications de mise à jour de l'application, des compteurs d'usage anonymes (tu peux les désactiver), les signalements de bug que tu choisis d'envoyer, et tes matchs, anonymisés, si tu choisis de les partager. Ce site ne dépose aucun cookie et n'a ni statistiques de visite, ni publicité, ni pistage.</p>
 <h2>1. Ce site</h2>
 <p>Quand tu le visites ou télécharges l'application, les serveurs de l'hébergeur enregistrent des journaux techniques (adresse IP, date et heure, page ou fichier demandé, navigateur) pour la sécurité et le fonctionnement. L'hébergeur les conserve une durée limitée ; nous ne les utilisons pas à d'autres fins. Le site ne charge rien depuis d'autres serveurs.</p>
 <h2>2. Vérifications de mise à jour</h2>
@@ -234,18 +239,22 @@ PRIVACY = {
 <ul><li>Une journée terminée est envoyée à ce site, ajoutée aux totaux de ce jour pour tous les joueurs, et le rapport lui-même est jeté : ne restent que des sommes par jour, qui ne peuvent être reliées à personne. Ton adresse IP n'est pas conservée (voir 3 pour l'empreinte salée du jour qui limite les envois).</li>
 <li><b>Base légale :</b> notre intérêt légitime à mesurer l'usage de l'application, dans les conditions fixées par la CNIL pour la mesure d'audience exemptée de consentement (statistiques anonymes, pour l'éditeur seul). <b>Tu peux t'y opposer à tout moment</b> : Settings → Usage statistics → Turn it off ; plus rien n'est compté ni envoyé. L'application te le signale à sa première ouverture.</li>
 <li><b>Conservation :</b> les totaux par jour, 25 mois au plus ; les compteurs gardés sur ton PC, 30 jours.</li></ul>
-<h2>6. Ce que l'application fait sur ton PC (rien ne nous est envoyé)</h2>
-<ul><li><b>Clé Steam Web API et code d'historique des matchs :</b> enregistrés dans <code>out/settings.json</code> sur ton PC et envoyés uniquement à l'API Steam de Valve, pour lister tes matchs.</li>
+<h2>6. La liste de tes matchs par ce site (quand tu n'as pas ta propre clé Steam)</h2>
+<p>Pour trouver tes nouveaux matchs, l'application demande à l'API Steam de Valve le match suivant de ton historique. Il faut pour cela une clé Steam Web API : si tu as ajouté la tienne dans l'application, elle interroge Valve directement. Sinon, elle envoie à ce site, dans le corps d'une requête chiffrée, ton SteamID, ton code d'historique des matchs et le code du dernier match qu'elle connaît ; le site les transmet à Valve avec sa propre clé et renvoie la réponse de Valve. De la même façon, l'application peut demander les pseudos Steam publics de SteamID et une liste d'amis publique (pour reconnaître ton groupe).</p>
+<ul><li><b>Rien n'est conservé :</b> les codes servent à cette requête seulement, le site ne les écrit ni dans un fichier ni dans un journal. Seul un compteur par jour limite le volume (ton adresse sous forme d'empreinte avec un sel du jour, supprimée après deux jours, voir 3).</li>
+<li><b>Base légale :</b> l'exécution du service que tu demandes (article 6(1)(b) du RGPD). Pour l'éviter complètement, ajoute ta propre clé dans Settings.</li></ul>
+<h2>7. Ce que l'application fait sur ton PC (rien ne nous est envoyé)</h2>
+<ul><li><b>Code d'historique des matchs (et ta propre clé Steam Web API, si tu en ajoutes une) :</b> enregistrés dans <code>out/settings.json</code> sur ton PC, envoyés à l'API Steam de Valve pour lister tes matchs, directement avec ta clé ou par ce site (voir 6).</li>
 <li><b>Les démos de tes matchs</b> (téléchargées depuis les serveurs de Valve via ton client Steam) et ce que l'application en extrait, y compris les autres joueurs de tes matchs (leurs SteamID et pseudos, comme dans toute démo) : traités sur ton PC pour te coacher, conservés sur ton PC.</li>
 <li><b>Voix (facultatif, désactivé par défaut) :</b> l'application peut enregistrer ton micro pendant tes matchs et le transcrire sur ton PC. Enregistrer tes coéquipiers (la sortie son de ton PC) demande leur accord à chaque match ; l'application ne le démarre qu'après ta confirmation en jeu. Les enregistrements ne quittent jamais ton PC. En France, enregistrer la parole d'autrui sans son consentement est puni par l'article 226-1 du Code pénal.</li>
 <li><b>Services contactés depuis ton PC</b> quand tu utilises la fonction concernée, selon leurs propres politiques : Valve (API Steam, Steam Community, le coordinateur de jeu via ton client Steam, serveurs de démos), l'API publique de Leetify (statistiques des joueurs que tu analyses), GitHub (radars des maps, un livre de lineups), Hugging Face (le modèle de reconnaissance vocale, si tu utilises la voix).</li></ul>
-<h2>7. La base fournie avec l'application</h2>
+<h2>8. La base fournie avec l'application</h2>
 <p>L'application contient des tables de référence calculées à partir de démos de matchmaking de Counter-Strike 2. Chaque joueur y a un identifiant inventé et aucun pseudo. Les matchs professionnels (issus des démos publiques publiées par HLTV.org) gardent les noms publics des joueurs ; si tu es l'un d'eux et veux qu'une donnée soit retirée, contacte-nous.</p>
-<h2>8. Tes droits</h2>
+<h2>9. Tes droits</h2>
 <p>Le RGPD te donne un droit d'accès, de rectification et d'effacement de tes données personnelles, de limitation et d'opposition à leur traitement, de portabilité et de retrait de ton consentement. Contact : <a href="mailto:{CONTACT}">{CONTACT}</a>. Tu peux aussi adresser une réclamation à la CNIL (<a href="https://www.cnil.fr">www.cnil.fr</a>).</p>
-<h2>9. Où sont les données</h2>
+<h2>10. Où sont les données</h2>
 <p>L'hébergeur est en Suisse, pays reconnu par la Commission européenne comme offrant une protection adéquate. L'ordinateur de l'éditeur est en France.</p>
-<h2>10. Modifications</h2><p>Cette page change quand l'usage des données par l'application change ; la date en haut indique la dernière mise à jour.</p></div>""",
+<h2>11. Modifications</h2><p>Cette page change quand l'usage des données par l'application change ; la date en haut indique la dernière mise à jour.</p></div>""",
 }
 
 TERMS = {
@@ -253,7 +262,7 @@ TERMS = {
 <h2>1. The app</h2><p>Wily is a free Windows app that analyzes your Counter-Strike 2 matches on your PC and coaches you during, before and after them. It is an alpha, the first version open to all: features can change, break or stop.</p>
 <h2>2. Free, as is</h2><p>The app is provided free of charge and "as is", without warranty that it is accurate, uninterrupted or fit for a particular purpose. Its advice comes from statistics and can be wrong.</p>
 <h2>3. Your use</h2><p>You may use the app for your own, non-commercial use. You may not sell it or distribute modified versions of it. You are responsible for using it lawfully: recording other people's voices needs their consent (in France, article 226-1 of the Penal Code), and the app records your teammates only after you confirm they agreed.</p>
-<h2>4. Fair play</h2><p>The app only uses what Valve provides for third-party tools: Game State Integration, the console log the game writes, the Steam Web API with your own key and your matches' demos. It never reads the game's memory or network traffic and never acts in the game for you. The training server is a separate local copy of the game that only you join. Valve alone decides how its rules apply.</p>
+<h2>4. Fair play</h2><p>The app only uses what Valve provides for third-party tools: Game State Integration, the console log the game writes, the Steam Web API and your matches' demos. It never reads the game's memory or network traffic and never acts in the game for you. The training server is a separate local copy of the game that only you join. Valve alone decides how its rules apply.</p>
 <h2>5. Valve</h2><p>Wily is not affiliated with, endorsed or sponsored by Valve Corporation. Counter-Strike, Counter-Strike 2, CS2 and Steam are trademarks of Valve Corporation.</p>
 <h2>6. Third-party components</h2><p>The app ships third-party software and data under their own licenses: see <a href="licenses.html">Licenses</a>.</p>
 <h2>7. Liability</h2><p>As far as the law allows, the publisher is not liable for indirect damage, loss of data or of in-game results caused by the app. Nothing in these terms limits a liability the law does not allow to limit.</p>
@@ -263,7 +272,7 @@ TERMS = {
 <h2>1. L'application</h2><p>Wily est une application Windows gratuite qui analyse tes matchs de Counter-Strike 2 sur ton PC et te coache pendant, avant et après. C'est une alpha, la première version ouverte à tous : ses fonctions peuvent changer, casser ou s'arrêter.</p>
 <h2>2. Gratuite, en l'état</h2><p>L'application est fournie gratuitement et « en l'état », sans garantie d'exactitude, de continuité ou d'adéquation à un usage particulier. Ses conseils viennent de statistiques et peuvent se tromper.</p>
 <h2>3. Ton usage</h2><p>Tu peux utiliser l'application pour ton usage personnel et non commercial. Tu ne peux ni la vendre ni en distribuer des versions modifiées. Tu es responsable d'un usage conforme à la loi : enregistrer la parole d'autrui exige son consentement (article 226-1 du Code pénal), et l'application n'enregistre tes coéquipiers qu'après ta confirmation de leur accord.</p>
-<h2>4. Fair-play</h2><p>L'application n'utilise que ce que Valve fournit aux outils tiers : le Game State Integration, le journal de console écrit par le jeu, l'API Steam avec ta propre clé et les démos de tes matchs. Wily ne lit jamais la mémoire du jeu ni son trafic réseau et n'agit jamais en jeu à ta place. Le serveur d'entraînement est une copie locale séparée du jeu que toi seul rejoins. Valve reste seul juge de l'application de ses règles.</p>
+<h2>4. Fair-play</h2><p>L'application n'utilise que ce que Valve fournit aux outils tiers : le Game State Integration, le journal de console écrit par le jeu, l'API Steam et les démos de tes matchs. Wily ne lit jamais la mémoire du jeu ni son trafic réseau et n'agit jamais en jeu à ta place. Le serveur d'entraînement est une copie locale séparée du jeu que toi seul rejoins. Valve reste seul juge de l'application de ses règles.</p>
 <h2>5. Valve</h2><p>Wily n'a aucun lien avec Valve Corporation : ni affiliation, ni approbation, ni sponsoring de sa part. Counter-Strike, Counter-Strike 2, CS2 et Steam sont des marques de Valve Corporation.</p>
 <h2>6. Composants tiers</h2><p>L'application contient des logiciels et des données de tiers sous leurs propres licences : voir <a href="licenses.html">Licences</a>.</p>
 <h2>7. Responsabilité</h2><p>Dans la mesure permise par la loi, l'éditeur n'est pas responsable des dommages indirects, pertes de données ou de résultats en jeu causés par l'application. Rien dans ces conditions ne limite une responsabilité que la loi ne permet pas de limiter.</p>
@@ -293,6 +302,17 @@ AddType font/woff2 .woff2
 """
 
 
+def steam_key_php():
+    """The coach's Steam Web API key for the site's relay (web/api/steam.php, 08/10: players have no key of their own to
+    create): written from his settings into web/api/steam_key.php (not versioned, refused to the web by .htaccess)."""
+    key = str(config.settings().get("steam_api_key") or "")
+    f = os.path.join(HERE, "web", "api", "steam_key.php")
+    if re.fullmatch(r"[0-9A-Fa-f]{32}", key):
+        open(f, "w", encoding="utf-8", newline="\n").write(f"<?php\nreturn '{key}';\n")
+    else:
+        print("note: no Steam Web API key in out/settings.json: the site's Steam relay will answer 'not set up'", flush=True)
+
+
 def build():
     rel = _release()
     os.makedirs(os.path.join(OUT, "assets"), exist_ok=True)
@@ -309,6 +329,7 @@ def build():
     for f in os.listdir(os.path.join(HERE, "legal", "licenses")):
         shutil.copy2(os.path.join(HERE, "legal", "licenses", f), os.path.join(OUT, "licenses"))
     shutil.copy2(os.path.join(HERE, "plugin", "CoachReplay", "LICENSE.txt"), os.path.join(OUT, "licenses", "CoachReplay-LICENSE.txt"))
+    steam_key_php()
     shutil.copytree(os.path.join(HERE, "web"), OUT, dirs_exist_ok=True)   # the API (PHP) and its .htaccess
     desc = {"en": "Wily, your CS2 coach: live advice on your second screen, a warm-up with bots on your own situations, and a review of your matches.",
             "fr": "Wily, ton coach CS2 : des conseils en direct sur ton deuxième écran, un échauffement avec des bots sur tes situations, et la revue de tes matchs."}
