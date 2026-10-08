@@ -2588,7 +2588,8 @@ function sgPoll(v){SG.t=setTimeout(async()=>{const box=$("[data-sg2]",v);if(!box
   $("[data-sg2a]",box).innerHTML=sgTick(a);$("[data-sg2b]",box).innerHTML=sgTick(b);$("[data-sg2t]",box).innerHTML=sgTick(a&&b);box.classList.toggle("done",a&&b);
   if(b)$("[data-sg2n]",box).textContent="CS2 started with it: the numpad keys of Live work.";
   if(!(a&&b))sgPoll(v)},5000)}
-function welcome(v){const own=D.own;if(D.local&&!D.setup)return setupGuide(v,true);
+function welcome(v){const own=D.own,sn=$("#subnav");if(sn)sn.hidden=true;   // no profile yet: no profile tabs either
+  if(D.local&&!D.setup)return setupGuide(v,true);
   v.innerHTML=`<div class="welcome"><h2>Hi, I'm Wily</h2>
    <p class="lede">I watch your CS2 matches and tell you what wins rounds. I'm with you at three moments:</p>
    <ul style="font-size:15px"><li><b>Live</b>: a sheet to keep on a 2nd screen that follows your match (what to buy, where the Ts are likely to go, your paths, your rotations).</li>
