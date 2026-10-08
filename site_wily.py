@@ -122,10 +122,11 @@ def download_block(lang, rel):
                 f'<span class="note">Version {html.escape(rel["app"])} · {when} · base of {rel["base"]["matches"]:,} matches · the setup downloads {parts:.0f} MB</span></div>'
                 f'<p class="note">If Windows says <i>"Windows protected your PC"</i>: click <b>More info</b>, then <b>Run anyway</b>. The app isn\'t signed with a paid certificate yet; every part it downloads is checked against my author\'s signature.</p>'
                 f'<p class="note">SHA-256 of the setup: <span class="mono">{ins["sha256"]}</span> · or <a href="releases/{s["file"]}" download>the zip</a> ({mb:.0f} MB, to unzip yourself)</p>')
+    n_fr = f'{rel["base"]["matches"]:,}'.replace(",", " ")   # the thousands only: the sentences keep their commas
     return (f'<div class="cta"><a class="btn" href="releases/{ins["file"]}" download>Télécharger Wily pour Windows</a>'
-            f'<span class="note">Version {html.escape(rel["app"])} · {when} · base de {rel["base"]["matches"]:,} matchs · l\'installation télécharge {parts:.0f} Mo</span></div>'
+            f'<span class="note">Version {html.escape(rel["app"])} · {when} · base de {n_fr} matchs · l\'installation télécharge {parts:.0f} Mo</span></div>'
             f'<p class="note">Si Windows affiche <i>« Windows a protégé votre ordinateur »</i> : clique sur <b>Informations complémentaires</b>, puis <b>Exécuter quand même</b>. L\'application n\'est pas encore signée par un certificat payant ; chaque partie qu\'elle télécharge est vérifiée avec la signature de son auteur.</p>'
-            f'<p class="note">SHA-256 de l\'installation : <span class="mono">{ins["sha256"]}</span> · ou <a href="releases/{s["file"]}" download>le zip</a> ({mb:.0f} Mo, à décompresser toi-même)</p>').replace(",", " ")
+            f'<p class="note">SHA-256 de l\'installation : <span class="mono">{ins["sha256"]}</span> · ou <a href="releases/{s["file"]}" download>le zip</a> ({mb:.0f} Mo, à décompresser toi-même)</p>')
 
 
 HOME = {
