@@ -320,13 +320,14 @@ def aim_range_drills(sid, secs):
     mp = aim_map()
     team = 3 if mp == "aim_botz" else 2   # Aim Botz: you on its CT spawn in the middle, the targets on its T spawns
     menu = [
-        {"variant": "flick", "gun": tr, "secs": 60, "count": 3, "goal": 25,
+        # 09/10, his warm-up: "j'aimerais bien avoir plus de bots pour l'aim": twice as many targets out at once
+        {"variant": "flick", "gun": tr, "secs": 60, "count": 6, "goal": 30,
          "tip": "still targets across the map: flick to the head, one bullet · they don't shoot"},
-        {"variant": "strafe", "gun": cr, "secs": 50, "count": 2, "goal": 14,
+        {"variant": "strafe", "gun": cr, "secs": 50, "count": 4, "goal": 16,
          "tip": "strafing targets: stop, then shoot (counter-strafe) · they don't shoot"},
-        {"variant": "duel", "gun": tr, "secs": 60, "count": 2, "goal": 12,
+        {"variant": "duel", "gun": tr, "secs": 60, "count": 3, "goal": 14,
          "tip": "duels: they shoot back once they've seen you a player's reaction time · you respawn"},
-        {"variant": "flick", "gun": pi, "secs": 45, "count": 3, "goal": 15,
+        {"variant": "flick", "gun": pi, "secs": 45, "count": 5, "goal": 18,
          "tip": "pistol: still targets, head only · they don't shoot"},
     ]
     out, used, k = [], 0, 0
@@ -791,16 +792,20 @@ def _jumps(z):
 
 def _no_returns(P, r=90.0):
     """A walked way without its loops and its returns (07/10, the user: "le chemin qui fait des allers-retours,
-    useless"): from each point, on to the last later point back within r of it (same floor), so a trip there and back
-    is cut out."""
+    useless"): from each point, on to the last later point back within r of it (same floor) when the way went away
+    meanwhile (1.5 r), so a trip there and back is cut out. 09/10 (his prefire video: "le path au sol... ne suit pas
+    exactement la map"): without that condition every point jumped to the one 90 u ahead, a way of 449 points kept 27,
+    and the line's smoothing, made for a point every 2 ticks, flattened its heights (Control's ramp drawn 218 u low)."""
     Q = np.asarray(P, float)
     if len(Q) < 3:
         return Q
     out, i, n = [0], 0, len(Q)
     while i < n - 1:
         R = Q[i + 1:]
-        back = np.where((np.hypot(R[:, 0] - Q[i, 0], R[:, 1] - Q[i, 1]) < r) & (np.abs(R[:, 2] - Q[i, 2]) < 60))[0]
-        i = i + 1 + int(back[-1]) if len(back) else i + 1
+        d = np.hypot(R[:, 0] - Q[i, 0], R[:, 1] - Q[i, 1])
+        back = np.where((d < r) & (np.abs(R[:, 2] - Q[i, 2]) < 60))[0]
+        j = int(back[-1]) if len(back) else -1
+        i = i + 1 + j if j > 0 and d[:j].max() > 1.5 * r else i + 1
         out.append(i)
     return Q[out]
 
@@ -1452,6 +1457,10 @@ def _exposed(mp, spot, land):
     return int((near(K, spot, 120, 90) & near(V, land, 450, 220)).sum() + (near(V, spot, 120, 90) & near(K, land, 450, 220)).sum())
 
 
+CLICK = {"left": "left click", "gauche": "left click", "right": "right click", "droit": "right click",
+         "middle": "left + right click", "milieu": "left + right click", "both": "left + right click"}
+
+
 def nade_drills(sid, mp):
     """The lineups for where you play: thrown from the spots you hold 15-30 s into your rounds, or landing where your
     enemies come from when you hold them (04/10: "I'm an Apps player, I don't play long: this smoke changes nothing for
@@ -1500,7 +1509,10 @@ def nade_drills(sid, mp):
             out.append({"id": did, "kind": "nade", "map": mp,
                         "title": f"{name} → {x['to']}", "tip": f"{why} · {x.get('timer') or ''}".strip(" ·"),
                         "team": team, "type": typ, "item": item, "how": x.get("how") or "standing still",
-                        "click": {"right": "right click", "both": "left + right click"}.get(x.get("click"), "left click"),
+                        # 09/10, his HE to Mini, told "left click": "c'est pas que du left click, c'est du left et right
+                        # click". The demos hold the buttons for almost no throw (CS2's don't record them: 154 of 1,028,672
+                        # in the base): the click only when it is known, never a "left click" by default
+                        "click": CLICK.get(x.get("click") or "", ""),
                         "me": {"pos": pos, "ang": ang}, "target": land, "victims": [], "_vic": [side, x.get("t_med")],
                         "clock": round(max(10.0, 115 - float(x.get("t_med") or 0) + 3), 1) if x.get("t_med") else 0,
                         "weight": 1 + 10 * w})

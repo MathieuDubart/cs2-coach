@@ -41,7 +41,7 @@ public class Drill
     [JsonPropertyName("type")] public string Type { get; set; } = "";
     [JsonPropertyName("item")] public string Item { get; set; } = "";
     [JsonPropertyName("how")] public string How { get; set; } = "";
-    [JsonPropertyName("click")] public string Click { get; set; } = "";
+    [JsonPropertyName("click")] public string Click { get; set; } = "";   // "" when the demos don't tell
     [JsonPropertyName("target")] public float[]? Target { get; set; }   // stuff: where it lands (x, y, and z when known)
     [JsonPropertyName("victims")] public List<Spot> Victims { get; set; } = new();   // stuff: the enemies' spots it is for
     [JsonPropertyName("level")] public int Level { get; set; }
@@ -192,6 +192,8 @@ public partial class CoachReplay
     // the player in the menu. On a Workshop map the plugin sets everything itself: the map's command entities are
     // removed, and a load by name goes through the map's Workshop id.
     int wsCut;
+
+    static string HowClick(Drill d) => d.Click != "" ? $"{d.How} · {d.Click}" : d.How;
 
     static bool MapLogic(string n) => n.StartsWith("logic_") || n.StartsWith("math_") || n.StartsWith("trigger_")
         || n is "point_servercommand" or "point_clientcommand" or "point_broadcastclientcommand" or "point_script" or "point_template"
@@ -682,10 +684,10 @@ public partial class CoachReplay
     {
         var how = d.Kind == "situation" && cur != null ? SituationText() : d.Kind != "nade" ? d.Tip : d.Level switch
         {
-            0 or 1 when d.Rush => $"{d.How} · {d.Click} — a real rush gets to the blue ring at {RoundClock(d.RushAt)}: your {d.Type} must be up before · the grenade comes at GO",
+            0 or 1 when d.Rush => $"{HowClick(d)} — a real rush gets to the blue ring at {RoundClock(d.RushAt)}: your {d.Type} must be up before · the grenade comes at GO",
             _ when d.Rush => $"they rush: your {d.Type} up on its spot in time · the grenade comes at GO",
-            0 or 1 => $"<font color='#ffd34d' class='fontSize-l'>{d.How.ToUpper()}</font> · {d.Click}<br>crosshair on the green cross · it must land in the blue ring · stand in the green ring",
-            _ => $"<font color='#ffd34d' class='fontSize-l'>{d.How.ToUpper()}</font> · {d.Click} · find the aim",
+            0 or 1 => $"<font color='#ffd34d' class='fontSize-l'>{d.How.ToUpper()}</font>{(d.Click != "" ? $" · {d.Click}" : "")}<br>crosshair on the green cross · it must land in the blue ring · stand in the green ring",
+            _ => $"<font color='#ffd34d' class='fontSize-l'>{d.How.ToUpper()}</font>{(d.Click != "" ? $" · {d.Click}" : "")} · find the aim",
         };
         var again = tries > 0 ? " · AGAIN" : "";
         introHtml = $"<font color='{KindColor[d.Kind]}'>{KindName[d.Kind]}{again}</font> · {Left()} · ⭐ {points}<br><font class='fontSize-l'>{d.Title}</font><br>{how}";
@@ -1032,7 +1034,20 @@ public partial class CoachReplay
         if (ph == postIdx) return;
         postIdx = ph;
         ClearLine();
-        if (ph >= drill.Posts.Count) { Html("<font color='#4fc3a1'>FREE</font> · play the site where you want", 3); return; }
+        if (ph >= drill.Posts.Count)
+        {   // 09/10, his defense video: "téléporte-moi sur le bombsite quand je suis en free pour vraiment montrer un
+            // changement": back on the site (the drill's start), turned the way they come, refilled like at a post
+            var me0 = cur.Players.FirstOrDefault(t => t.Me);
+            if (drill.Me is { } site)
+                foreach (var h in Humans())
+                    if (h.PawnIsAlive && h.PlayerPawn.Value is { } pw0)
+                    {
+                        pw0.Teleport(new Vector3(site.Pos[0], site.Pos[1], site.Pos[2]), new Vector3(0, site.Ang[1], 0), Vector3.Zero);
+                        if (me0 != null) Loadout(h, me0, 100);
+                    }
+            Html("<font color='#4fc3a1'>FREE</font> · on the site: play it where you want", 3);
+            return;
+        }
         var p = drill.Posts[ph];
         var at = new Vector3(p.Pos[0], p.Pos[1], p.Pos[2]);
         var green = System.Drawing.Color.FromArgb(255, 79, 195, 161);
@@ -1161,7 +1176,7 @@ public partial class CoachReplay
         if (cur.Kind == "aim" && string.IsNullOrEmpty(drill?.Mode))
             SetMain($"<font color='#ff8a3d'>{drill?.Title}</font> · target {Math.Max(1, aimNext)}/{aimOrder.Count}");
         if (cur.Kind == "nade" && drill != null)
-            SetMain($"<font color='#5ab4ff'>{drill.Title}</font>{(drill.Rush ? (drill.Level < 2 ? $" · they get there at {RoundClock(drill.RushAt)}" : " · in time") : $" · throw {Math.Min(3, attempts + 1)}/3")}<br><font class='fontSize-s'>{(drill.Level < 2 ? $"{drill.How} · {drill.Click}" : "find the aim and the throw")}</font>");
+            SetMain($"<font color='#5ab4ff'>{drill.Title}</font>{(drill.Rush ? (drill.Level < 2 ? $" · they get there at {RoundClock(drill.RushAt)}" : " · in time") : $" · throw {Math.Min(3, attempts + 1)}/3")}<br><font class='fontSize-s'>{(drill.Level < 2 ? HowClick(drill) : "find the aim and the throw")}</font>");
         // a target not found in 12 s goes away (missed), the next one comes
         if (cur.Kind == "aim" && aimSpawn > 0 && Server.TickCount - aimSpawn > 12 * 64)
         {

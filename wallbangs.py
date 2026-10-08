@@ -120,7 +120,7 @@ def analyze_map(mp, log=print):
                & (np.abs(((D.attacker_yaw - my) + 180) % 360 - 180) < ad)]
         direct = int(sum(np.hypot(VX - vx, VY - vy).min() < 100 for vx, vy in zip(d0.user_X, d0.user_Y))) if len(d0) else 0
         wall = len(x) / (len(x) + direct)
-        if wall < 0.5:
+        if wall < 0.75:   # 09/10, Nuke's B Site at 57%: "c'est juste un tir à travers la petite barrière jaune" (seen through)
             continue
         side = Counter(x.attacker_team_num.map(SIDE)).most_common(1)[0][0]
         wc = Counter(x.weapon)
