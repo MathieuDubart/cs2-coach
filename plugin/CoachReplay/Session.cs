@@ -193,16 +193,22 @@ public partial class CoachReplay
     // removed, and a load by name goes through the map's Workshop id.
     int wsCut;
 
+    static bool MapLogic(string n) => n.StartsWith("logic_") || n.StartsWith("math_") || n.StartsWith("trigger_")
+        || n is "point_servercommand" or "point_clientcommand" or "point_broadcastclientcommand" or "point_script" or "point_template"
+            or "game_player_equip" or "player_weaponstrip" or "game_ui" or "game_text" or "env_hudhint";
+
     void RegisterWorkshopGuard()
     {
-        // its command entities removed as they spawn (each round restart makes them again); reading an output's
-        // connections to stop only those crashed the server (CounterStrikeSharp's layout of them is off: 08/10)
+        // its logic removed as it spawns (each round restart makes it again): its console commands, its scripts, relays,
+        // counters, timers, templates and triggers. 08/10 22:58, his second warm-up: its weapon handling took the drill's
+        // rifle at his spawn (@weapon_relay.kill.primary: a Glock and a knife left) and its kill zones killed the strafing
+        // targets 15 times in 11 s. Walls, floors and spawns stay. (Reading an output's connections to stop only some of
+        // them crashed the server: CounterStrikeSharp's layout of them is off.)
         RegisterListener<Listeners.OnEntitySpawned>(ent =>
         {
-            if (ent.DesignerName is not ("point_servercommand" or "point_clientcommand" or "point_broadcastclientcommand")
-                || !Workshop.ContainsKey(Server.MapName)) return;
+            if (!MapLogic(ent.DesignerName) || !Workshop.ContainsKey(Server.MapName)) return;
             ent.Remove();
-            if (wsCut++ == 0) Logger.LogInformation("workshop map: its console commands cut ({c})", ent.DesignerName);
+            if (wsCut++ == 0) Log("workshop map: its own logic removed ({c}...)", ent.DesignerName);
         });
         RegisterListener<Listeners.OnMapStart>(_ => wsCut = 0);
         AddCommand("css_dbgfire", "an input to the entities of that name: css_dbgfire <name> <input> [value]", (p, c) =>
@@ -218,7 +224,7 @@ public partial class CoachReplay
                 if (p != null) return HookResult.Continue;   // a player's own console: the game's rules
                 var target = cmd == "restart" || info.ArgCount < 2 ? Server.MapName : info.GetArg(1);
                 if (!Workshop.TryGetValue(target, out var id)) return HookResult.Continue;
-                Logger.LogInformation("workshop map: \"{c}\" by name stopped", info.GetCommandString);
+                Log("workshop map: \"{c}\" by name stopped", info.GetCommandString);
                 if (cmd != "restart") Server.NextFrame(() => Server.ExecuteCommand($"host_workshop_map {id}"));
                 return HookResult.Stop;
             }, HookMode.Pre);
@@ -481,11 +487,34 @@ public partial class CoachReplay
 
     void CmdSession(CCSPlayerController? p, CommandInfo c)
     {
-        var f = System.IO.Path.Combine(Dir, "sessions", c.GetArg(1) + ".json");
-        if (!File.Exists(f)) { Say(p, $"no session {c.GetArg(1)}"); return; }
-        try { sess = JsonSerializer.Deserialize<Session>(File.ReadAllText(f)); } catch (Exception e) { Say(p, e.Message); return; }
-        if (sess == null || sess.Blocks.Count == 0) { sess = null; return; }
-        StartSession(sess);
+        var id = c.GetArg(1);
+        var f = System.IO.Path.Combine(Dir, "sessions", id + ".json");
+        Io(() =>   // a session is 1-2 MB of JSON: read and parsed off the game's thread (08/10)
+        {
+            Session? s = null;
+            string? err = null;
+            try { if (File.Exists(f)) s = JsonSerializer.Deserialize<Session>(File.ReadAllText(f)); else err = $"no session {id}"; }
+            catch (Exception e) { err = e.Message; }
+            OnGame(() =>
+            {
+                if (err != null) { Say(p is { IsValid: true } ? p : null, err); return; }
+                if (s == null || s.Blocks.Count == 0) { sess = null; return; }
+                StartSession(s);
+            });
+        });
+    }
+
+    // a situation's file (the whole round of the demo, hundreds of KB) read by the io thread: null while it loads
+    readonly Dictionary<string, Scenario?> scLoaded = new();
+    readonly HashSet<string> scLoading = new();
+    Scenario? PeekSoon(string id, out bool pending)
+    {
+        pending = false;
+        if (scLoaded.Remove(id, out var s)) return s;
+        pending = true;
+        if (scLoading.Add(id))
+            Io(() => { var r = Peek(id); OnGame(() => { scLoading.Remove(id); scLoaded[id] = r; }); });
+        return null;
     }
 
     void StartSession(Session s)
@@ -495,7 +524,7 @@ public partial class CoachReplay
         mode = "actor";
         blockIdx = -1; points = streak = okN = doneN = drillNo = 0; drill = null; queue.Clear(); cur = null;
         sessDone.Clear();
-        Logger.LogInformation("session {id}: {n} blocks", sess.Id, sess.Blocks.Count);
+        Log("session {id}: {n} blocks", sess.Id, sess.Blocks.Count);
         if (!Humans().Any()) { phase = "waiting"; return; }   // starts when you join
         Welcome();
         AddTimer(4f, NextBlock);
@@ -543,10 +572,10 @@ public partial class CoachReplay
         };
         try
         {
-            File.AppendAllText(System.IO.Path.Combine(Dir, "reports.jsonl"), JsonSerializer.Serialize(rec) + "\n");
+            Append("reports.jsonl", JsonSerializer.Serialize(rec));
             Say(p, "📨 noted: it goes to Wily's author with this drill and where you stand. Thanks!");
         }
-        catch (Exception e) { Logger.LogInformation("report: {m}", e.Message); Say(p, "couldn't keep it, sorry: the app's \"alpha · report\" works too"); }
+        catch (Exception e) { Log("report: {m}", e.Message); Say(p, "couldn't keep it, sorry: the app's \"alpha · report\" works too"); }
     }
 
     void Welcome()
@@ -604,8 +633,15 @@ public partial class CoachReplay
     {
         if (sess == null) return;
         sessGen++;
-        var s = d.Kind switch { "situation" => d.Scenario != null ? Peek(d.Scenario) : null, "aim" => d.Mode == "range" ? RangeScenario(d) : AimScenario(d),
+        var pending = false;
+        var s = d.Kind switch { "situation" => d.Scenario != null ? PeekSoon(d.Scenario, out pending) : null, "aim" => d.Mode == "range" ? RangeScenario(d) : AimScenario(d),
             "nade" => NadeScenario(d), _ => null };
+        if (pending)
+        {
+            var gp = sessGen;
+            AddTimer(0.2f, () => { if (gp == sessGen && drill == d) RunDrill(d); });
+            return;
+        }
         if (s == null && d.Kind == "situation" && waitFile++ < 20)   // the app is still building it from the demo
         {
             Html($"<font color='#e0a030'>SITUATION</font><br>loading {d.Title}…", 2);
@@ -614,7 +650,7 @@ public partial class CoachReplay
             return;
         }
         waitFile = 0;
-        if (s == null) { Logger.LogInformation("drill {id}: nothing to play", d.Id); NextDrill(); return; }
+        if (s == null) { Log("drill {id}: nothing to play", d.Id); NextDrill(); return; }
         if (!string.IsNullOrEmpty(s.Lost))
         {   // 07/10: "la situation est perdue d'avance, autant pas me la faire jouer"
             All($"\x10SITUATION\x01 {d.Title}: {s.Lost} · skipped");
@@ -789,7 +825,7 @@ public partial class CoachReplay
             if (now - since < 3 * 64) continue;
             var here = Pos(t, 0);
             var i = rangeTheirs.FindIndex(q => Vector3.Distance(q, here) < 2f);
-            if (i >= 0 && rangeTheirs.Count - rangeBlind.Count > 4) { rangeBlind.Add(i); Logger.LogInformation("range: their spot {i} unseen from yours, dropped ({n} left)", i, rangeTheirs.Count - rangeBlind.Count); }
+            if (i >= 0 && rangeTheirs.Count - rangeBlind.Count > 4) { rangeBlind.Add(i); Log("range: their spot {i} unseen from yours, dropped ({n} left)", i, rangeTheirs.Count - rangeBlind.Count); }
             rangeSeenAt[slot] = now;
             RangeAgain(generation, slot);
         }
@@ -808,6 +844,13 @@ public partial class CoachReplay
             var here = new Vector3(o.X, o.Y, o.Z);
             var to = new Vector3(me.X - here.X, me.Y - here.Y, 0);
             if (to.Length() < 1) continue;
+            var spot = Pos(t, 0);
+            if (here.Z < spot.Z - 40)
+            {   // off its ledge (Aim Botz's walkways are narrow, 08/10): back on its spot, going the other way
+                pw.Teleport(spot, new Vector3(0, MathF.Atan2(to.Y, to.X) * 180 / MathF.PI, 0), Vector3.Zero);
+                strafe[slot] = (strafe.TryGetValue(slot, out var was) && was.sign != 0 ? -was.sign : 1, Server.TickCount + Rng.Next(20, 50));
+                continue;
+            }
             var side = Vector3.Normalize(new Vector3(-to.Y, to.X, 0));
             var off = Vector3.Dot(here - Pos(t, 0), side);
             (int sign, int until) st = strafe.TryGetValue(slot, out var s0) ? s0 : (Rng.Next(2) * 2 - 1, Server.TickCount + Rng.Next(20, 50));
@@ -971,7 +1014,7 @@ public partial class CoachReplay
             var dz = tg.Length >= 3 ? Math.Abs(o.Z - tg[2]) : 0f;
             if (MathF.Sqrt((o.X - tg[0]) * (o.X - tg[0]) + (o.Y - tg[1]) * (o.Y - tg[1])) > 240f || dz > 160f) continue;
             rushIn = Server.TickCount;
-            Logger.LogInformation("rush: {n} on the spot at {s:F1} s", t.Name, (rushIn - t0) / 64.0);
+            Log("rush: {n} on the spot at {s:F1} s", t.Name, (rushIn - t0) / 64.0);
             if (!nadeWait) return;   // up already (scored at its pop)
             nadeWait = false;
             DrillDone(false, "late", 0, $"{t.Name} got there before your {drill.Type}");
@@ -1470,11 +1513,7 @@ public partial class CoachReplay
         Server.ExecuteCommand("bot_kick");
     }
 
-    void Write(Dictionary<string, object> o)
-    {
-        try { File.AppendAllText(System.IO.Path.Combine(Dir, "results.jsonl"), JsonSerializer.Serialize(o) + "\n"); }
-        catch (Exception e) { Logger.LogInformation("{m}", e.Message); }
-    }
+    void Write(Dictionary<string, object> o) => Append("results.jsonl", JsonSerializer.Serialize(o));
 
     Dictionary<string, object?> SessionBeat() => sess == null ? new() : new()
     {

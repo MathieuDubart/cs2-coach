@@ -162,9 +162,10 @@ public partial class CoachReplay : BasePlugin
     {
         loadedAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
         Directory.CreateDirectory(System.IO.Path.Combine(Dir, "scenarios"));
-        try { smokeCreate = new(SmokeSig); } catch (Exception e) { smokeCreate = null; Logger.LogInformation("no smokes: {m}", e.Message); }
-        try { heCreate = new(HeSig); } catch (Exception e) { heCreate = null; Logger.LogInformation("no HE: {m}", e.Message); }
-        try { molotovCreate = new(MolotovSig); } catch (Exception e) { molotovCreate = null; Logger.LogInformation("no molotov: {m}", e.Message); }
+        StartIo();
+        try { smokeCreate = new(SmokeSig); } catch (Exception e) { smokeCreate = null; Log("no smokes: {m}", e.Message); }
+        try { heCreate = new(HeSig); } catch (Exception e) { heCreate = null; Log("no HE: {m}", e.Message); }
+        try { molotovCreate = new(MolotovSig); } catch (Exception e) { molotovCreate = null; Log("no molotov: {m}", e.Message); }
         RegisterListener<Listeners.OnTick>(OnTick);
         RegisterListener<Listeners.OnServerPrecacheResources>(m => m.AddResource(NullModel));
         RegisterListener<Listeners.OnMapStart>(_ =>
@@ -203,7 +204,7 @@ public partial class CoachReplay : BasePlugin
                 if (t.Hold || t.Team == cur.Team || free.Contains(slot) || gone.Contains(t.Sid)) continue;   // your enemies
                 var c = Utilities.GetPlayerFromSlot(slot);
                 if (c?.PlayerPawn.Value?.AbsOrigin is { } bo && Vector3.Distance(new Vector3(bo.X, bo.Y, bo.Z), me) < r)
-                { Free(slot, c, t); Logger.LogInformation("heard {n}", t.Name); }
+                { Free(slot, c, t); Log("heard {n}", t.Name); }
             }
             return HookResult.Continue;
         });
@@ -211,10 +212,10 @@ public partial class CoachReplay : BasePlugin
         RegisterEventHandler<EventBombDefused>((e, _) => { if (cur is { Kind: "death" or "clutch" } && phase == "live") Finish("defused"); return HookResult.Continue; });
         RegisterEventHandler<EventBombExploded>((e, _) => { if (cur is { Kind: "death" or "clutch" } && phase == "live") Finish("exploded"); return HookResult.Continue; });
         RegisterEventHandler<EventBombPlanted>((e, _) => { if (cur is { Kind: "death" or "clutch" }) bombLive = bombDone = true; return HookResult.Continue; });
-        RegisterEventHandler<EventSmokegrenadeDetonate>((e, _) => { Logger.LogInformation("smoke pops {x:F0} {y:F0}", e.X, e.Y); return HookResult.Continue; });
-        RegisterEventHandler<EventFlashbangDetonate>((e, _) => { Logger.LogInformation("flash pops {x:F0} {y:F0}", e.X, e.Y); return HookResult.Continue; });
-        RegisterEventHandler<EventHegrenadeDetonate>((e, _) => { Logger.LogInformation("he pops {x:F0} {y:F0}", e.X, e.Y); return HookResult.Continue; });
-        RegisterEventHandler<EventInfernoStartburn>((e, _) => { Logger.LogInformation("fire {x:F0} {y:F0}", e.X, e.Y); return HookResult.Continue; });
+        RegisterEventHandler<EventSmokegrenadeDetonate>((e, _) => { Log("smoke pops {x:F0} {y:F0}", e.X, e.Y); return HookResult.Continue; });
+        RegisterEventHandler<EventFlashbangDetonate>((e, _) => { Log("flash pops {x:F0} {y:F0}", e.X, e.Y); return HookResult.Continue; });
+        RegisterEventHandler<EventHegrenadeDetonate>((e, _) => { Log("he pops {x:F0} {y:F0}", e.X, e.Y); return HookResult.Continue; });
+        RegisterEventHandler<EventInfernoStartburn>((e, _) => { Log("fire {x:F0} {y:F0}", e.X, e.Y); return HookResult.Continue; });
         Server.ExecuteCommand("sv_hibernate_when_empty 0");
         RegisterSession();
         AddCommand("css_replay", "play a scenario: css_replay <id> [actor|spec]", (p, c) => CmdReplay(p, c));
@@ -228,10 +229,10 @@ public partial class CoachReplay : BasePlugin
         {
             foreach (var cls in new[] { "smokegrenade_projectile", "hegrenade_projectile", "flashbang_projectile", "molotov_projectile" })
                 foreach (var e in Utilities.FindAllEntitiesByDesignerName<CBaseCSGrenadeProjectile>(cls))
-                    Logger.LogInformation("dbg {c} at {x:F0} {y:F0} {z:F0} vel {v:F0} det {d:F1} now {n:F1} think {t} live {l} smoke {s}", cls, e.AbsOrigin?.X, e.AbsOrigin?.Y, e.AbsOrigin?.Z,
+                    Log("dbg {c} at {x:F0} {y:F0} {z:F0} vel {v:F0} det {d:F1} now {n:F1} think {t} live {l} smoke {s}", cls, e.AbsOrigin?.X, e.AbsOrigin?.Y, e.AbsOrigin?.Z,
                         e.AbsVelocity?.Length(), e.DetonateTime, Server.CurrentTime, e.NextThinkTick, e.IsLive, cls.StartsWith("smoke") ? new CSmokeGrenadeProjectile(e.Handle).DidSmokeEffect : null);
             foreach (var b in Utilities.GetPlayers().Where(x => x is { IsValid: true }))
-                Logger.LogInformation("dbg {n} slot {s} team {t} alive {a} life {l} hp {h}", b.PlayerName, b.Slot, b.Team, b.PawnIsAlive, b.PlayerPawn.Value?.LifeState, b.PlayerPawn.Value?.Health);
+                Log("dbg {n} slot {s} team {t} alive {a} life {l} hp {h}", b.PlayerName, b.Slot, b.Team, b.PawnIsAlive, b.PlayerPawn.Value?.LifeState, b.PlayerPawn.Value?.Health);
         });
         AddCommand("css_dbgbots", "the players' body angle, aim, move type, speed and kit; the bomb; the guns on the ground", (p, c) =>
         {
@@ -241,13 +242,13 @@ public partial class CoachReplay : BasePlugin
                 if (pw == null) continue;
                 var r = pw.AbsRotation; var e = pw.EyeAngles; var v = pw.AbsVelocity;
                 var kit = pw.ItemServices == null ? (bool?)null : new CCSPlayer_ItemServices(pw.ItemServices.Handle).HasDefuser;
-                Logger.LogInformation("dbgbots {n} body {bp:F1} {by:F1} {br:F1} eye {ep:F1} {ey:F1} move {m} speed {s:F0} kit {k} free {f} life {l} hp {h}", b.PlayerName,
+                Log("dbgbots {n} body {bp:F1} {by:F1} {br:F1} eye {ep:F1} {ey:F1} move {m} speed {s:F0} kit {k} free {f} life {l} hp {h}", b.PlayerName,
                     r?.X, r?.Y, r?.Z, e?.X, e?.Y, pw.MoveType, v == null ? -1 : Math.Sqrt(v.X * v.X + v.Y * v.Y), kit, free.Contains(b.Slot), pw.LifeState, pw.Health);
             }
             foreach (var c4 in Utilities.FindAllEntitiesByDesignerName<CPlantedC4>("planted_c4"))
-                Logger.LogInformation("dbgbots bomb at {x:F0} {y:F0} {z:F0} site {s} ticking {t} blows in {l:F1} s", c4.AbsOrigin?.X, c4.AbsOrigin?.Y, c4.AbsOrigin?.Z,
+                Log("dbgbots bomb at {x:F0} {y:F0} {z:F0} site {s} ticking {t} blows in {l:F1} s", c4.AbsOrigin?.X, c4.AbsOrigin?.Y, c4.AbsOrigin?.Z,
                     c4.BombSite, c4.BombTicking, c4.C4Blow - Server.CurrentTime);
-            Logger.LogInformation("dbgbots guns on the ground: {n}", Utilities.FindAllEntitiesByDesignerName<CBasePlayerWeapon>("weapon_").Count(w => w.OwnerEntity.Value == null));
+            Log("dbgbots guns on the ground: {n}", Utilities.FindAllEntitiesByDesignerName<CBasePlayerWeapon>("weapon_").Count(w => w.OwnerEntity.Value == null));
         });
         // the In game page's numpad keys say a path with CS2's chat wheel "Ping Site A": what the server makes of it
         // (a ping entity, and where), tried with a bot
@@ -255,7 +256,7 @@ public partial class CoachReplay : BasePlugin
         {
             var b = Utilities.GetPlayers().FirstOrDefault(x => x is { IsValid: true, IsBot: true, PawnIsAlive: true }
                                                                 && x.PlayerPawn.Value?.LifeState == (byte)LifeState_t.LIFE_ALIVE);
-            if (b == null) { Logger.LogInformation("dbgping: no bot alive"); return; }
+            if (b == null) { Log("dbgping: no bot alive"); return; }
             var arg = c.ArgCount > 1 ? c.GetArg(1) : "CW.GoA";
             var before = Utilities.GetAllEntities().Select(e => e.Index).ToHashSet();
             // a CW.* item through the chat wheel's command; anything else as it is (player_ping: a ping where it looks)
@@ -265,24 +266,24 @@ public partial class CoachReplay : BasePlugin
                 foreach (var e in Utilities.GetAllEntities().Where(e => !before.Contains(e.Index) || (e.DesignerName != null && e.DesignerName.Contains("ping"))))
                 {
                     var be = new CBaseEntity(e.Handle);
-                    Logger.LogInformation("dbgping new or ping entity {d} at {x:F0} {y:F0} {z:F0}", e.DesignerName, be.AbsOrigin?.X, be.AbsOrigin?.Y, be.AbsOrigin?.Z);
+                    Log("dbgping new or ping entity {d} at {x:F0} {y:F0} {z:F0}", e.DesignerName, be.AbsOrigin?.X, be.AbsOrigin?.Y, be.AbsOrigin?.Z);
                 }
                 foreach (var s in Utilities.FindAllEntitiesByDesignerName<CBaseEntity>("func_bomb_target"))
-                    Logger.LogInformation("dbgping site trigger at {x:F0} {y:F0} {z:F0}", s.AbsOrigin?.X, s.AbsOrigin?.Y, s.AbsOrigin?.Z);
-                Logger.LogInformation("dbgping: {n} by {b} ({a})", "done", b.PlayerName, arg);
+                    Log("dbgping site trigger at {x:F0} {y:F0} {z:F0}", s.AbsOrigin?.X, s.AbsOrigin?.Y, s.AbsOrigin?.Z);
+                Log("dbgping: {n} by {b} ({a})", "done", b.PlayerName, arg);
             });
         });
         AddCommand("css_dbgspawns", "the map's spawn points", (p, c) =>
         {
             foreach (var cls in new[] { "info_player_terrorist", "info_player_counterterrorist" })
                 foreach (var e in Utilities.FindAllEntitiesByDesignerName<SpawnPoint>(cls))
-                    Logger.LogInformation("dbgspawns {c} {x:F0} {y:F0} {z:F0} yaw {w:F0} enabled {on} priority {pr}", cls, e.AbsOrigin?.X, e.AbsOrigin?.Y, e.AbsOrigin?.Z, e.AbsRotation?.Y, e.Enabled, e.Priority);
+                    Log("dbgspawns {c} {x:F0} {y:F0} {z:F0} yaw {w:F0} enabled {on} priority {pr}", cls, e.AbsOrigin?.X, e.AbsOrigin?.Y, e.AbsOrigin?.Z, e.AbsRotation?.Y, e.Enabled, e.Priority);
         });
         AddCommand("css_dbgbreak", "the map's breakables", (p, c) =>
         {
             foreach (var cls in new[] { "func_breakable", "func_breakable_surf", "prop_dynamic", "prop_physics_multiplayer" })
                 foreach (var e in Utilities.FindAllEntitiesByDesignerName<CBaseEntity>(cls))
-                    Logger.LogInformation("dbgbreak {c} {n} {x:F0} {y:F0} {z:F0} hp {h}", cls, e.Entity?.Name, e.AbsOrigin?.X, e.AbsOrigin?.Y, e.AbsOrigin?.Z, e.Health);
+                    Log("dbgbreak {c} {n} {x:F0} {y:F0} {z:F0} hp {h}", cls, e.Entity?.Name, e.AbsOrigin?.X, e.AbsOrigin?.Y, e.AbsOrigin?.Z, e.Health);
         });
         AddCommand("css_dbgbreakat", "break the breakables near x y z", (p, c) =>
         {
@@ -293,14 +294,14 @@ public partial class CoachReplay : BasePlugin
             AddTimer(1f, () =>
             {
                 foreach (var e in Utilities.FindAllEntitiesByDesignerName<CBaseEntity>("prop_dynamic").Where(e => (e.Entity?.Name ?? "").Contains("vent")))
-                    Logger.LogInformation("dbgbreakat after: {n} valid {v} hp {h}", e.Entity?.Name, e.IsValid, e.Health);
+                    Log("dbgbreakat after: {n} valid {v} hp {h}", e.Entity?.Name, e.IsValid, e.Health);
             });
         });
         AddCommand("css_dbgboost", "two bots of a team: one held still (crouched with 1), the other dropped on its head; heights after 1.5 s", (p, c) =>
         {
             var duck = c.ArgCount > 1 && c.GetArg(1) == "1";
             var bs = Utilities.GetPlayers().Where(x => x is { IsValid: true, IsBot: true, PawnIsAlive: true }).GroupBy(x => x.Team).FirstOrDefault(g => g.Count() >= 2)?.Take(2).ToList();
-            if (bs == null || bs[0].PlayerPawn.Value?.AbsOrigin == null || bs[1].PlayerPawn.Value == null) { Logger.LogInformation("dbgboost: two living bots of one team needed"); return; }
+            if (bs == null || bs[0].PlayerPawn.Value?.AbsOrigin == null || bs[1].PlayerPawn.Value == null) { Log("dbgboost: two living bots of one team needed"); return; }
             Zombie(true);
             var a = bs[0].PlayerPawn.Value!; var b = bs[1].PlayerPawn.Value!;
             var at = new Vector3(a.AbsOrigin!.X, a.AbsOrigin.Y, a.AbsOrigin.Z);
@@ -312,14 +313,14 @@ public partial class CoachReplay : BasePlugin
             {
                 tm.Kill();
                 var da = a.MovementServices == null ? -1f : new CCSPlayer_MovementServices(a.MovementServices.Handle).DuckAmount;
-                Logger.LogInformation("dbgboost duck {d}: the one below has duck amount {da:F2}, the one on top is {h:F1} u above it (solid teammates {s})", duck, da,
+                Log("dbgboost duck {d}: the one below has duck amount {da:F2}, the one on top is {h:F1} u above it (solid teammates {s})", duck, da,
                     b.IsValid && b.AbsOrigin != null ? b.AbsOrigin.Z - at.Z : -999f, ConVar.Find("mp_solid_teammates")?.GetPrimitiveValue<int>());
             });
         });
         AddCommand("css_dbgents", "the map's entity classes and how many of each", (p, c) =>
         {
             foreach (var g in Utilities.GetAllEntities().Where(e => e.DesignerName != null).GroupBy(e => e.DesignerName).OrderBy(g => g.Key))
-                Logger.LogInformation("dbgents {d} {n}", g.Key, g.Count());
+                Log("dbgents {d} {n}", g.Key, g.Count());
         });
         AddCommand("css_dbgdoors", "the map's doors: class and position", (p, c) =>
         {
@@ -329,17 +330,17 @@ public partial class CoachReplay : BasePlugin
                 {
                     var o = d.AbsOrigin;
                     var n = d.CBodyComponent?.SceneNode;
-                    Logger.LogInformation("dbgdoors #{i} valid {v} origin {o} node {n} at {x:F0} {y:F0} {z:F0}", d.Index, d.IsValid, o != null, n != null,
+                    Log("dbgdoors #{i} valid {v} origin {o} node {n} at {x:F0} {y:F0} {z:F0}", d.Index, d.IsValid, o != null, n != null,
                         o?.X ?? n?.AbsOrigin?.X, o?.Y ?? n?.AbsOrigin?.Y, o?.Z ?? n?.AbsOrigin?.Z);
                 }
-                catch (Exception ex) { Logger.LogInformation("dbgdoors #{i}: {m}", d.Index, ex.Message); }
+                catch (Exception ex) { Log("dbgdoors #{i}: {m}", d.Index, ex.Message); }
             }
         });
         AddCommand("css_dbgline", "draw a test line (3 segments) and count the beams", (p, c) =>
         {
             DrawLine(new List<float[]> { new[] { 0f, 0f, 0f }, new[] { 200f, 0f, 0f }, new[] { 200f, 200f, 0f }, new[] { 0f, 200f, 0f } });
-            Logger.LogInformation("dbgline: {n} beams drawn, {m} in the world", beams.Count, Utilities.FindAllEntitiesByDesignerName<CBeam>("beam").Count());
-            AddTimer(2f, () => { ClearLine(); Logger.LogInformation("dbgline: cleared, {m} in the world", Utilities.FindAllEntitiesByDesignerName<CBeam>("beam").Count()); });
+            Log("dbgline: {n} beams drawn, {m} in the world", beams.Count, Utilities.FindAllEntitiesByDesignerName<CBeam>("beam").Count());
+            AddTimer(2f, () => { ClearLine(); Log("dbgline: cleared, {m} in the world", Utilities.FindAllEntitiesByDesignerName<CBeam>("beam").Count()); });
         });
         AddCommand("css_stop", "stop the replay (or the session)", (p, c) =>
         {
@@ -348,9 +349,9 @@ public partial class CoachReplay : BasePlugin
         });
     }
 
-    void Say(CCSPlayerController? p, string s) { if (p == null) Logger.LogInformation("{s}", s); else p.PrintToChat($" \x04[coach]\x01 {s}"); }
+    void Say(CCSPlayerController? p, string s) { if (p == null) Log("{s}", s); else p.PrintToChat($" \x04[coach]\x01 {s}"); }
 
-    void All(string s) { foreach (var p in Humans()) p.PrintToChat($" \x04[coach]\x01 {s}"); Logger.LogInformation("{s}", s); }
+    void All(string s) { foreach (var p in Humans()) p.PrintToChat($" \x04[coach]\x01 {s}"); Log("{s}", s); }
 
     static IEnumerable<CCSPlayerController> Humans() => Utilities.GetPlayers().Where(p => p is { IsValid: true, IsBot: false, IsHLTV: false });
 
@@ -365,7 +366,7 @@ public partial class CoachReplay : BasePlugin
     {
         var f = System.IO.Path.Combine(Dir, "scenarios", id + ".json");
         if (!File.Exists(f)) return null;
-        try { return JsonSerializer.Deserialize<Scenario>(File.ReadAllText(f)); } catch (Exception e) { Logger.LogInformation($"{id}: {e.Message}"); return null; }
+        try { return JsonSerializer.Deserialize<Scenario>(File.ReadAllText(f)); } catch (Exception e) { Log($"{id}: {e.Message}"); return null; }
     }
 
     void CmdReplay(CCSPlayerController? p, CommandInfo c)
@@ -490,7 +491,7 @@ public partial class CoachReplay : BasePlugin
                     bs[i].PlayerName = tracks[i].Me ? tracks[i].Name + " (you)" : tracks[i].Name;
                     Utilities.SetStateChanged(bs[i], "CBasePlayerController", "m_iszPlayerName");
                 }
-                if (bs.Count != tracks.Count) Logger.LogInformation($"team {team}: {bs.Count} bots for {tracks.Count} tracks");
+                if (bs.Count != tracks.Count) Log($"team {team}: {bs.Count} bots for {tracks.Count} tracks");
                 foreach (var extra in bs.Skip(tracks.Count)) Server.ExecuteCommand($"kickid {extra.UserId}");   // a bot the game added on its own
             }
             Server.ExecuteCommand($"bot_quota {bots.Count}");   // the game keeps that many: no bot added on its own
@@ -498,7 +499,7 @@ public partial class CoachReplay : BasePlugin
             var foes = want.Count(t => t.Team != cur!.Team);
             if (want.Count > 0 && (bots.Count == 0 || (mode == "actor" && foes > 0 && !bots.Values.Any(t => t.Team != cur!.Team))))
             {
-                Logger.LogInformation("no bots for {id} ({n} of {w})", cur!.Id, bots.Count, want.Count);
+                Log("no bots for {id} ({n} of {w})", cur!.Id, bots.Count, want.Count);
                 if (emptyTries++ < 1) { builtFor = null; Setup(); return; }
                 emptyTries = 0;
                 if (sess != null && drill != null) { phase = "live"; DrillDone(false, "skipped", 0, "the bots did not come"); }
@@ -630,7 +631,7 @@ public partial class CoachReplay : BasePlugin
                     d.AcceptInput("Open");
                     open.Add(d.Index);
                 }
-        if (open.Count > 0) Logger.LogInformation("{n} door(s) opened", open.Count);
+        if (open.Count > 0) Log("{n} door(s) opened", open.Count);
     }
 
     // the map's breakables near these points broken (a vent cover, a window the players went through). Nuke's vent is a
@@ -645,9 +646,9 @@ public partial class CoachReplay : BasePlugin
                 var name = (e.Entity?.Name ?? "").ToLowerInvariant();
                 if (cls == "prop_dynamic" && (e.Health <= 0 || !(name.Contains("vent") || name.Contains("window") || name.Contains("glass")))) continue;
                 var o = new Vector3(e.AbsOrigin.X, e.AbsOrigin.Y, e.AbsOrigin.Z);
-                if (pts.Any(p => Vector3.DistanceSquared(p, o) < r * r)) { e.AcceptInput("Break"); n++; Logger.LogInformation("broken: {c} {n}", cls, name); }
+                if (pts.Any(p => Vector3.DistanceSquared(p, o) < r * r)) { e.AcceptInput("Break"); n++; Log("broken: {c} {n}", cls, name); }
             }
-        if (n > 0) Logger.LogInformation("{n} breakable(s) broken", n);
+        if (n > 0) Log("{n} breakable(s) broken", n);
     }
 
     // a path's point at a (fractional) frame
@@ -667,7 +668,7 @@ public partial class CoachReplay : BasePlugin
         // the planter off its way before the plant: it carries the bomb, the game's AI plants it if it lives (06/10: "il
         // n'y avait personne sur le B, impossible qu'ils plantent: le seul qui allait planter est mort")
         if (phase == "live" && cur?.Bomb is { F: > 0 } b && !bombDone && t.Sid == b.By && t.Team == 2)
-        { c.GiveNamedItem("weapon_c4"); bombDone = true; Logger.LogInformation("{n} plays on its own with the bomb", t.Name); }
+        { c.GiveNamedItem("weapon_c4"); bombDone = true; Log("{n} plays on its own with the bomb", t.Name); }
     }
 
     // a bot playing on its own: its grenades back (the AI throws them). A situation: the ones it had in the match; a
@@ -742,7 +743,7 @@ public partial class CoachReplay : BasePlugin
             var foes = bots.Where(b => b.Value.Team != cur.Team).Select(b => Utilities.GetPlayerFromSlot(b.Key)).ToList();
             if (foes.Count > 0 && foes.All(c => c == null || !c.IsValid || !c.PawnIsAlive))
             {
-                Logger.LogInformation("{id}: no enemy alive at the start, set up again", cur.Id);
+                Log("{id}: no enemy alive at the start, set up again", cur.Id);
                 if (emptyTries++ < 1) { builtFor = null; Setup(); return; }
                 emptyTries = 0;   // still none: skipped, never a win for nothing
                 if (sess != null && drill != null) { phase = "live"; DrillDone(false, "skipped", 0, "no enemy at the start"); return; }
@@ -767,6 +768,7 @@ public partial class CoachReplay : BasePlugin
 
     void OnTick()
     {
+        while (toGame.TryDequeue(out var back)) { try { back(); } catch (Exception e) { Log("io: {m}", e.Message); } }
         // the center text (the drill's card) blinks off every second while the game rules say a restart is
         // pending: set on every tick (CS2FlashingHtmlHudFix, the workaround found by Poggu)
         rules ??= Utilities.FindAllEntitiesByDesignerName<CCSGameRulesProxy>("cs_gamerules").FirstOrDefault()?.GameRules;
@@ -791,7 +793,7 @@ public partial class CoachReplay : BasePlugin
             if (free.Contains(slot) || gone.Contains(t.Sid)) continue;
             var c = Utilities.GetPlayerFromSlot(slot);
             var pawn = c?.PlayerPawn.Value;
-            if (c == null || pawn == null || !c.PawnIsAlive) { gone.Add(t.Sid); Logger.LogInformation("gone {n} at {f}", t.Name, (int)f); continue; }
+            if (c == null || pawn == null || !c.PawnIsAlive) { gone.Add(t.Sid); Log("gone {n} at {f}", t.Name, (int)f); continue; }
             if (t.Strafe) continue;   // an aim map's strafing target: the session moves it
             if (t.Hold)
             {
@@ -811,7 +813,7 @@ public partial class CoachReplay : BasePlugin
                 // "un mec dans mon spawn, derrière": it roamed on its own)
                 gone.Add(t.Sid);
                 pawn.CommitSuicide(false, true);
-                Logger.LogInformation("again {n} at {f}", t.Name, (int)f);
+                Log("again {n} at {f}", t.Name, (int)f);
                 continue;
             }
             if (i >= t.Frames - 1)
@@ -819,8 +821,8 @@ public partial class CoachReplay : BasePlugin
                 // the end of its recorded path: a death in the demo (by a player still alive here, or the world), or the
                 // window is over / you were the killer: the bot plays on from there
                 if (t.Death >= 0 && t.Killer != meSid && (t.Killer == "" || !cur.Players.Any(q => q.Sid == t.Killer) || Alive(t.Killer)))
-                { DemoKill(c, pawn, t); gone.Add(t.Sid); Logger.LogInformation("demo kill {n} at {f}", t.Name, (int)f); }
-                else { Free(slot, c, t); Logger.LogInformation("free {n} at {f} (death {d}, killer {k})", t.Name, (int)f, t.Death, t.Killer); }
+                { DemoKill(c, pawn, t); gone.Add(t.Sid); Log("demo kill {n} at {f}", t.Name, (int)f); }
+                else { Free(slot, c, t); Log("free {n} at {f} (death {d}, killer {k})", t.Name, (int)f, t.Death, t.Killer); }
                 continue;
             }
             var a = Math.Clamp(ft - i, 0f, 1f);
@@ -834,11 +836,11 @@ public partial class CoachReplay : BasePlugin
             var eng = engaged.TryGetValue(slot, out var et);
             if (eng && Server.TickCount - et > EngageTicks) { Free(slot, c, t); continue; }
             if (!eng && !t.Runner && phase == "live" && seen != null && (seen[slot / 32] & (1u << (slot % 32))) != 0 && (contact[slot] = contact.GetValueOrDefault(slot) + 1) >= ReactTicks)
-            { engaged[slot] = Server.TickCount; eng = true; Logger.LogInformation("contact {n} at {f}", t.Name, (int)f); }
+            { engaged[slot] = Server.TickCount; eng = true; Log("contact {n} at {f}", t.Name, (int)f); }
             var here = pawn.AbsOrigin is { } ho ? new Vector3(ho.X, ho.Y, ho.Z) : pos;
             if (phase == "live" && mePos != null && t.Team != cur.Team && !t.Runner && Vector3.DistanceSquared(here, mePos.Value) < Near * Near)
             {   // you are right on it: a player would notice you, path or not
-                Free(slot, c, t); Logger.LogInformation("close {n} at {f}", t.Name, (int)f); continue;
+                Free(slot, c, t); Log("close {n} at {f}", t.Name, (int)f); continue;
             }
             // the real player's way and facing; until it reacts, the real player's aim too (not yet yours)
             var y0 = t.Path[i * 5 + 3]; var dy = ((t.Path[i * 5 + 8] - y0 + 540f) % 360f) - 180f;
@@ -869,15 +871,15 @@ public partial class CoachReplay : BasePlugin
         if (!bombDone && cur.Bomb != null && f >= cur.Bomb.F)   // the demo's plant: its planter alive here and still on its way
         {
             var pl = bots.FirstOrDefault(kv => kv.Value.Sid == cur.Bomb.By);
-            if (gone.Contains(cur.Bomb.By)) { bombDone = true; Logger.LogInformation("no plant: its planter is dead here"); }
-            else if (pl.Value != null && free.Contains(pl.Key)) { bombDone = true; Logger.LogInformation("no plant: its planter plays on its own"); }
+            if (gone.Contains(cur.Bomb.By)) { bombDone = true; Log("no plant: its planter is dead here"); }
+            else if (pl.Value != null && free.Contains(pl.Key)) { bombDone = true; Log("no plant: its planter plays on its own"); }
             else PlantBomb();
         }
         SessionTick();
         if (cur == null || phase != "live" || cur.Kind is "aim" or "nade") return;   // their end is the session's
         while (nextNade < cur.Nades.Count && cur.Nades[nextNade].F <= f) Throw(cur.Nades[nextNade++]);
         if (mode == "spec" && devN > 0 && (now - t0) % 320 == 0)
-            Logger.LogInformation($"drift {devSum / devN:F1} u over {devN} samples");
+            Log($"drift {devSum / devN:F1} u over {devN} samples");
         if (humanDead)   // you died: traded or not, the drill ends (the bots keep moving meanwhile)
         {
             if (traded) Finish("traded");
@@ -914,7 +916,7 @@ public partial class CoachReplay : BasePlugin
                 NativeAPI.SetEventString(ev, "weapon", w == "" ? "world" : w);
                 NativeAPI.FireEvent(ev, false);
             }
-            catch (Exception e) { Logger.LogInformation("kill feed: {m}", e.Message); }
+            catch (Exception e) { Log("kill feed: {m}", e.Message); }
         }
         pawn.CommitSuicide(false, true);   // its own death event stays out of the feed (the Pre hook)
     }
@@ -969,9 +971,9 @@ public partial class CoachReplay : BasePlugin
                 NativeAPI.SetEventInt(ev, "site", b.Site);
                 NativeAPI.FireEvent(ev, false);
             }
-            Logger.LogInformation("bomb planted at {x:F0} {y:F0} {z:F0} site {s}, {l:F1} s left", b.Pos[0], b.Pos[1], b.Pos[2], b.Site, left);
+            Log("bomb planted at {x:F0} {y:F0} {z:F0} site {s}, {l:F1} s left", b.Pos[0], b.Pos[1], b.Pos[2], b.Site, left);
         }
-        catch (Exception e) { Logger.LogInformation("bomb: {m}", e.Message); }
+        catch (Exception e) { Log("bomb: {m}", e.Message); }
     }
 
     // a grenade of the demo, thrown again from the same point at the same speed, if its thrower is alive here (yours: you
@@ -1002,7 +1004,7 @@ public partial class CoachReplay : BasePlugin
                 else if (n.Type == "he" && heCreate != null) heCreate.Invoke(o.Handle, new QAngle(0, 0, 0).Handle, v.Handle, spin.Handle, pawn.Handle, 44);
                 else if (n.Type == "molotov" && molotovCreate != null) molotovCreate.Invoke(o.Handle, new QAngle(0, 0, 0).Handle, v.Handle, spin.Handle, pawn.Handle, n.Inc ? 48 : 46);
                 else return;
-                Logger.LogInformation("nade {t} by {n} at {f}", n.Type, c.PlayerName, n.F);
+                Log("nade {t} by {n} at {f}", n.Type, c.PlayerName, n.F);
                 return;
             }
             var e = Utilities.CreateEntityByName<CBaseCSGrenadeProjectile>(cls);
@@ -1024,9 +1026,9 @@ public partial class CoachReplay : BasePlugin
             e.DispatchSpawn();
             e.AcceptInput("InitializeSpawnFromWorld");
             e.AcceptInput("FireUser1", pawn, pawn);
-            Logger.LogInformation("nade {t} by {n} at {f}", n.Type, c.PlayerName, n.F);
+            Log("nade {t} by {n} at {f}", n.Type, c.PlayerName, n.F);
         }
-        catch (Exception ex) { Logger.LogInformation("nade {t}: {m}", n.Type, ex.Message); }
+        catch (Exception ex) { Log("nade {t}: {m}", n.Type, ex.Message); }
     }
 
     HookResult OnDeath(EventPlayerDeath e, GameEventInfo i)
@@ -1034,7 +1036,7 @@ public partial class CoachReplay : BasePlugin
         if (cur == null || phase != "live") return HookResult.Continue;
         var v = e.Userid;
         if (v != null && v.IsValid && bots.TryGetValue(v.Slot, out var t)) gone.Add(t.Sid);
-        Logger.LogInformation("death {f}/{s}: {v} by {a} ({w})", (Server.TickCount - t0) / cur.Step, cur.Id, v?.PlayerName, e.Attacker?.PlayerName, e.Weapon);
+        Log("death {f}/{s}: {v} by {a} ({w})", (Server.TickCount - t0) / cur.Step, cur.Id, v?.PlayerName, e.Attacker?.PlayerName, e.Weapon);
         if (e.Attacker is { IsValid: true, IsBot: false } && v != null && v.IsBot) kills++;
         if (drill?.Kind == "aim" && e.Attacker is { IsValid: true, IsBot: false } killer && v is { IsBot: true })
             AddTimer(0.05f, () => { if (killer.IsValid) FullMag(killer); });
@@ -1119,7 +1121,7 @@ public partial class CoachReplay : BasePlugin
             ["id"] = cur.Id, ["t"] = DateTimeOffset.UtcNow.ToUnixTimeSeconds(), ["outcome"] = outcome, ["mode"] = mode,
             ["kills"] = kills, ["dmg"] = dmg, ["alive_s"] = Math.Round(alive, 1), ["difficulty"] = difficulty,
             ["drift"] = devN > 0 ? Math.Round(devSum / devN, 1) : -1 });
-        try { File.AppendAllText(System.IO.Path.Combine(Dir, "results.jsonl"), line + "\n"); } catch (Exception e) { Logger.LogInformation($"{e.Message}"); }
+        Append("results.jsonl", line);
         var msg = outcome switch { "won" => "\x04WON\x01", "survived" => "\x04SURVIVED\x01", "traded" => "\x04TRADED\x01",
             "kill" => "\x04KILL, THEN DEAD\x01", "passive" => "\x02NO KILL\x01", "dead" => "\x02DEAD\x01",
             "defused" => BombWon(outcome) ? "\x04DEFUSED\x01" : "\x02DEFUSED\x01", "exploded" => BombWon(outcome) ? "\x04BOMB EXPLODED\x01" : "\x02BOMB EXPLODED\x01",
@@ -1146,7 +1148,7 @@ public partial class CoachReplay : BasePlugin
     // "rcon": the app's password, set here; "quit": a request made after this plugin loaded, the server stops itself.
     // A local file of the server's own folder: no password needed, and nothing more than the app can already do.
     long loadedAt, ctlSeen;
-    void Control()
+    void Control()   // the io thread's
     {
         try
         {
@@ -1159,25 +1161,60 @@ public partial class CoachReplay : BasePlugin
             var root = doc.RootElement;
             if (root.TryGetProperty("rcon", out var pw) && pw.ValueKind == JsonValueKind.String
                 && System.Text.RegularExpressions.Regex.IsMatch(pw.GetString() ?? "", "^[0-9a-f]{8,64}$"))
-                Server.ExecuteCommand($"rcon_password {pw.GetString()}");
+            {
+                var p = pw.GetString();
+                OnGame(() => Server.ExecuteCommand($"rcon_password {p}"));
+            }
             if (root.TryGetProperty("quit", out var q) && q.ValueKind == JsonValueKind.Number && q.GetInt64() > loadedAt)
             {
-                Logger.LogInformation("control: the app asked the server to stop");
-                Server.ExecuteCommand("quit");
+                Log("control: the app asked the server to stop");
+                OnGame(() => Server.ExecuteCommand("quit"));
             }
         }
-        catch (Exception e) { Logger.LogInformation("control: {m}", e.Message); }
+        catch (Exception e) { Log("control: {m}", e.Message); }
     }
+
+    // 08/10, his 22:55 warm-up: the game froze 0.2 to 1.3 s at a time and dropped him seven times ("Too many queued
+    // messages", NETWORK_DISCONNECT_OVERFLOW): this plugin's file reads and writes ran on the game's thread (the heartbeat
+    // each second, the logs, the results) and waited on the hard disk E: (OBS recorded there; a 20-byte write took 811 ms).
+    // They now run on one thread of their own; what the game has to do with them comes back to its thread (OnTick).
+    readonly System.Collections.Concurrent.BlockingCollection<Action> io = new(512);
+    readonly System.Collections.Concurrent.ConcurrentQueue<Action> toGame = new();
+    int beatBusy;
+
+    void StartIo()
+    {
+        new Thread(() => { foreach (var a in io.GetConsumingEnumerable()) { try { a(); } catch (Exception) { } } })
+            { IsBackground = true, Name = "coach-io" }.Start();
+    }
+
+    public override void Unload(bool hotReload) { io.CompleteAdding(); }
+
+    bool Io(Action a) { try { return !io.IsAddingCompleted && io.TryAdd(a); } catch (InvalidOperationException) { return false; } }
+    void OnGame(Action a) => toGame.Enqueue(a);
+    void Log(string msg, params object?[] args) { if (!Io(() => Logger.LogInformation(msg, args))) Logger.LogInformation(msg, args); }
+    void Append(string file, string line) => Io(() => File.AppendAllText(System.IO.Path.Combine(Dir, file), line + "\n"));
 
     void Beat()
     {
-        Control();
         try
         {
             var o = new Dictionary<string, object?> { ["t"] = DateTimeOffset.UtcNow.ToUnixTimeSeconds(), ["humans"] = Humans().Count(),
                 ["scenario"] = cur?.Id, ["state"] = phase, ["mode"] = mode, ["map"] = Server.MapName };
             foreach (var (k, v) in SessionBeat()) o[k] = v;
-            File.WriteAllText(System.IO.Path.Combine(Dir, "live.json"), JsonSerializer.Serialize(o));
+            var json = JsonSerializer.Serialize(o);
+            if (Interlocked.Exchange(ref beatBusy, 1) == 1) return;   // the last one still on its way to the disk: this one skipped
+            if (!Io(() =>
+                {
+                    try
+                    {   // written beside, then put in place: the app never reads half of it
+                        var f = System.IO.Path.Combine(Dir, "live.json");
+                        File.WriteAllText(f + ".tmp", json);
+                        File.Move(f + ".tmp", f, true);
+                    }
+                    catch (Exception) { }
+                    finally { Control(); beatBusy = 0; }
+                })) beatBusy = 0;
         }
         catch (Exception) { }
     }

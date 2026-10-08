@@ -685,10 +685,18 @@ def busy():
 
 def _above_normal(pid):
     """The server above the app's own work: a build reading the hard disk made it run at half speed (06/10 19:53: frames
-    of 20-30 ms, 0.2 ms of them its own)."""
+    of 20-30 ms, 0.2 ms of them its own). Its console's host (conhost.exe) high: 08/10, his warm-up dropped him seven
+    times ("Too many queued messages"); on a loaded PC the server's console writes waited 0.6-0.8 s on a starved conhost,
+    frames that long (all 24 cores busy: 17 such frames a minute with conhost normal, none with it high, the server's own
+    priority changing nothing)."""
     try:
         import psutil
-        psutil.Process(pid).nice(psutil.ABOVE_NORMAL_PRIORITY_CLASS)
+        p = psutil.Process(pid)
+        if p.nice() != psutil.ABOVE_NORMAL_PRIORITY_CLASS:
+            p.nice(psutil.ABOVE_NORMAL_PRIORITY_CLASS)
+        for c in p.children(recursive=True):
+            if c.name().lower() == "conhost.exe" and c.nice() != psutil.HIGH_PRIORITY_CLASS:
+                c.nice(psutil.HIGH_PRIORITY_CLASS)
     except Exception as e:
         print("server priority:", e, flush=True)
 
@@ -798,6 +806,7 @@ def start(mp):
     if wid:
         _seed_workshop(wid)
     if _pid_alive(s.get("pid")):
+        _above_normal(s["pid"])   # a server an older app started: its console's host high too (08/10)
         if s.get("map") != mp:
             if s.get("map") in WORKSHOP and not wid:
                 for c in AFTER_WORKSHOP:
@@ -830,6 +839,7 @@ def start(mp):
     for _ in range(120):
         time.sleep(1)
         _hide_console(pr.pid)   # shown again while the server starts: hidden again
+        _above_normal(pr.pid)   # its console's host comes up meanwhile: high
         h = heartbeat()
         if h and (h.get("t") or 0) > s["started"]:
             if wid:   # up on the base map: now the Workshop one

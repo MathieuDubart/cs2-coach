@@ -515,13 +515,40 @@ def _hold_zone(CP, zones, p, mp):
 
 
 ZONES_F = os.path.join(config.OUT, "train_zones.json")
+THIN = 30   # fewer of a map's matches here: a player's PC (its own matches), not the base's
+_ZS = {}
+
+
+def _zone_samples(mp, max_matches=60):
+    """Where the base's players stood on a map (its last 60 matches, alive): x, y, z and their place's name. Kept 10 min
+    in memory, one map at a time: the base's package makes every post's outline at once (08/10)."""
+    hit = _ZS.get(mp)
+    if hit and time.time() - hit[0] < 600:
+        return hit[1]
+    parts = []
+    for d in _map_dirs(mp)[-max_matches:]:
+        try:
+            S = pd.read_parquet(os.path.join(config.OUT, "deep", d, "samples.parquet"), columns=["X", "Y", "Z", "zone", "health"])
+        except Exception:
+            continue
+        S = S[(S.health > 0) & S.zone.notna()]
+        if len(S):
+            zs = {z: replay_zone(z, mp) for z in S.zone.unique()}
+            parts.append(pd.DataFrame({"X": S.X.to_numpy(np.float32), "Y": S.Y.to_numpy(np.float32), "Z": S.Z.to_numpy(np.float32),
+                                       "name": S.zone.map(zs).astype(str).to_numpy()}))
+    df = pd.concat(parts, ignore_index=True) if parts else pd.DataFrame({"X": [], "Y": [], "Z": [], "name": []})
+    df["name"] = df["name"].astype("category")
+    _ZS.clear()
+    _ZS[mp] = (time.time(), df)
+    return df
 
 
 def zone_outline(mp, name, near, cell=32.0, max_matches=60, R=1600.0, ZR=170.0, hold=650.0):
     """The ground outline of the place a defense's post is in (06/10, the user: "une zone plus grande que juste un cercle,
     adapte-toi à la morphologie de la map: si c'est Garage, prends tout le Garage"): where the base's players stood in
     that place (same name, same floor), 650 u around the post at most (Nuke's Outside is the whole yard), the piece
-    around the post with its small holes filled, its border walked around and simplified (20 u). Cached per post."""
+    around the post with its small holes filled, its border walked around and simplified (20 u). Cached per post; the
+    base's package ships them all (zones_for_base), a player's PC uses the nearest one of the same place."""
     if not name or not near:
         return []
     key = f"{mp}|{name}|{round(near[0])}|{round(near[1])}|{round(near[2])}"
@@ -531,20 +558,24 @@ def zone_outline(mp, name, near, cell=32.0, max_matches=60, R=1600.0, ZR=170.0, 
         cache = {}
     if key in cache:
         return cache[key]
+    if len(_map_dirs(mp)) < THIN:
+        # 08/10, his warm-up on the installed app: with its own 8 matches Nuke's Tunnels came out 32 x 96 u ("c'est vraiment
+        # un pixel"), Ramp 128 x 160: the base's outline of that place nearest to it (same floor, 900 u)
+        best = None
+        for k, v in cache.items():
+            parts = k.split("|")
+            if len(parts) != 5 or parts[0] != mp or parts[1] != name or not v:
+                continue
+            x, y, z = (float(c) for c in parts[2:])
+            d = math.hypot(x - near[0], y - near[1])
+            if abs(z - near[2]) < ZR and d < 900 and (best is None or d < best[0]):
+                best = (d, v)
+        if best:
+            return best[1]
     from collections import deque
-    pts = []
-    for d in _map_dirs(mp)[-max_matches:]:
-        try:
-            S = pd.read_parquet(os.path.join(config.OUT, "deep", d, "samples.parquet"), columns=["X", "Y", "Z", "zone", "health"])
-        except Exception:
-            continue
-        S = S[(S.health > 0) & S.zone.notna()]
-        S = S[(np.hypot(S.X - near[0], S.Y - near[1]) < R) & ((S.Z - near[2]).abs() < ZR)]
-        if len(S):
-            zs = {z: replay_zone(z, mp) for z in S.zone.unique()}
-            S = S[S.zone.map(zs) == name]
-            pts.append(S[["X", "Y", "Z"]].to_numpy(float))
-    P = np.concatenate(pts) if pts else np.zeros((0, 3))
+    S = _zone_samples(mp, max_matches)
+    S = S[(S.name == name) & (np.hypot(S.X - near[0], S.Y - near[1]) < R) & ((S.Z - near[2]).abs() < ZR)]
+    P = S[["X", "Y", "Z"]].to_numpy(float)
     out = []
     if len(P) >= 30:
         cnt = Counter(zip(np.floor(P[:, 0] / cell).astype(int), np.floor(P[:, 1] / cell).astype(int)))
@@ -590,6 +621,44 @@ def zone_outline(mp, name, near, cell=32.0, max_matches=60, R=1600.0, ZR=170.0, 
     cache[key] = out
     config.write_json(ZONES_F, cache)
     return out
+
+
+def zones_for_base(log=print):
+    """Every post's outline (each site's holds) and each place's around its 3 busiest spots (900 u apart: a situation's
+    zone on a player's PC takes the nearest), made here where the base's matches are, shipped with the base (08/10)."""
+    try:
+        sites = json.load(open(SITES_F, encoding="utf-8"))
+    except (OSError, ValueError):
+        sites = {}
+    for mp in sorted(sites):
+        t0, n = time.time(), 0
+        for S in (sites[mp].get("sites") or {}).values():
+            for h in _site_holds(S):
+                if h.get("zone") and h.get("pos"):
+                    zone_outline(mp, h["zone"], h["pos"])
+                    n += 1
+        df = _zone_samples(mp)
+        for name, g in df.groupby("name", observed=True):
+            if str(name) in ("", "nan", "?", "None") or len(g) < 200:
+                continue
+            cx, cy = np.floor(g.X.to_numpy() / 64).astype(np.int64), np.floor(g.Y.to_numpy() / 64).astype(np.int64)
+            cells = pd.Series(cx * 100000 + cy).value_counts()
+            picked = []
+            for c in cells.index[:300]:
+                x, y = int(c // 100000), int(c % 100000)
+                if y > 50000:   # negative y: the key wrapped
+                    x, y = x + 1, y - 100000
+                p = ((x + .5) * 64, (y + .5) * 64)
+                if all(math.dist(p, q[:2]) >= 900 for q in picked):
+                    zz = float(np.median(g.Z.to_numpy()[(cx == x) & (cy == y)]))
+                    picked.append((p[0], p[1], zz))
+                if len(picked) >= 3:
+                    break
+            for p in picked:
+                zone_outline(mp, str(name), list(p))
+                n += 1
+        log(f"zones {mp}: {n} outlines ({time.time() - t0:.0f} s)")
+    _ZS.clear()
 
 
 def _timings(holds):

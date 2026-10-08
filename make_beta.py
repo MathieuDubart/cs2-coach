@@ -62,7 +62,8 @@ PER_MATCH = [os.path.join("population"), os.path.join("population", "buys"), os.
              os.path.join("population", "routes"), os.path.join("population", "tside"), "style"]
 # the pro matches (public, from HLTV): as they are; the pro references of a profile read their positions (proref)
 PUBLIC = [os.path.join("population", "midround_pro"), os.path.join("population", "routes_pro"), "style_pro", "deep_pro"]
-BASE_FILES = ["train_sites.json", "train_spots.json", "hostage.json", "cross.json", "cross_notes.json", os.path.join("pro", "matches.json")]
+BASE_FILES = ["train_sites.json", "train_spots.json", "train_zones.json", "hostage.json", "cross.json", "cross_notes.json",
+              os.path.join("pro", "matches.json")]
 BASE_DIRS = ["train_entries", os.path.join("site", "radars")]
 DAILYCSNADES = [os.path.join("site", "nadecat")]   # + out/lineups/*_dailycsnades.json
 FRESH = 120   # a file the base loop wrote in the last 2 minutes may be half-written: left for the next package
@@ -271,6 +272,13 @@ def copy_base(dst, pseudo, mine, dailycsnades=False):
         os.makedirs(os.path.join(out, "lineups"), exist_ok=True)
         for f in glob.glob(os.path.join(config.OUT, "lineups", "*_dailycsnades.json")):
             shutil.copy2(f, os.path.join(out, "lineups"))
+    # 08/10, his warm-up on the installed app: a player's PC has its own matches only, and what the training draws from
+    # the base's players came out of those few (Nuke's Tunnels outlined 32 x 96 u, almost no rusher for the anti-rush
+    # stuff): made here, shipped with the base
+    import train
+    pause_for_match("the zones")
+    train.zones_for_base(log)
+    early(out)
     for f in BASE_FILES:
         if os.path.exists(os.path.join(config.OUT, f)):
             os.makedirs(os.path.dirname(os.path.join(out, f)), exist_ok=True)
@@ -285,6 +293,29 @@ def copy_base(dst, pseudo, mine, dailycsnades=False):
     log(f"base {info['version']}: {n['tables']} tables ({n['skipped']} left for the next package), {matches} matches, "
         f"{len(pseudo.memo)} players pseudonymized")
     return info
+
+
+def early(out):
+    """The Ts' first 40 s of the base's rounds per map (train._early: when a rush gets where), compact and without who
+    they were (a number per player in each file, no SteamID)."""
+    import pandas as pd
+    src = os.path.join(config.OUT, "train_early")
+    if not os.path.isdir(src):
+        return
+    dst = os.path.join(out, "train_early")
+    os.makedirs(dst, exist_ok=True)
+    total = 0
+    for fp in sorted(glob.glob(os.path.join(src, "*.parquet"))):
+        E = pd.read_parquet(fp)
+        E["sid"] = E["sid"].astype("category").cat.codes.astype(np.int32)
+        E["zone"] = E["zone"].astype(str)   # plain text: the package's check reads every column
+        for c in ("X", "Y", "Z"):
+            E[c] = E[c].round().astype(np.int16)
+        t = os.path.join(dst, os.path.basename(fp))
+        E.to_parquet(t, compression="zstd", index=False)
+        shutil.copy2(fp[:-8] + ".json", dst)
+        total += os.path.getsize(t)
+    log(f"early rushers: {total / 1048576:.0f} MB for {len(glob.glob(os.path.join(dst, '*.parquet')))} maps")
 
 
 def copy_player(dst, sid, update):
