@@ -56,6 +56,7 @@ FILES = ["app_template.html", "report_template.html"]
 DIRS = ["maps", os.path.join("tools", "boiler")]
 SERVER_ZIPS = ["mmsource.zip", "css-runtime.zip"]   # Metamod:Source and CounterStrikeSharp for the training server
 KEY_F = os.path.join(config.OUT, "release_key.pem")   # Ed25519: signs latest.json; its public half ships in the code
+RELEASES_URL = "https://wily.valentingassend.com/releases/"   # where the installer downloads the parts from
 
 PER_MATCH = [os.path.join("population"), os.path.join("population", "buys"), os.path.join("population", "midround"),
              os.path.join("population", "routes"), os.path.join("population", "tside"), "style"]
@@ -499,6 +500,9 @@ def release(dst, version, base, notes):
     man = {"app": version, "build": build, "released": int(time.time()), "notes": notes,
            "code": dict(_entry(code_z), build=build), "runtime": dict(_entry(rt_z), key=rt),
            "base": dict(_entry(base_z), version=base["version"], matches=base["matches"]), "setup": _entry(setup_z)}
+    exe = installer(man)   # WilySetup.exe for these very parts (08/10)
+    if exe:
+        man["installer"] = _entry(exe)
     raw = json.dumps(man, indent=1).encode()
     open(os.path.join(RELEASES, "latest.json"), "wb").write(raw)
     open(os.path.join(RELEASES, "latest.json.sig"), "w").write(base64.b64encode(release_key().sign(raw)).decode())
@@ -510,9 +514,54 @@ def release(dst, version, base, notes):
     return man
 
 
+def iscc():
+    """Inno Setup's compiler: installed for this user by winget (JRSoftware.InnoSetup), or for every user."""
+    for p in (shutil.which("ISCC"), os.path.join(os.environ.get("LOCALAPPDATA", ""), "Programs", "Inno Setup 6", "ISCC.exe"),
+              r"C:\Program Files (x86)\Inno Setup 6\ISCC.exe", r"C:\Program Files\Inno Setup 6\ISCC.exe"):
+        if p and os.path.exists(p):
+            return p
+    return None
+
+
+def installer(man, base_url=RELEASES_URL, out_dir=RELEASES):
+    """WilySetup.exe (08/10, the user: a much simpler install): installer/wily.iss filled with this release's parts (their
+    address and SHA-256, checked by the setup as it downloads them), compiled by Inno Setup. -> its path, or None."""
+    exe_c = iscc()
+    if not exe_c:
+        log("Inno Setup not found (winget install JRSoftware.InnoSetup): no WilySetup.exe")
+        return None
+    import re as re_
+    v = man["app"]
+    vals = {"VERSION": v, "VERNUM": ".".join((re_.findall(r"\d+", v) + ["0"] * 4)[:4]), "BUILD": str(man.get("build") or ""),
+            "BASEURL": base_url, "RT_FILE": man["runtime"]["file"], "RT_SHA": man["runtime"]["sha256"],
+            "CODE_FILE": man["code"]["file"], "CODE_SHA": man["code"]["sha256"], "BASE_FILE": man["base"]["file"],
+            "BASE_SHA": man["base"]["sha256"], "OUTDIR": out_dir, "ICON": os.path.join(config.HERE, "installer", "wily.ico"),
+            "TOTAL_MB": str(round(sum(man[k]["size"] for k in ("runtime", "code", "base")) / 2 ** 20))}
+    tpl = open(os.path.join(config.HERE, "installer", "wily.iss"), encoding="utf-8").read()
+    for k, x in vals.items():
+        tpl = tpl.replace(f"@{k}@", x)
+    left = re_.findall(r"@[A-Z_]+@", tpl)
+    if left:
+        raise RuntimeError(f"installer template: {left} not filled")
+    iss = os.path.join(DIST, "WilySetup.iss")
+    open(iss, "w", encoding="utf-8-sig").write(tpl)   # with its BOM: Inno Setup reads the French messages right
+    os.makedirs(out_dir, exist_ok=True)
+    r = subprocess.run([exe_c, "/Q", iss], capture_output=True, text=True)
+    exe = os.path.join(out_dir, "WilySetup.exe")
+    if r.returncode or not os.path.exists(exe):
+        log(f"WilySetup.exe not built: {(r.stdout + r.stderr)[-800:]}")
+        return None
+    log(f"installer: {exe} ({os.path.getsize(exe) / 2 ** 20:.1f} MB, downloads {vals['TOTAL_MB']} MB from {base_url})")
+    return exe
+
+
 def main():
     sys.stdout.reconfigure(encoding="utf-8")
     arg = lambda k: sys.argv[sys.argv.index(k) + 1] if k in sys.argv else None
+    if "--installer" in sys.argv:   # only WilySetup.exe, for the release already in dist/site_wily/releases (a test: --base-url)
+        man = config.read_json(os.path.join(RELEASES, "latest.json"), {}) or {}
+        out = arg("--out") or (RELEASES if not arg("--base-url") else os.path.join(DIST, "installer-test"))
+        raise SystemExit(0 if installer(man, arg("--base-url") or RELEASES_URL, out) else 1)
     sid, version = arg("--player"), arg("--release")
     generic = "--generic" in sys.argv or bool(version)
     if not sid and not generic:
