@@ -103,16 +103,29 @@ def _release():
 def download_block(lang, rel):
     if not rel:
         return (f'<div class="cta"><span class="btn soon">{"Coming soon" if lang == "en" else "Bientôt disponible"}</span></div>')
-    s = rel["setup"]
+    s, ins = rel["setup"], rel.get("installer")
     mb = s["size"] / 2 ** 20
+    parts = sum(rel[k]["size"] for k in ("runtime", "code", "base") if isinstance(rel.get(k), dict)) / 2 ** 20
     when = time.strftime("%d/%m/%Y", time.localtime(rel["released"]))
+    if not ins:   # a release made before the installer (08/10): the zip alone
+        if lang == "en":
+            return (f'<div class="cta"><a class="btn" href="releases/{s["file"]}" download>Download for Windows · {mb:.0f} MB</a>'
+                    f'<span class="note">Version {html.escape(rel["app"])} · {when} · base of {rel["base"]["matches"]:,} matches</span></div>'
+                    f'<p class="note">SHA-256: <span class="mono">{s["sha256"]}</span></p>')
+        return (f'<div class="cta"><a class="btn" href="releases/{s["file"]}" download>Télécharger pour Windows · {mb:.0f} Mo</a>'
+                f'<span class="note">Version {html.escape(rel["app"])} · {when} · base de {rel["base"]["matches"]:,} matchs</span></div>'
+                f'<p class="note">SHA-256 : <span class="mono">{s["sha256"]}</span></p>').replace(",", " ")
+    # 08/10, the user: a much simpler install. The setup (2 MB) downloads the rest and checks it; not signed with a paid
+    # certificate yet: Windows' SmartScreen warns once, said here
     if lang == "en":
-        return (f'<div class="cta"><a class="btn" href="releases/{s["file"]}" download>Download for Windows · {mb:.0f} MB</a>'
-                f'<span class="note">Version {html.escape(rel["app"])} · {when} · base of {rel["base"]["matches"]:,} matches</span></div>'
-                f'<p class="note">SHA-256: <span class="mono">{s["sha256"]}</span></p>')
-    return (f'<div class="cta"><a class="btn" href="releases/{s["file"]}" download>Télécharger pour Windows · {mb:.0f} Mo</a>'
-            f'<span class="note">Version {html.escape(rel["app"])} · {when} · base de {rel["base"]["matches"]:,} matchs</span></div>'
-            f'<p class="note">SHA-256 : <span class="mono">{s["sha256"]}</span></p>').replace(",", " ")
+        return (f'<div class="cta"><a class="btn" href="releases/{ins["file"]}" download>Download Wily for Windows</a>'
+                f'<span class="note">Version {html.escape(rel["app"])} · {when} · base of {rel["base"]["matches"]:,} matches · the setup downloads {parts:.0f} MB</span></div>'
+                f'<p class="note">If Windows says <i>"Windows protected your PC"</i>: click <b>More info</b>, then <b>Run anyway</b>. The app isn\'t signed with a paid certificate yet; every part it downloads is checked against my author\'s signature.</p>'
+                f'<p class="note">SHA-256 of the setup: <span class="mono">{ins["sha256"]}</span> · or <a href="releases/{s["file"]}" download>the zip</a> ({mb:.0f} MB, to unzip yourself)</p>')
+    return (f'<div class="cta"><a class="btn" href="releases/{ins["file"]}" download>Télécharger Wily pour Windows</a>'
+            f'<span class="note">Version {html.escape(rel["app"])} · {when} · base de {rel["base"]["matches"]:,} matchs · l\'installation télécharge {parts:.0f} Mo</span></div>'
+            f'<p class="note">Si Windows affiche <i>« Windows a protégé votre ordinateur »</i> : clique sur <b>Informations complémentaires</b>, puis <b>Exécuter quand même</b>. L\'application n\'est pas encore signée par un certificat payant ; chaque partie qu\'elle télécharge est vérifiée avec la signature de son auteur.</p>'
+            f'<p class="note">SHA-256 de l\'installation : <span class="mono">{ins["sha256"]}</span> · ou <a href="releases/{s["file"]}" download>le zip</a> ({mb:.0f} Mo, à décompresser toi-même)</p>').replace(",", " ")
 
 
 HOME = {
@@ -122,22 +135,20 @@ HOME = {
 <section id="download">{download_block("en", rel)}</section>
 <div class="grid">
  <article class="card"><span class="eyebrow">Live</span><h3>During the match</h3><ul><li>What to buy for this round and the next</li><li>Where the Ts are likely to go, updated with the clock and what you see</li><li>Your paths and your strong spots on the radar, the grenades worth throwing now</li></ul></article>
- <article class="card"><span class="eyebrow">Prepare</span><h3>Before you play</h3><ul><li>A timed warm-up built on your weak points (5 to 30 min)</li><li>A one-minute sheet per map: where to play, what to throw</li><li>A training server with bots replaying your real deaths and clutches</li></ul></article>
+ <article class="card"><span class="eyebrow">Prepare</span><h3>Before you play</h3><ul><li>A timed warm-up built on your weak points (5 to 45 min)</li><li>A training server with bots replaying your real deaths and clutches</li></ul></article>
  <article class="card"><span class="eyebrow">Review</span><h3>After the session</h3><ul><li>What changed against your previous matches, and why</li><li>Your focus of the week and the experiments to try</li><li>Every match round by round</li></ul></article>
 </div>
 <h2 id="how">How it works</h2>
 <ol class="steps">
- <li>Download the zip, then (optional, avoids a warning per file) right-click it → Properties → <b>Unblock</b>. Unzip it on a drive with a few GB free (not in Program Files).</li>
- <li>Double-click <code>Wily.bat</code>: I open in your browser at <code>http://127.0.0.1:8765</code>. I run on your PC.</li>
- <li>With Steam open and CS2 closed, click <b>Update</b> (or <i>Analyze this PC's Steam account</i>): your latest matches are downloaded from Valve and analyzed on your PC, a few minutes each. For your whole history, add your Steam Web API key and match history code in Settings (the links are there).</li>
- <li>Settings → <b>Game detection</b> on, then restart CS2: Live follows your matches. For the numpad keys, add <code>-condebug</code> to CS2's launch options and type <code>exec coach_binds</code> once in its console.</li>
- <li>Prepare → <b>Install the training server</b>: a separate copy of CS2 next to the game (links to its files, no extra space), with my plugin.</li>
+ <li>Open <b>WilySetup.exe</b>, then <b>Install</b>: it downloads me, checks every part and installs me for your Windows account (no administrator rights). I start with Windows and open Live by myself when CS2 starts.</li>
+ <li>At my first launch, three steps: your Steam account (I find it), CS2 connected (one launch option to paste), your match history code (no Steam key to create). Then your matches are analyzed on your PC, a few minutes each.</li>
+ <li>Prepare → <b>Warm-up</b>: the training server installs itself the first time (a separate copy of CS2 next to the game, links to its files, no extra space).</li>
 </ol>
 <p class="note">Needs Windows 10 or 11 (64-bit), CS2 on Steam, 8 GB of RAM, and disk space for your demos (about 250 MB per match).</p>
 <h2>Fair play and privacy</h2>
 <div class="grid">
  <article class="card"><h3>Only what Valve provides</h3><p>Game State Integration (the game's official feature for HUDs and RGB keyboards), the console log CS2 writes, the Steam Web API, the demos of your matches. I never read the game's memory or network traffic and I never play for you. The training server is a local copy of the game that only you join.</p></article>
- <article class="card"><h3>Your data stays on your PC</h3><p>Your matches, profile, keys and voice stay on your PC. The base I come with is anonymized. If you choose to, your new matches can join the base anonymized: no SteamID, no name, no match id. <a href="privacy.html">Privacy policy</a></p></article>
+ <article class="card"><h3>Your data stays on your PC</h3><p>Your matches, profile, Steam codes and voice stay on your PC (without a Steam key of your own, your match list goes through this site to Steam, nothing kept). The base I come with is anonymized. If you choose to, your new matches can join the base anonymized: no SteamID, no name, no match id. <a href="privacy.html">Privacy policy</a></p></article>
  <article class="card"><h3>Free alpha</h3><p>Free while it is tested. It's the first version open to all players: tell me what breaks with the <b>alpha · report</b> tag at the top of my page (you see what is sent), or by email. My updates are signed by my author, and I check them before installing anything. Questions or bugs: <a href="mailto:{CONTACT}">{CONTACT}</a>.</p></article>
 </div>
 """,
@@ -147,22 +158,20 @@ HOME = {
 <section id="download">{download_block("fr", rel)}</section>
 <div class="grid">
  <article class="card"><span class="eyebrow">Live</span><h3>Pendant le match</h3><ul><li>Quoi acheter pour ce round et le suivant</li><li>Où les T vont probablement aller, mis à jour avec le chrono et ce que tu vois</li><li>Tes chemins et tes bons spots sur le radar, les grenades à lancer maintenant</li></ul></article>
- <article class="card"><span class="eyebrow">Prepare</span><h3>Avant de jouer</h3><ul><li>Un échauffement chronométré construit sur tes points faibles (5 à 30 min)</li><li>Une fiche d'une minute par map : où jouer, quoi lancer</li><li>Un serveur d'entraînement avec des bots qui rejouent tes vraies morts et tes clutchs</li></ul></article>
+ <article class="card"><span class="eyebrow">Prepare</span><h3>Avant de jouer</h3><ul><li>Un échauffement chronométré construit sur tes points faibles (5 à 45 min)</li><li>Un serveur d'entraînement avec des bots qui rejouent tes vraies morts et tes clutchs</li></ul></article>
  <article class="card"><span class="eyebrow">Review</span><h3>Après la session</h3><ul><li>Ce qui a changé par rapport à tes matchs précédents, et pourquoi</li><li>Ton focus de la semaine et les expériences à tenter</li><li>Chaque match round par round</li></ul></article>
 </div>
 <h2 id="how">Comment ça marche</h2>
 <ol class="steps">
- <li>Télécharge le zip, puis (facultatif, évite un avertissement par fichier) clic droit dessus → Propriétés → <b>Débloquer</b>. Décompresse-le sur un disque avec quelques Go libres (pas dans Program Files).</li>
- <li>Double-clique sur <code>Wily.bat</code> : je m'ouvre dans ton navigateur à l'adresse <code>http://127.0.0.1:8765</code>. Je tourne sur ton PC.</li>
- <li>Steam ouvert et CS2 fermé, clique sur <b>Update</b> (ou <i>Analyze this PC's Steam account</i>) : tes derniers matchs sont téléchargés depuis Valve et analysés sur ton PC, quelques minutes chacun. Pour tout ton historique, ajoute ta clé Steam Web API et ton code d'historique des matchs dans Settings (les liens y sont).</li>
- <li>Settings → <b>Game detection</b>, puis redémarre CS2 : Live suit tes matchs. Pour les touches du pavé numérique, ajoute <code>-condebug</code> aux options de lancement de CS2 et tape <code>exec coach_binds</code> une fois dans sa console.</li>
- <li>Prepare → <b>Install the training server</b> : une copie séparée de CS2 à côté du jeu (des liens vers ses fichiers, sans espace en plus), avec mon plugin.</li>
+ <li>Ouvre <b>WilySetup.exe</b>, puis <b>Installer</b> : il me télécharge, vérifie chaque partie et m'installe pour ton compte Windows (sans droits administrateur). Je démarre avec Windows et j'ouvre Live tout seul quand CS2 démarre.</li>
+ <li>À mon premier lancement, trois étapes : ton compte Steam (je le trouve), CS2 connecté (une option de lancement à coller), ton code d'historique des matchs (aucune clé Steam à créer). Ensuite tes matchs sont analysés sur ton PC, quelques minutes chacun.</li>
+ <li>Prepare → <b>Warm-up</b> : le serveur d'entraînement s'installe tout seul la première fois (une copie séparée de CS2 à côté du jeu, des liens vers ses fichiers, sans espace en plus).</li>
 </ol>
 <p class="note">Il faut Windows 10 ou 11 (64 bits), CS2 sur Steam, 8 Go de RAM et de la place pour tes démos (environ 250 Mo par match). L'app est en anglais.</p>
 <h2>Fair-play et vie privée</h2>
 <div class="grid">
  <article class="card"><h3>Seulement ce que Valve fournit</h3><p>Le Game State Integration (la fonction officielle du jeu pour les HUD et les claviers RGB), le journal de console que CS2 écrit, l'API Steam, les démos de tes matchs. Je ne lis jamais la mémoire du jeu ni son trafic réseau, et je ne joue jamais à ta place. Le serveur d'entraînement est une copie locale du jeu que toi seul rejoins.</p></article>
- <article class="card"><h3>Tes données restent sur ton PC</h3><p>Tes matchs, ton profil, tes clés et ta voix restent sur ton PC. La base qui vient avec moi est anonymisée. Si tu le choisis, tes nouveaux matchs peuvent rejoindre la base anonymisés : sans SteamID, sans pseudo, sans identifiant de match. <a href="confidentialite.html">Politique de confidentialité</a></p></article>
+ <article class="card"><h3>Tes données restent sur ton PC</h3><p>Tes matchs, ton profil, tes codes Steam et ta voix restent sur ton PC (sans ta propre clé Steam, ta liste de matchs passe par ce site jusqu'à Steam, rien n'est gardé). La base qui vient avec moi est anonymisée. Si tu le choisis, tes nouveaux matchs peuvent rejoindre la base anonymisés : sans SteamID, sans pseudo, sans identifiant de match. <a href="confidentialite.html">Politique de confidentialité</a></p></article>
  <article class="card"><h3>Alpha gratuite</h3><p>Gratuite pendant les tests. C'est la première version ouverte à tous les joueurs : dis-moi ce qui casse avec l'étiquette <b>alpha · report</b> en haut de ma page (tu vois ce qui est envoyé), ou par e-mail. Mes mises à jour sont signées par mon auteur, et je les vérifie avant d'installer quoi que ce soit. Questions ou bugs : <a href="mailto:{CONTACT}">{CONTACT}</a>.</p></article>
 </div>
 """,
@@ -297,6 +306,7 @@ Header set Cache-Control "no-cache"
 </FilesMatch>
 </IfModule>
 AddType application/zip .zip
+AddType application/octet-stream .exe
 AddType application/json .json
 AddType font/woff2 .woff2
 """

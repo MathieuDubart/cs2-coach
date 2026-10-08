@@ -411,18 +411,15 @@ the top of my page, or write to my author (contact@valentingassend.com).
 Website, updates, privacy policy and terms: https://wily.valentingassend.com
 
 INSTALL
+The simplest: WilySetup.exe from https://wily.valentingassend.com (it installs everything, shortcuts included).
+With this zip instead:
 1. Unzip this folder where you want to keep it, on a drive with a few GB free (not in Program Files).
 2. Double-click "Wily.bat". I open in your browser at http://127.0.0.1:8765
    (Windows may ask to confirm the first time: the app is not signed yet.)
-3. Settings (the gear, top right):
-   - Steam: your Steam Web API key and your match history authentication code (the links to get them are on the
-     page). They stay in out/settings.json on this PC and only go to Steam's official API.
-   - Game detection: turn it on, then restart CS2.
-   - Microphone (optional): your calls, recorded and transcribed on this PC.
-4. The numpad keys of the live guide: in Steam, CS2 > Properties > Launch options, add  -condebug
-   (CS2 then writes the console log the app reads), and in CS2's console, once:  exec coach_binds
-5. Update (top bar): your matches are downloaded and analyzed on this PC (a few minutes each).
-6. Prepare > Training: "Install the training server" (a few minutes, no extra space: its files are links to the game's).
+3. My first launch shows three steps: your Steam account (found on this PC), CS2 connected (game detection, and one
+   launch option to paste in Steam: CS2 > Properties > Launch options:  -condebug +exec coach_binds ), your match
+   history code (from Steam's help page; no Steam Web API key needed: Wily's site asks Steam, keeping nothing).
+4. Prepare > Warm-up: the training server installs itself the first time (no extra space: links to the game's files).
 
 DAILY USE
 - "Wily.bat" (or "Start with Windows.bat" once, to have me always running).
