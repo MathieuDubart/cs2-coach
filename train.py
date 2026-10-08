@@ -1192,7 +1192,11 @@ def _map_dirs(mp):
     if hit and time.time() - hit[0] < 600:
         return hit[1]
     dirs = []
-    for d in sorted(os.listdir(os.path.join(config.OUT, "deep"))):
+    try:
+        names = sorted(os.listdir(os.path.join(config.OUT, "deep")))
+    except FileNotFoundError:   # a fresh install before its first analysis (08/10, the installer's test): no match yet
+        names = []
+    for d in names:
         try:
             with open(os.path.join(config.OUT, "deep", d, "meta.json"), encoding="utf-8") as fh:
                 if json.load(fh).get("map") == mp:

@@ -813,6 +813,8 @@ STEP = 5
 
 def _map_dirs():
     by = {}
+    if not os.path.isdir(config.DEEP):   # a fresh install before its first analysis: no match yet
+        return by
     for mid in os.listdir(config.DEEP):
         d = os.path.join(config.DEEP, mid)
         m = midround._meta(d).get("map")
