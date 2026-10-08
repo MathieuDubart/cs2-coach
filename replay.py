@@ -535,6 +535,23 @@ def heartbeat():
     return h if time.time() - (h.get("t") or 0) < 8 else None
 
 
+def _beat_age():
+    """Seconds since the plugin's last heartbeat (None: never)."""
+    try:
+        return time.time() - (json.load(open(os.path.join(COACH, "live.json"), encoding="utf-8")).get("t") or 0)
+    except (OSError, ValueError):
+        return None
+
+
+def _dead(s):
+    """A server that runs without its plugin beating for a minute: no map (a load that failed, 08/10: Aim Botz reloaded
+    itself by name and the server was left with nothing), or the plugin gone. Nothing there can be asked anything."""
+    if not _pid_alive(s.get("pid")) or time.time() - (s.get("started") or 0) < 120:
+        return False
+    age = _beat_age()
+    return age is None or age > 60
+
+
 def on_server():
     """You are on the training server right now (the coach's GSI treats it as practice)."""
     h = heartbeat()
@@ -546,7 +563,8 @@ def status():
     up = _pid_alive(s.get("pid"))
     h = heartbeat() if up else None
     h = h or {}
-    return {"installed": installed(), "install": dict(INSTALL), "path": SERVER, "running": up, "map": (h.get("map") or s.get("map")) if up else None,
+    return {"installed": installed(), "install": dict(INSTALL), "path": SERVER, "running": up, "dead": up and not h and _dead(s),
+            "busy": busy(), "map": (h.get("map") or s.get("map")) if up else None,
             "humans": h.get("humans", 0), "scenario": h.get("scenario"), "state": h.get("state"),
             "session": {k: h.get(k) for k in ("session", "block", "drill", "points", "ok", "done", "streak", "left")} if h.get("session") else None,
             "connect": f"connect 127.0.0.1:{PORT}", "join": dict(JOIN)}
@@ -736,9 +754,11 @@ def _gone(pid, secs):
 
 
 def _force_stop(pid):
-    """A server this app can't talk to: asked to stop through the plugin, else killed; RuntimeError when neither works."""
+    """A server this app can't talk to: asked to stop through the plugin, else killed; RuntimeError when neither works.
+    A plugin that doesn't beat can't read the request: killed at once."""
+    age = _beat_age()
     control(rcon=_password(), quit=int(time.time()))
-    if _gone(pid, 15):
+    if age is not None and age < 10 and _gone(pid, 15):
         return
     subprocess.run(["taskkill", "/PID", str(pid), "/F"], capture_output=True, creationflags=NO_WINDOW)
     if not _gone(pid, 5):
@@ -764,7 +784,12 @@ def start(mp):
     pw = _password()   # made and saved before the state is read (08/10)
     s = _state()
     h0 = heartbeat() or {}
-    if _pid_alive(s.get("pid")) and not h0.get("humans") and not _answers():   # nobody on it, and it won't listen: again
+    if _dead(s):
+        print(f"training server: no heartbeat for {_beat_age() or 0:.0f} s (no map?), started again", flush=True)
+        _force_stop(s["pid"])
+        s.pop("pid", None)
+        _save_state(s)
+    elif _pid_alive(s.get("pid")) and not h0.get("humans") and not _answers():   # nobody on it, and it won't listen: again
         print("training server: it refuses this app's RCON, started again", flush=True)
         _force_stop(s["pid"])
         s.pop("pid", None)
@@ -832,11 +857,13 @@ def stop():
     s = _state()
     pid = s.get("pid")
     if _pid_alive(pid):
-        try:
-            rcon("quit")
-        except OSError:   # PermissionError too: a server that won't listen is asked through the plugin (08/10)
-            pass
-        if not _gone(pid, 5):
+        dead = _dead(s)   # no map: nothing answers there, killed at once
+        if not dead:
+            try:
+                rcon("quit")
+            except OSError:   # PermissionError too: a server that won't listen is asked through the plugin (08/10)
+                pass
+        if dead or not _gone(pid, 5):
             try:
                 _force_stop(pid)
             except RuntimeError as e:

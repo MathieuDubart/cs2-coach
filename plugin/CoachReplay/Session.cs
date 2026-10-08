@@ -146,6 +146,7 @@ public partial class CoachReplay
         AddCommand("css_session", "start a training session: css_session <id>", (p, c) => CmdSession(p, c));
         AddCommand("css_report", "tell Wily's author what's wrong or what you'd want, from where you are: !report <text>", (p, c) => Report(p, c.ArgString));
         AddCommand("css_again", "the last session's drills again: !again <number>[,<number>], missed or all", (p, c) => Again(p, c.ArgString));
+        RegisterWorkshopGuard();
         RegisterEventHandler<EventSmokegrenadeDetonate>((e, _) => { NadeHit(e.Userid, e.X, e.Y); return HookResult.Continue; });
         RegisterEventHandler<EventFlashbangDetonate>((e, _) => { NadeHit(e.Userid, e.X, e.Y); return HookResult.Continue; });
         RegisterEventHandler<EventHegrenadeDetonate>((e, _) => { NadeHit(e.Userid, e.X, e.Y); return HookResult.Continue; });
@@ -182,6 +183,45 @@ public partial class CoachReplay
         if (Workshop.ContainsKey(Server.MapName) && !Workshop.ContainsKey(map))
             foreach (var c in AfterWorkshop) Server.ExecuteCommand(c);
         Server.ExecuteCommand(Workshop.TryGetValue(map, out var id) ? $"host_workshop_map {id}" : $"changelevel {map}");
+    }
+
+    // 08/10, his warm-up video (20:29 and 20:30): Aim Botz runs its own logic at each round start through its command
+    // entities (a point_servercommand and a point_clientcommand, both "@servercommand"): its config again (bot_quota 12,
+    // its bots on T, respawns...), bot_add_t, then a check that, short of its 12 bots, sends "restart". The round restart
+    // of each drill set it off, and a Workshop map can't be loaded by its name here: the server was left with no map and
+    // the player in the menu. On a Workshop map the plugin sets everything itself: the map's command entities are
+    // removed, and a load by name goes through the map's Workshop id.
+    int wsCut;
+
+    void RegisterWorkshopGuard()
+    {
+        // its command entities removed as they spawn (each round restart makes them again); reading an output's
+        // connections to stop only those crashed the server (CounterStrikeSharp's layout of them is off: 08/10)
+        RegisterListener<Listeners.OnEntitySpawned>(ent =>
+        {
+            if (ent.DesignerName is not ("point_servercommand" or "point_clientcommand" or "point_broadcastclientcommand")
+                || !Workshop.ContainsKey(Server.MapName)) return;
+            ent.Remove();
+            if (wsCut++ == 0) Logger.LogInformation("workshop map: its console commands cut ({c})", ent.DesignerName);
+        });
+        RegisterListener<Listeners.OnMapStart>(_ => wsCut = 0);
+        AddCommand("css_dbgfire", "an input to the entities of that name: css_dbgfire <name> <input> [value]", (p, c) =>
+        {
+            var n = 0;
+            foreach (var e in Utilities.GetAllEntities())
+                if (e.IsValid && e.Entity?.Name == c.GetArg(1)) { e.AcceptInput(c.GetArg(2), null, null, c.ArgCount > 3 ? c.GetArg(3) : ""); n++; }
+            c.ReplyToCommand($"{n} entities");
+        });
+        foreach (var cmd in new[] { "restart", "map", "changelevel" })
+            AddCommandListener(cmd, (p, info) =>
+            {
+                if (p != null) return HookResult.Continue;   // a player's own console: the game's rules
+                var target = cmd == "restart" || info.ArgCount < 2 ? Server.MapName : info.GetArg(1);
+                if (!Workshop.TryGetValue(target, out var id)) return HookResult.Continue;
+                Logger.LogInformation("workshop map: \"{c}\" by name stopped", info.GetCommandString);
+                if (cmd != "restart") Server.NextFrame(() => Server.ExecuteCommand($"host_workshop_map {id}"));
+                return HookResult.Stop;
+            }, HookMode.Pre);
     }
 
     // the screen: the drill's line stays all the time (sent again every 0.4 s), an event shows above it for a few seconds
