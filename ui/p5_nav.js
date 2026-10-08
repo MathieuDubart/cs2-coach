@@ -71,7 +71,55 @@ function navUpdate(view){const g=GROUP[view]||view;
   const fm=$("#favme");if(fm)fm.onclick=()=>favToggle(S.player);
   acctUpdate();
   document.body.classList.toggle("ingame",view==="ingame")}
-function welcome(v){const own=D.own;
+// ---------- the setup guide (08/10, the user: "une façon beaucoup plus simple d'installer l'app"): a player's first
+// launch in three steps instead of Settings to explore: the Steam account of this PC, CS2 connected (game detection and
+// one launch option to paste, which also loads the numpad keys), the match history code (no Steam key to create:
+// Wily's site asks Steam), then the first analysis. Reopened from Settings ----------
+const SG={t:null},SG_LAUNCH="-condebug +exec coach_binds";
+const sgTick=b=>`<i class="sg-tick${b?" on":""}" aria-hidden="true">${b?"✓":""}</i>`;
+async function setupGuide(v,first){clearTimeout(SG.t);if(!D.local)return;
+  const get=u=>fetch(u).then(r=>r.ok?r.json():null).catch(()=>null);
+  const [st,gs,cc]=await Promise.all([get("/api/steam/status"+(D.own?`?sid=${D.own}`:"")),get("/api/gsi/status"),get("/api/coach/status")]);
+  if(!v.isConnected)return;
+  const pc=(st&&st.pc_account)||{},who=D.own?(pc.steamid===String(D.own)?pc.name:(st&&st.name)):null;
+  const s1=!!D.own,s2a=!!(gs&&gs.installed),s2b=!!(cc&&(cc.console||cc.bound)),s3=!!(st&&st.has_auth),L=(st&&st.links)||{};
+  v.innerHTML=`<div class="sg"><div class="sg-h"><h2>${first?"Welcome! Three steps and I'm ready":"Setup guide"}</h2><p class="note">About two minutes. Everything stays on this PC.</p></div>
+   <article class="card sg-step${s1?" done":""}"><b class="sg-n">1</b><div><h3>Your Steam account ${sgTick(s1)}</h3>
+     ${s1?`<p>${who?`<b>${esc(who)}</b> · `:""}<span class="num note">${esc(String(D.own))}</span>: the account open in Steam on this PC.</p>`
+       :`<p>Open Steam and sign in to your account, then reload this page. Or <a href="/api/steam/login" style="color:var(--ct)">sign in through Steam's page</a>.</p>`}</div></article>
+   <article class="card sg-step${s2a&&s2b?" done":""}" data-sg2><b class="sg-n">2</b><div><h3>Connect CS2 <span data-sg2t>${sgTick(s2a&&s2b)}</span></h3>
+     <p><span data-sg2a>${sgTick(s2a)}</span> Game detection: CS2 tells me the map, the round, your money and your grenades (Valve's official feature for HUDs). ${s2a?"":`<button type="button" class="primary" id="sg-gsi">Connect</button>`}</p>
+     <p><span data-sg2b>${sgTick(s2b)}</span> One paste in Steam: right-click <b>Counter-Strike 2</b> › <b>Properties</b> › <b>Launch options</b>:</p>
+     <div class="sg-copy"><code>${SG_LAUNCH}</code><button type="button" id="sg-cp">Copy</button></div>
+     <p class="note" data-sg2n>${s2b?"CS2 started with it: the numpad keys of Live work.":"It makes CS2 write its console (Live's numpad keys go through it) and loads my keys. Ticked once CS2 has started with it."}</p></div></article>
+   <article class="card sg-step${s3?" done":""}"><b class="sg-n">3</b><div><h3>Your matches ${sgTick(s3)}</h3>
+     ${s3?`<p>History code saved: I find each new match by myself.</p>`
+       :`<p>On <a href="${esc(L.auth||"https://help.steampowered.com/en/wizard/HelpWithGameIssue/?appid=730&issueid=128")}" target="_blank" rel="noopener" style="color:var(--ct)">Steam's CS2 page</a> (signed in to your account): <b>Create authentication code</b>, then copy it here. The same page shows the code of your last match.</p>
+       <div class="row"><input id="sg-auth" type="text" autocomplete="off" spellcheck="false" placeholder="XXXX-XXXXX-XXXX" aria-label="Authentication code" style="width:200px;font:14px var(--f-mono)">
+         <input id="sg-known" type="text" autocomplete="off" spellcheck="false" placeholder="Code of your last match CSGO-… (optional)" aria-label="Code of your last match" style="flex:1;min-width:240px;font:14px var(--f-mono)"></div>
+       <p class="note">No Steam key to create: Wily's site asks Steam for you and keeps nothing.</p>`}</div></article>
+   <div class="btns"><button type="button" class="primary" id="sg-go" ${s1?"":"disabled"}>${s3||!first?"Analyze my matches":"Save and analyze my matches"}</button>
+     <button type="button" id="sg-later">${first?"Later":"Close"}</button><span class="note" id="sg-msg" role="status"></span></div>
+   <p class="note">The first analysis needs Steam open and CS2 closed: a few minutes, then your profile is here.</p></div>`;
+  const msg=$("#sg-msg",v);
+  const g1=$("#sg-gsi",v);if(g1)g1.onclick=async()=>{g1.disabled=true;try{await api("/api/gsi/install",{});setupGuide(v,first)}catch(e){msg.textContent=e.message;g1.disabled=false}};
+  $("#sg-cp",v).onclick=async()=>{try{await navigator.clipboard.writeText(SG_LAUNCH);$("#sg-cp",v).textContent="Copied ✓"}catch(e){msg.textContent="Select the text and copy it (Ctrl+C)."}};
+  const done=async()=>{try{await api("/api/app/options",{setup_done:true})}catch(e){}D.setup=true};
+  $("#sg-later",v).onclick=async()=>{clearTimeout(SG.t);await done();if(first)welcome(v);else renderSettings()};
+  $("#sg-go",v).onclick=async()=>{const b=$("#sg-go",v),au=$("#sg-auth",v),kn=$("#sg-known",v);b.disabled=true;
+    if(au&&au.value.trim()){msg.textContent="Checking with Steam…";
+      try{await api("/api/steam/credentials",{sid:String(D.own),auth_code:au.value.trim(),known_code:kn?kn.value.trim():""})}
+      catch(e){msg.textContent=e.message;b.disabled=false;return}}
+    clearTimeout(SG.t);await done();partialShown=null;startAnalysis(D.own)};
+  if(!(s2a&&s2b))sgPoll(v)}
+// step 2 ticks itself once CS2 started with the option (the typed codes of step 3 stay: only step 2 is touched)
+function sgPoll(v){SG.t=setTimeout(async()=>{const box=$("[data-sg2]",v);if(!box||!v.isConnected)return;
+  const [gs,cc]=await Promise.all([fetch("/api/gsi/status").then(r=>r.json()).catch(()=>null),fetch("/api/coach/status").then(r=>r.json()).catch(()=>null)]);
+  const a=!!(gs&&gs.installed),b=!!(cc&&(cc.console||cc.bound));
+  $("[data-sg2a]",box).innerHTML=sgTick(a);$("[data-sg2b]",box).innerHTML=sgTick(b);$("[data-sg2t]",box).innerHTML=sgTick(a&&b);box.classList.toggle("done",a&&b);
+  if(b)$("[data-sg2n]",box).textContent="CS2 started with it: the numpad keys of Live work.";
+  if(!(a&&b))sgPoll(v)},5000)}
+function welcome(v){const own=D.own;if(D.local&&!D.setup)return setupGuide(v,true);
   v.innerHTML=`<div class="welcome"><h2>Hi, I'm Wily</h2>
    <p class="lede">I watch your CS2 matches and tell you what wins rounds. I'm with you at three moments:</p>
    <ul style="font-size:15px"><li><b>Live</b>: a sheet to keep on a 2nd screen that follows your match (what to buy, where the Ts are likely to go, your paths, your rotations).</li>

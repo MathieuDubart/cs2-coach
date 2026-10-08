@@ -175,6 +175,7 @@ def shell_html(index, local=False):
     import usage
     u = usage.settings()
     data = {"index": index, "own": own if own and own != "None" else None, "role": config.role(),
+            "setup": bool(s.get("setup_done")) or config.role() != "client",   # the setup guide was done or skipped (08/10)
             "usage": {"on": usage.enabled(), "noticed": bool(u.get("noticed"))},
             "default": own if any(e["steamid"] == own for e in index) else (index[0]["steamid"] if index else None),
             "local": local, "generated": dt.datetime.now().isoformat(timespec="minutes")}

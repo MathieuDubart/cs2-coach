@@ -592,3 +592,17 @@ svg.vdcurve .band.ct{fill:color-mix(in srgb,var(--ct) 16%,transparent)}
 @keyframes recblink{to{visibility:hidden}}
 @keyframes recglow{0%,100%{box-shadow:0 0 0 0 rgba(224,38,45,.55)}50%{box-shadow:0 0 0 6px rgba(224,38,45,0)}}
 @media (prefers-reduced-motion:reduce){.livebtn.rec,.livebtn.rec .recdot{animation:none}}
+
+/* the setup guide (08/10): three numbered steps, each ticked when done */
+.sg{display:grid;gap:12px;max-width:860px}
+.sg-h h2{margin:0}
+.sg-step{display:grid;grid-template-columns:40px minmax(0,1fr);gap:12px;align-items:start}
+.sg-step h3{margin:2px 0 6px;display:flex;align-items:center;gap:8px}
+.sg-step p{margin:6px 0}
+.sg-n{display:grid;place-items:center;width:32px;height:32px;border-radius:50%;background:var(--chip);font:800 16px var(--f-mono)}
+.sg-step.done .sg-n{background:var(--good);color:#0b0f14}
+.sg-tick{display:inline-grid;place-items:center;width:18px;height:18px;border-radius:50%;border:1.5px solid var(--line);font:800 12px var(--f-mono);font-style:normal;color:#0b0f14;vertical-align:-3px}
+.sg-tick.on{background:var(--good);border-color:var(--good)}
+.sg-copy{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.sg-copy code{font:600 15px var(--f-mono);padding:6px 10px;border:1px dashed var(--line);border-radius:4px;background:var(--bg);user-select:all}
+.sg input[type=text]{background:var(--bg);color:var(--ink);border:1px solid var(--line);border-radius:3px;padding:5px 8px}

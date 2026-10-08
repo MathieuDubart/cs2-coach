@@ -446,7 +446,7 @@ async function pollRefresh(v){clearTimeout(S.rfTimer);
   if(r.running)S.rfTimer=setTimeout(()=>{if(S.view==="settings")pollRefresh(v)},5000)}
 async function renderSettings(){
   const v=$("#v-settings");
-  const head=`<div class="head"><div style="display:grid;gap:4px"><span class="eyebrow">Everything stays on this PC</span><h2>Settings</h2></div></div>`;
+  const head=`<div class="head"><div style="display:grid;gap:4px"><span class="eyebrow">Everything stays on this PC</span><h2>Settings</h2></div>${D.local?`<button type="button" id="sg-open">Setup guide</button>`:""}</div>`;
   if(!D.local){v.innerHTML=head+`<div class="empty">My settings live in the local app: double-click <code>Wily.bat</code>, then open Settings.</div>`;return}
   v.innerHTML=head+`<div class="empty"><span class="spin" aria-hidden="true"></span>Reading your Steam connection…</div>`;
   let st;try{st=await (await fetch("/api/steam/status"+(D.own?`?sid=${D.own}`:""))).json()}catch(e){v.innerHTML=head+`<div class="empty">I don't answer: restart "Wily.bat" and I'll be back.</div>`;return}
@@ -532,6 +532,7 @@ async function renderSettings(){
    <p class="note">The theme of the app on this browser. Dark is the default; "your system's" follows Windows.</p></article>${reportCard()}${updateCard(up)}${D.role==="client"?shareCard(ct)+usageCard(us):""}
   ${D.role!=="client"?`<h3 class="set-h">The base and the players' apps</h3>${growCard(gr)}${refreshCard(rf)}${shareCard(ct)}${reportsCard(rs)}${usageStatsCard(us)}`:""}`;
   wireRefresh(v);if(rf&&rf.running)pollRefresh(v);
+  const sgo=$("#sg-open",v);if(sgo)sgo.onclick=()=>setupGuide(v,false);   // the three steps of the first launch, again
   const msg=$("#st-msg",v),sid=st.steamid;
   const vmsg=$("#v-msg",v),vcall=async(path,body)=>{try{await api(path,Object.assign({sid},body||{}));renderSettings()}catch(e){if(vmsg)vmsg.textContent=e.message}};
   const va=$("#v-auto",v);if(va)va.onchange=()=>vcall("/api/voice/settings",{auto:va.checked});

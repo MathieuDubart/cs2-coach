@@ -676,6 +676,8 @@ class Handler(BaseHTTPRequestHandler):
                 s["open_on_cs2"] = bool(body["open_on_cs2"])
             if "feedback_prompts" in body:
                 s["feedback_prompts"] = bool(body["feedback_prompts"])
+            if "setup_done" in body:   # the setup guide, done or skipped (08/10)
+                s["setup_done"] = bool(body["setup_done"])
             config.save_settings(s)
             return self.send(200, {"ok": True, "open_on_cs2": bool(s.get("open_on_cs2", True)), "feedback_prompts": s.get("feedback_prompts", True) is not False})
         if u.path in ("/api/gsi/install", "/api/gsi/uninstall"):
