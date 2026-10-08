@@ -160,6 +160,7 @@ public partial class CoachReplay : BasePlugin
 
     public override void Load(bool hotReload)
     {
+        loadedAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
         Directory.CreateDirectory(System.IO.Path.Combine(Dir, "scenarios"));
         try { smokeCreate = new(SmokeSig); } catch (Exception e) { smokeCreate = null; Logger.LogInformation("no smokes: {m}", e.Message); }
         try { heCreate = new(HeSig); } catch (Exception e) { heCreate = null; Logger.LogInformation("no HE: {m}", e.Message); }
@@ -1140,8 +1141,37 @@ public partial class CoachReplay : BasePlugin
     // the bomb's end is yours when you defuse it as a CT, or it blows up as a T
     bool BombWon(string o) => (o == "defused" && cur?.Team == 3) || (o == "exploded" && cur?.Team == 2);
 
+    // the app's control file (08/10, a player's server it could no longer log into: its password lost by the app, then
+    // 127.0.0.1 refused, and the server run with rights the app can't kill): coach/control.json, written by replay.py.
+    // "rcon": the app's password, set here; "quit": a request made after this plugin loaded, the server stops itself.
+    // A local file of the server's own folder: no password needed, and nothing more than the app can already do.
+    long loadedAt, ctlSeen;
+    void Control()
+    {
+        try
+        {
+            var f = System.IO.Path.Combine(Dir, "control.json");
+            if (!File.Exists(f)) return;
+            var seen = File.GetLastWriteTimeUtc(f).Ticks;
+            if (seen == ctlSeen) return;
+            ctlSeen = seen;
+            using var doc = JsonDocument.Parse(File.ReadAllText(f));
+            var root = doc.RootElement;
+            if (root.TryGetProperty("rcon", out var pw) && pw.ValueKind == JsonValueKind.String
+                && System.Text.RegularExpressions.Regex.IsMatch(pw.GetString() ?? "", "^[0-9a-f]{8,64}$"))
+                Server.ExecuteCommand($"rcon_password {pw.GetString()}");
+            if (root.TryGetProperty("quit", out var q) && q.ValueKind == JsonValueKind.Number && q.GetInt64() > loadedAt)
+            {
+                Logger.LogInformation("control: the app asked the server to stop");
+                Server.ExecuteCommand("quit");
+            }
+        }
+        catch (Exception e) { Logger.LogInformation("control: {m}", e.Message); }
+    }
+
     void Beat()
     {
+        Control();
         try
         {
             var o = new Dictionary<string, object?> { ["t"] = DateTimeOffset.UtcNow.ToUnixTimeSeconds(), ["humans"] = Humans().Count(),

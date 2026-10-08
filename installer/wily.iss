@@ -85,7 +85,8 @@ Name: "{autodesktop}\Wily"; Filename: "{app}\python\pythonw.exe"; Parameters: "-
 Name: "{userstartup}\Wily"; Filename: "{app}\python\pythonw.exe"; Parameters: "-s serve.py --no-browser"; WorkingDir: "{app}"; IconFilename: "{app}\wily.ico"; Tasks: startup
 
 [Run]
-Filename: "{app}\python\pythonw.exe"; Parameters: "-s serve.py"; WorkingDir: "{app}"; Description: "{cm:LaunchProgram,Wily}"; Flags: nowait postinstall skipifsilent
+; never with the setup's rights (08/10: a Wily run as administrator started a training server nothing else could stop)
+Filename: "{app}\python\pythonw.exe"; Parameters: "-s serve.py"; WorkingDir: "{app}"; Description: "{cm:LaunchProgram,Wily}"; Flags: nowait postinstall skipifsilent runasoriginaluser
 
 [Code]
 var

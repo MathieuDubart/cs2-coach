@@ -636,8 +636,6 @@ def entries(mp, demos=24):
     and ended on the site; with the moment a CT first saw each one (spot: its frame, -1: never) and the grenades it
     threw on the way (f: their frame). The attackers of a defense walk them, throw them, then fight on their own once
     they see you. Cached per map."""
-    from demoparser2 import DemoParser
-    import nades
     os.makedirs(ENTRY_D, exist_ok=True)
     cf = os.path.join(ENTRY_D, f"{mp}.json")
     try:
@@ -646,6 +644,14 @@ def entries(mp, demos=24):
             return c
     except (OSError, ValueError):
         pass
+    return replay.in_worker(_entries, mp, demos)   # the demos parsed out of the app's process (08/10)
+
+
+def _entries(mp, demos=24):
+    from demoparser2 import DemoParser
+    import nades
+    os.makedirs(ENTRY_D, exist_ok=True)
+    cf = os.path.join(ENTRY_D, f"{mp}.json")
     dirs = []
     for d in sorted(os.listdir(os.path.join(config.OUT, "deep")), reverse=True):
         try:
@@ -1802,10 +1808,9 @@ def build(sid, minutes=20, where="random", difficulty=2):
         _scenario(sid, d)
     json.dump(sess, open(os.path.join(SESS, f"{sid_}.json"), "w", encoding="utf-8"), ensure_ascii=False)
     rest = [d for d in todo if d not in first]
-    if rest:   # the others while you play the first blocks (demo parsing: about 2 s each)
-        import threading
-        from concurrent.futures import ThreadPoolExecutor
-        threading.Thread(target=lambda: list(ThreadPoolExecutor(3).map(lambda d: _scenario(sid, d), rest)), daemon=True).start()
+    if rest:   # the others while you play the first blocks (demo parsing: about 2 s each), one after the other: two
+        import threading   # demos parsed at once crashed a player's app in polars (08/10, replay.PARSE)
+        threading.Thread(target=lambda: [_scenario(sid, d) for d in rest], daemon=True).start()
     p["sessions"].append({"id": sid_, "t": time.time(), "minutes": minutes, "maps": chosen, "done": False, "difficulty": int(difficulty)})
     _save(p)
     return sess

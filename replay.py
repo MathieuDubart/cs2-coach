@@ -141,7 +141,39 @@ def scenarios(sid, n=15):
 
 # ---------------------------------------------------------------- one scenario from the demo
 
+# 08/10: a player's app went down with an access violation in polars' runtime (demoparser2 uses it), the session's
+# situations parsed in three threads while a second session's were starting. The demos the app parses itself (the
+# situations, the defense's entries) now go to ONE worker process, one at a time: a crash there costs a situation,
+# never the app (the analysis' own workers already work this way: cs2coach).
+PARSE = threading.RLock()
+_POOL = {"ex": None}
+
+
+def in_worker(fn, *args):
+    """fn(*args) in the app's demo worker (a process of its own, one job at a time); straight here when this already is
+    a worker. A crash of the worker: started again once, then RuntimeError."""
+    import multiprocessing
+    if multiprocessing.current_process().name != "MainProcess":
+        return fn(*args)
+    from concurrent.futures import ProcessPoolExecutor
+    from concurrent.futures.process import BrokenProcessPool
+    with PARSE:
+        for attempt in (1, 2):
+            if _POOL["ex"] is None:
+                _POOL["ex"] = ProcessPoolExecutor(1, initializer=config.low_priority)
+            try:
+                return _POOL["ex"].submit(fn, *args).result()
+            except BrokenProcessPool:
+                _POOL["ex"] = None
+                print(f"demo worker crashed ({getattr(fn, '__name__', fn)}{args[:3]})" + (", trying once more" if attempt == 1 else ""), flush=True)
+        raise RuntimeError("the demo parser crashed on this demo")
+
+
 def build(sid, mid, rnd, kind="death", t=None):
+    return in_worker(_build, sid, mid, rnd, kind, t)
+
+
+def _build(sid, mid, rnd, kind="death", t=None):
     from demoparser2 import DemoParser
     sid, mid, rnd = str(sid), str(mid), int(rnd)
     pre = None if _has_demo(mid) else _prebuilt(mid, rnd, kind)
@@ -294,9 +326,7 @@ def build(sid, mid, rnd, kind="death", t=None):
             zone_poly = train.zone_outline(mp, zone_name, zone_at) if zone_name else []
             inside = None
             if len(zone_poly) >= 3:
-                from matplotlib.path import Path as _MPath
-                poly = _MPath(np.array(zone_poly, float)[:, :2])
-                inside = [i for i, q in enumerate(line) if poly.contains_point(q[:2])]
+                inside = [i for i, q in enumerate(line) if _in_poly(q[:2], zone_poly)]
             else:
                 inside = [i for i, q in enumerate(line) if math.dist(q[:2], zone_at[:2]) < 300]
             line = line[:inside[0] + 1] if inside else line
@@ -426,6 +456,11 @@ def _state():
 
 
 def _save_state(s):
+    # a state read before the RCON password was made never drops it (08/10: a player's first server got a password the
+    # next save erased; the app then made another one and the server refused it)
+    cur = _state()
+    if cur.get("rcon") and not s.get("rcon"):
+        s = dict(s, rcon=cur["rcon"])
     json.dump(s, open(STATE_F, "w", encoding="utf-8"))
 
 
@@ -671,11 +706,69 @@ def _hide_console(pid):
         return 0
 
 
+def _in_poly(p, poly):
+    """Point in polygon (ray casting) on x, y."""
+    x, y, inside, n = float(p[0]), float(p[1]), False, len(poly)
+    for i in range(n):
+        x1, y1 = float(poly[i][0]), float(poly[i][1])
+        x2, y2 = float(poly[(i + 1) % n][0]), float(poly[(i + 1) % n][1])
+        if (y1 > y) != (y2 > y) and x < x1 + (y - y1) * (x2 - x1) / (y2 - y1):
+            inside = not inside
+    return inside
+
+
+def control(**kw):
+    """The plugin's control file (coach/control.json, 08/10): "rcon": this app's password, set by the plugin on the
+    running server; "quit": the server stops itself (no password, no rights needed: a server run as administrator, or
+    one whose password was lost, still obeys)."""
+    try:
+        json.dump(kw, open(os.path.join(COACH, "control.json"), "w", encoding="utf-8"))
+    except OSError as e:
+        print("training server control:", e, flush=True)
+
+
+def _gone(pid, secs):
+    for _ in range(int(secs * 2)):
+        if not _pid_alive(pid):
+            return True
+        time.sleep(0.5)
+    return not _pid_alive(pid)
+
+
+def _force_stop(pid):
+    """A server this app can't talk to: asked to stop through the plugin, else killed; RuntimeError when neither works."""
+    control(rcon=_password(), quit=int(time.time()))
+    if _gone(pid, 15):
+        return
+    subprocess.run(["taskkill", "/PID", str(pid), "/F"], capture_output=True, creationflags=NO_WINDOW)
+    if not _gone(pid, 5):
+        raise RuntimeError("The training server doesn't answer and can't be stopped: end 'Counter-Strike 2' (the server, "
+                           "not your game) in the Task Manager, or restart Windows, then try again")
+
+
+def _answers():
+    """True when this app can still talk to its server (the right password, 127.0.0.1 not refused)."""
+    try:
+        rcon("echo wily", timeout=5.0)
+        return True
+    except PermissionError:
+        return False
+    except OSError:   # refused after failed logins: the server says nothing
+        return False
+
+
 def start(mp):
     """The server on this map (started hidden, or its map changed); back when it answers."""
     if not installed():
         raise RuntimeError("The training server is not installed yet: install it from the Prepare page")
+    pw = _password()   # made and saved before the state is read (08/10)
     s = _state()
+    h0 = heartbeat() or {}
+    if _pid_alive(s.get("pid")) and not h0.get("humans") and not _answers():   # nobody on it, and it won't listen: again
+        print("training server: it refuses this app's RCON, started again", flush=True)
+        _force_stop(s["pid"])
+        s.pop("pid", None)
+        _save_state(s)
     wid = WORKSHOP.get(mp)
     if wid:
         _seed_workshop(wid)
@@ -706,6 +799,7 @@ def start(mp):
         time.sleep(0.1)
     s.update(pid=pr.pid, map=mp, started=time.time())
     _save_state(s)
+    control(rcon=pw)   # the plugin sets it too: the server and this app always agree on it
     # rcon only once the map runs (the plugin's heartbeat): an early try counts as a failed login and the server then
     # refuses 127.0.0.1
     for _ in range(120):
@@ -740,14 +834,13 @@ def stop():
     if _pid_alive(pid):
         try:
             rcon("quit")
-        except OSError:
+        except OSError:   # PermissionError too: a server that won't listen is asked through the plugin (08/10)
             pass
-        for _ in range(10):
-            time.sleep(0.5)
-            if not _pid_alive(pid):
-                break
-        else:
-            subprocess.run(["taskkill", "/PID", str(pid), "/F"], capture_output=True, creationflags=NO_WINDOW)
+        if not _gone(pid, 5):
+            try:
+                _force_stop(pid)
+            except RuntimeError as e:
+                print("training server:", e, flush=True)
     s.pop("pid", None)
     _save_state(s)
     return status()
