@@ -207,6 +207,7 @@ class Handler(BaseHTTPRequestHandler):
         pass
 
     def do_GET(self):
+        PAGE["any"] = time.time()
         u = urlparse(self.path)
         q = parse_qs(u.query)
         if self.foreign(write=u.path == "/api/analyze"):   # the only GET that starts something
@@ -411,6 +412,7 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
 
     def do_POST(self):
+        PAGE["any"] = time.time()
         """Journal check-ins and experiments: saved in out/, then the player's plan and page are rebuilt."""
         u = urlparse(self.path)
         if self.foreign(write=True):
@@ -678,6 +680,8 @@ class Handler(BaseHTTPRequestHandler):
                 s["feedback_prompts"] = bool(body["feedback_prompts"])
             if "setup_done" in body:   # the setup guide, done or skipped (08/10)
                 s["setup_done"] = bool(body["setup_done"])
+            if "auto_update" in body:   # automatic updates (08/10), on by default
+                s["auto_update"] = bool(body["auto_update"])
             config.save_settings(s)
             return self.send(200, {"ok": True, "open_on_cs2": bool(s.get("open_on_cs2", True)), "feedback_prompts": s.get("feedback_prompts", True) is not False})
         if u.path in ("/api/gsi/install", "/api/gsi/uninstall"):
@@ -819,7 +823,30 @@ def voice_status():
                      "on": voice.TEAM.running(), "pending": bool(voice.TEAM.pending)}}
 
 
-PAGE = {"seen": 0.0}   # the last time a Wily page asked for the game's state
+PAGE = {"seen": 0.0, "any": 0.0}   # the last time a Wily page asked for the game's state; anything at all (an open page peeks every few seconds)
+
+
+def app_busy():
+    """Why the app can't restart now (None: it can): CS2 open (a match, its menu or the training server), an analysis,
+    a recording or a transcription, the references being recomputed."""
+    try:
+        import psutil
+        if any((p.info.get("name") or "").lower() == "cs2.exe" for p in psutil.process_iter(["name"])):
+            return "CS2 is open"
+    except Exception:
+        pass
+    if LOCK.locked():
+        return "an analysis is running"
+    try:
+        v = voice_status()
+        if v.get("recording") or v.get("transcribing"):
+            return "a recording or a transcription"
+    except Exception:
+        pass
+    r = config.read_json(os.path.join(config.OUT, "refresh.json"), {}) or {}
+    if r.get("running") and time.time() - (r.get("updated") or 0) < 3600:
+        return "the references are being updated"
+    return None
 
 
 def cs2_page_watch():
@@ -934,7 +961,8 @@ if __name__ == "__main__":
         if config.role() == "client":   # a player's copy: updates from the coach, and the matches they chose to share
             import contrib
             import updater
-            threading.Thread(target=updater.watch, daemon=True).start()
+            threading.Thread(target=updater.watch, kwargs={"busy": app_busy, "quiet": lambda: time.time() - PAGE["any"] > 300},
+                             daemon=True).start()   # automatic updates: installed when nobody uses the app (08/10)
             threading.Thread(target=contrib.watch, daemon=True).start()
     if "--no-browser" not in sys.argv:
         webbrowser.open(url)

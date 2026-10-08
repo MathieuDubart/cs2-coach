@@ -314,9 +314,11 @@ function updateCard(u){
    ${busy?`<div style="height:8px;background:var(--line);border-radius:4px;overflow:hidden;margin:6px 0"><div style="width:${pct}%;height:100%;background:var(--ct)"></div></div><p class="note">${pr.restarting?"Restarting the app…":pr.part==="installing"?"Installing…":`Downloading ${UPW[pr.part]||""}…`}</p>`:""}
    ${pr.error?`<p class="note">Failed: ${esc(pr.error)}</p>`:""}
    <p class="note">Every update is signed by my author and checked here before I install it. Your settings, matches, profile and voice stay as they are.</p>
+   <div class="row"><label style="display:flex;gap:8px;align-items:center;font-size:14px"><input type="checkbox" id="up-auto" ${u.auto!==false?"checked":""}> Install updates by myself, when you don't use me (never while CS2 is open)</label></div>
    <div class="btns">${av.length&&!busy?`<button type="button" class="primary" id="up-go">Install the update</button>`:""}<button type="button" id="up-check"${busy?" disabled":""}>Check now</button></div></article>`}
 function wireUpdate(v){
-  const go=$("#up-go",v),ck=$("#up-check",v);
+  const go=$("#up-go",v),ck=$("#up-check",v),au=$("#up-auto",v);
+  if(au)au.onchange=async()=>{try{await api("/api/app/options",{auto_update:au.checked})}catch(e){}};
   if(ck)ck.onclick=async()=>{ck.disabled=true;try{await api("/api/update/check",{})}catch(e){}pollUpdate(v)};
   if(go)go.onclick=async()=>{go.disabled=true;try{await api("/api/update/apply",{})}catch(e){go.disabled=false;go.insertAdjacentHTML("afterend",`<span class="note">${esc(e.message)}</span>`);return}pollUpdate(v)}}
 async function pollUpdate(v){clearTimeout(S.upTimer);

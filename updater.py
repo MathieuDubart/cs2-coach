@@ -8,7 +8,9 @@ Three parts, each one only when it changed:
   player has here stays theirs, with their real rows); their profile is analyzed again with it;
 - runtime: Python and its libraries; replaced while the app is stopped (its files are in use), then it restarts.
 
-The check runs at start-up and every 6 hours, never during a match; installing is the player's click (Settings).
+The check runs at start-up then every 30 minutes, never during a match. Automatic updates (08/10, on unless the player
+turns them off in Settings): the new parts are downloaded when the app has nothing to do, and installed when nobody
+uses it (no CS2, no analysis, no recording, no Wily page open for 5 minutes), so the restart is never in the way.
 The coach's own app (role "server") makes the releases and never updates itself."""
 import base64
 import hashlib
@@ -39,6 +41,11 @@ MINE = {"settings.json", "players", "deep", "scenarios", "voice", "live", "gsi",
 
 def enabled():
     return config.role() == "client" and os.path.exists(PUB_F) and os.path.exists(VER_F)
+
+
+def auto_on():
+    """Automatic updates (08/10): on unless the player turned them off in Settings."""
+    return config.settings().get("auto_update", True) is not False
 
 
 def current():
@@ -99,7 +106,7 @@ def status():
     st = config.read_json(STATE_F, {}) or {}
     cur = current()
     man = st.get("latest") or {}
-    return {"enabled": enabled(), "current": cur, "checked": st.get("checked"), "error": st.get("error"),
+    return {"enabled": enabled(), "auto": auto_on(), "current": cur, "checked": st.get("checked"), "error": st.get("error"),
             "latest": {k: man.get(k) for k in ("app", "released", "notes")} if man else None,
             "available": _available(man, cur) if man and enabled() else [], "progress": dict(ST)}
 
@@ -261,8 +268,14 @@ def after_start():
         _refresh_mine()
 
 
-def watch():
-    """At start-up, then every 6 hours: what is published (no download, no install: the player decides)."""
+def _fetched(man, avail):
+    """True when every part to install is already downloaded and checked (out/updates: a file there passed its sha256)."""
+    return bool(avail) and all(os.path.exists(os.path.join(DL, man[a["part"]]["file"])) for a in avail)
+
+
+def watch(busy=None, quiet=None):
+    """At start-up, then every 30 minutes: what is published. Automatic updates on: the parts downloaded while busy()
+    says nothing (no CS2, no analysis, no recording), installed once quiet() too (no Wily page open for 5 minutes)."""
     if not enabled():
         return
     after_start()
@@ -271,6 +284,16 @@ def watch():
         if not config.in_match():
             try:
                 check()
+                st = config.read_json(STATE_F, {}) or {}
+                man = json.loads(st.get("raw") or "{}")
+                avail = _available(man, current()) if man else []
+                if auto_on() and avail and not ST["busy"] and not (busy and busy()):
+                    for a in avail:   # downloaded ahead, quietly (each one checked against the signed manifest, once)
+                        if not os.path.exists(os.path.join(DL, man[a["part"]]["file"])):
+                            _download(man[a["part"]])
+                    if _fetched(man, avail) and (quiet is None or quiet()) and not (busy and busy()) and not config.in_match():
+                        print("automatic update: installing " + ", ".join(a["part"] for a in avail), flush=True)
+                        apply()
             except Exception as e:
-                print("update check:", e, flush=True)
+                print("update:", e, flush=True)
         time.sleep(1800)
