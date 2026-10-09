@@ -209,7 +209,7 @@ def groups(df, side_rounds):
                 c = c.assign(w=[_window(tt, p) for tt, p in zip(c.t, c.post)])
                 wins = {}
                 for w, cw in c.groupby("w"):
-                    wins[w] = {"n": int(len(cw))}
+                    wins[w] = {"n": int(len(cw)), "t": round(float(cw.t.median()), 1)}   # its usual moment in that window (Live's timeline, 09/10)
                     ew = _eff(cw, typ)
                     if ew is not None:
                         wins[w]["eff"] = round(100 * (ew * len(cw) + prior * 5) / (len(cw) + 5)) if typ == "flash" else round((ew * len(cw) + prior * 5) / (len(cw) + 5))

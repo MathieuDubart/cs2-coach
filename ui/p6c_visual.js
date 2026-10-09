@@ -324,22 +324,41 @@ function postStuff(p,g,side,site){const E=((((p.advice.plan||{}).nades||{}).maps
   if(!E||!c)return [];const at=x=>x.to_px&&Math.hypot(x.to_px[0]-c.px[0],x.to_px[1]-c.px[1])<230&&(!x.land_level||!c.level||x.land_level===c.level);
   const L=[];Object.entries(E.types||{}).forEach(([t,v])=>(v.post||[]).forEach(x=>L.push({...x,type:t})));(E.pool||[]).filter(x=>(x.post||0)>=30).forEach(x=>L.push(x));
   return L.filter(at).filter(x=>(held[x.type]||0)>0).filter((x,i,a)=>a.findIndex(y=>y.type===x.type&&y.to===x.to&&y.from===x.from)===i).sort((a,b)=>(b.score||0)-(a.score||0)).slice(0,3)}   // the grenades you hold (07/10)
-// T after the plant on a site you gave (numpad 7 / 9, or said): where to hold, the post-plant stuff
+// after the plant (09/10, the user: CT "vu que j'ai encore du stuff, propose-moi du stuff de retake: la smoke, la molo, la
+// grenade ninja"; T "j'ai une grenade, propose-moi du stuff de défense"): the base's throws after a plant on that site
+// (4 or more, by 3 players or more), with the grenades you hold. CT: landing on the site, thrown from outside it (from
+// your way in first); T: thrown from the site or around it, landing where the CTs come from. One place, its stack
+function postPlan(p,g,side,site,way){const TD=tdirsOf(g.map)||{},L=(TD.lineups||{})[side]||[],held=g.nades||{};if(!site||!L.length)return null;
+  const S=((((((p.advice.plan||{}).tside||{}).maps||{})[g.map]||{}).geo||{}).sites||{})[site];if(!S)return null;
+  if(!Object.values(held).some(v=>v>0))return {stacks:[],why:"no grenade left",post:true};
+  const RS=1.15*Math.max(60,...(TD.gates||[]).filter(x=>x.site===site&&!x.mid&&(!x.level||!S.level||x.level===S.level)).map(x=>Math.hypot(x.px[0]-S.px[0],x.px[1]-S.px[1])));
+  const d=(xy,lv)=>!lv||!S.level||lv===S.level?Math.hypot(xy[0]-S.px[0],xy[1]-S.px[1]):1e9;
+  const C=L.filter(u=>u.from_px&&u.to_px&&(held[u.type]||0)>0&&((u.w||[])[4]||0)>=4&&(u.players||0)>=3
+      &&(side==="CT"?d(u.to_px,u.land_level)<RS*1.3&&d(u.from_px,u.level)>RS*.6:d(u.from_px,u.level)<RS*1.6))
+    .map(u=>({...u,s:(u.w||[])[4]}));
+  if(!C.length)return {stacks:[],why:"none for your grenades",post:true};
+  const A=[];C.sort((a,b)=>b.s-a.s).forEach(u=>{const a=A.find(x=>x.lv===(u.level||null)&&Math.hypot(x.c[0]-u.from_px[0],x.c[1]-u.from_px[1])<55);if(a)a.L.push(u);else A.push({c:u.from_px,lv:u.level||null,L:[u]})});
+  const pick=a=>{const left={...held},out=[];a.L.forEach(u=>{if((left[u.type]||0)>0&&!out.some(x=>x.type===u.type&&x.to_key===u.to_key)){left[u.type]--;out.push(u)}});return out};
+  const onWay=a=>!!(way&&way.length&&way.some(q=>Math.hypot(q[0]-a.c[0],q[1]-a.c[1])<90));
+  const B=A.map(a=>({a,out:pick(a)})).sort((x,y)=>(y.out.length*1000+(onWay(y.a)?500:0)+y.out.reduce((s_,u)=>s_+u.s,0))-(x.out.length*1000+(onWay(x.a)?500:0)+x.out.reduce((s_,u)=>s_+u.s,0)))[0];
+  const st=B.out.sort((a,b)=>NADE_ORDER.indexOf(a.type)-NADE_ORDER.indexOf(b.type));
+  return {stacks:[st],buy:false,prac:u=>(TD.practiced||[]).includes(pracKey(side,u)),SH:TD.shots||{},side,tempo:null,post:true}}
+// T after the plant on a site you gave (numpad 7 / 9, or said): where to hold, the post-plant stuff (09/10: no rotation
+// on T, "la rotation de là où c'est planté par rapport à là où je suis en T, ça ne me sert à rien")
 function vPostPlant(p,g,site){const M=(((p.advice.plan||{}).tside||{}).maps||{})[g.map]||{},PP=(M.postplant||{})[site];
-  const post=postStuff(p,g,"T",site),dir=tdirSel(g).dir,rot=vRotLine(rotFromDir(M,site,dir,g.map),dir,site,g.map);   // the way you said this round: your rotation to the bomb
-  const hs=((PP||{}).holds||[]).slice(0,3);if(!hs.length&&!post.length&&!rot)return "";
+  const P=postPlan(p,g,"T",site,null),hs=((PP||{}).holds||[]).slice(0,3);if(!hs.length&&!(P&&P.stacks.length))return "";
   // where to hold: the spots alone (07/10: their rounds won are near 100 % for every spot the Ts stay alive on, so no
   // bars; the map circles them)
-  return `${rot}${hs.length?`<div class="vchips"><span class="vchip good">⛨ HOLD ${site} · ${hs.map((h,i)=>`${vShort(h.zone||"?")}${i?"":" ★"}`).join(" · ")}</span></div>`:""}
-   ${post.length?`<div class="vchips">${post.map(x=>`<span class="vchip" style="border-color:${NADE_C[x.type]||"#ccc"}">${vLetter[x.type]||"?"} ${vShort(x.to)} <small>${esc(x.from||"")}</small></span>`).join("")}</div>`:""}`}
+  return `${hs.length?`<div class="vchips"><span class="vchip good">⛨ HOLD ${site} · ${hs.map((h,i)=>`${vShort(h.zone||"?")}${i?"":" ★"}`).join(" · ")}</span></div>`:""}
+   ${P&&P.stacks.length?vStuff(P,`POST-PLANT STUFF · ${site}`):""}`}
 // CT after the plant: the retake. The spots to check (where Ts hold after a plant there), the way from your site, the stuff
 function vRetake(p,g,site){const TS=(p.advice.plan||{}).tside,M=((TS||{}).maps||{})[g.map]||{},PP=((M.postplant||{})[site]||{}).holds||[];
-  const dir=tdirSel(g).dir||mySite(g),rot=vRotLine(rotFromDir(M,site,dir,g.map),dir,site,g.map);   // where you said you play this round (numpad 1-2-3, 7 / 9 before the plant)
-  const post=postStuff(p,g,"CT",site);
+  const dir=tdirSel(g).dir||mySite(g),RX=rotFromDir(M,site,dir,g.map),rot=vRotLine(RX,dir,site,g.map);   // where you said you play this round (numpad 1-2-3, 7 / 9 before the plant)
+  const P=postPlan(p,g,"CT",site,RX&&RX.routes[0]?RX.routes[0].pts:null);   // the retake stuff, from your way in first
   const zs=[...new Set(PP.slice(0,4).map(h=>h.zone).filter(Boolean))];
   return (`${rot}
    ${zs.length?`<div class="vchips">${zs.map(z=>`<span class="vchip bad">⚠ check ${vShort(z)}</span>`).join("")}</div>`:""}
-   ${post.length?`<div class="vchips">${post.map(x=>`<span class="vchip" style="border-color:${NADE_C[x.type]||"#ccc"}">${vLetter[x.type]||"?"} ${vShort(x.to)} <small>${esc(x.from||"")}</small></span>`).join("")}</div>`:""}`).trim()}
+   ${P&&P.stacks.length?vStuff(P,`RETAKE STUFF · ${site}`):""}`).trim()}
 // this match's peek timings: the zones you called at the same moment (±8 s) in two rounds or more of this half and side;
 // el: now (live: only the ones still to come), null at the buy time
 function vPeekTimes(g,el){const H=g.hist||{},Mk=H.marks||{},R=H.rounds||{},hs=halfStart(g.round||1),by={};
@@ -399,7 +418,7 @@ function nowVisual(p,g,following){
     put("info",vInfo(g)||(dead&&!planted?`<div class="vsit dead"><span>YOU'RE OUT</span><b>call what your teammate can't see</b></div>`:""));
     if(planted){const left=g.phase_left!=null?g.phase_left:Math.max(0,40-(g.since_plant||0)),as=typeof autoSite==="function"?autoSite(p,g):null;
       put("alert",`<div class="vbig ${ct?"bad":"good"}"><b>💣 ${Math.ceil(left)}s</b><span>${ct?"retake together":"hold the bomb"}${as?` · ${as.site} site, ${as.said?"you said it":`${as.p}% sure`}`:" · numpad 7 A / 9 B"}</span></div>`);
-      if(WF)put("focus",WF);else if(as&&(as.said||as.p>=70))put("focus",ct?vRetake(p,g,as.site):vPostPlant(p,g,as.site))}
+      if(WF)put("focus",WF);else if(as&&(as.said||as.p>=50))put("focus",ct?vRetake(p,g,as.site):vPostPlant(p,g,as.site))}
     else if(isHostage(g.map))put("focus",ct?(vFocus(p,g)||(el<45?vHostRoutes(p,g,false):"")):(el<45?vHostRoutes(p,g,true):""));
     else if(ct){const CD=!WF&&!dead?vCTDir(p,g,r):"",CDs=!!CD&&tdirSel(g).dir!=="MID",CTL=r&&el<75&&!dead&&!CDs?vCTline(p,g,r):"";if(!dead)put("focus",WF||CD||vMySite(p,g,!!CTL));
       const WM=g.wily_match||{};if(WM.fake||WM.rush||WM.slow)put("evid",`<span class="vchip warn">🎙 they ${[WM.fake?"fake":"",WM.rush?"rush":"",WM.slow?"play slow":""].filter(Boolean).join(", ")} · you said</span>`);

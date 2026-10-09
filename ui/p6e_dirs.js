@@ -47,7 +47,7 @@ function dirRank(p,g,TD){if(!TD)return null;const sel=tdirSel(g),lb=(w,n)=>{cons
 // rounds won by the moment the Ts get on the site (at equal numbers, like the plays' curves), moved like its odds this
 // round; x is the game clock, the tempo picked is shaded, the dashed line is now; under it, the same read at 1:25,
 // 1:10, 0:45 and 0:10 (and now), the best one in green
-function vDirCurve(p,g,r){const T_=r.timing||{},TM=(g.round===halfStart(g.round)&&T_.pistol)||T_.other||T_.pistol;
+function vDirCurve(p,g,r,P){const T_=r.timing||{},TM=(g.round===halfStart(g.round)&&T_.pistol)||T_.other||T_.pistol;
   if(!TM||!TM.curve||TM.curve.length<3)return "";const L=RLEN(),W=300,H=46,x=t=>6+(W-12)*Math.min(1,Math.max(0,t/L)),sh=r.shift||0;
   const pts=TM.curve.map(([t,w])=>[t,Math.round(100*sgm(lgt(clp(w/100))+sh))]),lo=Math.min(...pts.map(q=>q[1]))-3,hi=Math.max(...pts.map(q=>q[1]))+3,y=w=>H-4-(H-8)*(w-lo)/Math.max(1,hi-lo);
   const sel=tdirSel(g),band=sel.tempo==="rush"?[0,30]:sel.tempo==="slow"?[60,L]:sel.tempo==="control"?[35,L]:null;
@@ -57,7 +57,7 @@ function vDirCurve(p,g,r){const T_=r.timing||{},TM=(g.round===halfStart(g.round)
   return `<div class="vhead">ON THE SITE AT · ROUNDS WON</div><svg class="vdcurve" viewBox="0 0 ${W} ${H}" role="img" aria-label="Rounds won by when you get on the site">
     ${band?`<rect x="${x(band[0])}" y="0" width="${x(band[1])-x(band[0])}" height="${H}" class="band"/>`:""}<line x1="6" x2="${W-6}" y1="${H-1}" y2="${H-1}" class="base"/>
     <polyline points="${pts.map(q=>`${x(q[0]).toFixed(1)},${y(q[1]).toFixed(1)}`).join(" ")}" style="fill:none;stroke:${r.col};stroke-width:2.6;stroke-linejoin:round"/>
-    <circle cx="${x(best[0])}" cy="${y(best[1])}" r="3.5" style="fill:var(--good)"/>${el!=null?`<line x1="${x(el)}" x2="${x(el)}" y1="0" y2="${H}" class="now"/>`:""}</svg>
+    <circle cx="${x(best[0])}" cy="${y(best[1])}" r="3.5" style="fill:var(--good)"/>${el!=null?`<line x1="${x(el)}" x2="${x(el)}" y1="0" y2="${H}" class="now"/>`:""}${nadeMarks(P,x,H)}</svg>
     <div class="vdtimes">${el!=null&&at(el)!=null?`<span class="now">now <b>${at(el)}%</b></span>`:""}${reads.map(([t,w])=>`<span${Math.abs(t-best[0])<=8?' class="best"':""}>${clock(t)} <b>${w}%</b></span>`).join("")}${reads.some(([t])=>Math.abs(t-best[0])<=8)?"":`<span class="best">${clock(best[0])} <b>${best[1]}%</b></span>`}</div>`}
 // the grenades of the way, by stack: thrown from one spot (the smoke, then the flash over it), the most used first
 const NADE_L={smoke:"S",flash:"F",molotov:"M",he:"H"},HOW_S=h=>String(h||"").replace("standing still","").replace("jumpthrow","jump").replace("running","run").replace("walking","walk").replace("crouching","crouch").replace(/ \+ /g,"+");
@@ -84,6 +84,14 @@ const shotId=(side,u)=>`${side}_${u.type}_${u.from_key||u.from||""}_${u.to_key||
 // covers the most of your grenades (T: on the way you take, whenever one there has something; CT: on your site first);
 // a second place only for what the first can't throw
 const TEMPO_W={rush:[0,1],control:[1],slow:[2,3]};   // nades.py's windows: 0-20 s, 20-40 s, 40-70 s, after 70 s (then after the plant)
+// when to throw a lineup (09/10, the user: "donne-moi le timing le plus optimisé si je n'ai rien mis, et si j'ai mis
+// quelque chose, le timing qui correspond au rythme que je veux"): with a tempo, its usual moment in the tempo's window
+// that throws it most; none said, in its best window (where it works best; a smoke: where it is thrown most). Seconds
+// into the round; an older base without the windows' moments: the window's middle
+const W_MID=[10,30,55,85];
+function nadeT(u,tempo){const W=tempo?TEMPO_W[tempo]:[0,1,2,3],w=u.w||[];
+  const i=!tempo&&u.best!=null&&u.best<4&&(w[u.best]||0)>0?u.best:W.reduce((a,j)=>(w[j]||0)>(w[a]||0)?j:a,W[0]);
+  const t=(u.wt||[])[i];return t!=null?t:W_MID[i]}
 const NADE_ORDER="smoke molotov flash he";   // the order to throw them: the smoke, then the flash over it
 const comboDir=(r,sel)=>sel.dir&&!(sel.dir==="MID"&&!r.mid)?sel.dir:(r.mid?"MID":r.site);
 const nearPts=(p_,lv,P,d)=>!!p_&&P.some(q=>Math.hypot(q[0]-p_[0],q[1]-p_[1])<d&&(!lv||!q[2]||lv===q[2]));
@@ -119,34 +127,53 @@ function stuffPlan(p,g,side,dir,tempo,way,max){const TD=tdirsOf(g.map)||{},L=(TD
   const ord=s_=>s_.sort((a,b)=>NADE_ORDER.indexOf(a.type)-NADE_ORDER.indexOf(b.type)),stacks=[ord(first.out)];
   if((max||2)>1&&Object.values(first.left).some(v=>v>0)){const nx=B.slice(1).map(a=>({a,r:pick(a,first.left)})).filter(x=>x.r.out.length).sort((x,y)=>val(y.a,first.left)-val(x.a,first.left))[0];
     if(nx){if(fromOf(nx.r.out)===fromOf(stacks[0])){stacks[0].push(...nx.r.out);ord(stacks[0])}else stacks.push(ord(nx.r.out))}}   // the same callout: one place
-  return {stacks,buy,prac,SH,side}}
+  return {stacks,buy,prac,SH,side,tempo}}
 const fromOf=st=>{const c={};st.forEach(u=>c[u.from]=(c[u.from]||0)+1);return Object.entries(c).sort((a,b)=>b[1]-a[1])[0][0]};   // the place's name: its throws' most common zone
 function vStuff(P,title){if(!P)return "";if(!P.stacks.length)return `<div class="vhead">${title} · <span class="vnone">${P.why}</span></div>`;const {stacks,buy,prac,SH,side}=P;
   return `<div class="vhead">${title}${buy?" · TO BUY":""}</div><div class="vstacks">${stacks.map(st=>{const sh=st.map(u=>SH[shotId(side,u)]).find(Boolean);
-    return `<div class="vstack${sh?" shot":""}">${sh?`<img class="vshot" src="${esc(sh)}" alt="Where to aim" loading="lazy">`:""}<div class="vst-in"><span class="from">${esc(vShort(fromOf(st)||"?"))}${st.length>1?` <small>×${st.length}</small>`:""}</span>${st.map(u=>`<span class="vnd${prac(u)?" prac":""}"><i style="background:${NADE_C[u.type]||"#ccc"}">${NADE_L[u.type]||"?"}</i>${esc(vShort(u.to||"?"))}${prac(u)?`<b title="practiced in training">✓</b>`:""}${HOW_S(u.how)?`<small>${esc(HOW_S(u.how))}</small>`:""}</span>`).join("")}</div></div>`}).join("")}</div>`}
+    return `<div class="vstack${sh?" shot":""}">${sh?`<img class="vshot" src="${esc(sh)}" alt="Where to aim" loading="lazy">`:""}<div class="vst-in"><span class="from">${esc(vShort(fromOf(st)||"?"))}${st.length>1?` <small>×${st.length}</small>`:""}</span>${st.map(u=>`<span class="vnd${prac(u)?" prac":""}"><i style="background:${NADE_C[u.type]||"#ccc"}">${NADE_L[u.type]||"?"}</i>${esc(vShort(u.to||"?"))}${prac(u)?`<b title="practiced in training">✓</b>`:""}${HOW_S(u.how)?`<small>${esc(HOW_S(u.how))}</small>`:""}${P.post?"":`<em class="vnt" title="when to throw it (game clock)">${clock(nadeT(u,P.tempo))}</em>`}</span>`).join("")}</div></div>`}).join("")}</div>`}
+// the stuff's moments on a timeline (09/10, the user: "dans la timeline, le timing des stuff"): a mark per grenade where
+// it is thrown, in its colour, with its letter
+function nadeMarks(P,x,H){if(!P||!P.stacks||!P.stacks.length||P.post)return "";const seen=[];
+  return P.stacks.flat().map(u=>{const t=nadeT(u,P.tempo),k=seen.filter(q=>Math.abs(q-x(t))<11).length;seen.push(x(t));const cx=x(t)+k*11,cy=H-7;
+    return `<g class="vnm"><title>${esc(`${u.type} ${u.from} → ${u.to}: ${clock(t)}`)}</title><circle cx="${cx.toFixed(1)}" cy="${cy}" r="6" style="fill:${NADE_C[u.type]||"#ccc"}"/><text x="${cx.toFixed(1)}" y="${cy+3.5}" text-anchor="middle">${NADE_L[u.type]||"?"}</text></g>`}).join("")}
+// the odds of each direction this round (09/10, the user: "dis-moi juste t'as plus de chances de gagner des rounds en A,
+// en B ou en mid... tu gardes cette information quelque part" once he picked another): its best way's (A: the ways
+// straight onto A; mid: the ways through mid), ranked like the card's ways (a small sample doesn't win), for the tempo
+// said; the best one starred (Wily's pick), the one picked framed
+const lbW=(w,n)=>{const z=1.28,ph=w/100;return n?(ph+z*z/(2*n)-z*Math.sqrt(ph*(1-ph)/n+z*z/(4*n*n)))/(1+z*z/n):0};
+function dirBest(p,g,TD){const sel=tdirSel(g),out={};
+  ["A","MID","B"].forEach(k=>(TD.dirs||[]).filter(d=>d.n>=(d.split?40:25)&&(k==="MID"?d.mid:d.site===k&&!d.mid)).forEach(d=>{
+    const o=dirOdds(p,g,d,sel.tempo),n_=Math.min(o.n,d.n),s_=lbW(o.wr,n_);if(!out[k]||s_>out[k].s)out[k]={wr:o.wr,s:s_,n:n_}}));return out}
+function vDirBest(p,g,TD){const B=dirBest(p,g,TD),ks=["A","MID","B"].filter(k=>B[k]);if(ks.length<2)return "";
+  const best=ks.reduce((a,k)=>B[k].s>B[a].s?k:a,ks[0]),sel=tdirSel(g).dir,n={A:1,MID:2,B:3};
+  return `<div class="vdbest">${ks.map(k=>`<span class="${k===best?"best":""}${k===sel?" on":""}${B[k].n<60?" few":""}"><kbd>${n[k]}</kbd>${dirName(k,g.map)}<b>${B[k].n<60?"~":""}${B[k].wr}%</b>${k===best?"★":""}</span>`).join("")}</div>`}   // ~: few rounds behind it (it can't win the star on a small sample)
 // the panel's way card: the plan picked (or Wily's pick), the ways with their odds this round, then the timeline and the stuff of the top one
 function vDir(p,g,opt){if(g.side!=="T"||isHostage(g.map))return "";const more=opt&&opt.stuff;const TD=tdirsOf(g.map),R=dirRank(p,g,TD);if(!R||!R.rows.length)return "";
   const sel=R.sel,top=R.rows[0],dead=typeof deadAgo==="function"&&deadAgo(g)!=null,mn=midName(g.map).toLowerCase(),live=g.round_phase==="live",el=live?(g.elapsed||0):0;
   const head=sel.dir?`<b>${dirName(sel.dir,g.map)}${sel.tempo?` · ${TEMPO_EN[sel.tempo]}`:""}</b>${R.nomid?` <small>no way through ${esc(mn)} here: the best ways</small>`:""}`
-    :sel.tempo?`<b>${TEMPO_EN[sel.tempo]}</b>`:`<b>WILY'S PICK</b> · 1&nbsp;A · 2&nbsp;${esc(mn)} · 3&nbsp;B · 4&nbsp;rush · 5&nbsp;slow · 6&nbsp;control`;
+    :sel.tempo?`<b>${TEMPO_EN[sel.tempo]}</b>`:`<b>WILY'S PICK</b> · 4&nbsp;rush · 5&nbsp;slow · 6&nbsp;control`;
   // a way without a tempo: the tempo is asked; a tempo without a way: the way (until 15 s into the round)
   const ask=dead||el>15?"":sel.dir&&!sel.tempo?keyAsk("TEMPO?",[["4","rush"],["5","slow"],["6","control"]]):!sel.dir&&sel.tempo?keyAsk("WHERE?",[["1","A"],["2",esc(mn)],["3","B"]]):"";
   const mx=Math.max(...R.rows.map(r=>r.wr),1);
   const late=live&&el>(sel.tempo==="slow"||sel.tempo==="control"?95:Math.max(50,(top.hit_med||35)+15));   // the stuff stays until the way's usual hit (a slow round: until 0:20)
   const way=(top.routes||[]).flatMap(r=>r.pts||[]),dn=comboDir(top,sel);   // the way you take (a split: both): the place you throw from is on it first
-  const stuff=dead||(!more&&late)?"":vStuff(stuffPlan(p,g,"T",dn,sel.tempo,way,more||2),`STUFF · ${dirName(dn,g.map)}${sel.tempo?` · ${TEMPO_EN[sel.tempo]}`:""}`);
-  return `<div class="vdir"><div class="vdir-h">${head}</div>${ask}<div class="vrows">${R.rows.map((r,i)=>`<div class="vrow" style="--c:${r.col}${i?`;opacity:${[1,.82,.68][i]}`:""}"><span>${i===0?"★ ":""}${esc(r.label)}</span><i><u style="width:${Math.max(4,Math.round(100*r.wr/mx))}%"></u></i><b>${r.wr}%</b></div>`).join("")}</div>
-    ${dead?"":vDirCurve(p,g,top)}${stuff}</div>`}
+  const SP=dead||(!more&&late)?null:stuffPlan(p,g,"T",dn,sel.tempo,way,more||2),stuff=SP?vStuff(SP,`STUFF · ${dirName(dn,g.map)}${sel.tempo?` · ${TEMPO_EN[sel.tempo]}`:""}`):"";
+  return `<div class="vdir"><div class="vdir-h">${head}</div>${dead?"":vDirBest(p,g,TD)}${ask}<div class="vrows">${R.rows.map((r,i)=>`<div class="vrow" style="--c:${r.col}${i?`;opacity:${[1,.82,.68][i]}`:""}"><span>${i===0?"★ ":""}${esc(r.label)}</span><i><u style="width:${Math.max(4,Math.round(100*r.wr/mx))}%"></u></i><b>${r.wr}%</b></div>`).join("")}</div>
+    ${dead?"":vDirCurve(p,g,top,SP)}${stuff}</div>`}
 // CT (07/10, the user: "en CT, quand je fais 1, 2 ou 3, tu me donnes le pourcentage de chance que les terroristes
 // avancent en fonction du temps, et pareil les stuff par rapport à ce que je te dis... parfois des zones de boost que
 // j'ai travaillé à l'échauffement... pas forcément des zones de wallbang"): numpad 1-2-3 where you play, 4-5-6 the
 // tempo you expect from them; the chance they hit your site around each moment, your stuff against that tempo, a
 // boost you trained there (at the buy time)
-function ctDirStuff(p,g){const sel=tdirSel(g);if(g.side!=="CT"||!sel.dir)return null;return stuffPlan(p,g,"CT",sel.dir,sel.tempo,null,2)}
+function ctDirStuff(p,g,site){const sel=tdirSel(g),s=site||sel.dir;if(g.side!=="CT"||!s)return null;return stuffPlan(p,g,"CT",s,sel.tempo,null,2)}
+// CT with no key yet (09/10, the user: "côté CT quand j'ai appuyé sur aucun bouton, ça ne me propose rien"): the site
+// they likely hit (the read), until 1-2-3 says where you play
+const ctLikely=r=>r&&r.A!=null&&r.B!=null&&r.A!==r.B?(r.A>r.B?"A":"B"):null;
 // the chance they hit your site around each moment of the round: the base's rounds for their buy (every 5 s), scaled to
 // this round's read of that site; the tempo said shaded; under it the same in three windows (a rush, the middle of the
 // round, late), the tempo's framed, the past ones faded
-function vArrive(p,g,site,tempo,r){const M=(((p.advice.plan||{}).tside||{}).maps||{})[g.map]||{},TT=M.t_timeline;if(!TT)return "";const ew=econW(p,g),acc={};let sh=0,ws=0;
+function vArrive(p,g,site,tempo,r,P){const M=(((p.advice.plan||{}).tside||{}).maps||{})[g.map]||{},TT=M.t_timeline;if(!TT)return "";const ew=econW(p,g),acc={};let sh=0,ws=0;
   for(const [c,w] of Object.entries(ew)){const X=TT[c]&&TT[c][site];if(!X||!w)continue;ws+=w;sh+=w*X.share;X.curve.forEach(([t,v])=>acc[t]=(acc[t]||0)+w*v)}
   if(!ws)return "";const pts=Object.entries(acc).map(([t,v])=>[+t,v/ws]).sort((a,b)=>a[0]-b[0]),tot=pts.reduce((a,q)=>a+q[1],0);if(!tot||pts.length<3)return "";
   const k=(r&&r[site]!=null?r[site]:sh/ws)/tot,L=RLEN(),W=300,H=46,x=t=>6+(W-12)*Math.min(1,Math.max(0,t/L)),mx=Math.max(...pts.map(q=>q[1])),y=v=>H-4-(H-8)*v/mx;
@@ -156,7 +183,7 @@ function vArrive(p,g,site,tempo,r){const M=(((p.advice.plan||{}).tside||{}).maps
   return `<div class="vhead">THEY HIT ${site} · WHEN</div><svg class="vdcurve" viewBox="0 0 ${W} ${H}" role="img" aria-label="When the Ts hit ${site}">
     ${band?`<rect x="${x(band[0])}" y="0" width="${x(band[1])-x(band[0])}" height="${H}" class="band ct"/>`:""}<line x1="6" x2="${W-6}" y1="${H-1}" y2="${H-1}" class="base"/>
     <polygon points="${x(pts[0][0]).toFixed(1)},${H-1} ${line} ${x(pts[pts.length-1][0]).toFixed(1)},${H-1}" style="fill:${c};fill-opacity:.22"/><polyline points="${line}" style="fill:none;stroke:${c};stroke-width:2.6;stroke-linejoin:round"/>
-    <circle cx="${x(pk[0])}" cy="${y(pk[1])}" r="3.5" style="fill:${c}"/>${el!=null?`<line x1="${x(el)}" x2="${x(el)}" y1="0" y2="${H}" class="now"/>`:""}</svg>
+    <circle cx="${x(pk[0])}" cy="${y(pk[1])}" r="3.5" style="fill:${c}"/>${el!=null?`<line x1="${x(el)}" x2="${x(el)}" y1="0" y2="${H}" class="now"/>`:""}${nadeMarks(P,x,H)}</svg>
     <div class="vwin" style="--c:${c}">${WN.map(w=>`<span class="${w.on?"on":""}${el!=null&&el>w.b?" past":""}">${w.l}<b>${w.v}%</b></span>`).join("")}</div>`}
 // a boost you trained (Prepare's warm-up), CT, near your site: the one that killed most up there
 function ctBoostPick(p,g,site){const B=((tdirsOf(g.map)||{}).boosts||[]).filter(b=>b.side==="CT");if(!B.length)return null;
@@ -164,12 +191,13 @@ function ctBoostPick(p,g,site){const B=((tdirsOf(g.map)||{}).boosts||[]).filter(
   const at=b=>{const w=GEO&&typeof worldPx==="function"?worldPx(GEO,b.pos):null;return {...b,px:w?w.px:null,level:w?w.level:null}};
   const near=b=>!S||(b.victims||[]).some(v=>String(v).startsWith(site+" "))||(b.px&&Math.hypot(b.px[0]-S.px[0],b.px[1]-S.px[1])<380);
   return B.map(at).filter(near).sort((a,b)=>b.kills-a.kills)[0]||null}
-function vCTDir(p,g,r){if(g.side!=="CT"||isHostage(g.map))return "";const sel=tdirSel(g);if(!sel.dir)return "";
-  const site=sel.dir,mn=midName(g.map),live=g.round_phase==="live",el=live?(g.elapsed||0):0,dead=typeof deadAgo==="function"&&deadAgo(g)!=null;
-  const head=`<b>${dirName(site,g.map)}${sel.tempo?` · VS ${TEMPO_EN[sel.tempo]}`:""}</b>`;
-  const ask=dead||el>15||sel.tempo?"":keyAsk("THEIR TEMPO?",[["4","rush"],["5","slow"],["6","control"]]);
-  const curve=site==="MID"||dead?"":vArrive(p,g,site,sel.tempo,r);   // mid: both sites' arrivals stay on the CT timeline
-  const st=dead?"":vStuff(ctDirStuff(p,g),`STUFF · ${site==="MID"?esc(mn.toUpperCase()):site}${sel.tempo?` · VS ${TEMPO_EN[sel.tempo]}`:""}`);
+function vCTDir(p,g,r){if(g.side!=="CT"||isHostage(g.map))return "";const sel=tdirSel(g),site=sel.dir||ctLikely(r);if(!site)return "";
+  const mn=midName(g.map),live=g.round_phase==="live",el=live?(g.elapsed||0):0,dead=typeof deadAgo==="function"&&deadAgo(g)!=null;
+  const head=`<b>${dirName(site,g.map)}${sel.dir?"":" · LIKELY"}${sel.tempo?` · VS ${TEMPO_EN[sel.tempo]}`:""}</b>${sel.dir?"":" <small>1-2-3: where you play</small>"}`;
+  const ask=dead||el>15||sel.tempo||!sel.dir?"":keyAsk("THEIR TEMPO?",[["4","rush"],["5","slow"],["6","control"]]);
+  const SP=dead?null:ctDirStuff(p,g,site);
+  const curve=site==="MID"||dead?"":vArrive(p,g,site,sel.tempo,r,SP);   // mid: both sites' arrivals stay on the CT timeline
+  const st=SP?vStuff(SP,`STUFF · ${site==="MID"?esc(mn.toUpperCase()):site}${sel.tempo?` · VS ${TEMPO_EN[sel.tempo]}`:""}`):"";
   const b=live?null:ctBoostPick(p,g,site);
   const bo=b?`<div class="vchips"><span class="vchip good">⤴ BOOST ${esc(vShort(b.place||"?"))} ✓ <small>trained · ${b.kills} kill${b.kills>1?"s":""} up there in the base</small></span></div>`:"";
   return `<div class="vdir ct"><div class="vdir-h">${head}</div>${ask}${curve}${st}${bo}</div>`}
@@ -191,7 +219,7 @@ function vRotLine(X,dir,site,map){const rt=X&&X.routes[0];if(!rt)return "";
 // last of each you pressed this round, nothing the app picked (the way in stays on your screen, in Live)
 const DIR_SAY={A:"A",MID:"mid",B:"B"};
 function sayCombo(dir,tempo,map){const d=dir==="MID"&&map?midName(map).toLowerCase():DIR_SAY[dir]||"";if(!tempo)return d?d.charAt(0).toUpperCase()+d.slice(1):"";
-  return tempo==="control"?`Map control${d?", then "+d:""}`:`${TEMPO_SAY[tempo]}${d?" "+d:""}`}
+  return `${TEMPO_SAY[tempo]}${d?" "+d:""}`}   // 09/10: "Map control mid", not "Map control, then mid"
 function dirTexts(p,g){const TD=tdirsOf(g.map);if(!TD||g.side!=="T"||isHostage(g.map))return null;const sel=tdirSel(g);
   return {paths:[{rank:1,site:"A",text:sayCombo("A",sel.tempo,g.map)},{rank:2,site:null,text:sayCombo("MID",sel.tempo,g.map)},{rank:3,site:"B",text:sayCombo("B",sel.tempo,g.map)}],
     tempo:{rush:sayCombo(sel.dir,"rush",g.map),slow:sayCombo(sel.dir,"slow",g.map),ctrl:sayCombo(sel.dir,"control",g.map)}}}
@@ -230,7 +258,9 @@ function dirPaths(Lrot,Ltop,R,level){R.rows.slice().reverse().forEach(r=>(r.rout
   tPathLabel(Lrot,Ltop,rt.pts,r.col,level,j===0?`${r.rank===1?"★ ":""}${r.label} · ${r.wr}%`:null)}))}
 // the picked way's stuff on the map (06/10: "où je dois me mettre"): an arc from where you stand to where it lands, the
 // first of each stack (the practiced ones first), five at most
-function dirNades(Lnades,Ltop,R,level,TD,g,p){const r=R.rows[0];if(!r||!R.sel.dir||!g||!p)return 0;return stuffArcs(Lnades,Ltop,stuffPlan(p,g,"T",comboDir(r,R.sel),R.sel.tempo,(r.routes||[]).flatMap(q=>q.pts||[]),2),level)}
+function dirNades(Lnades,Ltop,R,level,TD,g,p){const r=R.rows[0];if(!r||!g||!p)return 0;const el=g.round_phase==="live"?(g.elapsed||0):0;
+  if(el>(R.sel.tempo==="slow"||R.sel.tempo==="control"?95:Math.max(50,(r.hit_med||35)+15)))return 0;   // the panel's rule: until the way's usual hit
+  return stuffArcs(Lnades,Ltop,stuffPlan(p,g,"T",comboDir(r,R.sel),R.sel.tempo,(r.routes||[]).flatMap(q=>q.pts||[]),2),level)}
 function stuffArcs(Lnades,Ltop,P,level){let n=0;if(!P||!P.stacks.length)return 0;
   P.stacks.flat().forEach(u=>{if(!u.from_px||!u.to_px||(u.level&&level&&u.level!==level))return;n++;
     nadeArc(Lnades,u.from_px[0],u.from_px[1],u.to_px[0],u.to_px[1],u.type);nadeIcon(Ltop,u.type,u.to_px[0],u.to_px[1],`${u.type} from ${u.from} onto ${u.to}${u.how&&u.how!=="standing still"?" ("+u.how+")":""}`)});

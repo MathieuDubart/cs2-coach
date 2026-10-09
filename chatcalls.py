@@ -3,6 +3,10 @@ un bind pour slow, un bind pour contrôle map"): numpad 1, 2, 3 say the directio
 slow, map control) in the team chat, only what you pressed ("Rush A", 07/10: "si la touche veut dire A tu ne peux pas
 écrire A from Ramp"), and tell Wily: Live then shows the way in that wins most, its odds and its grenades, with a ping. On CT the same keys only tell Wily (1-2-3 where you play, 4-5-6 what the
 Ts do): nothing in the chat.
+One line for the two keys (09/10, the user: "attends 6 secondes savoir si j'ai appuyé sur 4, 5 ou 6 avant d'écrire, comme
+ça si je mets B Rush ça met Rush B et ça ne met pas juste B"; "Map control mid", not "Map control, then mid"): CS2 only
+writes when a key is pressed, so the first key of the pair says nothing (Wily hears it) and the second says both
+("Rush B", whichever came first); a key left alone 6 s is said alone on its next press.
 
 CS2 runs a config file each time a key bound to `exec` is pressed, and reads it from the disk again: the app rewrites
 small files in CS2's cfg folder (coach_path1.cfg to coach_path3.cfg for the ways, kept from the time they said three
@@ -31,6 +35,45 @@ OLD_KEYS = {"KP_MULTIPLY": "exec coach_team"}   # numpad *, the team key of 04/1
                                                 # of yours; unbound by exec coach_binds while it still runs the coach's file
 BINDS = "coach_binds.cfg"
 _LAST = {}
+SAY_DIR = {"A": "A", "MID": "mid", "B": "B"}
+SAY_TEMPO = {"rush": "Rush", "slow": "Slow", "control": "Map control"}
+ALONE = 6.0   # s: a way without its tempo (or the reverse) is said alone on its next press after this
+
+
+def combo(d, tempo, mp):
+    """The team chat's line for a way and a tempo: "Rush B", "Slow mid", "Map control A" (Nuke's mid: outside)."""
+    w = ""
+    if d == "MID":
+        try:
+            import tdirs
+            w = (tdirs.mid_name(mp) or "Mid").lower()
+        except Exception:
+            w = "mid"
+    elif d:
+        w = SAY_DIR.get(d, "")
+    if not tempo:
+        return w[:1].upper() + w[1:]
+    return f"{SAY_TEMPO.get(tempo, '')} {w}".strip()
+
+
+def t_lines(now=None):
+    """T on a bomb map: what numpad 1-2-3 and 4-5-6 say now, from the round's plan (gsi: the way and the tempo pressed
+    this round): both said together by the second key, nothing by a key alone until it waited 6 s. None elsewhere
+    (CT: Wily only; hostage maps: the page's routes)."""
+    with gsi.LOCK:   # read 10 times a second: only what it needs
+        s = {k: gsi.STATE.get(k) for k in ("map", "side", "round", "round_phase", "tdir")}
+    mp, rnd = s.get("map") or "", s.get("round")
+    if s.get("side") != "T" or not mp or mp.startswith("cs_") or not rnd:
+        return None
+    t = s.get("tdir") or {}
+    if t.get("round") != (rnd + 1 if s.get("round_phase") == "over" else rnd):
+        t = {}
+    d, tempo = t.get("dir"), t.get("tempo")
+    alone = (now or time.time()) - (t.get("t") or 0) >= ALONE
+    ways = {i: combo(WAYS[i], tempo, mp) if tempo else combo(d, None, mp) if d == WAYS[i] and alone else "" for i in KEYS}
+    tempos = {k: combo(d, TEMPO_STATE[k], mp) if d else combo(None, TEMPO_STATE[k], mp) if tempo == TEMPO_STATE[k] and alone else ""
+              for k in TEMPO}
+    return ways, tempos, d
 WHEEL = {"A": 'playerchatwheel CW.GoA "#Chatwheel_aplan"', "B": 'playerchatwheel CW.GoB "#Chatwheel_bplan"'}   # the chat wheel's Go A / Go B
 
 
@@ -97,7 +140,12 @@ def write(paths, extra=None, tempo=None):
             by[r] = t
             if p.get("site") in WHEEL:
                 site[r] = p["site"]
+    tl = t_lines()
+    if tl:   # T on a bomb map: the way and the tempo in one line, from the round's plan (09/10)
+        _t_files(d, tl)
     for i in KEYS:
+        if tl:
+            break
         body = (f'say_team "{by[i]}"\n' + (WHEEL[site[i]] + "\n" if i in site else "")) if i in by else f'echo "Wily: {WAYS[i]}"\n'
         if _LAST.get(i) != body:
             open(os.path.join(d, f"coach_path{i}.cfg"), "w", encoding="utf-8").write(body)
@@ -109,6 +157,8 @@ def write(paths, extra=None, tempo=None):
             open(os.path.join(d, f"coach_{name}.cfg"), "w", encoding="utf-8").write(body)
             _LAST[name] = body
     for name in TEMPO:   # always a file: the key must reach Wily even with nothing to say (its line in the console)
+        if tl:
+            break
         t = clean((tempo or {}).get(name)) if isinstance(tempo, dict) else ""
         body = f'say_team "{t}"\n' if t else f'echo "Wily: {TEMPO_STATE[name]}"\n'
         f = os.path.join(d, f"coach_{name}.cfg")
@@ -116,6 +166,34 @@ def write(paths, extra=None, tempo=None):
             open(f, "w", encoding="utf-8").write(body)
             _LAST[name] = body
     return True
+
+
+def _t_files(d, tl):
+    """Numpad 1-6's files for T on a bomb map: the line a key says now (none: a note in the console, Wily hears it),
+    with CS2's own Go A / Go B of the chat wheel when the way is a site."""
+    ways, tempos, cur = tl
+    for i in KEYS:
+        t = clean(ways.get(i))
+        body = (f'say_team "{t}"\n' + (WHEEL[WAYS[i]] + "\n" if WAYS[i] in WHEEL else "")) if t else f'echo "Wily: {WAYS[i]}"\n'
+        if _LAST.get(i) != body or not os.path.exists(os.path.join(d, f"coach_path{i}.cfg")):
+            open(os.path.join(d, f"coach_path{i}.cfg"), "w", encoding="utf-8").write(body)
+            _LAST[i] = body
+    for name in TEMPO:
+        t = clean(tempos.get(name))
+        body = (f'say_team "{t}"\n' + (WHEEL[cur] + "\n" if cur in WHEEL else "")) if t else f'echo "Wily: {TEMPO_STATE[name]}"\n'
+        f = os.path.join(d, f"coach_{name}.cfg")
+        if _LAST.get(name) != body or not os.path.exists(f):
+            open(f, "w", encoding="utf-8").write(body)
+            _LAST[name] = body
+
+
+def refresh():
+    """Numpad 1-6's lines again from the round's plan (T on a bomb map): right after a key, and as time passes (a key
+    alone for 6 s)."""
+    d = gsi.cfg_dir()
+    tl = t_lines() if d else None
+    if tl:
+        _t_files(d, tl)
 
 
 def _site_files(d):
@@ -208,8 +286,8 @@ def watch():
                             lineshots.on_key()
                         except Exception as e:
                             print("lineup photo:", e, flush=True)
-                    elif m and m.group(4):   # numpad 4-5-6: the tempo
-                        gsi.set_tdir(TEMPO_STATE[m.group(4)])
+                    elif m and m.group(4):   # numpad 4-5-6: the tempo (pressed again: said again, it stays; minus drops it)
+                        gsi.set_tdir(TEMPO_STATE[m.group(4)], toggle=False)
                     elif m and m.group(1):   # numpad 1-2-3: the way (A, mid, B); hostage maps keep their routes 1-2-3
                         if gsi.wily_answer(WAYS[int(m.group(1))]):   # Wily asked "from A or B?": the key answers
                             continue
@@ -218,9 +296,10 @@ def watch():
                     elif m:   # numpad minus: no focus, no plan
                         gsi.set_focus(0)
                         gsi.drop_tdir()
+            refresh()   # the two keys' line (09/10): ready before the second key is pressed
         except Exception:
             pass
-        time.sleep(0.3)
+        time.sleep(0.1)
 
 
 def status():

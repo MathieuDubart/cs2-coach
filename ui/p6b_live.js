@@ -221,7 +221,8 @@ function liveRadar(box,p,map,level,g,o){
   // T side, before the hit: the way from the spawn of the plays that win most (numbered like the side panel's lines)
   const FN=o.following&&g?focusN(g):0;   // the path you pressed: the only one drawn
   const TDR=!HMAP&&att&&o.following&&g&&typeof tdirsOf==="function"&&tdirsOf(map)?dirRank(p,g,tdirsOf(map)):null;   // 06/10: the ways in (A via Ramp...)
-  if(TDR&&on("paths")&&!planted&&(g.round_phase==="freezetime"||(live&&(g.elapsed||0)<45))&&TDR.rows.length){dirPaths(Lrot,Ltop,TDR,level);
+  const planOn=!!(TDR&&(TDR.sel.dir||TDR.sel.tempo));   // a way or a tempo said: its ways stay until the plant (09/10)
+  if(TDR&&on("paths")&&!planted&&(g.round_phase==="freezetime"||(live&&((g.elapsed||0)<45||planOn)))&&TDR.rows.length){dirPaths(Lrot,Ltop,TDR,level);
     if(!dead&&dirNades(Lnades,Ltop,TDR,level,tdirsOf(map),g,p))legend.push(`<span>the way's stuff: thrown from the white dot, lands on the icon</span>`);
     legend.push(`<span>${SW.tpath}the way in from the spawn, % = rounds won by it this round (your buy and theirs${TDR.sel.tempo?`, ${TEMPO_EN[TDR.sel.tempo].toLowerCase()}`:""}); numpad 1-2-3 = A / mid / B, 4-5-6 = rush / slow / map control, minus drops them</span>`)}
   const TDx=!HMAP&&o.following&&g&&typeof tdirsOf==="function"?tdirsOf(map):null;if(TDx)pingMark(Ltop,g,TDR,level,TDx);   // A, B or mid pressed or said: a ping
@@ -290,12 +291,11 @@ function liveRadar(box,p,map,level,g,o){
     const tx=x.to_px[0]+k*34,ty=x.to_px[1];
     nadeArc(Lnades,x.from_px[0],x.from_px[1],tx,ty,x.type);obstacle(Ltop,tx,ty,34,34);nadeIcon(Ltop,x.type,tx,ty,title);
     qTag(Ltop,tx,ty,17,label,`var(--${x.type})`,4)};
-  if(ct&&on("nades")&&planted&&site&&GEO&&GEO.sites&&GEO.sites[site]){const E=((((PL.nades||{}).maps||{})[map])||{}).CT,S_=GEO.sites[site].px,held=g.nades||null;
-    Object.entries((E&&E.types)||{}).forEach(([type,T])=>(T.post||[]).filter(x=>x.to_px&&Math.hypot(x.to_px[0]-S_[0],x.to_px[1]-S_[1])<=230&&(!held||held[type]>0)).slice(0,1)
-      .forEach(x=>drawNade({...x,type},`retake ${nadeName(type,"CT")}`,`Retake ${nadeName(type,"CT")}: ${x.from} → ${x.to}. ${x.how||""}`)));
-    legend.push(`<span>${SW.nade}retake grenade: from the white dot to its icon</span>`)}
-  const CDP=ct&&!planted&&o.following&&g&&typeof ctDirStuff==="function"&&tdirSel(g).dir?ctDirStuff(p,g):null;   // a site said (numpad 1-3, 07/10): the card's stuff
-  if(CDP&&on("nades")&&stuffArcs(Lnades,Ltop,CDP,level))legend.push(`<span>${SW.nade}your stuff for the site you said: from the white dot to its icon</span>`);
+  if(on("nades")&&planted&&site&&o.following&&g&&typeof postPlan==="function"){const RX=ct&&M?rotFromDir(M,site,tdirSel(g).dir||mySite(g),map):null;
+    if(stuffArcs(Lnades,Ltop,postPlan(p,g,ct?"CT":"T",site,RX&&RX.routes[0]?RX.routes[0].pts:null),level))legend.push(`<span>${SW.nade}${ct?"retake":"post-plant"} grenade you hold: from the white dot to its icon</span>`)}
+  const CDs_=ct&&!planted&&o.following&&g&&typeof ctDirStuff==="function"?(tdirSel(g).dir||(typeof ctLikely==="function"?ctLikely(o.read||(M&&M.plays?tsidePredict(TS,map,g,evFor(g)):null)):null)):null;
+  const CDP=CDs_?ctDirStuff(p,g,CDs_):null;   // a site said (numpad 1-3, 07/10), else the likely one (09/10): the card's stuff
+  if(CDP&&on("nades")&&stuffArcs(Lnades,Ltop,CDP,level))legend.push(`<span>${SW.nade}your stuff for ${tdirSel(g).dir?"the site you said":"the likely site"}: from the white dot to its icon</span>`);
   if(ct&&!planted&&o.following&&g&&g.round_phase==="freezetime"&&tdirSel(g).dir&&typeof ctBoostPick==="function"){const b=ctBoostPick(p,g,tdirSel(g).dir);
     if(b&&b.px&&(!b.level||!level||b.level===level)){const gg=el("g",{},Ltop);el("circle",{cx:b.px[0],cy:b.px[1],r:11,style:"fill:var(--good);fill-opacity:.35;stroke:var(--good);stroke-width:2.4"},gg);
       el("text",{x:b.px[0],y:b.px[1]+5,"text-anchor":"middle",class:"pbt"},gg).textContent="⤴";obstacle(Ltop,b.px[0],b.px[1],24,24);
@@ -315,7 +315,7 @@ function liveRadar(box,p,map,level,g,o){
   // before the plant, when the read leans hard to one site (70%+): the rotation from the other one (you may be holding it)
   let rotSite=planted?site:null,rotFrom=null,said=false;
   // after the plant, a way said this round (numpad 1-2-3, 07/10: "tu me donnes les chemins de rota depuis le mid pour le B"): from there, both sides
-  const SD=planted&&site&&o.following&&g&&typeof tdirSel==="function"?tdirSel(g).dir:null,SX=SD&&M?rotFromDir(M,site,SD,map):null;
+  const SD=ct&&planted&&site&&o.following&&g&&typeof tdirSel==="function"?tdirSel(g).dir:null,SX=SD&&M?rotFromDir(M,site,SD,map):null;   // CT only (09/10: no use on T)
   if(SX){rotFrom=SX.from;said=true}
   if(ct&&!planted&&live&&o.following&&g&&(g.elapsed||0)>=15&&(g.elapsed||0)<=80&&M&&M.plays){const r_=tsidePredict(TS,map,g,evFor(g));
     if(r_&&Math.max(r_.A,r_.B)>=70){rotSite=r_.A>r_.B?"A":"B";rotFrom=`${rotSite==="A"?"B":"A"} Site`}}

@@ -564,6 +564,10 @@ def lineups_page(mp):
                           "from_px": x["from_px"], "to_px": x["to_px"], "level": x.get("level"), "land_level": x.get("land_level"),
                           "n": int(x.get("n") or 0), "players": int(x.get("players") or 0), "how": x.get("how"),
                           "w": [int(((x.get("windows") or {}).get(k) or {}).get("n") or 0) for k in WINDOWS],
+                          # when it is thrown (09/10, the user: "le timing des stuff" in Live's timeline): the median
+                          # moment, the one in each window (s into the round; the post window's: after the plant)
+                          "t": x.get("t_med"), "wt": [((x.get("windows") or {}).get(k) or {}).get("t") for k in WINDOWS],
+                          "best": WINDOWS.index(x["best"]) if x.get("best") in WINDOWS else None,
                           "eff": x.get("blind") if typ == "flash" else x.get("dmg") if typ in ("he", "molotov") else x.get("per100")})
         out[side] = L
     return out
