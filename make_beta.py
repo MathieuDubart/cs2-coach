@@ -212,6 +212,9 @@ def lands(path):
     grenade drills show that very landing (train._land), and a player's PC has only its own matches' extractions."""
     import pandas as pd
     df = pd.read_parquet(path)
+    if "land_Z" in df and df.land_Z.notna().any():   # the base's own file carries them since nades v5 (09/10)
+        log(f"lineup landings: {int(df.land_X.notna().sum())} of {len(df)} throws (in the base)")
+        return
     key = ["match", "round", "type", "_x", "_y"]
     parts = []
     for mid in df["match"].astype(str).unique():

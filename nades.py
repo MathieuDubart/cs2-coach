@@ -199,6 +199,9 @@ def _phys(X, Y, Z, pitch, yaw, crouch, lx, ly, lz, flight):
         return None
     X, Y, Z, pitch, yaw, lx, ly, lz, flight = vals
     T = flight - PHYS_DT
+    # it went off on the aim's line (a jump or a W adds nothing sideways): off it, it bounced off a wall
+    if math.hypot(lx - X, ly - Y) < 150 or abs(((math.degrees(math.atan2(ly - Y, lx - X)) - yaw) + 180) % 360 - 180) > 6:
+        return None
     el, yr = math.radians(10.0 - pitch * (80.0 / 90.0)), math.radians(yaw)
     F = np.array([math.cos(el) * math.cos(yr), math.cos(el) * math.sin(yr), math.sin(el)])
     to = np.array([lx - X, ly - Y, lz - Z - (46.0 if crouch else 64.0) + PHYS_G2 * T * T]) - F * 16.0
@@ -208,10 +211,11 @@ def _phys(X, Y, Z, pitch, yaw, crouch, lx, ly, lz, flight):
         fw = u[0] * math.cos(yr) + u[1] * math.sin(yr)
         side = -u[0] * math.sin(yr) + u[1] * math.cos(yr)
         flat, up = math.hypot(fw, side), float(u[2])
+        run = click != "right"   # a running lob: a bounce more likely than that throw
         fit += [(flat + abs(up), "still", click, flat < 60 and abs(up) < 70),
                 (flat + abs(up - 265), "jump", click, flat < 70 and 190 < up < 340),
-                (abs(fw - 190) + abs(side) + abs(up), "W", click, 110 < fw < 340 and abs(side) < 70 and abs(up) < 70),
-                (abs(fw - 190) + abs(side) + abs(up - 265), "WJ", click, 110 < fw < 340 and abs(side) < 70 and 190 < up < 340)]
+                (abs(fw - 190) + abs(side) + abs(up), "W", click, run and 110 < fw < 340 and abs(side) < 70 and abs(up) < 70),
+                (abs(fw - 190) + abs(side) + abs(up - 265), "WJ", click, run and 110 < fw < 340 and abs(side) < 70 and 190 < up < 340)]
     fit.sort()
     # the throw that explains it best, clean and well ahead of any other (a bounce fits two of them about as badly: the
     # CT flash to Banana, "bizarre... soit un running, soit gauche-droite")
