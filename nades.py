@@ -249,6 +249,10 @@ def groups(df, side_rounds):
         rounds = side_rounds.get((mp, side), 0)
         if rounds < 60:
             continue
+        # after a plant, the rounds still running at each 10 s slice and how many this side won: a late throw only
+        # happens in a round that lasted, so each slice is read against those (else late throws look like wins)
+        pr = g[g.post.astype(bool) & g.te.notna()].drop_duplicates(["match", "round"]) if "te" in g else g.iloc[:0]
+        alive = [float(pr[pr.te >= 10 * b].won.mean()) if int((pr.te >= 10 * b).sum()) >= 20 else None for b in range(4)]
         res = {}
         for typ in TYPES:
             t = g[g.type == typ]
@@ -302,10 +306,15 @@ def groups(df, side_rounds):
                 pc = c[c.post.astype(bool) & c.tp.notna()] if "tp" in c else c.iloc[:0]
                 if len(pc) >= 5:
                     w0, sl = float(pc.won.mean()), (pc.tp // 10).clip(0, 3)
-                    sh = {int(b): (len(cb) * float(cb.won.mean()) + 5 * w0) / (len(cb) + 5) for b, cb in pc.groupby(sl) if len(cb) >= 3}
-                    bb = max(sh, key=sh.get) if sh else None
-                    post_tp = {"t": round(float(pc.tp.median()), 1), "base": round(100 * w0),
-                               **({"best": round(float(pc[sl == bb].tp.median()), 1), "win": round(100 * sh[bb])} if bb is not None else {})}
+                    sh = {}
+                    for b, cb in pc.groupby(sl):
+                        a = alive[int(b)] if alive[int(b)] is not None else w0
+                        if len(cb) >= 3:
+                            sh[int(b)] = ((len(cb) * float(cb.won.mean()) + 5 * a) / (len(cb) + 5), a)
+                    bb = max(sh, key=lambda b: sh[b][0] - sh[b][1]) if sh else None   # the slice that adds most to the rounds still running
+                    post_tp = {"t": round(float(pc.tp.median()), 1),
+                               **({"best": round(float(pc[sl == bb].tp.median()), 1), "win": round(100 * sh[bb][0]), "base": round(100 * sh[bb][1])}
+                                  if bb is not None else {"base": round(100 * w0)})}
                 usual = max(wins, key=lambda k: wins[k]["n"])
                 best = usual
                 if typ != "smoke":
@@ -347,16 +356,16 @@ def groups(df, side_rounds):
 
 
 def _plant_ts():
-    """(match, round) -> the plant's moment, seconds into the round."""
+    """(match, round) -> the plant's moment and the round's end, seconds into the round."""
     out = {}
     for mid in os.listdir(config.DEEP):
         try:
-            R = pd.read_parquet(os.path.join(config.DEEP, mid, "rounds.parquet"), columns=["round", "plant_t"])
+            R = pd.read_parquet(os.path.join(config.DEEP, mid, "rounds.parquet"), columns=["round", "plant_t", "end_t"])
         except Exception:
             continue
-        for r, t in zip(R["round"], R["plant_t"]):
+        for r, t, e in zip(R["round"], R["plant_t"], R["end_t"]):
             if t is not None and t == t:
-                out[(mid, int(r))] = float(t)
+                out[(mid, int(r))] = (float(t), float(e) if e is not None and e == e else np.nan)
     return out
 
 
@@ -425,8 +434,9 @@ def summary(rebuild=False):
             pass
     df = load_all()
     PT = _plant_ts()   # each throw after a plant: its seconds since the plant
-    df = df.assign(tp=[t - PT[(m, int(r))] if p and (m, int(r)) in PT and t == t else np.nan
-                       for m, r, t, p in zip(df["match"], df["round"], df["t"], df["post"])])
+    key = [(m, int(r)) for m, r in zip(df["match"], df["round"])]
+    df = df.assign(tp=[t - PT[k][0] if p and k in PT and t == t else np.nan for k, t, p in zip(key, df["t"], df["post"])],
+                   te=[PT[k][1] - PT[k][0] if p and k in PT else np.nan for k, p in zip(key, df["post"])])   # how long the round ran after the plant
     res = {"_stamp": stamp, "maps": groups(df, _side_rounds()), "payoff": payoff(), "price": PRICE, "windows": WINDOW_FR}
     json.dump(res, open(SUMMARY, "w", encoding="utf-8"), ensure_ascii=False)
     return res
