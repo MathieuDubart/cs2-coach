@@ -125,6 +125,12 @@ public partial class CoachReplay
     static readonly Dictionary<string, string> KindName = new() { ["defend"] = "DEFENSE", ["push"] = "PUSH", ["aim"] = "AIM", ["nade"] = "STUFF", ["situation"] = "SITUATION", ["wallbang"] = "WALLBANG" };
     static readonly Dictionary<string, string> KindColor = new() { ["defend"] = "#4fc3a1", ["push"] = "#ff8a3d", ["aim"] = "#ff8a3d", ["nade"] = "#5ab4ff", ["situation"] = "#e0a030", ["wallbang"] = "#c792ea" };
     int postIdx = -1;   // a defense: the spot you hold now (Posts), Posts.Count: free
+    // a defense's attackers come in waves, all of them at once (09/10): the wave's number, its first death (tick), the
+    // next one called
+    int wave, waveFirstDead = -1;
+    bool waveDue;
+    int preKillAt;   // prefire: the last kill (tick); the last ones shown after 8 s without one (09/10)
+    readonly HashSet<int> beaconed = new();
     // the aim map: when each target came, the last kill, the strafers' way and its end
     readonly Dictionary<int, int> cameAt = new();
     readonly Dictionary<int, (int sign, int until)> strafe = new();
@@ -332,7 +338,9 @@ public partial class CoachReplay
         Beam(p + new Vector3(0, 0, 4), p + new Vector3(0, 0, 90), red, 2f);
     }
 
-    // stuff: a green cross 150 u ahead on the aim, from your eyes: put the crosshair on it
+    // stuff: a green cross 150 u ahead on the aim, from your eyes: put the crosshair on it. A small one 40 u ahead on the
+    // same line, the same size on screen, is seen when a box stands between you and the far one (09/10, Dust2's smoke
+    // to Mid Doors: "où est le repère ? le repère est derrière la caisse"); the two on one point: you stand right and aim right
     void DrawCross(Drill d)
     {
         if (d.Me == null) return;
@@ -341,10 +349,13 @@ public partial class CoachReplay
         var fw = new Vector3(MathF.Cos(p) * MathF.Cos(y), MathF.Cos(p) * MathF.Sin(y), -MathF.Sin(p));
         var right = new Vector3(MathF.Sin(y), -MathF.Cos(y), 0);
         var up = Vector3.Normalize(Vector3.Cross(right, fw));
-        var at = eye + fw * 150;
         var green = System.Drawing.Color.FromArgb(255, 90, 230, 90);
-        Beam(at - right * 4, at + right * 4, green, 0.8f);
-        Beam(at - up * 4, at + up * 4, green, 0.8f);
+        foreach (var (dist, arm, w) in new[] { (150f, 4f, 0.8f), (40f, 1.1f, 0.3f) })
+        {
+            var at = eye + fw * dist;
+            Beam(at - right * arm, at + right * arm, green, w);
+            Beam(at - up * arm, at + up * arm, green, w);
+        }
     }
 
     // CS2's grenade practice views (stuff drills only): the trail after the throw. Never the landing preview while you
@@ -699,10 +710,14 @@ public partial class CoachReplay
             return;
         }
         cur = s;
-        if (d.Kind != "situation" && d.Clock > 0) cur.Clock = d.Clock + (d.Rush ? rushDelay : 0);   // a rush's wait: its arrival stays on the real clock
+        // an aim drill's own time on the game's clock (09/10, his defense: "le temps d'en haut finit avant le temps de la
+        // situation", 10 s before): the round's clock ends with the drill; a stuff drill keeps its throw's real moment
+        if (d.Kind == "aim" && d.Seconds > 0) cur.Clock = d.Seconds;
+        else if (d.Kind != "situation" && d.Clock > 0) cur.Clock = d.Clock + (d.Rush ? rushDelay : 0);   // a rush's wait: its arrival stays on the real clock
         rushIn = -1;
         mode = "actor";
         aimOrder.Clear(); reacts.Clear(); aimHs = 0; aimNext = 0; attempts = 0; nadeWait = false; frags = deaths = plants = 0;
+        wave = 0; waveFirstDead = -1; waveDue = false; beaconed.Clear();
         nadePops.Clear();
         if (d.Kind == "nade") ClearNades();
         cameAt.Clear(); strafe.Clear(); lastKill = 0;
@@ -1024,7 +1039,7 @@ public partial class CoachReplay
         aimSpawn = Server.TickCount;
         lastHud = Server.TickCount;
         if (cur.Kind == "aim" && string.IsNullOrEmpty(drill?.Mode)) AimCard();
-        if (drill?.Mode == "prefire") Html($"<font color='#ff8a3d'>GO</font> · clear {aimOrder.Count} · {drill.Seconds} s", 2);
+        if (drill?.Mode == "prefire") { Html($"<font color='#ff8a3d'>GO</font> · clear {aimOrder.Count} · {drill.Seconds} s", 2); preKillAt = Server.TickCount; }
         if (drill?.Mode == "range") { Html($"<font color='#ff8a3d'>GO</font> · {drill.Goal} kills · {drill.Seconds} s", 2); lastKill = Server.TickCount; foreach (var sl in bots.Keys) cameAt[sl] = Server.TickCount; }
         if (drill?.Mode == "defend") { postIdx = -1; Html($"<font color='#ff8a3d'>HOLD</font> · {drill.Seconds} s · they are coming", 2); }
         if (drill is { Rush: true })
@@ -1069,8 +1084,10 @@ public partial class CoachReplay
         var n = drill.Posts.Count + 1;
         var ph = Math.Min(n - 1, (int)(el / (drill.Seconds / (float)n)));
         if (ph == postIdx) return;
+        var moved = postIdx >= 0;   // not the drill's start
         postIdx = ph;
         ClearLine();
+        if (moved) NewWave();   // the next post's attackers, all at once (the last ones walked to the post you left)
         if (ph >= drill.Posts.Count)
         {   // 09/10, his defense video: "téléporte-moi sur le bombsite quand je suis en free pour vraiment montrer un
             // changement": back on the site (the drill's start), turned the way they come, refilled like at a post
@@ -1088,17 +1105,20 @@ public partial class CoachReplay
         var p = drill.Posts[ph];
         var at = new Vector3(p.Pos[0], p.Pos[1], p.Pos[2]);
         var green = System.Drawing.Color.FromArgb(255, 79, 195, 161);
+        // its corners on the post's floor, a thin line: one corner taken on a box top drew a line through the air at eye
+        // height (09/10, Mirage's Van: "est-ce que les lignes ne gênent pas la vue ? typiquement là, ça gêne")
+        float Floor(float z) => Math.Clamp(z, p.Pos[2] - 48f, p.Pos[2] + 8f) + 4f;
         if (p.Poly.Count >= 3)   // the place's own shape (06/10: "si c'est Garage, prends tout le Garage")
             for (int i = 0; i < p.Poly.Count; i++)
             {
                 var a = p.Poly[i]; var b = p.Poly[(i + 1) % p.Poly.Count];
-                Beam(new Vector3(a[0], a[1], a[2] + 6), new Vector3(b[0], b[1], b[2] + 6), green, 4f);
+                Beam(new Vector3(a[0], a[1], Floor(a[2])), new Vector3(b[0], b[1], Floor(b[2])), green, 2f);
             }
         else
             for (int i = 0; i < 16; i++)
             {
                 float a0 = i * MathF.PI / 8, a1 = (i + 1) * MathF.PI / 8;
-                Beam(at + new Vector3(40 * MathF.Cos(a0), 40 * MathF.Sin(a0), 4), at + new Vector3(40 * MathF.Cos(a1), 40 * MathF.Sin(a1), 4), green, 2.5f);
+                Beam(at + new Vector3(40 * MathF.Cos(a0), 40 * MathF.Sin(a0), 4), at + new Vector3(40 * MathF.Cos(a1), 40 * MathF.Sin(a1), 4), green, 2f);
             }
         var meT = cur.Players.FirstOrDefault(t => t.Me);
         foreach (var h in Humans())
@@ -1188,11 +1208,14 @@ public partial class CoachReplay
                 if (c.PlayerPawn.Value is { } pw) { pw.Teleport(Pos(t, 0), Upright(Ang(t, 0)), Vector3.Zero); Freeze(pw, true); }
                 gone.Remove(t.Sid);
             }
+            // the last ones not found in 8 s since your last kill: an orange post over each (09/10: one held Lower Tunnels,
+            // behind the way, 37 s to find it: "et je ne trouve pas les derniers")
+            if (drill.Mode == "prefire" && aimOrder.Count - frags <= 2 && Server.TickCount - preKillAt > 8 * 64) Beacons();
             {
                 var left = (int)(drill.Seconds - el);
                 var where = drill.Mode == "prefire" && aimOrder.Count - frags <= 3 ? LeftPlaces() : "";
                 SetMain(drill.Mode == "prefire"
-                    ? $"<font color='#ff8a3d'>{drill.Title}</font> · {aimOrder.Count - frags} left{(where != "" ? $": {where}" : "")} · {left} s<br><font class='fontSize-s'>{string.Join(" → ", drill.Route)} · follow the gold line</font>"
+                    ? $"<font color='#ff8a3d'>{drill.Title}</font> · {aimOrder.Count - frags} left{(where != "" ? $": {where}" : "")}{(beaconed.Count > 0 ? " (orange posts)" : "")} · {left} s<br><font class='fontSize-s'>{string.Join(" → ", drill.Route)} · follow the gold line</font>"
                     : $"<font color='#ff8a3d'>{drill.Title}</font> · {left} s · ⚔ {frags} · ☠ {deaths}"
                       + (drill.Posts.Count == 0 || postIdx < 0 ? "" : postIdx < drill.Posts.Count ? (OutOfPost() ? $"<br><font color='#ff5a5a'>⚠ back in {drill.Posts[postIdx].Zone} (the green zone)</font>" : $"<br><font class='fontSize-s'>hold {drill.Posts[postIdx].Zone} (the green zone)</font>") : "<br><font class='fontSize-s'>free</font>"));
             }
@@ -1234,7 +1257,7 @@ public partial class CoachReplay
         if (drill.Mode == "prefire")
         {
             if (!v.IsBot) return false;
-            if (e.Attacker is { IsValid: true, IsBot: false }) { frags++; if (e.Headshot) aimHs++; }
+            if (e.Attacker is { IsValid: true, IsBot: false }) { frags++; if (e.Headshot) aimHs++; preKillAt = Server.TickCount; }
             if (peekAt.ContainsKey(v.Slot)) return false;   // a hidden one going to wait for its timing
             var left = bots.Count(b => !gone.Contains(b.Value.Sid) && b.Key != v.Slot) + peekAt.Count;
             if (left == 0) AddTimer(0.3f, () => Finish("cleared"));
@@ -1279,24 +1302,10 @@ public partial class CoachReplay
                     if (g != generation || phase != "live" || cur == null) return;
                     var me = cur.Players.First(p => p.Me);
                     var spot = DefendSpot();
-                    // the attackers already on your spot are taken away (they come again from an entrance, on other real
-                    // ways): no death the moment you are back (04/10, "the spawn kill problem is very annoying"); the others
-                    // still walking their way step 2.5 s back on it, out of your sight again, and one playing on its own
-                    // near you goes (09/10 on Fachwerk's Long A: "pareil je spawn devant eux")
-                    var fNow = (Server.TickCount - t0) / (float)cur.Step;
-                    var back = 2.5f * 64 / cur.Step;
-                    foreach (var (sl, tk) in bots)
-                    {
-                        if (Utilities.GetPlayerFromSlot(sl) is not { IsValid: true, PawnIsAlive: true } bc || bc.PlayerPawn.Value is not { AbsOrigin: { } o } bp) continue;
-                        var dist = Vector3.Distance(new Vector3(o.X, o.Y, o.Z), spot);
-                        if (dist < 900 || (free.Contains(sl) && dist < 1600)) { bp.CommitSuicide(false, true); continue; }
-                        if (free.Contains(sl) || tk.Hold || tk.Strafe || tk.Frames < 2) continue;
-                        tk.Start += back;
-                        engaged.Remove(sl);
-                        contact.Remove(sl);
-                        var ix = Math.Clamp((int)(fNow - tk.Start), 0, tk.Frames - 1);
-                        bp.Teleport(Pos(tk, ix), Upright(Ang(tk, ix)), Vector3.Zero);
-                    }
+                    // the wave that got you goes, a new one comes from the entrances, all of it at once (09/10): no death
+                    // the moment you are back (04/10, "the spawn kill problem is very annoying"), nobody already in front
+                    // of you (09/10 on Fachwerk's Long A: "pareil je spawn devant eux")
+                    NewWave();
                     protectUntil = Server.TickCount + 2 * 64;
                     var face = postIdx >= 0 && postIdx < drill.Posts.Count ? new Vector3(0, drill.Posts[postIdx].Ang[1], 0) : Upright(Ang(me, 0));
                     foreach (var h in Humans()) { h.Respawn(); Loadout(h, me); h.PlayerPawn.Value?.Teleport(spot, face, Vector3.Zero); }
@@ -1304,40 +1313,7 @@ public partial class CoachReplay
                 return true;
             }
             if (e.Attacker is { IsValid: true, IsBot: false }) { frags++; if (e.Headshot) aimHs++; }
-            var slot = v.Slot;
-            AddTimer(1f + (float)Rng.NextDouble() * 1.5f, () =>   // another one comes, from a real entrance not right next to you
-            {
-                if (g != generation || phase != "live" || cur == null || drill == null || !bots.TryGetValue(slot, out var t)) return;
-                var c = Utilities.GetPlayerFromSlot(slot);
-                if (c == null || !c.IsValid) return;
-                c.Respawn();
-                Loadout(c, t);
-                string? zone;
-                if (drill.Tracks.Count > 0)   // another real hit on the site, walked from now with its grenades; it fights once it sees you
-                {
-                    var tr = PickTrack(drill, postIdx < 0 ? 0 : postIdx)!;
-                    t.Path = tr.Path;
-                    t.TrackNades = tr.Nades;
-                    t.NadeNext = 0;
-                    t.Start = (Server.TickCount - t0) / (float)cur.Step;
-                    zone = tr.Zone;
-                    free.Remove(slot);
-                    contact.Remove(slot);
-                    engaged.Remove(slot);
-                    if (c.PlayerPawn.Value is { } pw) { pw.Teleport(Pos(t, 0), Upright(Ang(t, 0)), Vector3.Zero); Freeze(pw, false); }   // it walks its way
-                }
-                else
-                {
-                    var me = Pos(cur.Players.First(p => p.Me), 0);
-                    var far = drill.Bots.Where(b => Vector3.Distance(new Vector3(b.Pos[0], b.Pos[1], b.Pos[2]), me) > 600).ToList();
-                    if (far.Count == 0) far = drill.Bots;
-                    var sp = far[Rng.Next(far.Count)];
-                    zone = sp.Zone;
-                    c.PlayerPawn.Value?.Teleport(new Vector3(sp.Pos[0], sp.Pos[1], sp.Pos[2]), new Vector3(0, sp.Ang[1], 0), Vector3.Zero);
-                }
-                if (zone != null) { c.PlayerName = zone; Utilities.SetStateChanged(c, "CBasePlayerController", "m_iszPlayerName"); }
-                gone.Remove(t.Sid);
-            });
+            AddTimer(0.1f, () => WaveCheck(g));   // the next ones once this wave is down
             return false;
         }
         if (!v.IsBot) return false;
@@ -1368,6 +1344,114 @@ public partial class CoachReplay
         }
         else AddTimer(0.4f, () => Finish(reacts.Count == aimOrder.Count ? "cleared" : "done"));
         return false;
+    }
+
+    // a prefire's bots still up and out (not waiting for their turn): an orange post over each, once
+    void Beacons()
+    {
+        var orange = System.Drawing.Color.FromArgb(255, 255, 140, 40);
+        foreach (var (sl, t) in bots)
+        {
+            if (beaconed.Contains(sl) || peekAt.ContainsKey(sl) || gone.Contains(t.Sid) || !Up(sl)) continue;
+            beaconed.Add(sl);
+            var p = Pos(t, 0);
+            Beam(p + new Vector3(0, 0, 80), p + new Vector3(0, 0, 400), orange, 4f);
+        }
+    }
+
+    // a defense's attackers come in waves (09/10, his Dust2 A: "il y a 3 bots en vie théoriquement, et j'en croise très
+    // rarement 3 en même temps"): one walking in as another one died, they came one by one. Now all of a wave start
+    // together on real ways (their tracks start the same time before they come into sight) and the next wave comes once
+    // this one is down; one of them staying away from the fight (it has not seen you for 4 s) 10 s after the wave's first
+    // death is taken off.
+    IEnumerable<int> Attackers() => cur == null ? Enumerable.Empty<int>() : bots.Where(b => b.Value.Team != cur.Team).Select(b => b.Key).ToList();
+    static bool Up(int sl) => Utilities.GetPlayerFromSlot(sl) is { IsValid: true, PawnIsAlive: true };
+
+    // the attackers still up go (your death, another post): their deaths call the next wave
+    void NewWave()
+    {
+        var up = Attackers().Where(Up).ToList();
+        if (up.Count == 0) { WaveCheck(generation); return; }
+        foreach (var sl in up) Utilities.GetPlayerFromSlot(sl)?.PlayerPawn.Value?.CommitSuicide(false, true);
+    }
+
+    void WaveCheck(int g)
+    {
+        if (g != generation || phase != "live" || cur == null || drill?.Mode != "defend" || waveDue) return;
+        if (!Attackers().Any(Up))
+        {
+            waveDue = true;
+            var w = wave;
+            AddTimer(1.2f + (float)Rng.NextDouble() * 0.8f, () => { if (g == generation && w == wave) StartWave(g); });
+            return;
+        }
+        if (waveFirstDead < 0)
+        {
+            waveFirstDead = Server.TickCount;
+            var w = wave;
+            AddTimer(10f, () => WaveStale(g, w));
+        }
+    }
+
+    void WaveStale(int g, int w)
+    {
+        if (g != generation || w != wave || waveDue || phase != "live" || cur == null) return;
+        var now = Server.TickCount;
+        var up = Attackers().Where(Up).ToList();
+        if (up.Count == 0) { WaveCheck(g); return; }
+        if (up.All(sl => now - sawYou.GetValueOrDefault(sl, -100000) > 4 * 64))
+        {   // nobody of it in the fight any more: taken off, the next wave comes
+            Log("wave {w}: {n} away from the fight, taken off", wave, up.Count);
+            foreach (var sl in up) Utilities.GetPlayerFromSlot(sl)?.PlayerPawn.Value?.CommitSuicide(false, true);
+            return;
+        }
+        AddTimer(2f, () => WaveStale(g, w));   // still fighting: wait
+    }
+
+    void StartWave(int g)
+    {
+        if (g != generation || phase != "live" || cur == null || drill == null) return;
+        wave++; waveDue = false; waveFirstDead = -1;
+        var start = (Server.TickCount - t0) / (float)cur.Step;   // the same for all: they come into sight together
+        var n = 0;
+        foreach (var sl in Attackers())
+            if (Utilities.GetPlayerFromSlot(sl) is { IsValid: true } c && !c.PawnIsAlive && bots.TryGetValue(sl, out var t)) { Attacker(c, t, start); n++; }
+        Log("wave {w}: {n} attackers", wave, n);
+    }
+
+    // one of the wave: a real hit on the site walked from now with its grenades (it fights once it sees you), or the game's
+    // AI from an entrance not right next to you
+    void Attacker(CCSPlayerController c, Track t, float start)
+    {
+        if (cur == null || drill == null) return;
+        var slot = c.Slot;
+        c.Respawn();
+        Loadout(c, t);
+        string? zone;
+        if (drill.Tracks.Count > 0)
+        {
+            var tr = PickTrack(drill, postIdx < 0 ? 0 : postIdx)!;
+            t.Path = tr.Path;
+            t.TrackNades = tr.Nades;
+            t.NadeNext = 0;
+            t.Start = start;
+            zone = tr.Zone;
+            free.Remove(slot);
+            contact.Remove(slot);
+            engaged.Remove(slot);
+            if (c.PlayerPawn.Value is { } pw) { pw.Teleport(Pos(t, 0), Upright(Ang(t, 0)), Vector3.Zero); Freeze(pw, false); }   // it walks its way
+        }
+        else
+        {
+            var me = Pos(cur.Players.First(p => p.Me), 0);
+            var far = drill.Bots.Where(b => Vector3.Distance(new Vector3(b.Pos[0], b.Pos[1], b.Pos[2]), me) > 600).ToList();
+            if (far.Count == 0) far = drill.Bots;
+            var sp = far[Rng.Next(far.Count)];
+            zone = sp.Zone;
+            c.PlayerPawn.Value?.Teleport(new Vector3(sp.Pos[0], sp.Pos[1], sp.Pos[2]), new Vector3(0, sp.Ang[1], 0), Vector3.Zero);
+        }
+        if (zone != null) { c.PlayerName = zone; Utilities.SetStateChanged(c, "CBasePlayerController", "m_iszPlayerName"); }
+        gone.Remove(t.Sid);
     }
 
     // a defense: a bomb planted is taken away (and costs points)

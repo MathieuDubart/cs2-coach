@@ -405,6 +405,20 @@ public partial class CoachReplay : BasePlugin
         var key = $"{cur.Id}|{mode}|{diff}";
         if (builtFor == key && bots.Count > 0 && bots.Keys.All(sl => Utilities.GetPlayerFromSlot(sl) is { IsValid: true, IsBot: true }))
         {
+            // the same bots on the new try's own tracks: a defense's attackers kept the last try's start and way, and
+            // its retry's waited a minute at their entrance (09/10 17:51: "les bots étaient freeze")
+            var fresh = cur.Players.Where(t => !t.Me || mode == "spec").ToList();
+            foreach (var team in new[] { 2, 3 })
+            {
+                var slots = bots.Where(b => b.Value.Team == team).Select(b => b.Key).ToList();
+                var tr = fresh.Where(t => t.Team == team).ToList();
+                for (int i = 0; i < Math.Min(slots.Count, tr.Count); i++)
+                {
+                    bots[slots[i]] = tr[i];
+                    if (Utilities.GetPlayerFromSlot(slots[i]) is { IsValid: true } bc)
+                    { bc.PlayerName = tr[i].Me ? tr[i].Name + " (you)" : tr[i].Name; Utilities.SetStateChanged(bc, "CBasePlayerController", "m_iszPlayerName"); }
+                }
+            }
             Teams();
             awaitRestart = true;
             Server.ExecuteCommand("mp_restartgame 1");

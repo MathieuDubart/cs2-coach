@@ -485,6 +485,37 @@ def site_data(mp):
     return cache[mp]
 
 
+_PLANTS = {}
+
+
+def _plant_spot(mp, letter, S):
+    """Where the base's Ts plant on a site, its busiest 48 u cell: on the plant zone itself, a spot players stand on
+    (09/10, his Inferno defense: "fais-moi spawn là où on peut planter, là je spawn juste à côté du bombsite"; the
+    CTs' favourite spot of the site can be next to it). Its height: where the base's players stood there, on the site's
+    floor (Nuke's A is above B). None without enough plants."""
+    key = (mp, letter)
+    if key not in _PLANTS:
+        pts = []
+        for d in _map_dirs(mp)[-400:]:
+            try:
+                R = pd.read_parquet(os.path.join(config.OUT, "deep", d, "rounds.parquet"), columns=["plant_site", "plant_X", "plant_Y"])
+            except Exception:
+                continue
+            R = R[(R.plant_site == letter) & R.plant_X.notna() & R.plant_Y.notna()]
+            pts += R[["plant_X", "plant_Y"]].values.tolist()
+        _PLANTS[key] = np.array(pts, float).reshape(-1, 2)
+    P = _PLANTS[key]
+    if len(P) < 20 or not S.get("center"):
+        return None
+    cx, cy = (P[:, 0] // 48).astype(int), (P[:, 1] // 48).astype(int)
+    (bx, by), _ = Counter(zip(cx, cy)).most_common(1)[0]
+    x, y = np.median(P[(cx == bx) & (cy == by)], axis=0)
+    Z = _zone_samples(mp)
+    zs = Z.Z.to_numpy(float)[(np.hypot(Z.X.to_numpy(float) - x, Z.Y.to_numpy(float) - y) < 48) & (np.abs(Z.Z.to_numpy(float) - S["center"][2]) < 160)]
+    z = float(np.median(zs)) if len(zs) >= 5 else float(S["center"][2])
+    return [round(float(x), 1), round(float(y), 1), round(z + 2, 1)]
+
+
 def _site_holds(S):
     """A site's CT spots from all its entrances, the ones 160 u apart merged (their counts and their foes summed), the
     most held first."""
@@ -1049,11 +1080,12 @@ def practice_drills(sid, mp):
         froms = ", ".join(f"{w} {round(100 * n / len(tracks))}%" for w, n in ways.most_common(4)) if tracks else \
             ", ".join(dict.fromkeys(replay_zone(e["zone"], mp) for e in S["entrances"]))
         hold_t = [p["t"] for p in posts if p.get("t") is not None]
+        site_at = _plant_spot(mp, letter, S) or S["defend"]   # free: you back on the plant zone itself
         for kit in _defense_kits(sid):
             out.append({"id": f"defend:{mp}:{z}:{kit['cls']}", "kind": "aim", "mode": "defend", "map": mp,
                         "title": f"DEFEND {site} · {kit['name']}", "team": 3,
                         "tip": f"{kit['seconds']} s · {kit['alive']} at a time, the ways real hits come: {froms} · {kit['goal']} frags · you respawn",
-                        "me": {"pos": S["defend"], "ang": _angle(S["defend"], spawns[0]["pos"] if spawns else tracks[0]["path"][:3])},
+                        "me": {"pos": site_at, "ang": _angle(site_at, spawns[0]["pos"] if spawns else tracks[0]["path"][:3])},
                         "weapons": kit["weapons"], "bot_weapons": kit["bot_weapons"], "armor": 100, "helmet": kit["helmet"],
                         "bots": spawns, "tracks": tracks, "seconds": kit["seconds"], "alive": kit["alive"], "goal": kit["goal"],
                         "posts": posts, "weight": kit["weight"],
@@ -1439,7 +1471,9 @@ def _my_setup(sid, mp):
     return setup, faced
 
 
-REPEATABLE = ("standing still", "jumpthrow", "crouching", "jumpthrow + crouching")
+# from a spot, standing still when you click; a run-throw (W pressed as you release, a bind's way) leaves from it too
+# (09/10: his "running molly" to Banana was told "standing still")
+REPEATABLE = ("standing still", "jumpthrow", "crouching", "jumpthrow + crouching", "run-throw (W)", "W + jumpthrow")
 
 
 def _lands_for_you(it):

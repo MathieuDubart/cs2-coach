@@ -9,8 +9,10 @@ Writes out/population/nades.parquet (every throw) and nades_summary.json (groups
 Usage: python nades.py
 """
 import json
+import math
 import os
 import sys
+from collections import Counter
 
 import numpy as np
 import pandas as pd
@@ -29,8 +31,8 @@ WINDOWS = [("debut", 0, 20), ("prise", 20, 40), ("action", 40, 70), ("fin", 70, 
 WINDOW_FR = {"debut": "start of the round (1:55 to 1:35)", "prise": "info gathering (1:35 to 1:15)", "action": "site attack (1:15 to 0:45)",
              "fin": "end of the round (after 0:45)", "post": {"T": "after the plant", "CT": "retake"}}
 COLS = ["map", "match", "round", "t", "type", "thrower", "side", "zone", "land_zone", "X", "Y", "Z", "pitch", "yaw", "px", "py",
-        "level", "land_px", "land_py", "land_level", "jump", "speed", "crouch", "walk", "click", "flight_s", "damage",
-        "enemies_blind", "mates_blind", "kills_after", "post", "won", "buy", "self_kill", "died"]
+        "level", "land_px", "land_py", "land_level", "land_X", "land_Y", "land_Z", "jump", "speed", "crouch", "walk", "click",
+        "flight_s", "damage", "enemies_blind", "mates_blind", "kills_after", "post", "won", "buy", "self_kill", "died"]
 
 
 def humanize(z, mp=None):
@@ -43,7 +45,7 @@ def _timer(t):
     return f"{int(left // 60)}:{int(left % 60):02d}"
 
 
-VERSION = 4   # bump when the summary changes (texts, fields): the cache is rebuilt
+VERSION = 5   # bump when the summary changes (texts, fields): the cache is rebuilt
 
 
 def fresh(cached, stamp, slack=0.85):
@@ -76,7 +78,7 @@ def load_all(rebuild=False):
         try:
             if fresh(json.load(open(meta_f, encoding="utf-8")).get("stamp"), stamp):
                 cached = pd.read_parquet(OUT)
-                if "died" in cached:   # older files: built again once
+                if "died" in cached and "land_Z" in cached:   # older files: built again once
                     return cached
         except ValueError:
             pass
@@ -155,19 +157,84 @@ def _eff(x, typ):
     return None
 
 
-def _how(b):
+def _how(b, fit=None):
     """How a throw was made, from the thrower at the release: in the air (the jumpthrow), moving (running over 150 u/s,
-    walking under it or with the walk key), crouching; else standing still."""
+    walking under it or with the walk key), crouching; else standing still. fit: what its flight says (_phys): a bind's
+    jump or W the demo does not show."""
+    pat = fit[0] if fit else None
     how = []
-    if b.jump:
+    if pat in ("W", "WJ"):
+        how.append("W + jumpthrow" if pat == "WJ" else "run-throw (W)")
+    elif b.jump or pat == "jump":
         how.append("jumpthrow")
-    if b.speed > 150:
+    if not how and b.speed > 150:
         how.append("running")
-    elif b.walk or 20 < b.speed <= 150:
+    elif not how and (b.walk or 20 < b.speed <= 150):
         how.append("walking")
     if b.crouch:
         how.append("crouching")
     return " + ".join(how) or "standing still"
+
+
+# The throw that sent a grenade where it went off (09/10, his stuff drills: "non, c'est une running molly", "c'est
+# gauche-droite", "il faut prendre le repère debout puis jump"): a CS2 demo writes the thrower at the click's release,
+# still on the ground and still standing when a bind jumps or runs on that tick, and the grenade leaves 0.11 s later
+# with his velocity then. Its flight tells: CS2 throws 10° above the aim (the aim's angle x 0.89), at 675 u/s with a
+# left click, 439 with both, 203 with a right one, plus 1.25 x the thrower's own velocity; gravity 320 u/s². Fitted
+# on the base: 1.61 s from leaving the hand to a flash's or an HE's pop, a molotov goes off on the ground. Only a clean
+# fit counts (a bounce off a wall fits none): nothing added (standing), a bind's jump (about 265 u/s up), a bind's W
+# (about 190 u/s forward), both.
+PHYS_DT, PHYS_G2 = 0.11, 160.0
+PHYS_V = {"left": 675.0, "middle": 438.75, "right": 202.5}
+PHYS_DZ = {"left": 0.0, "middle": -6.0, "right": -12.0}
+
+
+def _phys(X, Y, Z, pitch, yaw, crouch, lx, ly, lz, flight):
+    """-> (pattern: still | jump | W | WJ, click: left | middle | right), or None when no clean throw explains it."""
+    try:
+        vals = [float(v) for v in (X, Y, Z, pitch, yaw, lx, ly, lz, flight)]
+    except (TypeError, ValueError):
+        return None
+    if any(v != v for v in vals) or vals[8] - PHYS_DT <= 0.2:
+        return None
+    X, Y, Z, pitch, yaw, lx, ly, lz, flight = vals
+    T = flight - PHYS_DT
+    el, yr = math.radians(10.0 - pitch * (80.0 / 90.0)), math.radians(yaw)
+    F = np.array([math.cos(el) * math.cos(yr), math.cos(el) * math.sin(yr), math.sin(el)])
+    to = np.array([lx - X, ly - Y, lz - Z - (46.0 if crouch else 64.0) + PHYS_G2 * T * T]) - F * 16.0
+    fit = []   # (how far from the throw, pattern, click, clean)
+    for click, a in PHYS_V.items():
+        u = (to - np.array([0.0, 0.0, PHYS_DZ[click]])) / T - a * F   # 1.25 x the thrower's velocity as it left
+        fw = u[0] * math.cos(yr) + u[1] * math.sin(yr)
+        side = -u[0] * math.sin(yr) + u[1] * math.cos(yr)
+        flat, up = math.hypot(fw, side), float(u[2])
+        fit += [(flat + abs(up), "still", click, flat < 60 and abs(up) < 70),
+                (flat + abs(up - 265), "jump", click, flat < 70 and 190 < up < 340),
+                (abs(fw - 190) + abs(side) + abs(up), "W", click, 110 < fw < 340 and abs(side) < 70 and abs(up) < 70),
+                (abs(fw - 190) + abs(side) + abs(up - 265), "WJ", click, 110 < fw < 340 and abs(side) < 70 and 190 < up < 340)]
+    fit.sort()
+    # the throw that explains it best, clean and well ahead of any other (a bounce fits two of them about as badly: the
+    # CT flash to Banana, "bizarre... soit un running, soit gauche-droite")
+    best, second = fit[0], fit[1]
+    return best[1:3] if best[3] and best[0] <= 0.75 * second[0] else None
+
+
+def _lineup_fit(c, b, typ):
+    """How b's lineup is thrown, from flights (flash, HE, molotov: a smoke rolls on): b's own clean fit, else the one most
+    of the clean fits of the throws from its spot and aim agree on (12 u, 0.7°)."""
+    if typ not in ("flash", "he", "molotov") or "land_Z" not in c:
+        return None
+    one = lambda r: _phys(r.X, r.Y, r.Z, r.pitch, r.yaw, bool(r.crouch), r.land_X, r.land_Y, r.land_Z, r.flight_s)
+    own = one(b)
+    if own:
+        return own
+    same = c[((c.X - b.X).abs() < 12) & ((c.Y - b.Y).abs() < 12) & ((c.pitch - b.pitch).abs() < 0.7)
+             & ((((c.yaw - b.yaw) + 180) % 360 - 180).abs() < 0.7) & (c.crouch.astype(bool) == bool(b.crouch))]
+    fits = [f for f in (one(r) for r in same.head(40).itertuples()) if f]
+    if len(fits) < 2:
+        return None
+    top, n = Counter(fits).most_common(1)[0]
+    return top if n >= 0.6 * len(fits) else None
 
 
 def groups(df, side_rounds):
@@ -247,11 +314,12 @@ def groups(df, side_rounds):
                 elif typ in ("he", "molotov"):
                     cand = cand.sort_values("damage", ascending=False)
                 b = cand.iloc[0]
+                fit = _lineup_fit(c, b, typ)   # the bind's jump or W and the click its flight tells (09/10)
                 lst.append({"from_key": z, "from": humanize(z, mp), "to_key": lz, "to": humanize(lz, mp), "score": round(float(score), 3), **e,
                             "t_med": round(float(c.t.median()), 1), "timer": _timer(c.t.median()),
                             "timer_span": [_timer(c.t.quantile(0.25)), _timer(c.t.quantile(0.75))],
                             "windows": wins, "usual": usual, "best": best, "post": round(100 * float(c.post.mean())),
-                            "how": _how(b), "click": b.click, "flight_s": None if pd.isna(b.flight_s) else float(b.flight_s),
+                            "how": _how(b, fit), "click": fit[1] if fit else b.click, "flight_s": None if pd.isna(b.flight_s) else float(b.flight_s),
                             "from_px": [round(float(cand.px.mean())), round(float(cand.py.mean()))], "level": b.level,
                             "to_px": [round(float(c.land_px.median())), round(float(c.land_py.median()))], "land_level": b.land_level,
                             "setpos": f"setpos {b.X:.1f} {b.Y:.1f} {b.Z:.1f}; setang {b.pitch:.2f} {b.yaw:.2f} 0"})

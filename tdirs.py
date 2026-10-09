@@ -28,7 +28,7 @@ import nades
 import tside
 
 OUT = os.path.join(config.OUT, "population", "tdirs.json")
-VERSION = 3   # bump when the output changes shape: the cache is rebuilt (3: Nuke's Outside, 07/10)
+VERSION = 4   # bump when the output changes shape: the cache is rebuilt (3: Nuke's Outside, 07/10; 4: throws' technique from their flight, 09/10)
 RUSH, SLOW = 30.0, 60.0   # on the site in the first 30 s (1:25 on the clock): a rush; after 60 s (0:55): a slow round
 CONTROL_T = (14.0, 26.0)  # Ts spread over two areas or more around 0:20 into the round, then a hit after 35 s: map control first
 MIN_DIR = 25              # rounds for a way to be kept
@@ -288,12 +288,14 @@ def _lineups(N, rounds, min_n=None):
         close = ((np.abs(P[:, None] - P[None, :]) < 1.5) & (dy < 1.5)).sum(1)
         b = rep.iloc[int(np.argmax(close))]
         won = rr.won.mean()
+        fit = nades._lineup_fit(x, b, c[0])   # the bind's jump or W and the click its flight tells (09/10: a "running molly" said standing still)
         out.append({"type": c[0], "from": b.zone_h, "to": b.land_zone_h, "from_key": b.zone if isinstance(b.zone, str) else None,
                     "to_key": b.land_zone if isinstance(b.land_zone, str) else None, "from_px": [round(float(rep.px.median())), round(float(rep.py.median()))],
                     "to_px": [round(float(x.land_px.median())), round(float(x.land_py.median()))], "level": b.level, "land_level": b.land_level,
                     "X": round(float(b.X), 1), "Y": round(float(b.Y), 1), "Z": round(float(b.Z), 1),
                     "n": int(len(rr)), "share": round(100 * len(rr) / nr), "win": round(100 * float(won)),
-                    "t_med": round(float(x.t.median()), 1), "how": nades._how(b), "click": b.click if isinstance(b.click, str) else None,
+                    "t_med": round(float(x.t.median()), 1), "how": nades._how(b, fit),
+                    "click": fit[1] if fit else (b.click if isinstance(b.click, str) else None),
                     "setpos": f"setpos {b.X:.1f} {b.Y:.1f} {b.Z:.1f}; setang {b.pitch:.2f} {b.yaw:.2f} 0"})
     out.sort(key=lambda u: -u["n"])
     seen = []
@@ -375,7 +377,7 @@ def analyze_map(mp, dirs, log=print):
             continue
         try:
             n = pd.read_parquet(f, columns=["round", "t", "type", "side", "X", "Y", "Z", "pitch", "yaw", "px", "py", "level", "zone", "jump", "speed",
-                                            "crouch", "walk", "click", "land_X", "land_Y", "land_px", "land_py", "land_level", "land_zone"])
+                                            "crouch", "walk", "click", "land_X", "land_Y", "land_Z", "flight_s", "land_px", "land_py", "land_level", "land_zone"])
         except Exception:
             continue
         n = n[n.land_X.notna()]
