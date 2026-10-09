@@ -109,9 +109,9 @@ def _api(path):
 
 
 def _match():
-    """A real match going on: the game detection's flag (out/playing.json, fresh while you play, never on the training
-    server), this app's or the installed app's (the one CS2 sends its game state to). Not the menu, not the training
-    server: the base used to wait whenever CS2 was open (09/10: a whole night on the training server's pause menu)."""
+    """A match going on: the game detection's flag (out/playing.json, fresh while a map is loaded: bots and the training
+    server included), this app's or the installed app's (the one CS2 sends its game state to). Not the menu: the base
+    used to wait whenever CS2 was open (09/10: a whole night with the game left open)."""
     paths = [config.PLAYING, os.path.join(os.environ.get("LOCALAPPDATA", ""), "Programs", "Wily", "out", "playing.json")]
     for f in paths:
         d = config.read_json(f, {}) or {}
