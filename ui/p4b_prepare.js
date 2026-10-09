@@ -8,7 +8,7 @@
 const PREP_LEN=[5,10,15,20,30,45];   // the warm-up card's durations: its plan follows the one you pick, live (07/10)
 // pend: a start or a stop on its way, note: its outcome for 30 s; both outlive the card's refreshes (08/10: the 4 s
 // refresh wiped "Starting the server…", he clicked Stop, reloaded, clicked again)
-const PREP={tick:null,watch:null,warm:null,sec:null,pend:null,note:null};
+const PREP={tick:null,watch:null,warm:null,sec:null,pend:null,note:null,base:null};   // base: the maps the base covers (09/10)
 const WBLOCK={aim:"🎯 Aim",defend:"🛡 Defense",push:"🚶 Prefire",nade:"💨 Stuff",wallbang:"🧱 Wallbang",situation:"🔁 Situations"};
 // what you chose today (your browser): the maps, the duration, the blocks done, the one running
 function prepState(){const day=new Date().toDateString();let st=store("prep");
@@ -22,11 +22,17 @@ function wireFocus(v,p,rerender){const sel=$("[data-focus-pick]",v);if(!sel)retu
 function renderPrepare(){
   const p=P(),v=$("#v-prepare"),PL=p.advice.plan;if(!PL)return noPlan(v);
   clearTimeout(PREP.warm);
-  const st=prepState(),own=D.local&&p.steamid===D.own,maps=mapsOf(p),sel=(st.maps||[]).filter(m=>maps.some(x=>x.map===m)).slice(0,3);
+  const st=prepState(),own=D.local&&p.steamid===D.own,maps=mapsOf(p);
+  // 09/10, his warm-up: "trainer les maps sur lesquelles je n'ai pas de démo téléchargée, puisque j'ai le dataset des
+  // matchs": the base's other bomb maps, trained on its own spots and lineups (no situations: they come from your demos)
+  if(own&&PREP.base===null){PREP.base=[];fetch("/api/train/maps").then(r=>r.ok?r.json():null).then(j=>{PREP.base=(j&&j.maps)||[];if(S.view==="prepare"&&PREP.base.length)renderPrepare()}).catch(()=>{})}
+  const extra=own?(PREP.base||[]).filter(m=>!maps.some(x=>x.map===m.map)):[];
+  const sel=(st.maps||[]).filter(m=>maps.some(x=>x.map===m)||extra.some(x=>x.map===m)).slice(0,3);
   v.innerHTML=`<div class="head"><div style="display:grid;gap:4px"><span class="eyebrow">${esc(p.name)} · before you play</span><h2>Prepare</h2></div></div>
    <section class="prep1">
     <h3>Which maps?</h3><p class="note">One to three: the warm-up follows them. Your most played first.</p>
     <div class="btns prep-maps" role="group" aria-label="Maps">${maps.map(m=>`<button type="button" data-pmap="${esc(m.map)}" aria-pressed="${sel.includes(m.map)}">${esc(MAPN(m.map))} <span class="note">${m.n||0}</span></button>`).join("")}</div>
+    ${extra.length?`<p class="note">Maps you have no match of: trained on the base's spots and lineups (no situations).</p><div class="btns prep-maps" role="group" aria-label="Other maps">${extra.map(m=>`<button type="button" data-pmap="${esc(m.map)}" aria-pressed="${sel.includes(m.map)}">${esc(MAPN(m.map))}</button>`).join("")}</div>`:""}
     ${own?`<div class="pstrug" data-pstrug></div>`:""}</section>
    <section class="prep2">${!sel.length?`<p class="note">Pick a map: the warm-up builds itself here.</p>`
      :`<article class="card pwarm" data-pwarm>${own?`<p class="note"><span class="spin" aria-hidden="true"></span>Preparing your warm-up…</p>`:`<p class="note">The warm-up runs on the training server, from the local app (double-click <code>Wily.bat</code>).</p>`}</article>`}</section>`;   // no pre-session journal here either (07/10: "tu peux aussi enlever ça")
@@ -49,15 +55,15 @@ async function prepWarm(v,p,sel,st){const box=$("[data-pwarm]",v);if(!box||!D.lo
   const running=ss&&T.running,pend=PREP.pend,wait=!!(pend||T.busy);   // T.busy: a start the server side runs (a reload meanwhile)
   const say=pend?`${pend.text} (${Math.round((Date.now()-pend.t0)/1e3)} s)`:T.busy?`${T.busy.charAt(0).toUpperCase()+T.busy.slice(1)} is starting on the training server…`
     :PREP.note&&Date.now()-PREP.note.t<30e3?PREP.note.text:T.dead?"The training server stopped answering: ▶ WARM-UP starts it again.":"";
-  const live=running?`<div class="tlive"><b>●</b><span>${WBLOCK[ss.block]||BLOCK[ss.block]||"Session"} · ${esc(ss.drill||"…")}</span><span>⭐ ${ss.points||0} · ${ss.ok||0}/${ss.done||0} ✔${ss.streak>=2?` · 🔥${ss.streak}`:""}</span><span>${ss.left?`${Math.floor(ss.left/60)}:${String(ss.left%60).padStart(2,"0")}`:""}</span>${T.humans?"":T.join&&/refused|failed/.test(T.join.state)?`<span class="note" style="color:var(--bad,#f87171)">${esc(T.join.why||"CS2 did not get in")}</span>`:`<span class="note">waiting for you on the server</span>`}</div>`:"";
+  const live=running?`<div class="tlive"><b>${ss.paused?"⏸":"●"}</b><span>${ss.paused?"PAUSED · ":""}${WBLOCK[ss.block]||BLOCK[ss.block]||"Session"} · ${esc(ss.drill||"…")}</span><span>⭐ ${ss.points||0} · ${ss.ok||0}/${ss.done||0} ✔${ss.streak>=2?` · 🔥${ss.streak}`:""}</span><span>${ss.left?`${Math.floor(ss.left/60)}:${String(ss.left%60).padStart(2,"0")}`:""}</span>${T.humans?"":T.join&&/refused|failed/.test(T.join.state)?`<span class="note" style="color:var(--bad,#f87171)">${esc(T.join.why||"CS2 did not get in")}</span>`:`<span class="note">waiting for you on the server</span>`}</div>`:"";
   box.innerHTML=`<div class="pwarm-h"><span class="eyebrow">Warm-up · all on the training server</span></div>
     ${running?"":`<div class="btns pwlen" role="group" aria-label="Duration">${PREP_LEN.map(n=>`<button type="button" data-pwlen="${n}" aria-pressed="${st.min===n}">${n} min</button>`).join("")}</div>`}
     <ol class="pwarm-plan">${byMap.map(({mp,b})=>`${byMap.length>1?`<li class="pwmap">${esc(MAPN(mp))}</li>`:""}${b.map(x=>`<li class="k-${x.kind}"><b>${WBLOCK[x.kind]||x.kind}</b><span>${Math.max(1,Math.round(x.seconds/60))}′</span></li>`).join("")}`).join("")}</ol>
     ${live}
-    <div class="trow"><button type="button" class="tbig" data-pwgo${wait?" disabled":""}>${running?"↻ NEW WARM-UP":"▶ WARM-UP"}</button>${running&&!T.humans&&!wait?`<button type="button" data-pwjoin>↪ Rejoin the server</button>`:""}${T.running?`<button type="button" data-pwstop${wait?" disabled":""}>Stop</button>`:""}<span class="note" role="status" data-pwmsg>${esc(say)}</span></div>
+    <div class="trow"><button type="button" class="tbig" data-pwgo${wait?" disabled":""}>${running?"↻ NEW WARM-UP":"▶ WARM-UP"}</button>${running&&!T.humans&&!wait?`<button type="button" data-pwjoin>↪ Rejoin the server</button>`:""}${running&&T.humans?`<button type="button" data-pwpause${wait?" disabled":""}>${ss.paused?"▶ Resume":"⏸ Pause"}</button>`:""}${T.running?`<button type="button" data-pwstop${wait?" disabled":""}>Stop</button>`:""}<span class="note" role="status" data-pwmsg>${esc(say)}</span></div>
     <div class="trow" role="group" aria-label="Bots' level"><span class="tk2" title="Bots' level">🤖</span>${DIFF.map((n,i)=>`<button type="button" data-pwdiff="${i}" aria-pressed="${i===df}">${n}</button>`).join("")}${sug?`<span class="note">suggested: ${DIFF[sug.diff]} · ${esc(sug.why)}</span>`:""}</div>
     <div class="tlvl"><b>LVL ${Pg.level}</b><div class="tbar"><i style="width:${pct}%"></i></div><span>${Math.max(0,Pg.xp-Pg.from).toLocaleString("en-US")} / ${Math.max(1,Pg.to-Pg.from).toLocaleString("en-US")} XP to LVL ${Pg.level+1}</span></div>
-    <p class="note">One button: the server starts, the session is built on your maps, CS2 joins it (started first if it is closed). In game: <b>!n</b> skips a drill, <b>!r</b> again, <b>!stop</b> ends, <b>!report</b> followed by a few words tells my author what's wrong.</p>`;
+    <p class="note">One button: the server starts, the session is built on your maps, CS2 joins it (started first if it is closed). In game: <b>!n</b> skips a drill, <b>!r</b> again, <b>!pause</b> / <b>!resume</b>, <b>!stop</b> ends, <b>!report</b> followed by a few words tells my author what's wrong.</p>`;
   const msg=$("[data-pwmsg]",box);
   $$("[data-pwlen]",box).forEach(b=>b.onclick=()=>{st.min=+b.dataset.pwlen;prepSave(st);   // another duration: the parts redone at once
     $$("[data-pwlen]",box).forEach(x=>x.setAttribute("aria-pressed",String(x===b)));
@@ -65,7 +71,7 @@ async function prepWarm(v,p,sel,st){const box=$("[data-pwarm]",v);if(!box||!D.lo
   $$("[data-pwdiff]",box).forEach(b=>b.onclick=()=>{try{localStorage.setItem("coach_diff",b.dataset.pwdiff)}catch(e){}tSet("at",Date.now());prepWarm(v,p,sel,st)});   // your pick wins for 12 h
   // a start or a stop: shown, with its seconds, until it answers (a refresh meanwhile keeps it)
   const run=async(text,path,body,done)=>{PREP.pend={t0:Date.now(),text};PREP.note=null;
-    $$("[data-pwgo],[data-pwstop],[data-pwjoin]",box).forEach(x=>x.disabled=true);msg.textContent=text;prepWarm(v,p,sel,st);   // at once: the card's own fetches take a second or two
+    $$("[data-pwgo],[data-pwstop],[data-pwjoin],[data-pwpause]",box).forEach(x=>x.disabled=true);msg.textContent=text;prepWarm(v,p,sel,st);   // at once: the card's own fetches take a second or two
     try{const r=await api(path,body);PREP.note=done?{t:Date.now(),text:done(r)}:null}catch(e){PREP.note={t:Date.now(),text:"Failed: "+e.message}}
     PREP.pend=null;if(S.view==="prepare")prepWarm(v,p,sel,st)};
   const go=$("[data-pwgo]",box);if(go)go.onclick=()=>run(T.running?"Preparing the session (30 s, a few minutes the first time) · CS2 starts meanwhile…":"Starting the server and preparing the session (30 s, a few minutes the first time) · CS2 starts meanwhile…",
@@ -74,6 +80,7 @@ async function prepWarm(v,p,sel,st){const box=$("[data-pwarm]",v);if(!box||!D.lo
   const jn=$("[data-pwjoin]",box);if(jn)jn.onclick=async()=>{jn.disabled=true;PREP.note={t:Date.now(),text:"CS2 joins the server (started first if it is closed)…"};msg.textContent=PREP.note.text;
     try{await api("/api/train/join",{})}catch(e){PREP.note={t:Date.now(),text:"Failed: "+e.message};msg.textContent=PREP.note.text;jn.disabled=false}};
   const sp=$("[data-pwstop]",box);if(sp)sp.onclick=()=>run("Stopping the training server…","/api/train/stop",{});
+  const pz=$("[data-pwpause]",box);if(pz)pz.onclick=()=>run(ss.paused?"Going on…":"Pausing (the block's clock waits)…",ss.paused?"/api/train/resume":"/api/train/pause",{});   // 09/10: "la mettre en pause, et la reprendre"
   clearInterval(PREP.sec);if(pend)PREP.sec=setInterval(()=>{if(!PREP.pend||!box.isConnected){clearInterval(PREP.sec);return}   // its seconds, each second
     msg.textContent=`${PREP.pend.text} (${Math.round((Date.now()-PREP.pend.t0)/1e3)} s)`},1000);
   if(T.running||wait)PREP.warm=setTimeout(()=>{if(box.isConnected&&S.view==="prepare")prepWarm(v,p,sel,st)},4000)}

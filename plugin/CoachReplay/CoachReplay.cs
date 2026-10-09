@@ -125,10 +125,13 @@ public partial class CoachReplay : BasePlugin
     readonly HashSet<int> free = new();   // slots whose path is over: the bot plays on its own
     readonly Dictionary<int, int> contact = new();   // ticks a scripted bot has seen you: then it plays on its own, like a player
     readonly Dictionary<int, int> engaged = new();   // the tick a scripted bot started fighting you: it keeps the real player's moves 1.5 s
+    readonly Dictionary<int, int> sawYou = new();   // the last tick each bot had you in sight (the game's spotting): its bullets hurt you only then
+    const int SawTicks = 96;
     const int EngageTicks = 96;
     int t0, countdownEnd, kills, dmg, generation, lastBeat, nextNade;
     bool awaitRestart;
     int emptyTries;   // a drill set up again because its bots did not come
+    int refusedFor = -1;   // the setup (generation) whose refused bots got a round restart
     CCSGameRules? rules;   // the center text's blink fix (OnTick)
     const int MinHp = 40;   // a situation: at least that many HP (2 HP in the match: dead before you could do anything)
     // a bot on its recorded path keeps the real player's aim this long after it has seen you, then fights on its own: a
@@ -394,7 +397,7 @@ public partial class CoachReplay : BasePlugin
     {
         if (cur == null) return;
         var g = ++generation;
-        gone.Clear(); free.Clear(); contact.Clear(); engaged.Clear();
+        gone.Clear(); free.Clear(); contact.Clear(); engaged.Clear(); sawYou.Clear();
         if (mode == "actor" && !Humans().Any()) { phase = "waiting"; return; }   // starts when you join
         phase = "setup";
         // the same situation again: the same bots, only a clean round (fast retries)
@@ -463,6 +466,29 @@ public partial class CoachReplay : BasePlugin
         {
             if (g != generation || cur == null) return;
             var all = want.GroupBy(t => t.Team).All(k => Utilities.GetPlayers().Count(p => Here(p) && (int)p.Team == k.Key) >= k.Count());
+            // 09/10 (CS2 build of 08/10): a team that held 10 bots refuses new ones ("Could not add bot to the game: Team is
+            // full") although they were kicked: the ones who left still count until a round restart (a 2nd and 3rd prefire
+            // of a map skipped, "the bots did not come"). Not one of a team's bots coming: one restart, then ask again
+            var none = want.GroupBy(t => t.Team).Where(k => !Utilities.GetPlayers().Any(p => Coming(p) && (int)p.Team == k.Key)).Select(k => k.Key).ToList();
+            if (none.Count > 0 && tries == 2 && refusedFor != g)
+            {
+                refusedFor = g;
+                var left = Utilities.GetPlayers().Count(p => p is { IsValid: true, IsBot: true } && none.Contains((int)p.Team) && p.Connected == PlayerConnectedState.Disconnected);
+                Log("team {t}: no bot came ({l} left still listed): a round restart, then again", string.Join("+", none), left);
+                Server.ExecuteCommand("mp_restartgame 1");
+                AddTimer(1.6f, () =>
+                {
+                    if (g != generation || cur == null) return;
+                    foreach (var k in want.GroupBy(t => t.Team))
+                    {
+                        var miss = k.Count() - Utilities.GetPlayers().Count(p => Coming(p) && (int)p.Team == k.Key);
+                        for (int i = 0; i < miss; i++) Server.ExecuteCommand(k.Key == 2 ? "bot_add_t" : "bot_add_ct");
+                    }
+                    Teams();
+                    WaitBots(g, want, 3);
+                });
+                return;
+            }
             if (!all && tries < 14)
             {
                 if (tries % 4 == 3)   // still short: ask again for the missing ones (the ones on their way count)
@@ -784,6 +810,9 @@ public partial class CoachReplay : BasePlugin
         var mePawn = Humans().Select(h => h.PlayerPawn.Value).FirstOrDefault(p => p != null && p.IsValid && p.LifeState == (byte)LifeState_t.LIFE_ALIVE);
         uint[]? seen = null;
         if (mePawn != null && mode == "actor") { var m = mePawn.EntitySpottedState.SpottedByMask; seen = new[] { m[0], m[1] }; }
+        if (seen != null)
+            foreach (var sl in bots.Keys)
+                if ((seen[sl / 32] & (1u << (sl % 32))) != 0) sawYou[sl] = now;
         Vector3? mePos = mode == "actor" && mePawn?.AbsOrigin is { } mo ? new Vector3(mo.X, mo.Y, mo.Z) : null;
         var meSid = cur.Players.FirstOrDefault(t => t.Me)?.Sid ?? "";
         int maxFrames = 0;
@@ -808,9 +837,11 @@ public partial class CoachReplay : BasePlugin
             var i = Math.Max(0, (int)ft);
             // a defense's attacker throws the grenades of the real hit it walks, at their moment
             while (phase == "live" && t.NadeNext < t.TrackNades.Count && t.TrackNades[t.NadeNext].F <= ft) ThrowAs(c, pawn, t.TrackNades[t.NadeNext++]);
-            if (i >= t.Frames - 1 && drill?.Mode == "defend" && sess != null && !engaged.ContainsKey(slot))
-            {   // a defense's attacker at the end of its way without meeting you: another one comes on a real way (06/10:
-                // "un mec dans mon spawn, derrière": it roamed on its own)
+            if (i >= t.Frames - 1 && drill?.Mode == "defend" && sess != null && !engaged.ContainsKey(slot)
+                && !(mePos is { } mp0 && pawn.AbsOrigin is { } bo && Vector3.Distance(mp0, new Vector3(bo.X, bo.Y, bo.Z)) < 1200))
+            {   // a defense's attacker at the end of its way far from you: another one comes on a real way (06/10: "un mec
+                // dans mon spawn, derrière": it roamed on its own). A post's way ends at the post (09/10): one near you
+                // there plays on and fights you ("si je ne les tue pas quand ils passent devant moi, après ils ne sont plus là")
                 gone.Add(t.Sid);
                 pawn.CommitSuicide(false, true);
                 Log("again {n} at {f}", t.Name, (int)f);
@@ -1100,6 +1131,13 @@ public partial class CoachReplay : BasePlugin
             // (it saw you) can be shot by anyone: your teammates can trade you
             if (vc is { IsBot: true } && ac is { IsBot: true } && vc.Slot != ac.Slot && !free.Contains(vc.Slot)) return HookResult.Handled;
             if (drill?.Mode == "prefire" && vc is { IsBot: false } && ac is { IsBot: true }) return HookResult.Handled;   // prefire: they don't shoot
+            // 09/10, his defense video: "je me prends des balles à travers les portes alors que l'ennemi ne m'a jamais vu": a
+            // bot's bullets hurt you only if it had you in sight the last 1.5 s (the game's own spotting, a closed door hides
+            // you); its grenades always do
+            var inf = info.Inflictor.Value?.DesignerName ?? "";
+            var nade = inf.Contains("projectile") || inf.Contains("grenade") || inf == "inferno";
+            if (vc is { IsBot: false } && ac is { IsBot: true } && !nade && Server.TickCount - sawYou.GetValueOrDefault(ac.Slot, -100000) > SawTicks)
+                return HookResult.Handled;
             // the aim map: still and strafing targets never hurt you; a duel's only once it has seen you a player's reaction
             // time (06/10: "ils me préfirent, ils savent où je suis, c'est un temps de réaction terrible")
             if (drill?.Mode == "range" && vc is { IsBot: false } && ac is { IsBot: true } && (drill.Variant != "duel" || contact.GetValueOrDefault(ac.Slot) < DuelReact))

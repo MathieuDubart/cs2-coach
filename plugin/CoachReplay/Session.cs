@@ -3,7 +3,7 @@
 // them, a miss is tried once more right away (repetition), and each drill is written to coach/results.jsonl for the app
 // (Leitner boxes: what you missed comes back next session).
 //
-// Commands during a session: !n skips the drill, !stop ends the session.
+// Commands during a session: !n skips the drill, !pause / !resume, !stop ends the session.
 using System.Numerics;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -145,6 +145,9 @@ public partial class CoachReplay
     {
         AddCommand("css_session", "start a training session: css_session <id>", (p, c) => CmdSession(p, c));
         AddCommand("css_report", "tell Wily's author what's wrong or what you'd want, from where you are: !report <text>", (p, c) => Report(p, c.ArgString));
+        AddCommand("css_pause", "pause the session (the block's clock waits): !resume goes on", (p, c) => Pause(p));
+        AddCommand("css_resume", "go on with a paused session", (p, c) => Resume(p));
+        AddCommand("css_go", "go on with a paused session", (p, c) => Resume(p));
         AddCommand("css_again", "the last session's drills again: !again <number>[,<number>], missed or all", (p, c) => Again(p, c.ArgString));
         RegisterWorkshopGuard();
         RegisterEventHandler<EventSmokegrenadeDetonate>((e, _) => { NadeHit(e.Userid, e.X, e.Y); return HookResult.Continue; });
@@ -585,13 +588,47 @@ public partial class CoachReplay
         if (sess == null) return;
         var order = string.Join(" → ", sess.Blocks.Select(b => KindName[b.Kind]).Distinct());
         Html($"<font color='#e0a030'>TRAINING · {sess.Minutes} MIN</font><br><font class='fontSize-l'>{string.Join(" · ", sess.Maps.Select(MapName))}</font><br>{order}", 4);
-        All($"Training {sess.Minutes} min · {string.Join(", ", sess.Maps.Select(MapName))} · {order}. !n skips a drill, !stop ends, !report <text> tells Wily's author.");
+        All($"Training {sess.Minutes} min · {string.Join(", ", sess.Maps.Select(MapName))} · {order}. !n skips a drill, !pause pauses (!resume), !stop ends, !report <text> tells Wily's author.");
+    }
+
+    // 09/10, his warm-up: "si je mets stop, ça se met en pause ? Il faudrait pouvoir la mettre en pause, et la reprendre":
+    // the drill stops, the bots go, the block's clock waits; !resume plays that drill again from its start
+    bool paused;
+    DateTime pausedAt;
+
+    void Pause(CCSPlayerController? p)
+    {
+        if (sess == null) { Say(p, "no session running"); return; }
+        if (paused) { Say(p, "already paused: !resume goes on"); return; }
+        paused = true;
+        pausedAt = DateTime.UtcNow;
+        sessGen++; generation++;   // the timers on their way (next drill, a bot back, the setup) do nothing
+        phase = "paused";
+        ClearLine();
+        if (cam != null) CamStop();
+        bots.Clear(); builtFor = null;
+        Server.ExecuteCommand("bot_quota 0");
+        Server.ExecuteCommand("bot_kick");
+        SetMain("<font color='#e0a030'>⏸ PAUSED</font><br>the block's clock waits · <b>!resume</b> goes on");
+        All("Paused · the block's clock waits · !resume goes on (that drill again from its start).");
+    }
+
+    void Resume(CCSPlayerController? p)
+    {
+        if (sess == null) { Say(p, "no session running"); return; }
+        if (!paused) { Say(p, "not paused"); return; }
+        paused = false;
+        if (blockEnd != DateTime.MinValue) blockEnd += DateTime.UtcNow - pausedAt;
+        SetMain("");
+        All("Go on.");
+        if (drill != null) RunDrill(drill); else NextDrill();
     }
 
     // after a map change, or when you join the server
     void SessionResume()
     {
         if (sess == null || !Humans().Any()) return;
+        if (paused) { SetMain("<font color='#e0a030'>⏸ PAUSED</font><br>the block's clock waits · <b>!resume</b> goes on"); return; }
         if (blockIdx < 0) { Welcome(); AddTimer(4f, NextBlock); return; }
         var b = sess.Blocks[blockIdx];
         if (Server.MapName != b.Map) { ChangeMap(b.Map); return; }
@@ -1243,11 +1280,23 @@ public partial class CoachReplay
                     var me = cur.Players.First(p => p.Me);
                     var spot = DefendSpot();
                     // the attackers already on your spot are taken away (they come again from an entrance, on other real
-                    // ways): no death the moment you are back (04/10, "the spawn kill problem is very annoying")
-                    foreach (var (sl, _) in bots)
-                        if (Utilities.GetPlayerFromSlot(sl) is { IsValid: true, PawnIsAlive: true } bc && bc.PlayerPawn.Value is { AbsOrigin: { } o } bp
-                            && Vector3.Distance(new Vector3(o.X, o.Y, o.Z), spot) < 900)
-                            bp.CommitSuicide(false, true);
+                    // ways): no death the moment you are back (04/10, "the spawn kill problem is very annoying"); the others
+                    // still walking their way step 2.5 s back on it, out of your sight again, and one playing on its own
+                    // near you goes (09/10 on Fachwerk's Long A: "pareil je spawn devant eux")
+                    var fNow = (Server.TickCount - t0) / (float)cur.Step;
+                    var back = 2.5f * 64 / cur.Step;
+                    foreach (var (sl, tk) in bots)
+                    {
+                        if (Utilities.GetPlayerFromSlot(sl) is not { IsValid: true, PawnIsAlive: true } bc || bc.PlayerPawn.Value is not { AbsOrigin: { } o } bp) continue;
+                        var dist = Vector3.Distance(new Vector3(o.X, o.Y, o.Z), spot);
+                        if (dist < 900 || (free.Contains(sl) && dist < 1600)) { bp.CommitSuicide(false, true); continue; }
+                        if (free.Contains(sl) || tk.Hold || tk.Strafe || tk.Frames < 2) continue;
+                        tk.Start += back;
+                        engaged.Remove(sl);
+                        contact.Remove(sl);
+                        var ix = Math.Clamp((int)(fNow - tk.Start), 0, tk.Frames - 1);
+                        bp.Teleport(Pos(tk, ix), Upright(Ang(tk, ix)), Vector3.Zero);
+                    }
                     protectUntil = Server.TickCount + 2 * 64;
                     var face = postIdx >= 0 && postIdx < drill.Posts.Count ? new Vector3(0, drill.Posts[postIdx].Ang[1], 0) : Upright(Ang(me, 0));
                     foreach (var h in Humans()) { h.Respawn(); Loadout(h, me); h.PlayerPawn.Value?.Teleport(spot, face, Vector3.Zero); }
@@ -1520,7 +1569,7 @@ public partial class CoachReplay
         if (cam != null) CamStop();
         Prac(false);
         SetMain("");
-        sess = null; drill = null; cur = null; phase = "idle"; bots.Clear(); builtFor = null; sessGen++;
+        sess = null; drill = null; cur = null; phase = "idle"; bots.Clear(); builtFor = null; sessGen++; paused = false;
         Zombie(false);
         DontShoot(false);
         Ammo(false);
@@ -1534,6 +1583,7 @@ public partial class CoachReplay
     {
         ["session"] = sess.Id, ["block"] = blockIdx >= 0 && blockIdx < sess.Blocks.Count ? sess.Blocks[blockIdx].Kind : null,
         ["drill"] = drill?.Title, ["points"] = points, ["ok"] = okN, ["done"] = doneN, ["streak"] = streak,
-        ["left"] = blockEnd > DateTime.UtcNow ? (int)(blockEnd - DateTime.UtcNow).TotalSeconds : 0,
+        ["left"] = blockEnd > DateTime.UtcNow ? (int)((paused ? blockEnd + (DateTime.UtcNow - pausedAt) : blockEnd) - DateTime.UtcNow).TotalSeconds : 0,
+        ["paused"] = paused,
     };
 }

@@ -202,6 +202,19 @@ def maps(sid):
     return dict(sorted(c.items(), key=lambda x: -x[1]))
 
 
+def base_maps(min_matches=20):
+    """The bomb maps the base covers (its site data comes with the app), the most played first: one you have no demo of
+    trains on the base's own spots, ways and lineups (09/10, his warm-up: "trainer les maps sur lesquelles je n'ai pas
+    forcément de démo téléchargée, puisque j'ai le dataset des matchs"). Its situations need your demos: none there."""
+    try:
+        C = json.load(open(SITES_F, encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    out = {mp: int(v.get("n") or 0) for mp, v in C.items()
+           if isinstance(v, dict) and v.get("sites") and int(v.get("n") or 0) >= min_matches}
+    return dict(sorted(out.items(), key=lambda kv: -kv[1]))
+
+
 def _angle(a, b):
     d = np.asarray(b, float) - np.asarray(a, float)
     yaw = math.degrees(math.atan2(d[1], d[0]))
@@ -1067,7 +1080,11 @@ def _defense_tracks(hits, spot, n=24, foes=None):
     mid when few go by mid, 04/10), each one from 2 s before a CT first saw it in its match, so it walks in out of sight
     instead of appearing in front of you ("the spawn kill problem"), never closer than 700 u; with its grenades. For a
     post (foes: its CT spot): from 3 s before it comes into that spot's sight, 900 u away at least (06/10: "ils sont trop
-    proches de moi")."""
+    proches de moi"). A post's attacker comes AT it (09/10, his video: "il faut que les bots se dirigent vers la zone que je
+    défends", "si je ne les tue pas quand ils passent devant moi, après ils ne sont plus là"): a way that only passes by
+    (never within 650 u of the spot) is left out, and the walk ends 1 s after its closest point, where the bot then fights
+    on its own; and it starts out of sight (one in the spot's sight in its first 1.5 s appeared in front of you: "ils me
+    spawnent littéralement dessus")."""
     cut = []
     for t in hits:
         P = np.array(t["path"], float).reshape(-1, 5)
@@ -1076,12 +1093,22 @@ def _defense_tracks(hits, spot, n=24, foes=None):
         far = 900 if foes else 700
         if 0 <= sp < 32 and d[0] < 1200:   # seen from its very first second, close: it would appear in your sight
             continue
-        k = max(0, sp - (96 if foes else 64)) if sp >= 0 else 0
+        end = len(P)
+        if foes:
+            if sp < 48:   # in the post's sight from the start (or never): it would pop up in front of you
+                continue
+            d3 = np.linalg.norm(P[:, :3] - np.asarray(spot, float)[:3], axis=1)
+            near = sp + int(np.argmin(d3[sp:]))
+            if d3[near] > 650:   # it only passes by, far
+                continue
+            end = min(len(P), near + 32)
+        k = max(0, sp - (72 if foes else 64)) if sp >= 0 else 0
         while k > 0 and d[k] < far:
             k -= 1
-        if d[k] < far or len(P) - k < 40:
+        if d[k] < far or end - k < 40:
             continue
-        cut.append({"zone": t["zone"], "path": t["path"][5 * k:], "nades": [dict(nd, f=nd["f"] - k) for nd in t.get("nades") or [] if nd["f"] >= k]})
+        cut.append({"zone": t["zone"], "path": t["path"][5 * k:5 * end],
+                    "nades": [dict(nd, f=nd["f"] - k) for nd in t.get("nades") or [] if k <= nd["f"] < end]})
     by = {}
     for t in cut:
         by.setdefault(t["zone"], []).append(t)
@@ -1457,6 +1484,21 @@ def _exposed(mp, spot, land):
     return int((near(K, spot, 120, 90) & near(V, land, 450, 220)).sum() + (near(V, spot, 120, 90) & near(K, land, 450, 220)).sum())
 
 
+def _works(typ, x, side):
+    """A lineup that does something in the base's matches (09/10, his stuff drills: "il n'y a pas vraiment de joueurs qui
+    jouent dans cette zone", "cette grenade ne sert à rien, la personne ne l'a pas subie"): a flash that blinds an enemy
+    a quarter of the time, an HE that hurts someone 22% of the time for 6+ damage a throw, a molotov that burns someone
+    8% of the time (a CT's early one, against a rush, is kept: it closes the way in time); a smoke always."""
+    if typ == "flash":
+        return (x.get("blind") or 0) >= 25
+    if typ == "he":
+        return (x.get("hit") or 0) >= 22 and (x.get("dmg") or 0) >= 6
+    if typ == "molotov":
+        early = side == "CT" and (x.get("usual") == "debut" or (x.get("t_med") or 99) <= 25)
+        return early or (x.get("hit") or 0) >= 8
+    return True
+
+
 CLICK = {"left": "left click", "gauche": "left click", "right": "right click", "droit": "right click",
          "middle": "left + right click", "milieu": "left + right click", "both": "left + right click"}
 
@@ -1469,6 +1511,16 @@ def nade_drills(sid, mp):
     import nades
     S = (nades.summary().get("maps") or {}).get(mp) or {}
     setup, faced = _my_setup(sid, mp)
+    based = set()
+    for side, M in S.items():   # no match of yours on this map (09/10): the spots the base throws from most, onto its busiest places
+        if isinstance(M, dict) and not setup.get(side):
+            based.add(side)
+            fk, tk = Counter(), Counter()
+            for T in (M.get("types") or {}).values():
+                for x in T.get("groups") or []:
+                    fk[x["from_key"]] += int(x.get("n") or 0)
+                    tk[x["to_key"]] += int(x.get("n") or 0)
+            setup[side], faced[side] = fk, tk
     out, E = [], None
     for side, M in S.items():
         if not isinstance(M, dict) or not setup.get(side):
@@ -1477,11 +1529,17 @@ def nade_drills(sid, mp):
         su, fa = setup[side], faced[side]
         top, n_su = dict(su.most_common(3)), sum(su.values())
         hot, n_fa = dict(fa.most_common(5)), sum(fa.values()) or 1
-        cands = []
+        cands, died_ok = [], {}
         for typ, T in (M.get("types") or {}).items():
-            for x in T.get("groups") or []:
-                if (x.get("how") or "standing still") not in REPEATABLE or (typ == "flash" and (x.get("blind") or 0) < 20):
+            gs = T.get("groups") or []
+            dd = [g["died"] for g in gs if g.get("died") is not None]
+            died_cap = max(15.0, 2.0 * float(np.median(dd))) if dd else None   # the base: median 6%, 90% of the lineups under 15%
+            for x in gs:
+                if (x.get("how") or "standing still") not in REPEATABLE or not _works(typ, x, side):
                     continue
+                if died_cap is not None and x.get("died") is not None and x["died"] >= died_cap:
+                    continue   # its thrower dies after it far more often than the others: thrown where they see you
+                died_ok[id(x)] = died_cap is not None and x.get("died") is not None
                 rel = top.get(x["from_key"], 0) / n_su + 0.5 * hot.get(x["to_key"], 0) / n_fa
                 if rel > 0:
                     cands.append((rel * (0.5 + float(x.get("score") or 0)), rel, typ, x))
@@ -1497,7 +1555,7 @@ def nade_drills(sid, mp):
             if not _lands_for_you(items.get(did)):
                 continue
             land0 = _land(mp, typ, pos) or _world(mp, *x["to_px"]) if x.get("to_px") else None
-            if land0 and len(land0) >= 2 and _exposed(mp, pos, land0 if len(land0) >= 3 else [land0[0], land0[1], pos[2]]) >= 3:
+            if not died_ok.get(id(x)) and land0 and len(land0) >= 2 and _exposed(mp, pos, land0 if len(land0) >= 3 else [land0[0], land0[1], pos[2]]) >= 3:
                 continue   # 07/10: "je suis visible de là où j'envoie la grenade ... tu peux me faire tuer alors que je suis en train de stuff"
             item = NADE_ITEM[typ][team] if typ == "molotov" else NADE_ITEM.get(typ)
             if not item or not x.get("to_px"):
@@ -1505,7 +1563,10 @@ def nade_drills(sid, mp):
             name = {"smoke": "Smoke", "flash": "Flash", "he": "HE", "molotov": "Molotov"}[typ]
             land = _land(mp, typ, pos) or _world(mp, *x["to_px"])
             mine = x["from_key"] in top
-            why = f"from {x['from']}, your spot" if mine else f"onto {x['to']}, where they come at you from your spot"
+            if side in based:   # the base's spots, not yours
+                why = f"from {x['from']}, a spot the base throws it from" if mine else f"onto {x['to']}, where they come from"
+            else:
+                why = f"from {x['from']}, your spot" if mine else f"onto {x['to']}, where they come at you from your spot"
             out.append({"id": did, "kind": "nade", "map": mp,
                         "title": f"{name} → {x['to']}", "tip": f"{why} · {x.get('timer') or ''}".strip(" ·"),
                         "team": team, "type": typ, "item": item, "how": x.get("how") or "standing still",
@@ -1798,7 +1859,8 @@ def build(sid, minutes=20, where="random", difficulty=2):
     p = ingest()
     nsess = len(p["sessions"])
     mine = maps(sid)
-    if not mine:
+    base = base_maps()
+    if not mine and not any(m in base for m in str(where).split(",")):
         raise ValueError("no match with a demo yet")
     names = list(mine)
     try:
@@ -1808,7 +1870,7 @@ def build(sid, minutes=20, where="random", difficulty=2):
         S = []
     top = max((x["score"] for x in S), default=0) or 1
     hard = {m: min(1.0, sum(x["score"] for x in S if x["map"] == m) / top) for m in names}   # your struggles: their maps come up more
-    picked_maps = [m for m in str(where).split(",") if m in mine]   # Prepare's maps (one to three)
+    picked_maps = [m for m in str(where).split(",") if m in mine or m in base]   # Prepare's maps (one to three), yours or the base's
     if picked_maps:
         chosen = picked_maps[:3]
     elif where == "mix":
@@ -1820,7 +1882,7 @@ def build(sid, minutes=20, where="random", difficulty=2):
         chosen = [str(np.random.choice(names, p=w / w.sum()))]
     warm = minutes <= WARMUP_MIN   # a quick warm-up before a game: no aim, one map (07/10), its defense, prefire and stuff
     first = lambda mp: next(("defend" if x["side"] == "CT" else "push" for x in S if x["map"] == mp), None)   # your weak side there first
-    aim_s, parts = parts_for(minutes, chosen, lambda mp, k: not (k in ("defend", "push") and mp.startswith("cs_")), first)
+    aim_s, parts = parts_for(minutes, chosen, lambda mp, k: not (k in ("defend", "push") and mp.startswith("cs_")) and not (k == "situation" and mp not in mine), first)
     plan_of = dict(parts)
     chosen = [mp for mp, _ in parts]   # a short warm-up keeps the first maps only
     all_sc = [] if not any(k == "situation" for ps in plan_of.values() for k, _ in ps) else replay.scenarios(sid, n=40)
@@ -1908,9 +1970,12 @@ def preview(sid, minutes=20, where="random"):
     import wallbangs
     sid = str(sid)
     mine = maps(sid) if sid.isdigit() else {}
-    chosen = [m for m in str(where).split(",") if m in mine][:3] or [where if where in mine else "random"]
+    base = base_maps()
+    chosen = [m for m in str(where).split(",") if m in mine or m in base][:3] or [where if where in mine else "random"]
     def has(mp, k):
         if k in ("defend", "push") and mp.startswith("cs_"):   # a hostage map: no site
+            return False
+        if k == "situation" and mp != "random" and mp not in mine:   # a map of the base only: its situations are your demos'
             return False
         if k == "wallbang" and mp != "random":   # no wallbang, no boost that kills
             return bool(wallbangs.load(mp)) or any(x["kills"] >= 2 and real_boost(mp, x) for x in boosts.load(mp))

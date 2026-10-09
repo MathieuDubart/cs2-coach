@@ -281,6 +281,9 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send(200, feedback.pending())
             except Exception as e:
                 return self.send(200, {"error": f"{type(e).__name__}"})
+        if u.path == "/api/train/maps":   # the bomb maps the base covers: Prepare offers the ones you have no demo of (09/10)
+            import train
+            return self.send(200, {"maps": [{"map": m, "n": n} for m, n in train.base_maps().items()]})
         if u.path == "/api/train/status":   # installed, installing, running (Prepare's warm-up asks before offering it)
             import replay
             return self.send(200, replay.status())
@@ -523,6 +526,11 @@ class Handler(BaseHTTPRequestHandler):
                     return self.send(200, replay.install())
                 if act == "stop":
                     return self.send(200, replay.stop())
+                if act in ("pause", "resume"):   # 09/10: "il faudrait pouvoir la mettre en pause, et la reprendre"
+                    if not replay.status().get("running"):
+                        return self.send(409, {"error": "The training server is not running."})
+                    replay.rcon(f"css_{act}")
+                    return self.send(200, {"ok": True})
                 if act == "join":   # the game back on the session's server (it crashed or was closed meanwhile, 04/10)
                     if not replay.status().get("running"):
                         return self.send(409, {"error": "The training server is not running."})

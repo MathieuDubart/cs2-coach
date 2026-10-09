@@ -30,7 +30,7 @@ WINDOW_FR = {"debut": "start of the round (1:55 to 1:35)", "prise": "info gather
              "fin": "end of the round (after 0:45)", "post": {"T": "after the plant", "CT": "retake"}}
 COLS = ["map", "match", "round", "t", "type", "thrower", "side", "zone", "land_zone", "X", "Y", "Z", "pitch", "yaw", "px", "py",
         "level", "land_px", "land_py", "land_level", "jump", "speed", "crouch", "walk", "click", "flight_s", "damage",
-        "enemies_blind", "mates_blind", "kills_after", "post", "won", "buy", "self_kill"]
+        "enemies_blind", "mates_blind", "kills_after", "post", "won", "buy", "self_kill", "died"]
 
 
 def humanize(z, mp=None):
@@ -76,7 +76,7 @@ def load_all(rebuild=False):
         try:
             if fresh(json.load(open(meta_f, encoding="utf-8")).get("stamp"), stamp):
                 cached = pd.read_parquet(OUT)
-                if "self_kill" in cached:   # older files: built again once
+                if "died" in cached:   # older files: built again once
                     return cached
         except ValueError:
             pass
@@ -104,15 +104,24 @@ def load_all(rebuild=False):
         # a pop flash: the thrower himself kills a blinded enemy in the 3 s after it pops
         fd = os.path.join(d, "duels.parquet")
         sk = [0] * len(g)
-        if os.path.exists(fd) and "land_tick" in g:
-            D = pd.read_parquet(fd, columns=["tick", "killer", "victim_flashed"])
-            D = D[D.victim_flashed.fillna(False).astype(bool)]
-            byk = {k: np.sort(x.tick.to_numpy()) for k, x in D.groupby("killer")}
-            for i, (typ, thr, lt) in enumerate(zip(g.type, g.thrower, g.land_tick)):
-                if typ == "flash" and lt == lt and thr in byk:
-                    a = byk[thr]
-                    sk[i] = int(np.searchsorted(a, lt + 3 * 64, side="right") - np.searchsorted(a, lt, side="right"))
-        g = g.assign(self_kill=sk)
+        died = [0] * len(g)
+        if os.path.exists(fd):
+            DD = pd.read_parquet(fd, columns=["tick", "killer", "victim", "victim_flashed"])
+            if "land_tick" in g:
+                D = DD[DD.victim_flashed.fillna(False).astype(bool)]
+                byk = {k: np.sort(x.tick.to_numpy()) for k, x in D.groupby("killer")}
+                for i, (typ, thr, lt) in enumerate(zip(g.type, g.thrower, g.land_tick)):
+                    if typ == "flash" and lt == lt and thr in byk:
+                        a = byk[thr]
+                        sk[i] = int(np.searchsorted(a, lt + 3 * 64, side="right") - np.searchsorted(a, lt, side="right"))
+            # the thrower killed in the 4 s after his throw: a lineup thrown where the enemy sees you (09/10, his stuff
+            # drills: "et ici on peut me tuer", "la personne qui l'envoie peut mourir, parce que je la vois")
+            byv = {v: np.sort(x.tick.to_numpy()) for v, x in DD.groupby("victim")}
+            for i, (thr, tk) in enumerate(zip(g.thrower, g.tick)):
+                a = byv.get(thr)
+                if a is not None and tk == tk:
+                    died[i] = int(np.searchsorted(a, tk + 4 * 64, side="right") > np.searchsorted(a, tk, side="left"))
+        g = g.assign(self_kill=sk, died=died)
         g = g.assign(map=mp, match=mid,
                      post=[bool(pd.notna(plant.get(r)) and t > plant.get(r)) for r, t in zip(g["round"], g.t)],
                      won=[R.winner.get(r) == s for r, s in zip(g["round"], g.side)],
@@ -186,6 +195,8 @@ def groups(df, side_rounds):
                     continue
                 n = len(c)
                 e = {"n": int(n), "players": int(c.thrower.nunique()), "per100": round(100 * n / rounds, 1)}
+                if "died" in c:   # how often its thrower dies in the 4 s after it (seen from where it lands, or in a fight)
+                    e["died"] = round(100 * float(c.died.fillna(0).astype(float).mean()))
                 if typ == "flash":
                     blind = float((c.enemies_blind.fillna(0) >= 1).sum())
                     e["blind"] = round(100 * (blind + prior * 10) / (n + 10))
