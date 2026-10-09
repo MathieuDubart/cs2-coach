@@ -283,7 +283,9 @@ def background(on):
 
 
 def low_priority():
-    """This process only gets the CPU the game doesn't use (worker processes of the analyses)."""
+    """This process only gets the CPU the game doesn't use (worker processes of the analyses). A worker also ends with
+    the process that started it: one left behind by a restart of the app (update, crash) waited on its queue forever
+    (09/10: three of them, one per restart)."""
     try:
         if os.name == "nt":
             import ctypes
@@ -294,6 +296,16 @@ def low_priority():
             k.SetPriorityClass(k.GetCurrentProcess(), 0x40)   # IDLE_PRIORITY_CLASS
         else:
             os.nice(15)
+    except Exception:
+        pass
+    try:
+        import multiprocessing
+        parent = multiprocessing.parent_process()   # None in a script's own process (grow, refresh...)
+        if parent is not None:
+            def watch():
+                parent.join()   # waits on the parent's process handle
+                os._exit(0)
+            threading.Thread(target=watch, daemon=True, name="parent-watch").start()
     except Exception:
         pass
 

@@ -570,6 +570,7 @@ def lineups_page(mp):
                           # moment, the one in each window (s into the round; the post window's: after the plant)
                           "t": x.get("t_med"), "wt": [((x.get("windows") or {}).get(k) or {}).get("t") for k in WINDOWS],
                           "best": WINDOWS.index(x["best"]) if x.get("best") in WINDOWS else None,
+                          "pt": x.get("post_tp"),   # after the plant: its usual and best moment since the plant (10/10)
                           "eff": x.get("blind") if typ == "flash" else x.get("dmg") if typ in ("he", "molotov") else x.get("per100")})
         out[side] = L
     return out

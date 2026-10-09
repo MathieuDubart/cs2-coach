@@ -91,6 +91,16 @@ for (const map of maps) {
         const as = run(`${label} planted`, planted, () => J("autoSite(__p,__g)"));
         if (!as || !["A", "B"].includes(as.site)) fail(map, `${label} planted: no site found`);
         run(`${label} planted`, planted, () => { J("nowVisual(__p,__g,true)"); LVS.forEach(l => radar(planted, l)) });
+        // 10/10: where you stood when it went down (you carried it) gives its site; 7 / 9 before the plant is the bomb's site
+        const SS = (((player.advice.plan.tside.maps[map] || {}).geo || {}).sites) || {};
+        for (const k of ["A", "B"].filter(k => SS[k] && SS[k].c)) {
+          const pg = Object.assign({}, planted, { plant_pos: SS[k].c, plant_mine: true });
+          const a2 = run(`${label} planted on ${k}`, pg, () => J("autoSite(__p,__g)"));
+          if (!a2 || a2.site !== k) fail(map, `${label} planted from ${k}'s middle: site ${a2 && a2.site}`);
+          const mg = Object.assign({}, live, { hist: { rounds: g.hist.rounds, marks: { [g.round]: { bomb_site: k } } } });
+          const ts = run(`${label} said ${k}`, mg, () => J("tdirSel(__g)"));
+          if (side === "T" && (!ts || ts.dir !== k)) fail(map, `${label}: numpad ${k === "A" ? 7 : 9} before the plant not followed`);
+        }
       }
     }
     const warm = base(map, side, { round: null, money: 800, map_phase: "warmup", round_phase: null });

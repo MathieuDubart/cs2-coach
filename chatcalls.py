@@ -14,8 +14,8 @@ paths, coach_rush.cfg, coach_slow.cfg, coach_ctrl.cfg) whenever the page's plan 
 console: `exec coach_binds` (the binds then stay in your CS2 settings).
 
 The text written is cleaned (no quote, semicolon or line break, plain characters, 120 at most): a file can only ever
-say one line in the team chat, plus, when the path ends on a site, CS2's own chat wheel order for it ("Go A" / "Go B",
-the one bots follow: `playerchatwheel CW.GoA`), a fixed line. Never another command."""
+say one line in the team chat (10/10: no more chat wheel "Go A" after it, two lines a key was spam), and define CS2
+aliases that only say such a line. Never another command."""
 import os
 import re
 import time
@@ -57,23 +57,64 @@ def combo(d, tempo, mp):
 
 
 def t_lines(now=None):
-    """T on a bomb map: what numpad 1-2-3 and 4-5-6 say now, from the round's plan (gsi: the way and the tempo pressed
-    this round): both said together by the second key, nothing by a key alone until it waited 6 s. None elsewhere
-    (CT: Wily only; hostage maps: the page's routes)."""
+    """T on a bomb map: the round's plan as the keys' files need it (gsi: the way and the tempo pressed this round), or
+    None elsewhere (CT: Wily only; hostage maps: the page's routes)."""
     with gsi.LOCK:   # read 10 times a second: only what it needs
         s = {k: gsi.STATE.get(k) for k in ("map", "side", "round", "round_phase", "tdir")}
     mp, rnd = s.get("map") or "", s.get("round")
     if s.get("side") != "T" or not mp or mp.startswith("cs_") or not rnd:
         return None
+    kr = rnd + 1 if s.get("round_phase") == "over" else rnd   # a key after the round's end counts for the next one
     t = s.get("tdir") or {}
-    if t.get("round") != (rnd + 1 if s.get("round_phase") == "over" else rnd):
+    if t.get("round") != kr:
         t = {}
-    d, tempo = t.get("dir"), t.get("tempo")
     alone = (now or time.time()) - (t.get("t") or 0) >= ALONE
-    ways = {i: combo(WAYS[i], tempo, mp) if tempo else combo(d, None, mp) if d == WAYS[i] and alone else "" for i in KEYS}
-    tempos = {k: combo(d, TEMPO_STATE[k], mp) if d else combo(None, TEMPO_STATE[k], mp) if tempo == TEMPO_STATE[k] and alone else ""
-              for k in TEMPO}
-    return ways, tempos, d
+    return {"map": mp, "round": kr, "dir": t.get("dir"), "tempo": t.get("tempo"), "alone": alone,
+            "dir_key": t.get("dir_src", t.get("src")) == "key", "tempo_key": t.get("tempo_src", t.get("src")) == "key"}
+
+
+# The pair is put together by CS2 itself (10/10, the user: two keys pressed fast wrote nothing: the second key's file was
+# read before the app had seen the first in the console): each way key defines what the three tempo keys say this round
+# ("Rush A"...), each tempo key what the three way keys say, as CS2 aliases named after the round (an older round's never
+# answer), and calls the one the other key defined: the first key of the pair says nothing, the second says both, however
+# fast. A part said to Wily (not a key) is not in CS2: the other key's file then says the line itself.
+TK = {"rush": "rush", "slow": "slow", "ctrl": "control"}
+
+
+def _alias(name, line):
+    return f'alias {name} "say_team {line}"' if line else f'alias {name} ""'
+
+
+NL = chr(10)
+
+
+def t_bodies(tl):
+    """The six files' text for T on a bomb map, and numpad minus's (it forgets the round's pair)."""
+    mp, n, d, tempo = tl["map"], tl["round"], tl["dir"], tl["tempo"]
+    out = {}
+    for i, x in WAYS.items():
+        lines = []
+        if tempo and not tl["tempo_key"]:
+            lines.append(f'say_team "{clean(combo(x, tempo, mp))}"')
+        else:
+            lines.append(f"coach_t{x}_r{n}")
+            if not tempo and d == x and tl["alone"]:   # alone 6 s: said alone on its next press
+                lines.append(f'say_team "{clean(combo(x, None, mp))}"')
+        lines += [_alias(f"coach_k{k}_r{n}", clean(combo(x, v, mp))) for k, v in TK.items()]
+        out[f"coach_path{i}"] = NL.join(lines) + NL
+    for k, v in TK.items():
+        lines = []
+        if d and not tl["dir_key"]:
+            lines.append(f'say_team "{clean(combo(d, v, mp))}"')
+        else:
+            lines.append(f"coach_k{k}_r{n}")
+            if not d and tempo == v and tl["alone"]:
+                lines.append(f'say_team "{clean(combo(None, v, mp))}"')
+        lines += [_alias(f"coach_t{x}_r{n}", clean(combo(x, v, mp))) for x in WAYS.values()]
+        out[f"coach_{k}"] = NL.join(lines) + NL
+    out["coach_focus0"] = NL.join([_alias(f"coach_k{k}_r{n}", "") for k in TK] + [_alias(f"coach_t{x}_r{n}", "") for x in WAYS.values()]
+                                    + ['echo "Coach CS2: focus off"']) + NL
+    return out
 WHEEL = {"A": 'playerchatwheel CW.GoA "#Chatwheel_aplan"', "B": 'playerchatwheel CW.GoB "#Chatwheel_bplan"'}   # the chat wheel's Go A / Go B
 
 
@@ -146,7 +187,7 @@ def write(paths, extra=None, tempo=None):
     for i in KEYS:
         if tl:
             break
-        body = (f'say_team "{by[i]}"\n' + (WHEEL[site[i]] + "\n" if i in site else "")) if i in by else f'echo "Wily: {WAYS[i]}"\n'
+        body = f'say_team "{by[i]}"\n' if i in by else f'echo "Wily: {WAYS[i]}"\n'   # one line (10/10: no chat wheel order after it)
         if _LAST.get(i) != body:
             open(os.path.join(d, f"coach_path{i}.cfg"), "w", encoding="utf-8").write(body)
             _LAST[i] = body
@@ -169,19 +210,10 @@ def write(paths, extra=None, tempo=None):
 
 
 def _t_files(d, tl):
-    """Numpad 1-6's files for T on a bomb map: the line a key says now (none: a note in the console, Wily hears it),
-    with CS2's own Go A / Go B of the chat wheel when the way is a site."""
-    ways, tempos, cur = tl
-    for i in KEYS:
-        t = clean(ways.get(i))
-        body = (f'say_team "{t}"\n' + (WHEEL[WAYS[i]] + "\n" if WAYS[i] in WHEEL else "")) if t else f'echo "Wily: {WAYS[i]}"\n'
-        if _LAST.get(i) != body or not os.path.exists(os.path.join(d, f"coach_path{i}.cfg")):
-            open(os.path.join(d, f"coach_path{i}.cfg"), "w", encoding="utf-8").write(body)
-            _LAST[i] = body
-    for name in TEMPO:
-        t = clean(tempos.get(name))
-        body = (f'say_team "{t}"\n' + (WHEEL[cur] + "\n" if cur in WHEEL else "")) if t else f'echo "Wily: {TEMPO_STATE[name]}"\n'
-        f = os.path.join(d, f"coach_{name}.cfg")
+    """Numpad 1-6's files (and minus's) for T on a bomb map: one line in the team chat for the pair, nothing else (10/10:
+    CS2's chat wheel Go A / Go B doubled every line, "ça spam")."""
+    for name, body in t_bodies(tl).items():
+        f = os.path.join(d, f"{name}.cfg")
         if _LAST.get(name) != body or not os.path.exists(f):
             open(f, "w", encoding="utf-8").write(body)
             _LAST[name] = body

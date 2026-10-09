@@ -432,7 +432,7 @@ details.rlayers .btns{margin-top:6px}
 .vdir{display:grid;gap:8px}
 .vdir-h{font:600 13px var(--f-mono);letter-spacing:.06em;color:var(--muted)}.vdir-h b{font:700 22px var(--f-display);letter-spacing:.02em;color:var(--ink);margin-right:2px}
 .vdir .vrow{grid-template-columns:minmax(0,11em) minmax(0,1fr) 3em}
-.vdtimes{display:flex;flex-wrap:wrap;gap:4px 10px;font:700 14px var(--f-mono);font-variant-numeric:tabular-nums}.vdtimes span{color:var(--muted);white-space:nowrap}.vdtimes b{color:var(--ink)}.vdtimes .best b{color:var(--good)}.vdtimes .now b{color:var(--t)}
+.vdtimes{display:flex;flex-wrap:wrap;gap:4px 10px;font:700 14px var(--f-mono);font-variant-numeric:tabular-nums}.vdtimes span{color:var(--muted);white-space:nowrap;display:inline-flex;gap:.35em;align-items:baseline}.vdtimes b{color:var(--ink)}.vdtimes .best b{color:var(--good)}.vdtimes .now b{color:var(--t)}
 svg.vdcurve{width:100%;height:auto;display:block}
 svg.vdcurve .band{fill:color-mix(in srgb,var(--t) 16%,transparent)}
 svg.vdcurve .now{stroke:var(--ink);stroke-width:1.5;stroke-dasharray:3 3}

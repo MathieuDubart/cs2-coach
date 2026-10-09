@@ -325,9 +325,11 @@ def set_tdir(what, src="key", toggle=True, via=None):
         if what in ("A", "MID", "B"):
             cur["dir"] = what
             cur["via"] = via   # the way in said with it ("B Apps", "A from Ramp", "mid to A"); a key: none
+            cur["dir_src"] = src   # a key's part is known to CS2 too (chatcalls: the pair is put together in CS2)
             STATE["ping"] = {"what": what, "t": now, "round": rnd}
         elif what in ("rush", "slow", "control"):
             cur["tempo"] = None if toggle and cur.get("tempo") == what else what
+            cur["tempo_src"] = src
         else:
             return False
         cur.update(t=now, src=src)
@@ -454,7 +456,7 @@ def drop_tdir():
 
 def set_site_key(site):
     """Numpad 7 (A) or 9 (B). Bomb down: the site it went down on (both sides). Else on CT: the site you play this round
-    (a key pressed after the round ended counts for the next one). On T before the plant: nothing."""
+    (a key pressed after the round ended counts for the next one). On T before the plant: where the bomb goes."""
     if site not in ("A", "B"):
         return False
     with LOCK:
@@ -467,7 +469,9 @@ def set_site_key(site):
         return set_mark(rnd, {"bomb_site": site})
     if side == "CT":
         return set_mark(rnd, {"me_site": site})
-    return False
+    # T before the plant: where the bomb goes (10/10, the user: "si je te dis 9 avant d'avoir planté tu fais pareil, tu
+    # focus le B"): Live follows that site, and it is the plant's site when it goes down
+    return set_mark(rnd, {"bomb_site": site})
 
 
 def voice_mood(mo, t_wall=None):
@@ -660,6 +664,12 @@ def update(payload):
             STATE["live_since"] = now      # end of the freeze time: the round clock starts
         if rd.get("bomb") == "planted" and STATE.get("bomb") != "planted":
             STATE["planted_at"] = now
+            # where you were when it went down (alive), and whether you carried it: the site without a key (10/10: Nuke's
+            # A is right above B, the plan alone guessed the wrong one twice)
+            STATE.update(plant_pos=STATE.get("pos") if alive else None, plant_mine=bool(alive and STATE.get("c4")))
+        elif rd.get("bomb") != "planted":
+            STATE.pop("plant_pos", None)
+            STATE.pop("plant_mine", None)
         # the game's own clock: seconds left in the phase (round, bomb, freeze time). Rounds are not always 1:55
         # (bot matches, other modes): the length of this round is read when it starts
         pc = payload.get("phase_countdowns") or {}
@@ -691,6 +701,8 @@ def update(payload):
                     if k:
                         held[k] = held.get(k, 0) + max(1, int(w.get("ammo_reserve") or 1))
             STATE["nades"] = held if pl.get("weapons") else STATE.get("nades")
+            if pl.get("weapons"):   # you carry the bomb (its plant then is yours)
+                STATE["c4"] = any(str(w.get("name", "")) == "weapon_c4" for w in pl["weapons"].values())
             try:   # your own position (world units), to put you on the radar: only while you are alive
                 pos = [round(float(v)) for v in str(pl.get("position") or "").split(",")] if pl.get("position") else None
                 STATE["pos"] = pos if pos and len(pos) == 3 and alive else None
@@ -702,6 +714,7 @@ def update(payload):
                           "stats": pl.get("match_stats")})
         if not own:
             STATE["pos"] = None   # dead: the game shows the teammate you spectate
+            STATE["c4"] = False
             if pl.get("steamid") and STATE.get("map"):
                 try:
                     _mate(pl, st, rd.get("phase"), now)

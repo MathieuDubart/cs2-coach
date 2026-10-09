@@ -511,6 +511,9 @@ function igWaiting(){return `<div class="ig-wait"><h3>Waiting for your match</h3
    <li>on CT: where the Ts go this half, rushes included, and when to throw your grenades;</li><li>your calls and Wily's orders, live.</li></ul>
   <p class="note">Keep it on a second screen. Your sheet for each map is in Prepare.</p>
   ${gsiStatus&&!gsiStatus.installed?`<p><b>Game detection is off:</b> turn it on in <a href="#settings" style="color:var(--ct)">Settings</a> and I'll follow your match by myself.</p>`:""}</div>`}
+function focusSite(p,g){if(!g)return null;if(g.bomb==="planted"){const a=typeof autoSite==="function"?autoSite(p,g):null;return a?a.site:null}
+  const mk=(((g.hist||{}).marks||{})[g.round])||{},sel=typeof tdirSel==="function"?tdirSel(g):{};
+  if(sel.dir==="A"||sel.dir==="B")return sel.dir;return g.side==="CT"&&(mk.me_site==="A"||mk.me_site==="B")?mk.me_site:null}
 function renderIngame(){
   const p=P(),v=$("#v-ingame"),PL=p.advice.plan||{},live=gsiFresh(),refs=PL.map_refs||{},mine=mapsOf(p);
   const maps=bombFirst([...mine,...Object.keys(refs).filter(k=>!mine.some(x=>x.map===k)).sort().map(k=>({map:k,n:0}))],x=>x.map);
@@ -524,6 +527,10 @@ function renderIngame(){
   const TSm=PL.tside&&PL.tside.maps&&PL.tside.maps[S.map],GEOm=TSm&&TSm.geo,liveR=!!((TSm&&GEOm&&GEOm.radar&&(S.side==="CT"?TSm.plays&&GEOm.sites:following))||(following&&typeof isHostage==="function"&&isHostage(S.map)&&(PL.hostage||{})[S.map]));   // live radar: CT always, T while following the game; hostage maps while following
   const LVs=(m&&m.levels)||(R0&&R0.levels)||((GEOm&&GEOm.radar&&GEOm.radar.levels)||[]).map(l=>({key:l.key,name:l.key==="lower"?"Lower level":l.key==="upper"?"Main level":"Map"}));
   if(liveR&&LVs.length&&!LVs.some(l=>l.key===S.level))S.level=LVs[0].key;
+  // the level follows the site of the round (10/10, the user: "le B c'est le lower level, switch sur le lower level"): the
+  // bomb's (planted, or 7 / 9 said), else the way said (T) or where you play (CT); a click on a level holds until it changes
+  if(following&&GEOm&&GEOm.sites&&LVs.length>1){const fs=focusSite(p,gsiLast),k=fs?`${S.map}|${gsiLast.round}|${fs}`:null;
+    if(k&&k!==S.lvKey){S.lvKey=k;const lv=(GEOm.sites[fs]||{}).level;if(lv&&LVs.some(l=>l.key===lv))S.level=lv}}
   const TABS=[["plan","Game plan"],["buys","Buys"],["nades","Grenades"],...(S.side==="CT"?[["t","T habits"]]:[])];
   let tab=store("igtab")||"plan";if(!TABS.some(t=>t[0]===tab))tab="plan";
   const cols=planColumns(p,m,R0);

@@ -350,7 +350,7 @@ function vPostPlant(p,g,site){const M=(((p.advice.plan||{}).tside||{}).maps||{})
   // where to hold: the spots alone (07/10: their rounds won are near 100 % for every spot the Ts stay alive on, so no
   // bars; the map circles them)
   return `${hs.length?`<div class="vchips"><span class="vchip good">⛨ HOLD ${site} · ${hs.map((h,i)=>`${vShort(h.zone||"?")}${i?"":" ★"}`).join(" · ")}</span></div>`:""}
-   ${P&&P.stacks.length?vStuff(P,`POST-PLANT STUFF · ${site}`):""}`}
+   ${P&&P.stacks.length?vBombLine(P,g)+vStuff(P,`POST-PLANT STUFF · ${site}`):""}`}
 // CT after the plant: the retake. The spots to check (where Ts hold after a plant there), the way from your site, the stuff
 function vRetake(p,g,site){const TS=(p.advice.plan||{}).tside,M=((TS||{}).maps||{})[g.map]||{},PP=((M.postplant||{})[site]||{}).holds||[];
   const dir=tdirSel(g).dir||mySite(g),RX=rotFromDir(M,site,dir,g.map),rot=vRotLine(RX,dir,site,g.map);   // where you said you play this round (numpad 1-2-3, 7 / 9 before the plant)

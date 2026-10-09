@@ -185,8 +185,17 @@ function keyRadar(p,g,map,level,lay,top,legend,here){const k=keySit(p,g);if(!k)r
 // usual plant times (TS evidence.plants t_q). Returns the site and how sure.
 function autoSite(p,g){if(!g||g.bomb!=="planted")return null;const TS=(p.advice.plan||{}).tside,M=((TS||{}).maps||{})[g.map]||{},PL=(M.evidence||{}).plants||{};
   const tp=g.elapsed!=null&&g.since_plant!=null?Math.max(0,g.elapsed-g.since_plant):null;let pr={A:.5,B:.5};
+  // where you stood when it went down (10/10: on Nuke the plan alone said A for a bomb on B, twice): you planted it, that
+  // site; T alive on a site (its level, within its size), that site
+  const GEO=M.geo,pp=g.plant_pos&&GEO&&typeof worldPx==="function"?worldPx(GEO,g.plant_pos):null;
+  if(pp&&GEO.sites){const d=k=>{const s_=GEO.sites[k];return s_&&s_.px&&(!s_.level||!pp.level||s_.level===pp.level)?Math.hypot(s_.px[0]-pp.px[0],s_.px[1]-pp.px[1]):1e9};
+    const dA=d("A"),dB=d("B"),k=dA<dB?"A":"B",dk=Math.min(dA,dB);
+    if(g.plant_mine&&dk<260)return {site:k,p:99,tp,mine:true}}   // you planted it: over a 7 / 9 said before
   const said=(((g.hist||{}).marks||{})[g.round]||{}).bomb_site;if(said==="A"||said==="B")return {site:said,p:95,tp,said:true};
+  if(pp&&GEO.sites){const d=k=>{const s_=GEO.sites[k];return s_&&s_.px&&(!s_.level||!pp.level||s_.level===pp.level)?Math.hypot(s_.px[0]-pp.px[0],s_.px[1]-pp.px[1]):1e9},dk=Math.min(d("A"),d("B")),k=d("A")<d("B")?"A":"B";
+    if(g.side==="T"&&dk<130)return {site:k,p:90,p0:90,tp}}
   if(g.side==="CT"){const r=tsidePredict(TS,g.map,Object.assign({},g,{bomb:null,elapsed:tp}),evFor(g));if(r&&r.A+r.B>0)pr={A:r.A/(r.A+r.B),B:r.B/(r.A+r.B)}}
+  else if(typeof tdirSel==="function"&&["A","B"].includes(tdirSel(g).dir)){const s=tdirSel(g).dir;pr={A:s==="A"?.8:.2,B:s==="B"?.8:.2}}   // T: the way you said, before the plan's
   else{const W=winsRank(p,Object.assign({},g,{bomb:null})),r1=W&&W.rows[0],s=r1?(r1.k.match(/[AB]$/)||r1.k.match(/^[AB]/)||[])[0]:null;if(s)pr={A:s==="A"?.7:.3,B:s==="B"?.7:.3}}
   const lik=s=>{const q=(PL[s]||{}).t_q;if(!q||tp==null)return 1;const sd=Math.max(6,(q[2]-q[0])/1.35);return Math.exp(-((tp-q[1])**2)/(2*sd*sd))/sd};
   const a=pr.A*lik("A"),b=pr.B*lik("B"),pa=a/((a+b)||1),pc=calPlant(pa);return {site:pc>=.5?"A":"B",p:Math.round(100*Math.max(pc,1-pc)),p0:Math.round(100*Math.max(pa,1-pa)),tp}}

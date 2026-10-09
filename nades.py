@@ -295,6 +295,17 @@ def groups(df, side_rounds):
                     ew = _eff(cw, typ)
                     if ew is not None:
                         wins[w]["eff"] = round(100 * (ew * len(cw) + prior * 5) / (len(cw) + 5)) if typ == "flash" else round((ew * len(cw) + prior * 5) / (len(cw) + 5))
+                # after the plant, when on the bomb's clock (10/10, the user: "la molo si tu l'envoies à 15 secondes de la
+                # fin, t'as plus de chance de gagner le round que si tu l'envoies au tout début"): its usual moment after
+                # the plant and the 10 s slice whose rounds were won most (few throws: closer to all of them)
+                post_tp = None
+                pc = c[c.post.astype(bool) & c.tp.notna()] if "tp" in c else c.iloc[:0]
+                if len(pc) >= 5:
+                    w0, sl = float(pc.won.mean()), (pc.tp // 10).clip(0, 3)
+                    sh = {int(b): (len(cb) * float(cb.won.mean()) + 5 * w0) / (len(cb) + 5) for b, cb in pc.groupby(sl) if len(cb) >= 3}
+                    bb = max(sh, key=sh.get) if sh else None
+                    post_tp = {"t": round(float(pc.tp.median()), 1), "base": round(100 * w0),
+                               **({"best": round(float(pc[sl == bb].tp.median()), 1), "win": round(100 * sh[bb])} if bb is not None else {})}
                 usual = max(wins, key=lambda k: wins[k]["n"])
                 best = usual
                 if typ != "smoke":
@@ -322,7 +333,7 @@ def groups(df, side_rounds):
                 lst.append({"from_key": z, "from": humanize(z, mp), "to_key": lz, "to": humanize(lz, mp), "score": round(float(score), 3), **e,
                             "t_med": round(float(c.t.median()), 1), "timer": _timer(c.t.median()),
                             "timer_span": [_timer(c.t.quantile(0.25)), _timer(c.t.quantile(0.75))],
-                            "windows": wins, "usual": usual, "best": best, "post": round(100 * float(c.post.mean())),
+                            "windows": wins, "usual": usual, "best": best, "post": round(100 * float(c.post.mean())), "post_tp": post_tp,
                             "how": _how(b, fit), "click": fit[1] if fit else b.click, "flight_s": None if pd.isna(b.flight_s) else float(b.flight_s),
                             "from_px": [round(float(cand.px.mean())), round(float(cand.py.mean()))], "level": b.level,
                             "to_px": [round(float(c.land_px.median())), round(float(c.land_py.median()))], "land_level": b.land_level,
@@ -332,6 +343,20 @@ def groups(df, side_rounds):
             if typ == "flash":
                 res[typ]["self_prior"] = round(100 * prior_s, 1)   # the map's pop flashes: the thrower's own kill after it
         out.setdefault(mp, {})[side] = {"rounds": int(rounds), "types": res}
+    return out
+
+
+def _plant_ts():
+    """(match, round) -> the plant's moment, seconds into the round."""
+    out = {}
+    for mid in os.listdir(config.DEEP):
+        try:
+            R = pd.read_parquet(os.path.join(config.DEEP, mid, "rounds.parquet"), columns=["round", "plant_t"])
+        except Exception:
+            continue
+        for r, t in zip(R["round"], R["plant_t"]):
+            if t is not None and t == t:
+                out[(mid, int(r))] = float(t)
     return out
 
 
@@ -399,6 +424,9 @@ def summary(rebuild=False):
         except ValueError:
             pass
     df = load_all()
+    PT = _plant_ts()   # each throw after a plant: its seconds since the plant
+    df = df.assign(tp=[t - PT[(m, int(r))] if p and (m, int(r)) in PT and t == t else np.nan
+                       for m, r, t, p in zip(df["match"], df["round"], df["t"], df["post"])])
     res = {"_stamp": stamp, "maps": groups(df, _side_rounds()), "payoff": payoff(), "price": PRICE, "windows": WINDOW_FR}
     json.dump(res, open(SUMMARY, "w", encoding="utf-8"), ensure_ascii=False)
     return res
