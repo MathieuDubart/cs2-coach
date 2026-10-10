@@ -101,6 +101,10 @@ Useful entry points:
 Issues and pull requests are welcome. Bug reports from the app itself (the **alpha · report** tag) show you exactly
 what is sent before sending it.
 
+## Contributors
+
+- [Mathieu Dubart](https://github.com/MathieuDubart): the first Linux tests, and the Downloads folder found on Linux (#1)
+
 ## Credits
 
 - [demoparser2](https://github.com/LaihoE/demoparser): demo parsing
