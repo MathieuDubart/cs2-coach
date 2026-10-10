@@ -7,7 +7,7 @@ demo downloaded and extracted with the per-player numbers of the base; then the 
 - paused while you play or the app works: CS2 open (a match, the training server), an analysis of the app, a
   recording or a transcription; the lowest priority otherwise;
 - the demos stay (the practice part uses them, and the base only counts matches with their demo): it stops at the
-  target, or when the disk has 150 GB left;
+  target, or when the disk has 50 GB left (out/grow_ctl.json "min_free_gb" changes it);
 - its state in out/grow.json (codes waiting, players looked up, counts): started again, it goes on where it was.
 The app starts and stops it (Settings, out/grow_ctl.json); python grow.py --once does a single match."""
 import datetime as dt
@@ -28,7 +28,7 @@ CTL = os.path.join(config.OUT, "grow_ctl.json")
 LOG_F = os.path.join(config.OUT, "grow.log")
 PER_PLAYER = 0            # matches taken per player, 0: every matchmaking game of the last DAYS days (5 until 04/10)
 GAP, MAX_GAP = 30, 600    # s between two requests to Valve's game coordinator, and the most it backs off to
-MIN_FREE_GB = 150         # the loop stops when the disk has that much left
+MIN_FREE_GB = 50          # the loop stops when the disk has that much left (150 until 10/10: the user wants the 5,000)
 DAYS = 27                 # the last month, as far as Valve keeps a demo (about 28 days)
 RELOOK_DAYS = 7           # a player looked up again a week later (their new matches)
 PORT = int(os.environ.get("COACH_PORT", 8765))
@@ -338,8 +338,9 @@ def main():
                     config.write_json(CTL, {k: v for k, v in c.items() if k != "then"})   # once
                     refresh_everything(mine=c["then"] == "refresh_mine")
                 break
-            if free_gb() < MIN_FREE_GB:
-                status(st, f"stopped: {MIN_FREE_GB} GB left on the disk")
+            floor = float(c.get("min_free_gb") or MIN_FREE_GB)   # 10/10, the user: "va jusqu'à 5000 matchs même sous 150 Go"
+            if free_gb() < floor:
+                status(st, f"stopped: {floor:.0f} GB left on the disk")
                 break
             why = busy()
             if why:
