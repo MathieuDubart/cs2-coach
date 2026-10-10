@@ -225,6 +225,9 @@ def set_credentials(sid, key=None, auth=None, known=None):
     key = (key or "").strip()
     auth = (auth or "").strip().upper() if auth else ""
     known = (known or "").strip()
+    # 10/10, a tester pasted the whole steam://rungame/730/.../+csgo_download_match%20CSGO-... link: the code inside it
+    m = re.search(r"CSGO(?:-[A-Za-z0-9]{5}){5}", known)
+    known = m.group(0) if m else known
     if key:
         if not KEY_RE.match(key):
             raise SteamError("A Steam API key is 32 characters long (digits and letters A to F).")
@@ -248,6 +251,11 @@ def set_credentials(sid, key=None, auth=None, known=None):
         p = s.setdefault("players", {}).setdefault(sid, {})
         p["authcode"] = auth
         p["last_code"] = start
+        # the starting match itself is fetched too (the walk only finds the ones after it): with the code of your last
+        # match, that match at once rather than nothing until the next one
+        pend = list(p.get("pending_codes") or [])
+        if start not in pend:
+            p["pending_codes"] = pend + [start]
         p.setdefault("auto_sync", False)   # the Update button does it when you want
         saved.append("history code")
     config.save_settings(s)
