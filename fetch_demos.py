@@ -38,8 +38,17 @@ def _go():
         time.sleep(WAIT)
 
 
+def _pro():
+    """The pro demos' downloader: a local module of this PC, not in the repository (10/10)."""
+    try:
+        import pro
+        return pro
+    except ImportError:
+        raise SystemExit("the pro demo tools (pro.py) are a local module, absent from this copy")
+
+
 def pro_demos(n=20, stars=2, teams=False, per_team=4):
-    import pro
+    pro = _pro()
     if not _go():
         return
     before = sum(len(v.get("demos") or []) for v in _registry().values())
@@ -70,8 +79,8 @@ def import_demos(path):
     import shutil
     import subprocess
     import deep
-    import pro
     import style
+    pro = _pro()
     files = [path] if os.path.isfile(path) else sorted(os.path.join(path, f) for f in os.listdir(path)
                                                        if f.lower().endswith((".rar", ".zip", ".dem")))
     reg = _registry()
