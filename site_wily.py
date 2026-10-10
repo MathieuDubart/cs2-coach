@@ -21,6 +21,7 @@ OUT = os.path.join(HERE, "dist", "site_wily")
 SITE = "https://wily.valentingassend.com"
 PUBLISHER = "Valentin Gassend"
 CONTACT = "contact@valentingassend.com"
+GITHUB = "https://github.com/ValentinGassend/cs2-coach"   # 10/10: the code is public (Apache 2.0)
 UPDATED = {"en": "8 October 2026", "fr": "8 octobre 2026"}
 HOST = ("Infomaniak Network SA, Rue Eugène-Marziano 25, 1227 Les Acacias (GE), Switzerland · +41 22 820 35 44 · "
         "https://www.infomaniak.com")
@@ -131,22 +132,22 @@ def download_block(lang, rel):
 
 
 def linux_note(rel, lang):
-    """Linux (10/10): the same release through wily-linux.sh (match review and Live; the training server is Windows only)."""
+    """Linux (10/10): the same release through wily-linux.sh (match review and Live; the training server experimental)."""
     lx = rel.get("installer_linux")
     if not lx:
         return ""
     if lang == "en":
-        return (f'<p class="note"><b>Linux</b> (match review and Live; the training server is Windows only for now): download '
+        return (f'<p class="note"><b>Linux</b> (match review and Live; the training server is experimental there, to turn on in Settings): download '
                 f'<a href="releases/{lx["file"]}" download>wily-linux.sh</a>, then in a terminal <code>sh wily-linux.sh</code> '
                 f'(Python 3.11 or newer). SHA-256: <span class="mono">{lx["sha256"]}</span></p>')
-    return (f'<p class="note"><b>Linux</b> (revue des matchs et Live ; le serveur d\'entraînement est pour Windows seulement pour l\'instant) : '
+    return (f'<p class="note"><b>Linux</b> (revue des matchs et Live ; le serveur d\'entraînement y est expérimental, à activer dans les Settings) : '
             f'télécharge <a href="releases/{lx["file"]}" download>wily-linux.sh</a>, puis dans un terminal <code>sh wily-linux.sh</code> '
             f'(Python 3.11 ou plus récent). SHA-256 : <span class="mono">{lx["sha256"]}</span></p>')
 HOME = {
 "en": lambda rel: f"""
 <h1>Hi, I'm Wily.</h1>
-<p class="lede">Your CS2 coach, on your second screen. I give you live advice during your matches, warm you up with bots on your own situations before you play, and tell you clearly what to fix after. I learn from your demos and from a base of thousands of matches. Free alpha for Windows: the first version open to all, expect rough edges.</p>
-<section id="download">{download_block("en", rel)}</section>
+<p class="lede">Your CS2 coach, on your second screen. I give you live advice during your matches, warm you up with bots on your own situations before you play, and tell you clearly what to fix after. I learn from your demos and from a base of thousands of matches. Free and open source alpha for Windows and Linux: the first version open to all, expect rough edges.</p>
+<section id="download">{download_block("en", rel)}<p class="note"><b>Open source</b> (Apache 2.0): every line of the app is on <a href="{GITHUB}">GitHub</a>. Each release is published there too, with the same SHA-256 as on this page, tied to the exact commit it was built from: <a href="{GITHUB}/releases">releases</a>.</p></section>
 <div class="grid">
  <article class="card"><span class="eyebrow">Live</span><h3>During the match</h3><ul><li>What to buy for this round and the next</li><li>Where the Ts are likely to go, updated with the clock and what you see</li><li>Your paths and your strong spots on the radar, the grenades worth throwing now</li></ul></article>
  <article class="card"><span class="eyebrow">Prepare</span><h3>Before you play</h3><ul><li>A timed warm-up built on your weak points (5 to 45 min)</li><li>A training server with bots replaying your real deaths and clutches</li></ul></article>
@@ -158,18 +159,18 @@ HOME = {
  <li>At my first launch, three steps: your Steam account (I find it), CS2 connected (one launch option to paste), your match history code (no Steam key to create). Then your matches are analyzed on your PC, a few minutes each.</li>
  <li>Prepare → <b>Warm-up</b>: the training server installs itself the first time (a separate copy of CS2 next to the game, links to its files, no extra space).</li>
 </ol>
-<p class="note">Needs Windows 10 or 11 (64-bit), CS2 on Steam, 8 GB of RAM, and disk space for your demos (about 250 MB per match).</p>
+<p class="note">Needs Windows 10 or 11 (64-bit) or Linux (Python 3.11+), CS2 on Steam, 8 GB of RAM, and disk space for your demos (about 250 MB per match).</p>
 <h2>Fair play and privacy</h2>
 <div class="grid">
- <article class="card"><h3>Only what Valve provides</h3><p>Game State Integration (the game's official feature for HUDs and RGB keyboards), the console log CS2 writes, the Steam Web API, the demos of your matches. I never read the game's memory or network traffic and I never play for you. The training server is a local copy of the game that only you join.</p></article>
- <article class="card"><h3>Your data stays on your PC</h3><p>Your matches, profile, Steam codes and voice stay on your PC (without a Steam key of your own, your match list goes through this site to Steam, nothing kept). The base I come with is anonymized. Your new matches join the base anonymized (no SteamID, no name, no match id) unless you turn it off. <a href="privacy.html">Privacy policy</a></p></article>
+ <article class="card"><h3>Only what Valve provides</h3><p>Game State Integration (the game's official feature for HUDs and RGB keyboards), the console log CS2 writes, the Steam Web API, the demos of your matches. I never read the game's memory or network traffic and I never play for you. The training server is a local copy of the game that only you join. You can check all of it: <a href="{GITHUB}">the code is public</a>.</p></article>
+ <article class="card"><h3>What stays here, what is shared</h3><p>Your demos, profile, Steam codes and voice never leave your PC (without a Steam key of your own, your match list goes through this site to Steam, nothing kept). <b>Shared by default, anonymized:</b> the tables I extract from your new matches (positions, duels, grenades, buys, rounds; every SteamID replaced by a random id, no names, no match id), to grow the base, and anonymous usage counters. My first launch tells you, and one click turns both off (or later in Settings). <a href="privacy.html">Privacy policy</a></p></article>
  <article class="card"><h3>Free alpha</h3><p>Free while it is tested. It's the first version open to all players: tell me what breaks with the <b>alpha · report</b> tag at the top of my page (you see what is sent), or by email. My updates are signed by my author, and I check them before installing anything. Questions or bugs: <a href="mailto:{CONTACT}">{CONTACT}</a>.</p></article>
 </div>
 """,
 "fr": lambda rel: f"""
 <h1>Salut, moi c'est Wily.</h1>
-<p class="lede">Ton coach CS2, sur ton deuxième écran. Je te conseille en direct pendant tes matchs, je t'échauffe avec des bots sur tes propres situations avant de jouer, et je te dis clairement quoi corriger après. J'apprends de tes démos et d'une base de milliers de matchs. Alpha gratuite pour Windows : la première version ouverte à tous, des défauts restent à corriger.</p>
-<section id="download">{download_block("fr", rel)}</section>
+<p class="lede">Ton coach CS2, sur ton deuxième écran. Je te conseille en direct pendant tes matchs, je t'échauffe avec des bots sur tes propres situations avant de jouer, et je te dis clairement quoi corriger après. J'apprends de tes démos et d'une base de milliers de matchs. Alpha gratuite et open source pour Windows et Linux : la première version ouverte à tous, des défauts restent à corriger.</p>
+<section id="download">{download_block("fr", rel)}<p class="note"><b>Open source</b> (Apache 2.0) : tout le code de l'app est sur <a href="{GITHUB}">GitHub</a>. Chaque version y est aussi publiée, avec le même SHA-256 que sur cette page, liée au commit exact dont elle est construite : <a href="{GITHUB}/releases">les versions</a>.</p></section>
 <div class="grid">
  <article class="card"><span class="eyebrow">Live</span><h3>Pendant le match</h3><ul><li>Quoi acheter pour ce round et le suivant</li><li>Où les T vont probablement aller, mis à jour avec le chrono et ce que tu vois</li><li>Tes chemins et tes bons spots sur le radar, les grenades à lancer maintenant</li></ul></article>
  <article class="card"><span class="eyebrow">Prepare</span><h3>Avant de jouer</h3><ul><li>Un échauffement chronométré construit sur tes points faibles (5 à 45 min)</li><li>Un serveur d'entraînement avec des bots qui rejouent tes vraies morts et tes clutchs</li></ul></article>
@@ -181,11 +182,11 @@ HOME = {
  <li>À mon premier lancement, trois étapes : ton compte Steam (je le trouve), CS2 connecté (une option de lancement à coller), ton code d'historique des matchs (aucune clé Steam à créer). Ensuite tes matchs sont analysés sur ton PC, quelques minutes chacun.</li>
  <li>Prepare → <b>Warm-up</b> : le serveur d'entraînement s'installe tout seul la première fois (une copie séparée de CS2 à côté du jeu, des liens vers ses fichiers, sans espace en plus).</li>
 </ol>
-<p class="note">Il faut Windows 10 ou 11 (64 bits), CS2 sur Steam, 8 Go de RAM et de la place pour tes démos (environ 250 Mo par match). L'app est en anglais.</p>
+<p class="note">Il faut Windows 10 ou 11 (64 bits) ou Linux (Python 3.11+), CS2 sur Steam, 8 Go de RAM et de la place pour tes démos (environ 250 Mo par match). L'app est en anglais.</p>
 <h2>Fair-play et vie privée</h2>
 <div class="grid">
- <article class="card"><h3>Seulement ce que Valve fournit</h3><p>Le Game State Integration (la fonction officielle du jeu pour les HUD et les claviers RGB), le journal de console que CS2 écrit, l'API Steam, les démos de tes matchs. Je ne lis jamais la mémoire du jeu ni son trafic réseau, et je ne joue jamais à ta place. Le serveur d'entraînement est une copie locale du jeu que toi seul rejoins.</p></article>
- <article class="card"><h3>Tes données restent sur ton PC</h3><p>Tes matchs, ton profil, tes codes Steam et ta voix restent sur ton PC (sans ta propre clé Steam, ta liste de matchs passe par ce site jusqu'à Steam, rien n'est gardé). La base qui vient avec moi est anonymisée. Tes nouveaux matchs rejoignent la base anonymisés (sans SteamID, sans pseudo, sans identifiant de match), sauf si tu le désactives. <a href="confidentialite.html">Politique de confidentialité</a></p></article>
+ <article class="card"><h3>Seulement ce que Valve fournit</h3><p>Le Game State Integration (la fonction officielle du jeu pour les HUD et les claviers RGB), le journal de console que CS2 écrit, l'API Steam, les démos de tes matchs. Je ne lis jamais la mémoire du jeu ni son trafic réseau, et je ne joue jamais à ta place. Le serveur d'entraînement est une copie locale du jeu que toi seul rejoins. Tu peux tout vérifier : <a href="{GITHUB}">le code est public</a>.</p></article>
+ <article class="card"><h3>Ce qui reste ici, ce qui est partagé</h3><p>Tes démos, ton profil, tes codes Steam et ta voix ne quittent jamais ton PC (sans ta propre clé Steam, ta liste de matchs passe par ce site jusqu'à Steam, rien n'est gardé). <b>Partagé par défaut, anonymisé :</b> les tables que j'extrais de tes nouveaux matchs (positions, duels, grenades, achats, rounds ; chaque SteamID remplacé par un identifiant aléatoire, sans pseudo, sans identifiant de match), pour enrichir la base, et des compteurs d'usage anonymes. Mon premier lancement te le dit, et un clic coupe les deux (ou plus tard dans les Settings). <a href="confidentialite.html">Politique de confidentialité</a></p></article>
  <article class="card"><h3>Alpha gratuite</h3><p>Gratuite pendant les tests. C'est la première version ouverte à tous les joueurs : dis-moi ce qui casse avec l'étiquette <b>alpha · report</b> en haut de ma page (tu vois ce qui est envoyé), ou par e-mail. Mes mises à jour sont signées par mon auteur, et je les vérifie avant d'installer quoi que ce soit. Questions ou bugs : <a href="mailto:{CONTACT}">{CONTACT}</a>.</p></article>
 </div>
 """,
