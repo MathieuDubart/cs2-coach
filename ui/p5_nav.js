@@ -83,7 +83,7 @@ async function setupGuide(v,first){clearTimeout(SG.t);if(!D.local)return;
   if(!v.isConnected)return;
   const pc=(st&&st.pc_account)||{},who=D.own?(pc.steamid===String(D.own)?pc.name:(st&&st.name)):null;
   const s1=!!D.own,s2a=!!(gs&&gs.installed),s2b=!!(cc&&(cc.console||cc.bound)),s3=!!(st&&st.has_auth),L=(st&&st.links)||{};
-  v.innerHTML=`<div class="sg"><div class="sg-h"><h2>${first?"Welcome! Three steps and I'm ready":"Setup guide"}</h2><p class="note">About two minutes. Everything stays on this PC.</p></div>
+  v.innerHTML=`<div class="sg"><div class="sg-h"><h2>${first?"Welcome! Three steps and I'm ready":"Setup guide"}</h2><p class="note">About two minutes. Your demos, profile and codes stay on this PC.</p></div>
    <article class="card sg-step${s1?" done":""}"><b class="sg-n">1</b><div><h3>Your Steam account ${sgTick(s1)}</h3>
      ${s1?`<p>${who?`<b>${esc(who)}</b> · `:""}<span class="num note">${esc(String(D.own))}</span>: the account open in Steam on this PC.</p>`
        :`<p>Open Steam and sign in to your account, then reload this page. Or <a href="/api/steam/login" style="color:var(--ct)">sign in through Steam's page</a>.</p>`}</div></article>

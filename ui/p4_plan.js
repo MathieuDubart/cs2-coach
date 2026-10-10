@@ -448,7 +448,7 @@ async function pollRefresh(v){clearTimeout(S.rfTimer);
   if(r.running)S.rfTimer=setTimeout(()=>{if(S.view==="settings")pollRefresh(v)},5000)}
 async function renderSettings(){
   const v=$("#v-settings");
-  const head=`<div class="head"><div style="display:grid;gap:4px"><span class="eyebrow">Everything stays on this PC</span><h2>Settings</h2></div>${D.local?`<button type="button" id="sg-open">Setup guide</button>`:""}</div>`;
+  const head=`<div class="head"><div style="display:grid;gap:4px"><span class="eyebrow">Your demos, profile and codes stay on this PC</span><h2>Settings</h2></div>${D.local?`<button type="button" id="sg-open">Setup guide</button>`:""}</div>`;
   if(!D.local){v.innerHTML=head+`<div class="empty">My settings live in the local app: double-click <code>Wily.bat</code>, then open Settings.</div>`;return}
   v.innerHTML=head+`<div class="empty"><span class="spin" aria-hidden="true"></span>Reading your Steam connection…</div>`;
   let st;try{st=await (await fetch("/api/steam/status"+(D.own?`?sid=${D.own}`:""))).json()}catch(e){v.innerHTML=head+`<div class="empty">I don't answer: restart "Wily.bat" and I'll be back.</div>`;return}
