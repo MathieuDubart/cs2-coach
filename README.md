@@ -1,8 +1,8 @@
 # Wily, your CS2 coach
 
-Wily is a free, open source coach for Counter-Strike 2 that runs on your PC. It analyzes your matchmaking demos, gives
-you live advice on a second screen during your matches, and warms you up on a local training server with bots
-replaying your own deaths.
+Wily is a free, open source coach for Counter-Strike 2 that runs on your PC. It replays your real deaths on a local
+training server: bots come back exactly where they killed you, so you can take the duel again. It also analyzes your
+matchmaking demos and gives you live advice on a second screen during your matches.
 
 **Download:** [wily.valentingassend.com](https://wily.valentingassend.com/) (Windows installer, Linux script) ·
 **Releases with checksums:** [GitHub releases](https://github.com/ValentinGassend/cs2-coach/releases) ·
@@ -19,6 +19,11 @@ replaying your own deaths.
   match round by round, compared with a base of thousands of anonymized matches and with pro demos.
 
 ## See it
+
+[![Your own deaths, replayed: bots come back where they killed you (round 3 on Nuke, Hut Roof), take the duel again](docs/media/deaths.jpg)](docs/media/deaths.mp4)
+
+**Your own deaths, replayed.** Bots come back exactly where they killed you in your real match (here round 3 on Nuke,
+Hut Roof, your path in blue): take the duel again until you win it.
 
 | Live on the second screen (a round on Nuke, 6× speed) | Training server (a grenade drill on Mirage) |
 |---|---|

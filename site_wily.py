@@ -147,7 +147,7 @@ def linux_note(rel, lang):
 HOME = {
 "en": lambda rel: f"""
 <h1>Hi, I'm Wily.</h1>
-<p class="lede">Your CS2 coach, on your second screen. I give you live advice during your matches, warm you up with bots on your own situations before you play, and tell you clearly what to fix after. I learn from your demos and from a base of thousands of matches. Free and open source alpha for Windows and Linux: the first version open to all, expect rough edges.</p>
+<p class="lede">Your CS2 coach, on your second screen. I replay your real deaths with bots so you can take the duel again, give you live advice during your matches, and tell you clearly what to fix after. I learn from your demos and from a base of thousands of matches. Free and open source alpha for Windows and Linux: the first version open to all, expect rough edges.</p>
 <section id="download">{download_block("en", rel)}<p class="note"><b>Open source</b> (Apache 2.0): every line of the app is on <a href="{GITHUB}">GitHub</a>. Each release is published there too, with the same SHA-256 as on this page, tied to the exact commit it was built from: <a href="{GITHUB}/releases">releases</a>.</p></section>
 <div class="grid">
  <article class="card"><span class="eyebrow">Live</span><h3>During the match</h3><ul><li>What to buy for this round and the next</li><li>Where the Ts are likely to go, updated with the clock and what you see</li><li>Your paths and your strong spots on the radar, the grenades worth throwing now</li></ul></article>
@@ -156,6 +156,7 @@ HOME = {
 </div>
 <h2 id="see">See it</h2>
 <div class="shots">
+ <figure><video src="media/deaths.mp4" poster="media/deaths.jpg" autoplay muted loop playsinline preload="metadata"></video><figcaption><b>Your own deaths, replayed.</b> Bots come back exactly where they killed you in your real match (here round 3 on Nuke, Hut Roof, your path in blue): take the duel again until you win it.</figcaption></figure>
  <figure><video src="media/live.mp4" poster="media/live.jpg" autoplay muted loop playsinline preload="metadata"></video><figcaption><b>Live</b> on the second screen, a round on Nuke (6× speed): after the plant, then the next round's plan with its odds, the ways and the grenades on the radar.</figcaption></figure>
  <figure><video src="media/training.mp4" poster="media/training.jpg" autoplay muted loop playsinline preload="metadata"></video><figcaption><b>Training server</b>, a grenade drill on Mirage: where to stand, where to aim, and whether it landed in time.</figcaption></figure>
  <figure><img src="media/prepare.jpg" alt="The Prepare page: maps to train, the rounds you lose lately, the warm-up blocks and your level" loading="lazy"><figcaption><b>Prepare</b>: the warm-up starts where you lose rounds lately.</figcaption></figure>
@@ -176,7 +177,7 @@ HOME = {
 """,
 "fr": lambda rel: f"""
 <h1>Salut, moi c'est Wily.</h1>
-<p class="lede">Ton coach CS2, sur ton deuxième écran. Je te conseille en direct pendant tes matchs, je t'échauffe avec des bots sur tes propres situations avant de jouer, et je te dis clairement quoi corriger après. J'apprends de tes démos et d'une base de milliers de matchs. Alpha gratuite et open source pour Windows et Linux : la première version ouverte à tous, des défauts restent à corriger.</p>
+<p class="lede">Ton coach CS2, sur ton deuxième écran. Je rejoue tes vraies morts avec des bots pour que tu reprennes le duel, je te conseille en direct pendant tes matchs, et je te dis clairement quoi corriger après. J'apprends de tes démos et d'une base de milliers de matchs. Alpha gratuite et open source pour Windows et Linux : la première version ouverte à tous, des défauts restent à corriger.</p>
 <section id="download">{download_block("fr", rel)}<p class="note"><b>Open source</b> (Apache 2.0) : tout le code de l'app est sur <a href="{GITHUB}">GitHub</a>. Chaque version y est aussi publiée, avec le même SHA-256 que sur cette page, liée au commit exact dont elle est construite : <a href="{GITHUB}/releases">les versions</a>.</p></section>
 <div class="grid">
  <article class="card"><span class="eyebrow">Live</span><h3>Pendant le match</h3><ul><li>Quoi acheter pour ce round et le suivant</li><li>Où les T vont probablement aller, mis à jour avec le chrono et ce que tu vois</li><li>Tes chemins et tes bons spots sur le radar, les grenades à lancer maintenant</li></ul></article>
@@ -185,6 +186,7 @@ HOME = {
 </div>
 <h2 id="see">En images</h2>
 <div class="shots">
+ <figure><video src="media/deaths.mp4" poster="media/deaths.jpg" autoplay muted loop playsinline preload="metadata"></video><figcaption><b>Tes propres morts, rejouées.</b> Les bots reviennent exactement là où ils t'ont tué dans ton vrai match (ici le round 3 sur Nuke, Hut Roof, ton chemin en bleu) : reprends le duel jusqu'à le gagner.</figcaption></figure>
  <figure><video src="media/live.mp4" poster="media/live.jpg" autoplay muted loop playsinline preload="metadata"></video><figcaption><b>Live</b> sur le deuxième écran, un round sur Nuke (×6) : après le plant, puis le plan du round suivant avec ses chances, les chemins et les grenades sur le radar.</figcaption></figure>
  <figure><video src="media/training.mp4" poster="media/training.jpg" autoplay muted loop playsinline preload="metadata"></video><figcaption><b>Serveur d'entraînement</b>, un exercice de grenade sur Mirage : où se placer, où viser, et si elle est arrivée à temps.</figcaption></figure>
  <figure><img src="media/prepare.jpg" alt="La page Prepare : les maps à travailler, les rounds que tu perds en ce moment, les blocs d'échauffement et ton niveau" loading="lazy"><figcaption><b>Prepare</b> : l'échauffement commence là où tu perds des rounds en ce moment.</figcaption></figure>
