@@ -47,7 +47,7 @@ Any player can be analyzed on the fly from the search bar (Steam link, SteamID64
 
 - Windows, Python 3.11+
 - Steam running and signed in, **CS2 closed** (to fetch the match list through the Game Coordinator)
-- Optional: [7-Zip](https://www.7-zip.org/) (HLTV pro demos) and [Git for Windows](https://gitforwindows.org/) (its `curl` is used for csstats.gg)
+- Optional: [7-Zip](https://www.7-zip.org/) (HLTV pro demos)
 
 ```bash
 pip install -r requirements.txt
@@ -84,7 +84,7 @@ The server port is set with the `COACH_PORT` environment variable.
 ## Limits
 
 - Valve only provides the **last 8 matches**, and demos expire after about **a month**.
-- A player with no public Leetify profile and no shared demo only gets a light profile (Steam/csstats ranks).
+- A player with no public Leetify profile and no shared demo only gets a light profile (public Steam profile).
 - FACEIT matches are listed with their stats (FACEIT Data API key needed); their demos are not analyzed yet.
 
 ## Data and privacy
@@ -96,7 +96,7 @@ Everything stays local in `cache/` (demos) and `out/` (analyses, generated site,
 - [demoparser2](https://github.com/LaihoE/demoparser): demo parsing
 - [boiler-writter](https://github.com/akiver/boiler-writter) (MIT): match list through the Game Coordinator
 - Radars and map metadata from [CS Demo Manager](https://github.com/akiver/cs-demo-manager)
-- [Leetify](https://leetify.com), [csstats.gg](https://csstats.gg), [HLTV](https://www.hltv.org): public stats and pro demos
+- [Leetify](https://leetify.com), [HLTV](https://www.hltv.org): public stats and pro demos
 
 ## License
 

@@ -51,8 +51,8 @@ def level(adv, sid=None):
     prem = next((p for p in cs.get("premier", []) if p.get("current")), None)
     rating = prem["current"] if prem else None
     comp = (cs.get("competitive") or {}).get("current")
-    import csstats
-    comp_i = csstats.SKILL.index(comp) if comp in csstats.SKILL else None
+    import steamprofile
+    comp_i = steamprofile.SKILL.index(comp) if comp in steamprofile.SKILL else None
     if comp_i is None:
         comp_i = ((adv or {}).get("bench") or {}).get("my_rank")
     lv = None

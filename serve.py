@@ -793,8 +793,8 @@ def account():
     except Exception:
         sp = {}
     if not sp.get("avatar"):
-        import csstats
-        sp = csstats.steam_profile(own) or {}
+        import steamprofile
+        sp = steamprofile.steam_profile(own) or {}
     if sp.get("avatar"):
         c = {"steamid": own, "name": sp.get("name"), "avatar": sp.get("avatar"), "at": time.time()}
         config.write_json(f, c)

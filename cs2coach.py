@@ -511,18 +511,20 @@ SHARECODE_RE = r"CSGO(?:-[A-Za-z0-9]{5}){5}"
 
 
 def extras(sid):
-    """Public info available for anyone: Steam profile + csstats.gg header (Premier / Competitive ranks)."""
-    import csstats
+    """Public info available for anyone: the Steam profile, and the ranks of a local source module when this PC has
+    one (csstats, not versioned: 10/10, kept out of the public repository)."""
+    import steamprofile
     out = {}
     try:
-        out["steam"] = csstats.steam_profile(sid)
+        out["steam"] = steamprofile.steam_profile(sid)
     except Exception:
         pass
     try:
+        import csstats
         cs = csstats.fetch(sid)
         if cs:
             out["csstats"] = cs
-    except Exception:
+    except Exception:   # ImportError: no such module here
         pass
     return out
 
