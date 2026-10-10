@@ -32,6 +32,11 @@ _own_libraries_only()
 OUT = os.path.join(HERE, "out")
 CACHE = os.path.join(HERE, "cache")
 DEEP = os.path.join(OUT, "deep")
+for _d in (OUT, CACHE, DEEP):   # 10/10, a fresh Linux install: "No such file or directory: .../out/deep" (no match yet)
+    try:
+        os.makedirs(_d, exist_ok=True)
+    except OSError:
+        pass
 PLAYERS = os.path.join(OUT, "players")
 SETTINGS = os.path.join(OUT, "settings.json")
 

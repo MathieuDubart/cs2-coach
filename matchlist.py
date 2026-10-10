@@ -9,7 +9,7 @@ import struct
 import subprocess
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-BOILER = os.path.join(HERE, "tools", "boiler", "bin", "boiler-writter.exe")
+BOILER = os.path.join(HERE, "tools", "boiler", "bin", "boiler-writter.exe" if os.name == "nt" else "boiler-writter")
 OUT = os.path.join(HERE, "cache", "matchlist.bin")
 os.makedirs(os.path.dirname(OUT), exist_ok=True)
 
@@ -57,27 +57,52 @@ def _packed(v):
 
 
 BOILER_ZIP = "https://github.com/akiver/boiler-writter/releases/download/v1.7.0/boiler-writter-win-1.7.0.zip"
+# Linux (10/10, a Linux tester's first run): the same release's Linux build (bin/boiler-writter, libsteam_api.so),
+# checked by its SHA-256 before use
+BOILER_ZIP_LINUX = ("https://github.com/akiver/boiler-writter/releases/download/v1.7.0/boiler-writter-linux-1.7.0.zip",
+                    "f3c85acebb55a8c8eefb1334db4fce2cda397dc50eb8ecdb5664cedbc900f7ff")
 
 
 def ensure_boiler():
-    """boiler-writter (MIT, by akiver) is not versioned here: fetch the Windows release on first use. Linux (10/10):
-    no build of it, Valve's last 8 matches are not listed there (the history code and the site's relay find them)."""
-    if os.name != "nt":
-        raise RuntimeError("Valve's match list needs Windows: on Linux, add your history code in Settings")
+    """boiler-writter (MIT, by akiver) is not versioned here: fetch its release on first use (Windows, or its Linux
+    build, the files' modes kept)."""
     if os.path.exists(BOILER):
         return
+    import hashlib
     import io
     import urllib.request
     import zipfile
     dest = os.path.join(HERE, "tools", "boiler")
     os.makedirs(dest, exist_ok=True)
-    data = urllib.request.urlopen(BOILER_ZIP, timeout=60).read()
-    zipfile.ZipFile(io.BytesIO(data)).extractall(dest)
+    if os.name == "nt":
+        zipfile.ZipFile(io.BytesIO(urllib.request.urlopen(BOILER_ZIP, timeout=60).read())).extractall(dest)
+        return
+    url, sha = BOILER_ZIP_LINUX
+    data = urllib.request.urlopen(urllib.request.Request(url, headers={"User-Agent": "Wily"}), timeout=120).read()
+    if hashlib.sha256(data).hexdigest() != sha:
+        raise RuntimeError("boiler-writter for Linux: the download does not match its SHA-256, not installed")
+    with zipfile.ZipFile(io.BytesIO(data)) as z:
+        for m in z.infolist():
+            out = z.extract(m, dest)
+            mode = (m.external_attr >> 16) & 0o777
+            if mode and not m.is_dir():
+                os.chmod(out, mode)
+
+
+def _env():
+    """Linux: boiler-writter loads libsteam_api.so from its own folder."""
+    if os.name == "nt":
+        return None
+    env = dict(os.environ)
+    d = os.path.dirname(BOILER)
+    env["LD_LIBRARY_PATH"] = d + (":" + env["LD_LIBRARY_PATH"] if env.get("LD_LIBRARY_PATH") else "")
+    return env
 
 
 def fetch():
     ensure_boiler()
-    subprocess.run([BOILER, OUT], cwd=os.path.dirname(BOILER), check=True, capture_output=True, timeout=120, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+    subprocess.run([BOILER, OUT], cwd=os.path.dirname(BOILER), check=True, capture_output=True, timeout=120, env=_env(),
+                   creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
     return parse(open(OUT, "rb").read())
 
 
@@ -157,7 +182,7 @@ def fetch_one(match_id, outcome_id, token):
     """Full info of one match by its share-code triple, through this PC's Steam session."""
     ensure_boiler()
     out = os.path.join(os.path.dirname(OUT), f"one_{match_id}.bin")
-    subprocess.run([BOILER, out, str(match_id), str(outcome_id), str(token)], cwd=os.path.dirname(BOILER),
+    subprocess.run([BOILER, out, str(match_id), str(outcome_id), str(token)], cwd=os.path.dirname(BOILER), env=_env(),
                    check=True, capture_output=True, timeout=120, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
     return parse(open(out, "rb").read())
 
