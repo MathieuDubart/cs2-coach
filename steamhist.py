@@ -74,16 +74,28 @@ def bookmarklet():
 
 
 def downloads_dir():
-    """Your Downloads folder (where Windows really keeps it: it can be moved)."""
-    try:
-        import winreg
-        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, r"Software\Microsoft\Windows\CurrentVersion\Explorer\User Shell Folders") as k:
-            v = winreg.QueryValueEx(k, "{374DE290-123F-4565-9164-39C4925E467B}")[0]
-            v = os.path.expandvars(v)
-            if os.path.isdir(v):
-                return v
-    except OSError:
-        pass
+    """Your Downloads folder (where the system really keeps it: it can be moved, and named in your own language)."""
+    if os.name == "nt":
+        try:
+            import winreg
+            with winreg.OpenKey(winreg.HKEY_CURRENT_USER, r"Software\Microsoft\Windows\CurrentVersion\Explorer\User Shell Folders") as k:
+                v = winreg.QueryValueEx(k, "{374DE290-123F-4565-9164-39C4925E467B}")[0]
+                v = os.path.expandvars(v)
+                if os.path.isdir(v):
+                    return v
+        except OSError:
+            pass
+    else:   # Linux: the folder XDG names, which the desktop translates (Telechargements, Descargas, Downloads...)
+        try:
+            cfg = os.path.join(os.environ.get("XDG_CONFIG_HOME") or os.path.join(os.path.expanduser("~"), ".config"),
+                               "user-dirs.dirs")
+            m = re.search(r'^\s*XDG_DOWNLOAD_DIR\s*=\s*"(.+)"', open(cfg, encoding="utf-8").read(), re.M)
+            if m:
+                v = os.path.expanduser(os.path.expandvars(m.group(1)))
+                if os.path.isdir(v):
+                    return v
+        except OSError:
+            pass
     return os.path.join(os.path.expanduser("~"), "Downloads")
 
 
