@@ -191,7 +191,7 @@ def _restart_linux():
              f"while kill -0 {pid} 2>/dev/null; do sleep 1; done",
              f"cd {q(here)} || exit 1",
              f"{q(py)} -m pip install -q -r requirements.txt >> {q(logf)} 2>&1",
-             f"PYTHONNOUSERSITE=1 nohup {q(py)} -s serve.py --no-browser >> {q(os.path.join(config.OUT, 'serve.log'))} 2>&1 &",
+             f"PYTHONNOUSERSITE=1 nohup {q(py)} -s serve.py --no-browser >> {q(os.path.join(config.CACHE, 'serve.log'))} 2>&1 &",
              f'echo "$(date) started" >> {q(logf)}', 'rm -f "$0"']
     with open(sh, "w", encoding="utf-8", newline="\n") as fh:
         fh.write("\n".join(lines) + "\n")

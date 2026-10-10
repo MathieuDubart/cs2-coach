@@ -274,7 +274,8 @@ class Handler(BaseHTTPRequestHandler):
         if u.path == "/api/gsi/status":
             import gsi
             return self.send(200, gsi.status() | {"open_on_cs2": bool(config.settings().get("open_on_cs2", True)),
-                                                  "feedback_prompts": config.settings().get("feedback_prompts", True) is not False})
+                                                  "feedback_prompts": config.settings().get("feedback_prompts", True) is not False,
+                                                  "linux": config.LINUX, "linux_training": bool(config.settings().get("linux_training"))})
         if u.path == "/api/feedback/pending":   # how it went: after a warm-up, after a match with the In game page (07/10)
             import feedback
             try:
@@ -686,6 +687,8 @@ class Handler(BaseHTTPRequestHandler):
                 s["open_on_cs2"] = bool(body["open_on_cs2"])
             if "feedback_prompts" in body:
                 s["feedback_prompts"] = bool(body["feedback_prompts"])
+            if "linux_training" in body:   # Linux (10/10): the training server, experimental there
+                s["linux_training"] = bool(body["linux_training"])
             if "setup_done" in body:   # the setup guide, done or skipped (08/10)
                 s["setup_done"] = bool(body["setup_done"])
             if "auto_update" in body:   # automatic updates (08/10), on by default

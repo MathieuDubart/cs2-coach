@@ -74,6 +74,13 @@ def diagnostics(page=None, errors=None):
     except Exception as e:
         out["checks"] = f"{type(e).__name__}"
     out["log"] = _log_tail()
+    if config.LINUX:   # 10/10: the experimental training server's own output (what to fix on Linux)
+        out["linux_training"] = bool(config.settings().get("linux_training"))
+        try:
+            with open(os.path.join(config.OUT, "train_server.log"), encoding="utf-8", errors="replace") as fh:
+                out["training_server_log"] = scrub("".join(fh.readlines()[-200:]))[-20000:]
+        except OSError:
+            pass
     return out
 
 

@@ -104,7 +104,14 @@ def cs2server_dir():
     if os.path.isdir(r"E:\CS2Server"):
         return r"E:\CS2Server"
     g = cs2_dir()
+    if LINUX:   # in the game's Steam library (its file system: the links need it), never at the root
+        return os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(g))), "CS2CoachServer") if g else os.path.join(HERE, "CS2CoachServer")
     return os.path.join(os.path.splitdrive(g)[0] + os.sep, "CS2CoachServer") if g else os.path.join(HERE, "CS2CoachServer")
+
+
+def linux_training():
+    """Linux (10/10): the training server is experimental there, on only when the player turns it on in Settings."""
+    return not LINUX or bool(settings().get("linux_training"))
 
 
 def role():

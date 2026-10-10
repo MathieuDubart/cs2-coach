@@ -27,7 +27,10 @@ import pandas as pd
 import config
 
 SERVER = config.cs2server_dir()   # COACH_CS2SERVER, the settings, or next to the game (any PC)
-EXE = os.path.join(SERVER, "game", "bin", "win64", "cs2.exe")
+EXE = os.path.join(SERVER, "game", "bin", *(("linuxsteamrt64", "cs2") if config.LINUX else ("win64", "cs2.exe")))
+LINUX_LOG = os.path.join(config.OUT, "train_server.log")   # Linux: the server's own output (its first runs: what to fix)
+EXPERIMENTAL = ("The training server is experimental on Linux: turn it on in Settings (Training server on Linux), "
+                "then try again. Review and Live work without it.")
 CSGO = os.path.join(SERVER, "game", "csgo")
 COACH = os.path.join(CSGO, "coach")   # scenarios/, results.jsonl, live.json (the plugin's heartbeat)
 SCEN = os.path.join(COACH, "scenarios")
@@ -647,8 +650,8 @@ def _seed_workshop(wid):
 def install():
     """The training server made on this PC from the app (05/10, the beta: a player without plugin/make_server.py at
     hand): CS2's files linked next to the game (no copy, a few minutes), Metamod, CounterStrikeSharp and the plugin."""
-    if os.name != "nt":
-        raise RuntimeError("The training server is not available on Linux yet: Review and Live work.")
+    if not config.linux_training():
+        raise RuntimeError(EXPERIMENTAL)
     if INSTALL["running"]:
         return status()
 
@@ -691,12 +694,50 @@ def busy():
     return _BUSY["what"] if _BUSY["what"] and time.time() - _BUSY["t"] < 600 else None
 
 
+def _steamclient_linux():
+    """A dedicated server on Linux loads Steam's client library from ~/.steam/sdk64 (the usual setup of a CS2 server):
+    linked there from the Steam install when missing. -> what is missing, or None."""
+    want = os.path.join(os.path.expanduser("~"), ".steam", "sdk64", "steamclient.so")
+    if os.path.exists(want):
+        return None
+    for src in (os.path.join(config.steam_path(), "linux64", "steamclient.so"),
+                os.path.join(SERVER, "game", "bin", "linuxsteamrt64", "steamclient.so")):
+        if os.path.exists(src):
+            os.makedirs(os.path.dirname(want), exist_ok=True)
+            try:
+                os.symlink(src, want)
+            except FileExistsError:
+                pass
+            return None
+    return "steamclient.so was not found in Steam's folder (linux64): start Steam once, then try again"
+
+
+def _launch_linux(args):
+    """The server in the background on Linux, through the game's own launcher script (cs2.sh sets its libraries) when
+    there is one; its output in out/train_server.log; a session of its own (it outlives a page reload, not the app)."""
+    miss = _steamclient_linux()
+    if miss:
+        raise RuntimeError(miss)
+    sh = os.path.join(SERVER, "game", "cs2.sh")
+    cmd = (["/bin/sh", sh] + args[1:]) if os.path.exists(sh) else args
+    env = dict(os.environ)
+    lib = os.path.dirname(EXE)
+    env["LD_LIBRARY_PATH"] = lib + (":" + env["LD_LIBRARY_PATH"] if env.get("LD_LIBRARY_PATH") else "")
+    log = open(LINUX_LOG, "a", encoding="utf-8")
+    log.write(f"\n--- {time.strftime('%Y-%m-%d %H:%M:%S')} {' '.join(c for c in cmd if not c.startswith(_password()))}\n")
+    log.flush()
+    return subprocess.Popen(cmd, cwd=lib, env=env, stdin=subprocess.DEVNULL, stdout=log, stderr=subprocess.STDOUT,
+                            start_new_session=True, close_fds=True)
+
+
 def _above_normal(pid):
     """The server above the app's own work: a build reading the hard disk made it run at half speed (06/10 19:53: frames
     of 20-30 ms, 0.2 ms of them its own). Its console's host (conhost.exe) high: 08/10, his warm-up dropped him seven
     times ("Too many queued messages"); on a loaded PC the server's console writes waited 0.6-0.8 s on a starved conhost,
     frames that long (all 24 cores busy: 17 such frames a minute with conhost normal, none with it high, the server's own
-    priority changing nothing)."""
+    priority changing nothing). Linux: left as it is (a higher priority needs root)."""
+    if config.LINUX:
+        return
     try:
         import psutil
         p = psutil.Process(pid)
@@ -712,7 +753,9 @@ def _above_normal(pid):
 def _hide_console(pid):
     """The server's console window out of sight. CREATE_NEW_CONSOLE with SW_HIDE no longer hides it (07/10, his warm-up
     video: the server's log over the desktop at each start, where it can take the focus from the game): its window,
-    owned by the server's conhost child, is hidden once it shows. Returns how many were hidden."""
+    owned by the server's conhost child, is hidden once it shows. Returns how many were hidden. Linux: no window."""
+    if config.LINUX:
+        return 1
     try:
         import ctypes
         from ctypes import wintypes
@@ -776,10 +819,21 @@ def _force_stop(pid):
     control(rcon=_password(), quit=int(time.time()))
     if age is not None and age < 10 and _gone(pid, 15):
         return
-    subprocess.run(["taskkill", "/PID", str(pid), "/F"], capture_output=True, creationflags=NO_WINDOW)
+    if config.LINUX:
+        import signal
+        try:
+            os.killpg(os.getpgid(int(pid)), signal.SIGKILL)   # its session: cs2.sh and the server
+        except (OSError, ValueError):
+            try:
+                os.kill(int(pid), signal.SIGKILL)
+            except (OSError, ValueError):
+                pass
+    else:
+        subprocess.run(["taskkill", "/PID", str(pid), "/F"], capture_output=True, creationflags=NO_WINDOW)
     if not _gone(pid, 5):
         raise RuntimeError("The training server doesn't answer and can't be stopped: end 'Counter-Strike 2' (the server, "
-                           "not your game) in the Task Manager, or restart Windows, then try again")
+                           "not your game) " + ("with your system monitor, or log out" if config.LINUX
+                                                else "in the Task Manager, or restart Windows") + ", then try again")
 
 
 def _answers():
@@ -795,8 +849,8 @@ def _answers():
 
 def start(mp):
     """The server on this map (started hidden, or its map changed); back when it answers."""
-    if os.name != "nt":   # 10/10: the training server is a Windows copy of CS2's dedicated server for now
-        raise RuntimeError("The training server is not available on Linux yet: Review and Live work.")
+    if not config.linux_training():
+        raise RuntimeError(EXPERIMENTAL)
     if not installed():
         raise RuntimeError("The training server is not installed yet: install it from the Prepare page")
     pw = _password()   # made and saved before the state is read (08/10)
@@ -832,10 +886,13 @@ def start(mp):
     args = [EXE, "-dedicated", "-usercon", "-ip", "127.0.0.1", "-port", str(PORT), "-condebug", "-nohltv",
             "+sv_lan", "1", "+rcon_password", _password(), "+game_type", "0", "+game_mode", "1",
             "+map", WORKSHOP_BASE if wid else mp]   # a Workshop map only once the server runs: given at launch it is ignored (07/10)
-    si = subprocess.STARTUPINFO()   # its own console, hidden: without one the server logs a console error every frame
-    si.dwFlags |= subprocess.STARTF_USESHOWWINDOW
-    si.wShowWindow = 0   # SW_HIDE: never shown, never takes the focus
-    pr = subprocess.Popen(args, cwd=os.path.dirname(EXE), creationflags=subprocess.CREATE_NEW_CONSOLE, startupinfo=si)
+    if config.LINUX:
+        pr = _launch_linux(args)
+    else:
+        si = subprocess.STARTUPINFO()   # its own console, hidden: without one the server logs a console error every frame
+        si.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+        si.wShowWindow = 0   # SW_HIDE: never shown, never takes the focus
+        pr = subprocess.Popen(args, cwd=os.path.dirname(EXE), creationflags=subprocess.CREATE_NEW_CONSOLE, startupinfo=si)
     _above_normal(pr.pid)
     for _ in range(20):   # its console comes up within a second or two
         if _hide_console(pr.pid):
