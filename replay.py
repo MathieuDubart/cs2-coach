@@ -35,7 +35,7 @@ PORT = 27015
 STATE_F = os.path.join(config.OUT, "train.json")
 STEP = 2   # one position every 2 ticks (32 a second); the plugin interpolates
 BEFORE, AFTER, CLUTCH = 7, 6, 35   # seconds of a death situation before and after it; length of a clutch
-NO_WINDOW = 0x08000000
+NO_WINDOW = config.NO_WINDOW   # CREATE_NO_WINDOW on Windows, 0 elsewhere (Linux: no creationflags)
 
 ITEMS = {"AK-47": "ak47", "M4A4": "m4a1", "M4A1-S": "m4a1_silencer", "AWP": "awp", "SSG 08": "ssg08", "AUG": "aug",
          "SG 553": "sg556", "FAMAS": "famas", "Galil AR": "galilar", "G3SG1": "g3sg1", "SCAR-20": "scar20",
@@ -518,6 +518,12 @@ def rcon(cmd, timeout=3.0):
 def _pid_alive(pid):
     if not pid:
         return False
+    if os.name != "nt":
+        import psutil
+        try:
+            return config.is_cs2(psutil.Process(int(pid)).name())
+        except (psutil.Error, ValueError):
+            return False
     r = subprocess.run(["tasklist", "/FI", f"PID eq {pid}", "/NH"], capture_output=True, text=True, creationflags=NO_WINDOW)
     return "cs2.exe" in r.stdout
 
@@ -641,6 +647,8 @@ def _seed_workshop(wid):
 def install():
     """The training server made on this PC from the app (05/10, the beta: a player without plugin/make_server.py at
     hand): CS2's files linked next to the game (no copy, a few minutes), Metamod, CounterStrikeSharp and the plugin."""
+    if os.name != "nt":
+        raise RuntimeError("The training server is not available on Linux yet: Review and Live work.")
     if INSTALL["running"]:
         return status()
 
@@ -787,6 +795,8 @@ def _answers():
 
 def start(mp):
     """The server on this map (started hidden, or its map changed); back when it answers."""
+    if os.name != "nt":   # 10/10: the training server is a Windows copy of CS2's dedicated server for now
+        raise RuntimeError("The training server is not available on Linux yet: Review and Live work.")
     if not installed():
         raise RuntimeError("The training server is not installed yet: install it from the Prepare page")
     pw = _password()   # made and saved before the state is read (08/10)

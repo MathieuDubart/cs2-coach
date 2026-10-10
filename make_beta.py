@@ -52,7 +52,7 @@ REQS = {"demoparser2": "0.42.0", "pandas": "2.3.3", "numpy": "2.3.4", "pyarrow":
         "cryptography": "50.0.1"}
 ENTRIES = ["serve", "refresh_all", "grow", "voice", "replay", "train", "build_app", "chatcalls", "focus", "heard", "cs2coach",
            "updater", "contrib"]
-FILES = ["app_template.html", "report_template.html"]
+FILES = ["app_template.html", "report_template.html", "wily.sh", "wily.png"]   # wily.sh, wily.png: the Linux launcher and icon
 DIRS = ["maps", os.path.join("tools", "boiler")]
 SERVER_ZIPS = ["mmsource.zip", "css-runtime.zip"]   # Metamod:Source and CounterStrikeSharp for the training server
 KEY_F = os.path.join(config.OUT, "release_key.pem")   # Ed25519: signs latest.json; its public half ships in the code
@@ -534,6 +534,8 @@ def release(dst, version, base, notes):
     exe = installer(man)   # WilySetup.exe for these very parts (08/10)
     if exe:
         man["installer"] = _entry(exe)
+    lx = linux_installer()   # wily-linux.sh (10/10): the same code and base, with a Python of the player's own
+    man["installer_linux"] = _entry(lx)
     raw = json.dumps(man, indent=1).encode()
     open(os.path.join(RELEASES, "latest.json"), "wb").write(raw)
     open(os.path.join(RELEASES, "latest.json.sig"), "w").write(base64.b64encode(release_key().sign(raw)).decode())
@@ -543,6 +545,15 @@ def release(dst, version, base, notes):
             os.remove(os.path.join(RELEASES, f))
     log(f"release {version}: " + ", ".join(f"{k} {v['size'] / 2 ** 20:.0f} MB" for k, v in man.items() if isinstance(v, dict)))
     return man
+
+
+def linux_installer():
+    """installer/wily-linux.sh with the release key's public half in it: it checks latest.json's signature itself."""
+    s = open(os.path.join(config.HERE, "installer", "wily-linux.sh"), encoding="utf-8").read().replace("@@PUBKEY@@", public_key_hex())
+    out = os.path.join(RELEASES, "wily-linux.sh")
+    with open(out, "w", encoding="utf-8", newline="\n") as fh:
+        fh.write(s.replace("\r\n", "\n"))
+    return out
 
 
 def iscc():

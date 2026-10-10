@@ -36,7 +36,23 @@ PLAYERS = os.path.join(OUT, "players")
 SETTINGS = os.path.join(OUT, "settings.json")
 
 
+LINUX = os.name != "nt"   # 10/10: a player on Linux (CS2 runs natively there): review and Live; no training server yet
+CS2_PROCS = {"cs2.exe", "cs2"}   # the game's process name on Windows / Linux
+
+
+def is_cs2(name):
+    return (name or "").lower() in CS2_PROCS
+
+
 def steam_path():
+    if LINUX:   # the native Steam client, then its Flatpak and Snap packages
+        h = os.path.expanduser("~")
+        for p in (os.path.join(h, ".steam", "steam"), os.path.join(h, ".local", "share", "Steam"),
+                  os.path.join(h, ".var", "app", "com.valvesoftware.Steam", ".local", "share", "Steam"),
+                  os.path.join(h, "snap", "steam", "common", ".local", "share", "Steam")):
+            if os.path.isdir(os.path.join(p, "steamapps")) or os.path.exists(os.path.join(p, "config", "loginusers.vdf")):
+                return os.path.realpath(p)
+        return os.path.join(h, ".local", "share", "Steam")
     try:
         import winreg
         with winreg.OpenKey(winreg.HKEY_CURRENT_USER, r"Software\Valve\Steam") as k:
@@ -67,7 +83,7 @@ def cs2_dir():
     libs = [sp]
     try:
         txt = open(os.path.join(sp, "steamapps", "libraryfolders.vdf"), encoding="utf-8", errors="replace").read()
-        libs += [p.replace("\\\\", "\\") for p in re.findall(r'"path"\s*"([^"]+)"', txt)]
+        libs += [p.replace("\\\\", "\\") if not LINUX else p for p in re.findall(r'"path"\s*"([^"]+)"', txt)]
     except OSError:
         pass
     found = []
@@ -75,7 +91,7 @@ def cs2_dir():
         d = os.path.join(lib, "steamapps", "common", "Counter-Strike Global Offensive")
         if os.path.isdir(os.path.join(d, "game", "csgo")):
             found.append((os.path.exists(os.path.join(lib, "steamapps", "appmanifest_730.acf"))
-                          and os.path.exists(os.path.join(d, "game", "bin", "win64", "cs2.exe")), d))
+                          and os.path.exists(os.path.join(d, "game", "bin", *(("linuxsteamrt64", "cs2") if LINUX else ("win64", "cs2.exe")))), d))
     return max(found, key=lambda f: f[0])[1] if found else None
 
 

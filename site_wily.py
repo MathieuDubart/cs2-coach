@@ -121,14 +121,27 @@ def download_block(lang, rel):
         return (f'<div class="cta"><a class="btn" href="releases/{ins["file"]}" download>Download Wily for Windows</a>'
                 f'<span class="note">Version {html.escape(rel["app"])} · {when} · base of {rel["base"]["matches"]:,} matches · the setup downloads {parts:.0f} MB</span></div>'
                 f'<p class="note">If Windows says <i>"Windows protected your PC"</i>: click <b>More info</b>, then <b>Run anyway</b>. The app isn\'t signed with a paid certificate yet; every part it downloads is checked against my author\'s signature.</p>'
-                f'<p class="note">SHA-256 of the setup: <span class="mono">{ins["sha256"]}</span> · or <a href="releases/{s["file"]}" download>the zip</a> ({mb:.0f} MB, to unzip yourself)</p>')
+                f'<p class="note">SHA-256 of the setup: <span class="mono">{ins["sha256"]}</span> · or <a href="releases/{s["file"]}" download>the zip</a> ({mb:.0f} MB, to unzip yourself)</p>' + linux_note(rel, lang))
     n_fr = f'{rel["base"]["matches"]:,}'.replace(",", " ")   # the thousands only: the sentences keep their commas
     return (f'<div class="cta"><a class="btn" href="releases/{ins["file"]}" download>Télécharger Wily pour Windows</a>'
             f'<span class="note">Version {html.escape(rel["app"])} · {when} · base de {n_fr} matchs · l\'installation télécharge {parts:.0f} Mo</span></div>'
             f'<p class="note">Si Windows affiche <i>« Windows a protégé votre ordinateur »</i> : clique sur <b>Informations complémentaires</b>, puis <b>Exécuter quand même</b>. L\'application n\'est pas encore signée par un certificat payant ; chaque partie qu\'elle télécharge est vérifiée avec la signature de son auteur.</p>'
-            f'<p class="note">SHA-256 de l\'installation : <span class="mono">{ins["sha256"]}</span> · ou <a href="releases/{s["file"]}" download>le zip</a> ({mb:.0f} Mo, à décompresser toi-même)</p>')
+            f'<p class="note">SHA-256 de l\'installation : <span class="mono">{ins["sha256"]}</span> · ou <a href="releases/{s["file"]}" download>le zip</a> ({mb:.0f} Mo, à décompresser toi-même)</p>' + linux_note(rel, lang))
 
 
+
+def linux_note(rel, lang):
+    """Linux (10/10): the same release through wily-linux.sh (match review and Live; the training server is Windows only)."""
+    lx = rel.get("installer_linux")
+    if not lx:
+        return ""
+    if lang == "en":
+        return (f'<p class="note"><b>Linux</b> (match review and Live; the training server is Windows only for now): download '
+                f'<a href="releases/{lx["file"]}" download>wily-linux.sh</a>, then in a terminal <code>sh wily-linux.sh</code> '
+                f'(Python 3.11 or newer). SHA-256: <span class="mono">{lx["sha256"]}</span></p>')
+    return (f'<p class="note"><b>Linux</b> (revue des matchs et Live ; le serveur d\'entraînement est pour Windows seulement pour l\'instant) : '
+            f'télécharge <a href="releases/{lx["file"]}" download>wily-linux.sh</a>, puis dans un terminal <code>sh wily-linux.sh</code> '
+            f'(Python 3.11 ou plus récent). SHA-256 : <span class="mono">{lx["sha256"]}</span></p>')
 HOME = {
 "en": lambda rel: f"""
 <h1>Hi, I'm Wily.</h1>

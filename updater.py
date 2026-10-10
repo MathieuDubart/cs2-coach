@@ -77,7 +77,7 @@ def _available(man, cur):
     pub = (man.get("code") or {}).get("build")   # a new publication of the same version has a new build
     if man.get("code") and ((pub and pub != cur.get("build")) or (not pub and man.get("app") != cur["app"])):
         out.append({"part": "code", "version": man["app"] + (f" · build {pub}" if pub else ""), "size": man["code"]["size"]})
-    if man.get("runtime") and man["runtime"].get("key") != cur["runtime"]:
+    if man.get("runtime") and man["runtime"].get("key") != cur["runtime"] and not config.LINUX:   # Linux: its own Python (wily.sh)
         out.append({"part": "runtime", "version": man["runtime"]["key"], "size": man["runtime"]["size"]})
     if man.get("base") and str(man["base"].get("version") or "") > str(cur["base"] or ""):   # YYYYMMDD-HHMM: only a newer base
         out.append({"part": "base", "version": man["base"]["version"], "size": man["base"]["size"], "matches": man["base"].get("matches")})
@@ -179,10 +179,34 @@ def apply_base(path):
     return kept
 
 
+def _restart_linux():
+    """Linux (10/10): a small shell script waits for the app to stop, installs the libraries the new code asks for
+    (requirements.txt, into the app's own venv), and starts it again in a session of its own."""
+    here, py, pid = config.HERE, sys.executable, os.getpid()
+    sh = os.path.join(DL, "restart.sh")
+    logf = os.path.join(DL, "restart.log")
+    def q(s):   # one shell word
+        return "'" + str(s).replace("'", "'\\''") + "'"
+    lines = ["#!/bin/sh", f'echo "$(date) waiting for {pid}" >> {q(logf)}',
+             f"while kill -0 {pid} 2>/dev/null; do sleep 1; done",
+             f"cd {q(here)} || exit 1",
+             f"{q(py)} -m pip install -q -r requirements.txt >> {q(logf)} 2>&1",
+             f"PYTHONNOUSERSITE=1 nohup {q(py)} -s serve.py --no-browser >> {q(os.path.join(config.OUT, 'serve.log'))} 2>&1 &",
+             f'echo "$(date) started" >> {q(logf)}', 'rm -f "$0"']
+    with open(sh, "w", encoding="utf-8", newline="\n") as fh:
+        fh.write("\n".join(lines) + "\n")
+    subprocess.Popen(["/bin/sh", sh], cwd=here, start_new_session=True, close_fds=True)
+    ST["restarting"] = True
+    threading.Timer(1.5, lambda: os._exit(0)).start()
+
+
 def _restart(runtime_zip=None):
     """The app stops, a small script waits for it, puts the new runtime in place if there is one, and starts it again.
     Windows' own tools by their full path (a PATH with Git's tools first gave it GNU find: 05/10), in a hidden console
-    of its own, out of the app's job (it must outlive the app); each step written to out/updates/restart.log."""
+    of its own, out of the app's job (it must outlive the app); each step written to out/updates/restart.log.
+    Linux: _restart_linux."""
+    if config.LINUX:
+        return _restart_linux()
     bat = os.path.join(DL, "restart.bat")
     logf = os.path.join(DL, "restart.log")
     here = config.HERE

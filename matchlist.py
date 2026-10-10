@@ -60,7 +60,10 @@ BOILER_ZIP = "https://github.com/akiver/boiler-writter/releases/download/v1.7.0/
 
 
 def ensure_boiler():
-    """boiler-writter (MIT, by akiver) is not versioned here: fetch the Windows release on first use."""
+    """boiler-writter (MIT, by akiver) is not versioned here: fetch the Windows release on first use. Linux (10/10):
+    no build of it, Valve's last 8 matches are not listed there (the history code and the site's relay find them)."""
+    if os.name != "nt":
+        raise RuntimeError("Valve's match list needs Windows: on Linux, add your history code in Settings")
     if os.path.exists(BOILER):
         return
     import io

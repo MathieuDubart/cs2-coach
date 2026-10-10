@@ -2090,6 +2090,10 @@ def summary(sid=None):
 def _game_running():
     """The game runs (the training server is a cs2.exe too: the one started with -dedicated)."""
     import subprocess
+    if os.name != "nt":   # Linux: the game's process and its command line through psutil
+        import psutil
+        return any(config.is_cs2(p.info.get("name")) and "-dedicated" not in " ".join(p.info.get("cmdline") or [])
+                   for p in psutil.process_iter(["name", "cmdline"]))
     ps = "Get-CimInstance Win32_Process -Filter \"name='cs2.exe'\" | ForEach-Object { $_.CommandLine }"
     r = subprocess.run(["powershell", "-NoProfile", "-Command", ps], capture_output=True, text=True, creationflags=replay.NO_WINDOW)
     return any(ln.strip() and "-dedicated" not in ln for ln in r.stdout.splitlines())
@@ -2148,12 +2152,21 @@ def _refused_since(start_size):
 _LAUNCH = {}
 
 
+def _open(url):
+    """A steam:// link through the system: Windows' file association, xdg-open on Linux."""
+    if os.name == "nt":
+        os.startfile(url)
+    else:
+        import subprocess
+        subprocess.Popen(["xdg-open", url], start_new_session=True)
+
+
 def _launch_game():
     """CS2 started, not connected yet: its menu comes up while the session is built (06/10: the build took 4 minutes
     on a busy disk and the game only started after it)."""
     f = _console()
     _LAUNCH.update(start=os.path.getsize(f) if f else 0, t=time.time())
-    os.startfile("steam://run/730")
+    _open("steam://run/730")
 
 
 def _wait_menu(start):
@@ -2183,7 +2196,7 @@ def _connect():
     replay.JOIN.update(state="joining", t=time.time())
     for url in urls:
         start = os.path.getsize(f) if f else 0
-        os.startfile(url)
+        _open(url)
         t0, wait, loading = time.time(), (30 if url.startswith("steam://rungame") else 60), False
         while time.time() - t0 < wait:
             time.sleep(1)

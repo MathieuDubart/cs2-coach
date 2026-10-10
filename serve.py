@@ -839,7 +839,7 @@ def app_busy():
     a recording or a transcription, the references being recomputed."""
     try:
         import psutil
-        if any((p.info.get("name") or "").lower() == "cs2.exe" for p in psutil.process_iter(["name"])):
+        if any(config.is_cs2(p.info.get("name")) for p in psutil.process_iter(["name"])):
             return "CS2 is open"
     except Exception:
         pass
@@ -869,7 +869,7 @@ def cs2_page_watch():
     was = None
     while True:
         try:
-            on = any((p.info.get("name") or "").lower() == "cs2.exe" for p in psutil.process_iter(["name"]))
+            on = any(config.is_cs2(p.info.get("name")) for p in psutil.process_iter(["name"]))
         except Exception:
             on = was
         if on and was is False and time.time() - PAGE["seen"] > 20 and config.settings().get("open_on_cs2", True):
