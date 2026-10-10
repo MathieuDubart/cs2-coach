@@ -1473,7 +1473,8 @@ def _my_setup(sid, mp):
 
 # from a spot, standing still when you click; a run-throw (W pressed as you release, a bind's way) leaves from it too
 # (09/10: his "running molly" to Banana was told "standing still")
-REPEATABLE = ("standing still", "jumpthrow", "crouching", "jumpthrow + crouching", "run-throw (W)", "W + jumpthrow")
+REPEATABLE = ("standing still", "jumpthrow", "crouching", "jumpthrow + crouching", "run-throw (W)", "W + jumpthrow",
+              "run-throw (moving forward)", "forward + jumpthrow")
 
 
 def _lands_for_you(it):
@@ -1591,7 +1592,9 @@ def nade_drills(sid, mp):
             land0 = _land(mp, typ, pos) or _world(mp, *x["to_px"]) if x.get("to_px") else None
             if not died_ok.get(id(x)) and land0 and len(land0) >= 2 and _exposed(mp, pos, land0 if len(land0) >= 3 else [land0[0], land0[1], pos[2]]) >= 3:
                 continue   # 07/10: "je suis visible de là où j'envoie la grenade ... tu peux me faire tuer alors que je suis en train de stuff"
-            item = NADE_ITEM[typ][team] if typ == "molotov" else NADE_ITEM.get(typ)
+            if typ != "flash" and (x["from_key"] == x["to_key"] or (land0 and len(land0) >= 2 and math.hypot(land0[0] - pos[0], land0[1] - pos[1]) < 500)):
+                continue   # 10/10, a Molotov → T Main from T Main's exit: "je suis vraiment au contact de la zone que je dois molo ... ça sert à rien d'envoyer ce stuff"
+            item =NADE_ITEM[typ][team] if typ == "molotov" else NADE_ITEM.get(typ)
             if not item or not x.get("to_px"):
                 continue
             name = {"smoke": "Smoke", "flash": "Flash", "he": "HE", "molotov": "Molotov"}[typ]
@@ -1603,7 +1606,7 @@ def nade_drills(sid, mp):
                 why = f"from {x['from']}, your spot" if mine else f"onto {x['to']}, where they come at you from your spot"
             out.append({"id": did, "kind": "nade", "map": mp,
                         "title": f"{name} → {x['to']}", "tip": f"{why} · {x.get('timer') or ''}".strip(" ·"),
-                        "team": team, "type": typ, "item": item, "how": x.get("how") or "standing still",
+                        "team": team, "type": typ, "item": item, "how": config.key_free(x.get("how")) or "standing still",
                         # 09/10, his HE to Mini, told "left click": "c'est pas que du left click, c'est du left et right
                         # click". The demos hold the buttons for almost no throw (CS2's don't record them: 154 of 1,028,672
                         # in the base): the click only when it is known, never a "left click" by default
@@ -1727,7 +1730,7 @@ def clip_drills(sid, mp):
             out.append({"id": f"clip:{c['id']}:{i}", "kind": "nade", "map": mp, "clip": c["id"], "step": i,
                         "title": f"{name} → {x['to']}" + (f" ({i + 1}/{n})" if n > 1 else ""),
                         "tip": f"{c['title']} · @{c['handle']}'s clip · {seen}",
-                        "team": team, "type": typ, "item": item, "how": x.get("how") or "standing still", "click": x.get("click") or "left click",
+                        "team": team, "type": typ, "item": item, "how": config.key_free(x.get("how")) or "standing still", "click": x.get("click") or "left click",
                         "me": {"pos": x["pos"], "ang": x["ang"]}, "target": x["land"], "victims": [], "_vic": [c["side"], x.get("t")],
                         "clock": round(max(10.0, 115 - float(x["t"]) + 3), 1) if x.get("t") is not None else 0,
                         "weight": 25})

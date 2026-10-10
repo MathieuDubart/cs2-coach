@@ -231,7 +231,7 @@ function liveRadar(box,p,map,level,g,o){
     if(W){const seen=new Map();W.rows.slice(0,3).forEach(r=>{if(!r.route)return;const k=r.route.zones.join(">");if(seen.has(k)){seen.get(k).push(r.rank);return}seen.set(k,[r.rank]);r._k=k});
       W.rows.slice(0,3).filter(r=>r._k).reverse().forEach(r=>tPath(Lrot,Ltop,r.route.pts,r.col,seen.get(r._k),level,r.rank===1,r.wr,r.rot,r.timing));   // the play's chance this round (a route alone is biased: only the ones who got there alive count)
       if(seen.size&&W.rows.some(r=>r.rot))legend.push(`<span>${SW.tpath}↻ ranked ahead of a better %: that one lost this half or was played too often, they read you too</span>`);
-      if(seen.size&&HMAP)legend.push(`<span>${SW.tpath}your way out of the spawn toward the hostages, % won = the CTs' rounds won when one takes it, "there ~1:41": when they get to its end (game clock); numpad 1-2-3 say it in the team chat and focus on it, numpad minus drops the focus</span>`);
+      if(seen.size&&HMAP)legend.push(`<span>${SW.tpath}your way out of the spawn toward the hostages, % won = the CTs' rounds won when one takes it, "there ~1:41": when they get to its end (game clock); numpad 1-2-3 = ${esc(W.rows.slice().sort((a,b)=>a.rank-b.rank).map(r=>r.name||r.rank).join(" / "))} (left to right from your spawn), 4-5-6 = rush / slow / map control: one line in the team chat; 7 / 9 = 1st / 2nd hostage taken (Wily only); minus drops them</span>`);
       else if(seen.size)legend.push(`<span>${SW.tpath}your way from the spawn, % won = rounds won by its play in this situation; "on site 1:31-1:21": be on the site between these times of the game clock, when this play wins the most rounds at equal numbers alive (a fast arrival in an easy round doesn't count for more; ~1:17: no moment wins more, the usual time); numpad 1-2-3 say the path in the team chat (${esc(RT_EN[W.rt]||W.rt)}${W.eb&&W.eb.full>=.5?" vs their full buy":W.eb&&W.eb.eco>=.5?" vs their eco":""}, ${RUN_EN[W.run]})</span>`)}}
   // T side: where the CTs stand when you get there, and the angles they kill from (! = a spot they kill a lot from for the
   // little time they spend there: the angle the Ts forget)
@@ -261,6 +261,26 @@ function liveRadar(box,p,map,level,g,o){
         el("path",{d:`M${z.px[0]-r-4} ${z.px[1]}H${z.px[0]-r+4}M${z.px[0]+r-4} ${z.px[1]}H${z.px[0]+r+4}M${z.px[0]} ${z.px[1]-r-4}V${z.px[1]-r+4}M${z.px[0]} ${z.px[1]+r-4}V${z.px[1]+r+4}`,style:"stroke:var(--bad);stroke-width:2.4;stroke-linecap:round"},gg);
         tip(gg,`${z.zone||"T angle"}: ${z.kills} CTs killed from here in the first minute`)});
       if(ds.length)legend.push(`<span>${SW.danger}spots the Ts kill CTs from in the first minute</span>`)}}
+  // hostage maps, a hostage taken (numpad 7 / 9, 10/10): the way back to the rescue (CT: from where you pressed) and
+  // where the Ts cut it, with when on the game clock; both sides
+  const HC=HMAP&&o.following&&g&&live&&typeof hostageCarry==="function"?hostageCarry(p,g):null;
+  if(HC&&HC.rows.length){const col=ct?"var(--ct)":"var(--t)";
+    HC.rows.forEach(s=>{tPathLabel(Lrot,Ltop,s.pts,col,level,`${s.to||"rescue"}${s.back!=null?` ~${clock(s.back)}`:` ~${Math.round(s.s)} s`}`);
+      s.cut.forEach(c=>{const q=s.pts.find(q=>q[3]>=c.after)||s.pts[s.pts.length-1];if(!here({px:q,level:q[2]}))return;const gg=el("g",{},Ltop);
+        el("circle",{cx:q[0],cy:q[1],r:10,style:"fill:none;stroke:var(--bad);stroke-width:2.6;stroke-dasharray:4 3"},gg);
+        if(c.by!=null)qLabel(Ltop,q[0],q[1],10,clock(c.by),"kwt",3);
+        tip(gg,`${c.zone}: ${c.share}% of the ways back from ${s.zone} cross it, ${Math.round(c.after)} s after the pick-up${c.by!=null?` (here ~${clock(c.by)})`:""}`)})});
+    legend.push(ct?`<span>${SW.tpath}hostage ${HC.n} taken: your way back to the rescue from ${esc(HC.rows[0].zone)} (~${Math.round(HC.rows[0].s)} s carrying), dashed: where the Ts cut it and when you get there - smoke or clear it first</span>`
+      :`<span>${SW.tpath}hostage ${HC.n} taken: their ways back to the rescue, dashed: where to cut them, the time is when the carrier gets there - be there before</span>`)}
+  // hostage maps, T (the defense, 10/10: as the CT of a bomb map): the CTs' ways, numpad 1-2-3 the one you play against
+  // (Wily only), and along it the spots the Ts kill CTs from in the first minute
+  const HT=HMAP&&!ct&&!HC?((PL.hostage||{})[map]):null;
+  if(HT&&o.following&&g&&(g.round_phase==="freezetime"||(live&&(g.elapsed||0)<60))){const f=g.focus&&g.focus.round===g.round?g.focus.n:0,W=hostageRank(p,g);
+    if(W){const rows=W.rows.filter(r=>!f||r.rank===f),FRt=f&&rows[0]?rows[0].route:null,nr=s=>!FRt||FRt.pts.some(q=>Math.hypot(q[0]-s.px[0],q[1]-s.px[1])<90);
+      rows.forEach(r=>tPathLabel(Lrot,Ltop,r.route.pts,"var(--ct)",level,`${r.rank} ${r.name||""} ~${clock(r.t_end)}`.trim()));
+      const ds=(HT.danger||[]).filter(h=>here(h)&&nr(h)).slice(0,4);
+      ds.forEach(h=>tip(el("circle",{cx:h.px[0],cy:h.px[1],r:8+Math.min(6,h.share/3),style:"fill:var(--t);fill-opacity:.3;stroke:var(--t);stroke-width:2.4"},Lstrong),`${h.zone||"T spot"}: ${h.kills} CTs killed from here in the first minute`));
+      legend.push(`<span>${SW.tpath}the CTs' ways toward the hostages (numpad 1-2-3: the one you play against, left to right from their spawn; the time: when they get to its end)${ds.length?", filled: the spots the Ts kill CTs from in the first minute":""}; 7 / 9 = 1st / 2nd hostage taken</span>`)}}
   const CS=!ct&&M&&M.ct_spots;
   if(CS&&!earlyDone&&(on("ctpos")||on("danger"))){const tt=t==null?25:Math.max(t+15,20),wn=tt<20?"early":tt<40?"setup":tt<70?"hit":"late",W_=CS[wn]||CS.setup;
     if(W_&&on("ctpos")){const hs=W_.hold.filter(h=>here(h)&&nearF(h)&&h.zone!=="CT Spawn").slice(0,6),mx=Math.max(...hs.map(h=>h.share),1);

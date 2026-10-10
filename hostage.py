@@ -7,6 +7,14 @@ it back), the Ts defend. From the matches of the base, per map:
 - where the Ts hold 20 to 40 s in (share of their time), and the spots they kill CTs from in the first minute: the
   zones the CT attacker checks.
 
+The ways are kept in the order of the map, not of their use (10/10, the user: numpad 1, 2, 3 = left, middle, right as
+seen from the CT spawn toward the hostages, the same keys every day), each with a short name (its last zone no other way
+takes: "Side Hall", "Back Way").
+
+The carries (10/10): the demos record a hostage rescued (who, when) but not its pick-up. The carrier walks to the hostage
+and back, so the pick-up is the point of his walk farthest from where he rescued it: from there, his way back, how long
+it took, and the zones the ways back cross (where the Ts cut them). Only the carries that ended in a rescue are seen.
+
 A map shows up with 40 rounds or more. Usage: python hostage.py  (prints the summary)"""
 import json
 import os
@@ -37,8 +45,75 @@ def _resample(pts, k=60):
     return np.c_[np.interp(s, d, xy[:, 0]), np.interp(s, d, xy[:, 1])], [pts[i][2] for i in idx], [pts[i][3] for i in idx]
 
 
+def _rescues(d):
+    """The hostages rescued in a match: [{"round", "t", "steamid"}], read once from its demo (kept beside its tables)."""
+    f = os.path.join(d, "hostages.json")
+    if os.path.exists(f):
+        try:
+            return json.load(open(f, encoding="utf-8"))
+        except (OSError, ValueError):
+            pass
+    dem = os.path.join(config.CACHE, os.path.basename(d) + ".dem")
+    fr = os.path.join(d, "rounds.parquet")
+    if not (os.path.exists(dem) and os.path.exists(fr)):
+        return []
+    from demoparser2 import DemoParser
+    R = pd.read_parquet(fr, columns=["round", "start_tick", "end_tick"])
+    try:
+        e = DemoParser(dem).parse_event("hostage_rescued")
+    except Exception:
+        e = pd.DataFrame()
+    if not isinstance(e, pd.DataFrame):   # no rescue in the match: an empty list
+        e = pd.DataFrame()
+    out = []
+    for tick, s in zip(e.get("tick", []), e.get("user_steamid", [])):
+        r = R[(R.start_tick <= tick) & (tick <= R.end_tick + 64)]
+        if len(r):
+            out.append({"round": int(r["round"].iloc[0]), "t": round((tick - int(r.start_tick.iloc[0])) / 64, 1), "steamid": str(s)})
+    json.dump(out, open(f, "w", encoding="utf-8"))
+    return out
+
+
+def _carry(S, rs, mp):
+    """One rescue's carry from the carrier's walk: picked up at the point farthest from where he rescued it."""
+    x = S[(S["round"] == rs["round"]) & (S.steamid.astype(str) == rs["steamid"]) & (S.t <= rs["t"] + 0.5)].sort_values("t")
+    if len(x) < 10:
+        return None
+    end = np.array([x.px.iloc[-1], x.py.iloc[-1]])
+    dist = np.hypot(x.px.values - end[0], x.py.values - end[1])
+    i = int(np.argmax(dist))
+    if dist[i] < 60:
+        return None
+    c = x.iloc[i:]
+    zs, zt = [], {}
+    for z, t in zip(c.zone, c.t):
+        zh = _humanize(z, mp)
+        if zh and (not zs or zs[-1] != zh):
+            zs.append(zh)
+            zt.setdefault(zh, float(t - c.t.iloc[0]))
+    return {"from": _humanize(x.zone.iloc[i], mp), "to": zs[-1] if zs else None, "zones": zs, "zt": zt, "s": float(c.t.iloc[-1] - c.t.iloc[0]),
+            "t0": float(c.t.iloc[0]), "pts": [(float(a), float(b), lv, float(t)) for a, b, lv, t in zip(c.px, c.py, c.level, c.t)]}
+
+
+def _order(routes):
+    """The ways from left to right as seen from the CT spawn toward the hostages (radar: y down), keys 1, 2, 3, and
+    each one's short name: its last zone no other way takes."""
+    if not routes:
+        return routes
+    st = np.mean([r["pts"][0][:2] for r in routes], axis=0)
+    ends = np.array([r["pts"][-1][:2] for r in routes])
+    h = ends.mean(axis=0) - st
+    side = [h[0] * (e[1] - st[1]) - h[1] * (e[0] - st[0]) for e in ends]   # < 0: left of the heading
+    routes = [r for _, r in sorted(zip(side, routes), key=lambda q: q[0])]
+    for k, r in enumerate(routes, 1):
+        own = [z for z in r["zones"] if not any(z in o["zones"] for o in routes if o is not r)]
+        r.update(key=k, name=(own or r["zones"])[-1])
+    return routes
+
+
 def map_summary(mp, dirs, cell=24):
     ways, holds, danger, n_rounds, ct_won, rescued = {}, {}, {}, 0, 0, 0
+    carries = []
     for d in dirs:
         fs, fr, fd = (os.path.join(d, x) for x in ("samples.parquet", "rounds.parquet", "duels.parquet"))
         if not (os.path.exists(fs) and os.path.exists(fr)):
@@ -51,6 +126,10 @@ def map_summary(mp, dirs, cell=24):
         rescued += int((R.reason.astype(str) == "hostage_rescued").sum())
         S = pd.read_parquet(fs, columns=["steamid", "side", "round", "t", "px", "py", "level", "zone", "health"])
         S = S[S.px.notna()].sort_values("t")
+        for rs in _rescues(d):
+            c = _carry(S, rs, mp)
+            if c:
+                carries.append(c)
         for (rnd, sid), x in S[(S.side == "CT") & (S.t <= ROUTE_MAX_T)].groupby(["round", "steamid"]):
             zs, pts = [], []
             for z, t, px_, py_, lv, hp in zip(x.zone, x.t, x.px, x.py, x.level, x.health):
@@ -112,7 +191,75 @@ def map_summary(mp, dirs, cell=24):
              "zone": _humanize(max(k["z"], key=k["z"].get), mp) if k["z"] else None}
             for (lv, cx, cy), k in sorted(danger.items(), key=lambda kv: -kv[1]["n"])[:6] if k["n"] >= 3]
     return {"n_rounds": n_rounds, "n_matches": len(dirs), "ct_won": round(100 * base), "rescued": round(100 * rescued / n_rounds),
-            "routes": routes, "holds": hold, "danger": dang}
+            "routes": _order(routes), "holds": hold, "danger": dang, "carry": _carries(carries), "geo": _geo(mp)}
+
+
+def _geo(mp):
+    """The radar's transform (a live position on the map: the carrier's spot when he presses numpad 7 / 9)."""
+    try:
+        import lanes as LN
+        return LN.radar(LN.geo(), mp)
+    except Exception:
+        return None
+
+
+def _carries(cs):
+    """Per spot where hostages were picked up: the way back most like the others (the medoid), its time, where it ends;
+    and the zones the ways back cross the most (neither the spot nor the rescue): where the Ts cut them, and how long
+    after the pick-up the carrier gets there."""
+    by = {}
+    for c in cs:
+        if c["from"]:
+            by.setdefault(c["from"], []).append(c)
+    spots = []
+    for z, L in sorted(by.items(), key=lambda kv: -len(kv[1])):
+        if len(L) < 3:
+            continue
+        rs = [(c, r) for c, r in ((c, _resample(c["pts"], 40)) for c in L) if r is not None]
+        if not rs:
+            continue
+        A = np.array([r[0] for _, r in rs])
+        med = int(np.argmin([np.mean(np.hypot(*(A - a).transpose(2, 0, 1))) for a in A]))
+        c0, (xy, lv, ts) = rs[med]
+        cut = {}
+        for c in L:
+            seen = set()
+            for q in c["zones"][1:-1]:
+                if q not in seen and q != z:
+                    seen.add(q)
+                    cut.setdefault(q, []).append(c)
+        cuts = []
+        for q, cl in sorted(cut.items(), key=lambda kv: -len(kv[1]))[:2]:
+            if len(cl) < max(2, 0.4 * len(L)):
+                continue
+            cuts.append({"zone": q, "share": round(100 * len(cl) / len(L)), "after": round(float(np.median([c["zt"][q] for c in cl])), 1)})
+        spots.append({"zone": z, "n": len(L), "s": round(float(np.median([c["s"] for c in L])), 1),
+                      "t0": round(float(np.median([c["t0"] for c in L])), 1),
+                      "to": max(set(c["to"] for c in L if c["to"]), key=[c["to"] for c in L].count, default=None),
+                      "cut": cuts, "pts": [[round(float(x_), 1), round(float(y_), 1), l_, round(float(t_) - ts[0], 1)] for (x_, y_), l_, t_ in zip(xy, lv, ts)]})
+    return spots
+
+
+_NAMES = {}
+
+
+def way_names(mp):
+    """{1: "Back Way", 2: "Main Hall", 3: "Side Hall"} from the saved summary (no new computation: read 10 times a
+    second by the keys' files)."""
+    try:
+        mt = os.path.getmtime(OUT)
+    except OSError:
+        return {}
+    c = _NAMES.get(mp)
+    if c and c[0] == mt:
+        return c[1]
+    try:
+        m = (json.load(open(OUT, encoding="utf-8")).get("maps") or {}).get(mp) or {}
+        names = {int(r["key"]): r["name"] for r in m.get("routes") or [] if r.get("key") and r.get("name")}
+    except (OSError, ValueError, KeyError, TypeError):
+        names = {}
+    _NAMES[mp] = (mt, names)
+    return names
 
 
 def summary(force=False):

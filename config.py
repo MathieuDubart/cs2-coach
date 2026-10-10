@@ -329,3 +329,12 @@ def display_name(sid, fallback=None):
 
 def player_dir(steamid):
     return os.path.join(PLAYERS, str(steamid))
+
+
+def key_free(how):
+    """A throw's way without a key letter: CS2 binds by key position, so "W" is Z on an AZERTY keyboard (10/10, the
+    user: "moi je suis en clavier français c'est Z ... différentes personnes, différents inputs"). Old labels stay in the
+    stored lineups; this renames them when shown."""
+    if not how:
+        return how
+    return how.replace("run-throw (W)", "run-throw (moving forward)").replace("W + jumpthrow", "forward + jumpthrow")

@@ -223,6 +223,9 @@ def set_mark(rnd, fields):
             clean[k] = [str(z)[:30] for z in v][:6] if isinstance(v, list) else None
         elif k in ("heat", "mood_word"):
             clean[k] = (bool(v) if k == "heat" else str(v)[:24]) if v else None
+        elif k == "hostage":   # hostage maps: numpad 7 / 9, the 1st / 2nd hostage taken (when, and the CT carrier's spot)
+            ok = isinstance(v, dict) and v.get("n") in (1, 2)
+            clean[k] = {"n": v["n"], "t": num(v.get("t")), "pos": v.get("pos") if isinstance(v.get("pos"), list) else None} if ok else None
     if not clean:
         return True
     with LOCK:
@@ -338,8 +341,8 @@ def set_tdir(what, src="key", toggle=True, via=None):
     log_event({"map": mp, "round": int(rnd), "tdir": {k: cur.get(k) for k in ("dir", "via", "tempo", "src")}})
     # CT: the site you play. Bomb down, only numpad 7 / 9 say its site (07/10, the user: "garde bien le 7 ou 9 pour le
     # post-plant"): 1, 2 or 3 then say where you are, the start of your rotation
-    if what in ("A", "B") and not (bomb == "planted" and ph != "over"):
-        set_site_key(what)
+    if what in ("A", "B") and not (bomb == "planted" and ph != "over") and not str(mp or "").startswith("cs_"):
+        set_site_key(what)   # hostage maps: 1 and 3 are ways, not sites
     return True
 
 
@@ -461,8 +464,14 @@ def set_site_key(site):
         return False
     with LOCK:
         rnd, side, ph, bomb = STATE.get("round"), STATE.get("side"), STATE.get("round_phase"), STATE.get("bomb")
+        mp, pos, since = STATE.get("map") or "", STATE.get("pos"), STATE.get("live_since")
     if not rnd:
         return False
+    if mp.startswith("cs_"):   # hostage maps (10/10): no bomb; 7 / 9 = the 1st / 2nd hostage taken, the round's
+        if ph != "live":       # "after the plant" (CT: you carry it, Live shows your way back; T: where to cut it)
+            return False
+        t = round(time.time() - since, 1) if since else None
+        return set_mark(rnd, {"hostage": {"n": 1 if site == "A" else 2, "t": t, "pos": pos if side == "CT" else None}})
     if ph == "over":
         rnd, bomb = rnd + 1, None
     if bomb == "planted":

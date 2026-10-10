@@ -44,7 +44,7 @@ def todo(mp):
         if i in seen:
             return
         seen.add(i)
-        out.append({"id": i, "side": side, "type": u["type"], "from": u.get("from"), "to": u.get("to"), "how": u.get("how"),
+        out.append({"id": i, "side": side, "type": u["type"], "from": u.get("from"), "to": u.get("to"), "how": config.key_free(u.get("how")),
                     "setpos": u["setpos"], "n": int(u.get("n") or 0)})
     for d in M.get("dirs") or []:
         for u in d.get("util") or []:

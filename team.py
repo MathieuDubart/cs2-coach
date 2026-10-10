@@ -455,7 +455,7 @@ def _lane_nades(M, mp, key, member_sid):
                 x = picks[key].get(typ)
                 if x:
                     res.append({"type": typ, "role": x.get("role"), "from": x.get("from"), "to": x.get("to"), "timer": x.get("timer"),
-                                "t": x.get("t_med"), "setpos": x.get("setpos"), "how": x.get("how"), "from_px": x.get("from_px"),
+                                "t": x.get("t_med"), "setpos": x.get("setpos"), "how": config.key_free(x.get("how")), "from_px": x.get("from_px"),
                                 "to_px": x.get("to_px"), "level": x.get("level"), "n": x.get("n"),
                                 "yours": bool(x.get("yours") and m["steamid"] == member_sid)})
             return res[:3]
@@ -696,7 +696,7 @@ def t_plays(M, mp, ref, R, TH, troles, missing):
                             break
                 if thr:
                     load[thr["name"]] += 1
-                items.append({"type": typ, "from": l["from_zone"], "to": l["to_zone"], "setpos": l.get("setpos"), "t": l.get("t"), "how": l.get("how"),
+                items.append({"type": typ, "from": l["from_zone"], "to": l["to_zone"], "setpos": l.get("setpos"), "t": l.get("t"), "how": config.key_free(l.get("how")),
                               "uses": l["uses"], "from_px": l.get("from_px"), "to_px": l.get("to_px"), "level": l.get("level"),
                               "lane": ls[li]["name"] if li is not None else None, "member": (thr or {}).get("member"),
                               "name": (thr or {}).get("name", "a teammate"),

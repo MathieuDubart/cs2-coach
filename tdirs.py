@@ -564,7 +564,7 @@ def lineups_page(mp):
                     continue
                 L.append({"type": typ, "from": x.get("from"), "to": x.get("to"), "from_key": x.get("from_key"), "to_key": x.get("to_key"),
                           "from_px": x["from_px"], "to_px": x["to_px"], "level": x.get("level"), "land_level": x.get("land_level"),
-                          "n": int(x.get("n") or 0), "players": int(x.get("players") or 0), "how": x.get("how"),
+                          "n": int(x.get("n") or 0), "players": int(x.get("players") or 0), "how": config.key_free(x.get("how")),
                           "w": [int(((x.get("windows") or {}).get(k) or {}).get("n") or 0) for k in WINDOWS],
                           # when it is thrown (09/10, the user: "le timing des stuff" in Live's timeline): the median
                           # moment, the one in each window (s into the round; the post window's: after the plant)

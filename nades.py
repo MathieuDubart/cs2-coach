@@ -164,7 +164,7 @@ def _how(b, fit=None):
     pat = fit[0] if fit else None
     how = []
     if pat in ("W", "WJ"):
-        how.append("W + jumpthrow" if pat == "WJ" else "run-throw (W)")
+        how.append("forward + jumpthrow" if pat == "WJ" else "run-throw (moving forward)")
     elif b.jump or pat == "jump":
         how.append("jumpthrow")
     if not how and b.speed > 150:

@@ -332,9 +332,19 @@ function sitText(p,g){if(!g.side||g.round==null)return null;const H=g.hist||{},R
 const isHostage=m=>/^cs_/.test(m||""),attackSide=m=>isHostage(m)?"CT":"T";
 // the path you pressed (numpad 1, 2 or 3, the last one wins) for this round, on the attacking side; 0: none
 function focusN(g){const f=g&&g.focus;return f&&f.n>=1&&f.n<=3&&f.round===g.round&&g.side===attackSide(g.map)?f.n:0}
-// hostage maps: the CTs' ways out of their spawn as the paths of the attack (most taken first), rounds won, when there
+// hostage maps: the CTs' ways out of their spawn as the paths of the attack, in the map's order (10/10: numpad 1, 2, 3 =
+// left, middle, right from the CT spawn, the same keys every day), rounds won, when there
 function hostageRank(p,g){const H=((p.advice.plan||{}).hostage||{})[g.map];if(!H||!(H.routes||[]).length)return null;const tot=H.routes.reduce((a,r)=>a+r.n,0)||1;
-  return {rows:H.routes.map((r,i)=>({rank:i+1,k:"h"+i,route:{zones:r.zones,pts:r.pts},col:WIN_C[i],wr:r.won,share:Math.round(100*r.n/tot),timing:{at:r.t_end},t_end:r.t_end,n:r.n})),hostage:true}}
+  return {rows:H.routes.map((r,i)=>({rank:r.key||i+1,name:r.name,k:"h"+i,route:{zones:r.zones,pts:r.pts},col:WIN_C[i],wr:r.won,share:Math.round(100*r.n/tot),timing:{at:r.t_end},t_end:r.t_end,n:r.n})),hostage:true}}
+// hostage maps: a hostage taken this round (numpad 7 / 9, 10/10, the bomb maps' "after the plant"): the ways back to the
+// rescue seen in the base (CT: the one from where you pressed the key; T: the most seen) and the zones they cross, where
+// the Ts cut them, with when on the game clock (the key's moment + the carrier's usual time to get there)
+function hostageCarry(p,g){const H=((p.advice.plan||{}).hostage||{})[g.map],mk=(((g.hist||{}).marks||{})[g.round]||{}).hostage;
+  if(!H||!mk||!(H.carry||[]).length)return null;let rows=H.carry,w=null;
+  if(g.side==="CT"&&mk.pos&&H.geo&&typeof worldPx==="function")w=worldPx(H.geo,mk.pos);
+  if(w){const d=s=>Math.hypot(s.pts[0][0]-w.px[0],s.pts[0][1]-w.px[1]);rows=[...rows].sort((a,b)=>d(a)-d(b)).slice(0,1)}else rows=rows.slice(0,g.side==="CT"?1:3);
+  const at=mk.t!=null?mk.t:null;
+  return {n:mk.n,at,you:w,rows:rows.map(s=>({...s,back:at!=null?at+s.s:null,cut:(s.cut||[]).map(c=>({...c,by:at!=null?at+c.after:null}))}))}}
 function pathShort(p,g,r){const M=(((p.advice.plan||{}).tside||{}).maps||{})[g.map]||{},lab=String(((M.plays||{}).label||{})[r.k]||r.k);   // fakes: their label is made below
   const all=Object.values(M.t_routes||{}).flat().map(x=>x.zones||[]),freq={};all.forEach(zs=>new Set(zs).forEach(z=>freq[z]=(freq[z]||0)+1));
   const zs=(r.route||{}).zones||[],i0=zs.findIndex(z=>/spawn/i.test(z));

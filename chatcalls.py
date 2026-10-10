@@ -15,7 +15,12 @@ console: `exec coach_binds` (the binds then stay in your CS2 settings).
 
 The text written is cleaned (no quote, semicolon or line break, plain characters, 120 at most): a file can only ever
 say one line in the team chat (10/10: no more chat wheel "Go A" after it, two lines a key was spam), and define CS2
-aliases that only say such a line. Never another command."""
+aliases that only say such a line. Never another command.
+
+Hostage maps (cs_*, 10/10): the keys follow the role, not the side. The CTs attack: as the T of a bomb map, numpad 1, 2,
+3 are the ways toward the hostages (left, middle, right from the CT spawn, named by hostage.way_names: "Rush Side Hall")
+with the same two-key line; the Ts defend: as the CT of a bomb map, Wily only. Numpad 7 / 9 = the 1st / 2nd hostage
+taken (Wily only, both sides: gsi.set_site_key)."""
 import os
 import re
 import time
@@ -43,7 +48,14 @@ ALONE = 6.0   # s: a way without its tempo (or the reverse) is said alone on its
 def combo(d, tempo, mp):
     """The team chat's line for a way and a tempo: "Rush B", "Slow mid", "Map control A" (Nuke's mid: outside)."""
     w = ""
-    if d == "MID":
+    if str(mp or "").startswith("cs_") and d in WAYS.values():   # hostage maps: the way's name (key 1, 2, 3)
+        try:
+            import hostage
+            w = hostage.way_names(mp).get({v: k for k, v in WAYS.items()}[d], "")
+        except Exception:
+            w = ""
+        w = w or {"A": "left", "MID": "middle", "B": "right"}[d]
+    elif d == "MID":
         try:
             import tdirs
             w = (tdirs.mid_name(mp) or "Mid").lower()
@@ -57,12 +69,12 @@ def combo(d, tempo, mp):
 
 
 def t_lines(now=None):
-    """T on a bomb map: the round's plan as the keys' files need it (gsi: the way and the tempo pressed this round), or
-    None elsewhere (CT: Wily only; hostage maps: the page's routes)."""
+    """The attack (T on a bomb map, CT on a hostage map): the round's plan as the keys' files need it (gsi: the way and
+    the tempo pressed this round), or None for the defense (Wily only)."""
     with gsi.LOCK:   # read 10 times a second: only what it needs
         s = {k: gsi.STATE.get(k) for k in ("map", "side", "round", "round_phase", "tdir")}
     mp, rnd = s.get("map") or "", s.get("round")
-    if s.get("side") != "T" or not mp or mp.startswith("cs_") or not rnd:
+    if not mp or not rnd or s.get("side") != ("CT" if mp.startswith("cs_") else "T"):
         return None
     kr = rnd + 1 if s.get("round_phase") == "over" else rnd   # a key after the round's end counts for the next one
     t = s.get("tdir") or {}
