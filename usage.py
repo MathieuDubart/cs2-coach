@@ -28,8 +28,17 @@ SCREENS = {"phone", "tablet", "laptop", "desktop", "wide"}
 LOCK = threading.Lock()
 
 
+NOTICE_V = 2   # the first-launch notice's version: 2 (10/10) also tells that the anonymized matches are shared by default
+
+
 def settings():
     return (config.settings().get("usage") or {})
+
+
+def noticed():
+    """The player saw the current notice (an older one, about the usage statistics only, does not count)."""
+    v = settings().get("noticed")
+    return (v if isinstance(v, int) and not isinstance(v, bool) else int(bool(v))) >= NOTICE_V
 
 
 def enabled():
@@ -43,7 +52,7 @@ def set_options(on=None, noticed=None):
     if on is not None:
         u["on"] = bool(on)
     if noticed is not None:
-        u["noticed"] = bool(noticed)
+        u["noticed"] = NOTICE_V if noticed else 0
     config.save_settings(s)
     return status()
 
@@ -80,7 +89,7 @@ def status():
     s = settings()
     today = config.read_json(os.path.join(DIR, f"{_today()}.json"), None)
     sent = len([f for f in os.listdir(DIR) if f.endswith(".sent.json")]) if os.path.isdir(DIR) else 0
-    return {"on": enabled(), "client": config.role() == "client", "noticed": bool(s.get("noticed")), "today": today, "days_sent": sent}
+    return {"on": enabled(), "client": config.role() == "client", "noticed": noticed(), "today": today, "days_sent": sent}
 
 
 def _post(day, counts):

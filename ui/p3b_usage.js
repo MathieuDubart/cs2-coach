@@ -30,7 +30,9 @@ setInterval(()=>usageFlush(false),60000);
 addEventListener("pagehide",()=>usageFlush(true));
 document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="hidden")usageFlush(true)});
 // the first time: what is counted, and the switch (Settings has it too)
-function usageNotice(){const n=$("#usage-note");if(!n||!D.local||D.role!=="client"||!D.usage||!D.usage.on||D.usage.noticed)return;
+// (10/10: the anonymized matches too, on by default on a player's copy; "Turn both off" stops both)
+function usageNotice(){const n=$("#usage-note");if(!n||!D.local||D.role!=="client"||!D.usage||D.usage.noticed)return;
   n.hidden=false;
-  const done=async on=>{n.hidden=true;try{const r=await api("/api/usage/set",{noticed:true,...(on===false?{on:false}:{})});D.usage={on:r.on,noticed:true}}catch(e){}};
+  const done=async on=>{n.hidden=true;try{const r=await api("/api/usage/set",{noticed:true,...(on===false?{on:false}:{})});D.usage={on:r.on,noticed:true};
+    if(on===false)await api("/api/contrib/set",{on:false})}catch(e){}};
   $("#un-ok",n).onclick=()=>done();$("#un-off",n).onclick=()=>done(false);$("#un-more",n).onclick=()=>{done();go("settings")}}

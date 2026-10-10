@@ -258,6 +258,7 @@ table.lc{border-collapse:collapse;font-variant-numeric:tabular-nums;min-width:64
 .replist{list-style:none;margin:8px 0;padding:0;display:grid;gap:10px}.replist li{border:1px solid var(--line);border-radius:6px;padding:10px 12px}
 .usage-note{position:fixed;left:16px;right:16px;bottom:16px;max-width:760px;margin:0 auto;z-index:50;background:var(--panel,var(--bg));border:1px solid var(--line);border-radius:8px;padding:14px 16px;display:grid;gap:10px;box-shadow:0 8px 30px rgba(0,0,0,.35)}
 .usage-note p{margin:0}
+.usage-note ul{margin:6px 0;padding-left:20px;display:grid;gap:4px}.usage-note p+p{margin-top:6px}
 .uspre{max-height:220px;overflow:auto;white-space:pre-wrap;font:12px var(--f-mono)}
 .ustab{width:100%;border-collapse:collapse;font-size:13.5px;margin:4px 0 10px}.ustab th,.ustab td{text-align:left;padding:4px 8px;border-bottom:1px solid var(--line)}
 .ustab th{font:600 11px var(--f-mono);text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}.ustab td:not(:first-child),.ustab th:not(:first-child){text-align:right}

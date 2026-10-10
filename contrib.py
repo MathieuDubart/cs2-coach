@@ -1,4 +1,6 @@
-"""A player's matches shared with the base, anonymized (05/10, off until the player turns it on in Settings):
+"""A player's matches shared with the base, anonymized (05/10; on by default on players' copies since 10/10, the
+user: "autorise par défaut l'ajout des données ... pour augmenter mes informations", said at the first launch, off in
+Settings or in that notice):
 the coach's base grows with the players who use the app, without their accounts.
 
 What leaves the PC, per match: the tables the app extracted from its demo (positions every half second, duels,
@@ -44,6 +46,12 @@ def state():
     return s
 
 
+def is_on(s=None):
+    """On unless the player turned it off: a player's copy shares by default (10/10), the coach's own app never."""
+    s = state() if s is None else s
+    return bool(s.get("on", config.role() == "client"))
+
+
 def set_on(on):
     s = state()
     s["on"] = bool(on)
@@ -68,7 +76,7 @@ def candidates():
 
 def status():
     s = state()
-    return {"on": bool(s.get("on")), "install": s["install_id"], "sent": len(s.get("sent") or {}), "waiting": len(candidates()) if s.get("on") else None,
+    return {"on": is_on(s), "install": s["install_id"], "sent": len(s.get("sent") or {}), "waiting": len(candidates()) if is_on(s) else None,
             "last": s.get("last"), "error": s.get("error"), "sending": ST["sending"], "url": URL}
 
 
@@ -143,7 +151,7 @@ def send(limit=None):
     try:
         while True:
             s = state()
-            if not s.get("on") or config.in_match():
+            if not is_on(s) or config.in_match():
                 break
             todo = candidates()[:limit] if limit else candidates()
             if not todo:
@@ -173,11 +181,13 @@ def send(limit=None):
 
 
 def watch():
-    """Every 30 minutes, when the player turned it on and no match is running."""
+    """Every 30 minutes, when sharing is on, the player saw the first-launch notice that says so, and no match is
+    running."""
     time.sleep(120)
     while True:
         try:
-            if state().get("on") and not config.in_match():
+            import usage
+            if is_on() and usage.noticed() and not config.in_match():
                 send()
         except Exception as e:
             print("share:", e, flush=True)
