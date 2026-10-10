@@ -85,7 +85,7 @@ The server port is set with the `COACH_PORT` environment variable.
 
 - Valve only provides the **last 8 matches**, and demos expire after about **a month**.
 - A player with no public Leetify profile and no shared demo only gets a light profile (Steam/csstats ranks).
-- FACEIT isn't supported.
+- FACEIT matches are listed with their stats (FACEIT Data API key needed); their demos are not analyzed yet.
 
 ## Data and privacy
 
@@ -97,3 +97,12 @@ Everything stays local in `cache/` (demos) and `out/` (analyses, generated site,
 - [boiler-writter](https://github.com/akiver/boiler-writter) (MIT): match list through the Game Coordinator
 - Radars and map metadata from [CS Demo Manager](https://github.com/akiver/cs-demo-manager)
 - [Leetify](https://leetify.com), [csstats.gg](https://csstats.gg), [HLTV](https://www.hltv.org): public stats and pro demos
+
+## License
+
+Copyright 2026 [Valentin Gassend](https://valentingassend.com/).
+
+Licensed under the [Apache License, Version 2.0](LICENSE): you may use, modify, redistribute and contribute to this
+work, provided you keep the copyright and the [NOTICE](NOTICE) file, which credits its author, Valentin Gassend,
+with a link to [valentingassend.com](https://valentingassend.com/). Contributions are accepted under the same
+license. The CoachReplay plugin is under the MIT License; third-party components keep their own licenses.

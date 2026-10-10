@@ -1,0 +1,11 @@
+Wily (CS2 coach)
+Copyright 2026 Valentin Gassend - https://valentingassend.com/
+
+This product includes software developed by Valentin Gassend (https://valentingassend.com/).
+
+Any redistribution or derivative work of this software, in source or binary form, must keep this NOTICE file
+and credit its author, Valentin Gassend, with a link to https://valentingassend.com/, as required by section 4(d)
+of the Apache License, Version 2.0.
+
+The CoachReplay server plugin (plugin/CoachReplay) is licensed separately under the MIT License (see its
+LICENSE.txt). Third-party components keep their own licenses (see legal/THIRD_PARTY_NOTICES.txt).
