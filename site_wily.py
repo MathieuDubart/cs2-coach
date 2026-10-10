@@ -45,6 +45,7 @@ h1{font-size:clamp(38px,6vw,60px);margin:56px 0 12px}h2{font-size:32px;margin:56
 .note{color:var(--muted);font-size:14px}.mono{font-family:var(--f-mono);font-size:12.5px;word-break:break-all}
 .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px;margin-top:18px}
 .card{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:18px 20px}
+.shots{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,420px),1fr));gap:16px;margin-top:18px}.shots figure{margin:0;min-width:0}.shots video,.shots img{display:block;width:100%;height:auto;border-radius:6px;border:1px solid var(--line);background:var(--panel)}.shots figcaption{color:var(--muted);font-size:14px;margin-top:8px}
 .card .eyebrow{font:600 12px var(--f-mono);text-transform:uppercase;letter-spacing:.08em;color:var(--t)}
 .card ul{margin:8px 0 0;padding-left:18px}.card li{margin:4px 0}
 ol.steps{padding-left:22px;max-width:75ch}ol.steps li{margin:10px 0}
@@ -153,6 +154,12 @@ HOME = {
  <article class="card"><span class="eyebrow">Prepare</span><h3>Before you play</h3><ul><li>A timed warm-up built on your weak points (5 to 45 min)</li><li>A training server with bots replaying your real deaths and clutches</li></ul></article>
  <article class="card"><span class="eyebrow">Review</span><h3>After the session</h3><ul><li>What changed against your previous matches, and why</li><li>Your focus of the week and the experiments to try</li><li>Every match round by round</li></ul></article>
 </div>
+<h2 id="see">See it</h2>
+<div class="shots">
+ <figure><video src="media/live.mp4" poster="media/live.jpg" autoplay muted loop playsinline preload="metadata"></video><figcaption><b>Live</b> on the second screen, a round on Nuke (6× speed): after the plant, then the next round's plan with its odds, the ways and the grenades on the radar.</figcaption></figure>
+ <figure><video src="media/training.mp4" poster="media/training.jpg" autoplay muted loop playsinline preload="metadata"></video><figcaption><b>Training server</b>, a grenade drill on Mirage: where to stand, where to aim, and whether it landed in time.</figcaption></figure>
+ <figure><img src="media/prepare.jpg" alt="The Prepare page: maps to train, the rounds you lose lately, the warm-up blocks and your level" loading="lazy"><figcaption><b>Prepare</b>: the warm-up starts where you lose rounds lately.</figcaption></figure>
+</div>
 <h2 id="how">How it works</h2>
 <ol class="steps">
  <li>Open <b>WilySetup.exe</b>, then <b>Install</b>: it downloads me, checks every part and installs me for your Windows account (no administrator rights). I start with Windows and open Live by myself when CS2 starts.</li>
@@ -175,6 +182,12 @@ HOME = {
  <article class="card"><span class="eyebrow">Live</span><h3>Pendant le match</h3><ul><li>Quoi acheter pour ce round et le suivant</li><li>Où les T vont probablement aller, mis à jour avec le chrono et ce que tu vois</li><li>Tes chemins et tes bons spots sur le radar, les grenades à lancer maintenant</li></ul></article>
  <article class="card"><span class="eyebrow">Prepare</span><h3>Avant de jouer</h3><ul><li>Un échauffement chronométré construit sur tes points faibles (5 à 45 min)</li><li>Un serveur d'entraînement avec des bots qui rejouent tes vraies morts et tes clutchs</li></ul></article>
  <article class="card"><span class="eyebrow">Review</span><h3>Après la session</h3><ul><li>Ce qui a changé par rapport à tes matchs précédents, et pourquoi</li><li>Ton focus de la semaine et les expériences à tenter</li><li>Chaque match round par round</li></ul></article>
+</div>
+<h2 id="see">En images</h2>
+<div class="shots">
+ <figure><video src="media/live.mp4" poster="media/live.jpg" autoplay muted loop playsinline preload="metadata"></video><figcaption><b>Live</b> sur le deuxième écran, un round sur Nuke (×6) : après le plant, puis le plan du round suivant avec ses chances, les chemins et les grenades sur le radar.</figcaption></figure>
+ <figure><video src="media/training.mp4" poster="media/training.jpg" autoplay muted loop playsinline preload="metadata"></video><figcaption><b>Serveur d'entraînement</b>, un exercice de grenade sur Mirage : où se placer, où viser, et si elle est arrivée à temps.</figcaption></figure>
+ <figure><img src="media/prepare.jpg" alt="La page Prepare : les maps à travailler, les rounds que tu perds en ce moment, les blocs d'échauffement et ton niveau" loading="lazy"><figcaption><b>Prepare</b> : l'échauffement commence là où tu perds des rounds en ce moment.</figcaption></figure>
 </div>
 <h2 id="how">Comment ça marche</h2>
 <ol class="steps">
@@ -356,6 +369,8 @@ def build():
     shutil.copy2(os.path.join(HERE, "plugin", "CoachReplay", "LICENSE.txt"), os.path.join(OUT, "licenses", "CoachReplay-LICENSE.txt"))
     steam_key_php()
     shutil.copytree(os.path.join(HERE, "web"), OUT, dirs_exist_ok=True)   # the API (PHP) and its .htaccess
+    if os.path.isdir(os.path.join(HERE, "docs", "media")):   # 10/10: pictures and short muted clips of the app, from the user's recordings
+        shutil.copytree(os.path.join(HERE, "docs", "media"), os.path.join(OUT, "media"), dirs_exist_ok=True)
     desc = {"en": "Wily, your CS2 coach: live advice on your second screen, a warm-up with bots on your own situations, and a review of your matches.",
             "fr": "Wily, ton coach CS2 : des conseils en direct sur ton deuxième écran, un échauffement avec des bots sur tes situations, et la revue de tes matchs."}
     pages = {"index.html": ("en", "Wily · your CS2 coach on your second screen", HOME["en"](rel)),

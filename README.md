@@ -18,6 +18,16 @@ replaying your own deaths.
 - **Review (after the session):** what changed against your previous matches and why, your focus of the week, every
   match round by round, compared with a base of thousands of anonymized matches and with pro demos.
 
+## See it
+
+| Live on the second screen (a round on Nuke, 6× speed) | Training server (a grenade drill on Mirage) |
+|---|---|
+| [![Live: the next round's plan with its odds, the ways and the grenades on the radar](docs/media/live.jpg)](docs/media/live.mp4) | [![Training server: where to stand, where to aim, and whether the grenade landed in time](docs/media/training.jpg)](docs/media/training.mp4) |
+
+![Prepare: the warm-up starts where you lose rounds lately](docs/media/prepare.jpg)
+
+Click a picture for its short clip (muted).
+
 ## Can I trust it?
 
 You should be careful with any tool you run next to your game. Here is what you can check yourself:
