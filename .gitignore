@@ -18,3 +18,28 @@ dist/
 # the hash of the coach's contributions token, written by contributions.py init
 web/api/config.php
 web/api/steam_key.php
+# Personal, never published (10/10 audit before opening the repo): the browser profile (cookies, sessions), the match
+# recordings (your voice and screen), the IDE settings, and the local scratch and scraping tests
+chrome_profile/
+rush/
+downloaded_files/
+.idea/
+scraped_codes.txt
+sharecode_farmer.user.js
+farm_*.py
+test_*.py
+fix_*.py
+patch*.py
+diff*.txt
+scratch_*
+*_page.html
+test_page_text.txt
+app_template_next.html
+app_template_original.html
+new_css.css
+check_js.js
+inject_pro_theme.py
+pro_review.py
+process_css.py
+save_html.py
+update_review.py

@@ -87,9 +87,13 @@ def collect(args, own_id):
             new += matchlist.fetch_one(mid, oc, tok)
         except Exception as e:
             log(f"Code {c}: failed ({e})")
+    by_url = {r["url"]: k for k, r in reg.items() if r.get("url")}
     for m in new:
         if m.get("url"):
-            reg.setdefault(m["match_id"], {}).update(m)
+            # a match read from Steam's history page (steamhist.py) is kept under its demo's number: the same match
+            # given here by its match id joins that entry (its demo is already under that name)
+            k = by_url.get(m["url"], m["match_id"])
+            reg.setdefault(k, {}).update({**m, "match_id": k})
     save_registry(reg)
     return reg
 
@@ -688,6 +692,12 @@ def sync_steam(sid=None):
     before = registry()
     args = SimpleNamespace(steamid=sid, sharecode=codes, authcode=None, knowncode=None, no_fetch=False, own=(sid == own_id))
     reg = collect(args, own_id)
+    try:   # the FACEIT matches of the last month (10/10), when the FACEIT key is set: no demo, the rest counts
+        import faceit
+        if faceit.key() and faceit.add_matches(sid, log=log):
+            reg = registry()
+    except Exception as e:
+        log(f"FACEIT: {e}")
     got = [c for c in codes if str(matchlist.decode_sharecode(c)[0]) in reg]
     if got:
         steamlink.done_codes(sid, got)
