@@ -486,7 +486,7 @@ async function renderSettings(){
    <p>When you're frustrated (a word or a shout after your death, "coach, énervé"), after two rounds lost dead without a kill, or when you don't understand ("qu'est-ce qu'on fait", "coach, perdu"): a few seconds of voice during the buy time, once per round. Calm, then one thing to do this round, or a simple plan.</p>
    <div class="row"><label style="display:flex;gap:8px;align-items:center;font-size:14px"><input type="checkbox" id="c-voice" ${voiceOn()?"checked":""}> Speak at the buy time</label><button type="button" id="c-voice-test">Hear it</button></div>
    <div class="row"><label style="display:flex;gap:8px;align-items:center;font-size:14px"><input type="checkbox" id="c-info" ${infoOn()?"checked":""}> Say "l'info !" when I die (your rounds with a call before your death are won far more often)</label></div>
-   <p class="note">A French voice of Windows (Julie, Paul or Hortense), on this PC: nothing is sent anywhere. The browser only lets a page speak after one click on it: click the In game page once when you open it.</p></article>
+   <p class="note">A French voice of this PC (Windows: Julie, Paul or Hortense; Linux: speech-dispatcher with espeak-ng): nothing is sent anywhere. The browser only lets a page speak after one click on it: click the In game page once when you open it.</p></article>
   <article class="card form"><h3>Your calls (microphone) ${ok(vs&&vs.settings&&vs.settings.auto)}</h3>
    <p>During your matches, the app records <b>your microphone</b>, transcribes your calls on this PC and lines them up with the rounds: info given before dying, "where + how many", grenades called, talking during a teammate's clutch, frustration. The result shows up in the Review.</p>
    <p class="note">Only your voice: with a headset, your teammates' voices don't reach your microphone. Nothing leaves the PC (folder <code>out/voice</code>, not versioned). Only record other people with their consent: recording someone's words without consent is illegal in France (article 226-1 of the Code pénal) and in many other countries.</p>
@@ -542,7 +542,7 @@ async function renderSettings(){
   const vl=$("#v-live",v);if(vl)vl.onchange=()=>vcall("/api/voice/settings",{live:vl.checked});
   const cvo=$("#c-voice",v);if(cvo)cvo.onchange=()=>{try{localStorage.setItem("coach_voice",cvo.checked?"on":"off")}catch(e){}};
   const cin=$("#c-info",v);if(cin)cin.onchange=()=>{try{localStorage.setItem("coach_info",cin.checked?"on":"off")}catch(e){}};
-  const cvt=$("#c-voice-test",v);if(cvt)cvt.onclick=()=>{if(!coachSay("Respire. Le round d'avant est fini. Ce round, joue le trade, à côté d'un coéquipier."))cvt.textContent="No French voice of Windows found"};
+  const cvt=$("#c-voice-test",v);if(cvt)cvt.onclick=()=>{if(!coachSay("Respire. Le round d'avant est fini. Ce round, joue le trade, à côté d'un coéquipier."))cvt.textContent=voiceHelp()};
   const vd=$("#v-dev",v);if(vd){fetch("/api/voice/devices").then(r=>r.json()).then(list=>{if(!Array.isArray(list))return;const cur=(vs.settings||{}).device||"";
     vd.innerHTML=`<option value="">${vs.cs2_device?`The same as CS2 (${esc(vs.cs2_device)})`:"Windows default microphone"}</option>`+list.map(d=>`<option value="${esc(d.name)}" ${d.name===cur?"selected":""}>${esc(d.name)}${d.cs2?" (used by CS2)":d.default?" (Windows default)":""}</option>`).join("")}).catch(()=>{});
     vd.onchange=()=>vcall("/api/voice/settings",{device:vd.value||null})}
