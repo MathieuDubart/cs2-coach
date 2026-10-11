@@ -249,7 +249,8 @@ class Handler(BaseHTTPRequestHandler):
         if u.path == "/api/voice/devices":
             try:
                 import voice
-                return self.send(200, voice.devices())
+                ok, why = voice.available()
+                return self.send(200, voice.devices() if ok else {"error": why})
             except Exception as e:
                 return self.send(200, {"error": str(e)})
         if u.path == "/api/account":   # your Steam name and avatar for the bar (05/10)
@@ -825,8 +826,11 @@ def voice_status():
         import voice
     except Exception as e:
         return {"available": False, "error": str(e)}
+    ok, why = voice.available()
+    if not ok:   # no sound library: the page says so instead of offering a microphone that fails on the first click
+        return {"available": False, "error": why, "settings": voice.settings()}
     m = voice.REC.meta
-    return {"available": True, "settings": voice.settings(), "device": voice.chosen_device(), "cs2_device": voice.cs2_voice_device(),
+    return {"available": True, "backend": voice.backend(), "settings": voice.settings(), "device": voice.chosen_device(), "cs2_device": voice.cs2_voice_device(),
             "recording": bool(m), "level": round(voice.REC.peak, 4) if m else None,
             "current": m and {k: m[k] for k in ("id", "map", "start_iso", "device", "source")},
             "transcribing": voice.transcribing(), "recordings": voice.recordings()[:12],
