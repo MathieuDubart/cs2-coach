@@ -6,3 +6,4 @@ pillow
 soundfile
 sounddevice
 faster-whisper
+av<19

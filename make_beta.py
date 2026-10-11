@@ -48,7 +48,7 @@ PY_URL = "https://www.python.org/ftp/python/3.11.9/python-3.11.9-embed-amd64.zip
 PIP_URL = "https://bootstrap.pypa.io/get-pip.py"
 # the versions this app runs with here: the players' copy behaves the same (cryptography: the updates' signature)
 REQS = {"demoparser2": "0.42.0", "pandas": "2.3.3", "numpy": "2.3.4", "pyarrow": "25.0.1", "pillow": "12.0.0", "psutil": "7.2.2",
-        "scikit-learn": "1.7.2", "soundfile": "0.13.1", "sounddevice": "0.5.6", "soundcard": "0.4.6", "faster-whisper": "1.2.1",
+        "scikit-learn": "1.7.2", "soundfile": "0.13.1", "sounddevice": "0.5.6", "soundcard": "0.4.6", "faster-whisper": "1.2.1", "av": "18.1.0",
         "cryptography": "50.0.1"}
 ENTRIES = ["serve", "refresh_all", "grow", "voice", "replay", "train", "build_app", "chatcalls", "focus", "heard", "cs2coach",
            "updater", "contrib"]
