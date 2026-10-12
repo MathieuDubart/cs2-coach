@@ -91,8 +91,10 @@ Terminal=false
 Categories=Game;
 EOF
 
-if ! ldconfig -p 2>/dev/null | grep -q libportaudio; then
-  echo "Note: voice features need PortAudio (Debian/Ubuntu: sudo apt install libportaudio2). Everything else works without it."
+MIC=$(venv/bin/python -c 'import voice; ok, why = voice.available(); print("" if ok else why)' 2>/dev/null || true)
+if [ -n "$MIC" ]; then   # the app itself says which sound library it found, so this note can never drift from the code
+  echo "Note: $MIC"
+  echo "      Everything else works without it: only your calls would be missing."
 fi
 echo "Wily is installed in $DEST. Start it from your applications menu (Wily) or with: sh \"$DEST/wily.sh\""
 echo "Then in CS2: the app installs its Game State Integration file for Live from its Settings page."

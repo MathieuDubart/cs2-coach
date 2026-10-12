@@ -54,19 +54,113 @@ def chosen_device():
     return settings().get("device") or cs2_voice_device()
 
 
+# ---------- sound libraries ----------
+# Windows: sounddevice, whose wheel carries PortAudio with it. Linux: soundcard, which talks to PulseAudio/PipeWire
+# and needs nothing installed by hand - sounddevice's Linux wheel bundles no PortAudio, so without one it raises
+# OSError("PortAudio library not found") and not a single call is ever recorded (10/10, a tester on Fedora).
+BACKENDS = ("sd", "sc") if os.name == "nt" else ("sc", "sd")
+_NAMES = {"sd": "sounddevice", "sc": "soundcard"}
+
+
+def _why_not(b):
+    """-> None when that library can be used here, else what it answered."""
+    # soundcard names itself to PulseAudio from sys.argv[1] when argv[0] is "-c" or "-m", without checking that there
+    # is one: probed from a "python -c" one-liner it raises IndexError and this PC would look unable to record.
+    argv = sys.argv
+    if len(argv) < 2:
+        sys.argv = [*argv, "wily"]
+    try:
+        __import__(_NAMES[b])
+        return None
+    except Exception as e:
+        return f"{type(e).__name__}: {e}"
+    finally:
+        sys.argv = argv
+
+
+def backend():
+    """The library the recording goes through: 'sc' (PulseAudio/PipeWire) or 'sd' (PortAudio). None: neither works."""
+    return next((b for b in BACKENDS if _why_not(b) is None), None)
+
+
+def available():
+    """(your calls can be recorded, why they cannot). The Settings page says it instead of offering a microphone
+    that will fail on the first click."""
+    if backend():
+        return True, ""
+    why = ", ".join(f"{_NAMES[b]} ({_why_not(b)})" for b in BACKENDS)
+    how = "" if os.name == "nt" else (" PortAudio gives one: Debian/Ubuntu: sudo apt install libportaudio2 ; "
+                                      "Fedora: sudo dnf install portaudio ; Arch: sudo pacman -S portaudio.")
+    return False, f"no sound library usable on this PC: {why}.{how}"
+
+
+def _same_device(name, want):
+    """A name as the library gives it against the one asked for (PortAudio shortens names to 31 characters)."""
+    return bool(name and want) and (name == want or name.startswith(want[:31]) or want.startswith(name[:31]))
+
+
 def devices():
-    import sounddevice as sd
-    default = sd.query_devices(kind="input")["name"]
     cs2 = cs2_voice_device()
     seen, out = set(), []
+    if backend() == "sc":
+        import soundcard as sc
+        try:
+            default = sc.default_microphone().name
+        except Exception:
+            default = None
+        for m in sc.all_microphones(include_loopback=False):   # the monitors are the team sound, not your voice
+            if m.name not in seen:
+                seen.add(m.name)
+                out.append({"name": m.name, "default": m.name == default, "cs2": _same_device(m.name, cs2)})
+        return out
+    import sounddevice as sd
+    default = sd.query_devices(kind="input")["name"]
     for d in sd.query_devices():
         if d["max_input_channels"] > 0 and d["name"] not in seen:
             seen.add(d["name"])
-            out.append({"name": d["name"], "default": d["name"] == default, "cs2": bool(cs2) and d["name"].startswith(cs2[:31])})
+            out.append({"name": d["name"], "default": d["name"] == default, "cs2": _same_device(d["name"], cs2)})
     return out
 
 
 # ---------- recording ----------
+class _ScStream:
+    """soundcard records through blocking calls: a thread makes them and hands each block over, behind the same
+    start/stop/close a sounddevice stream has. The device opens inside that thread, so start() waits for it: a
+    microphone that cannot open is an error of the button you pressed, not a recording that turns out empty."""
+
+    def __init__(self, mic, rate, on_block, blocksize=1024):
+        self.mic, self.rate, self.on_block, self.blocksize = mic, rate, on_block, blocksize
+        self.stop_ev, self.ready, self.error = threading.Event(), threading.Event(), None
+        self.thread = threading.Thread(target=self._run, daemon=True)
+
+    def _run(self):
+        try:
+            with self.mic.recorder(samplerate=self.rate, channels=1, blocksize=self.blocksize) as r:
+                self.ready.set()
+                while not self.stop_ev.is_set():
+                    d = r.record(numframes=self.rate // 10)
+                    self.on_block(d[:, 0] if getattr(d, "ndim", 1) > 1 else d)
+        except Exception as e:
+            self.error = e
+            if self.ready.is_set():   # it was recording and the sound card went away: the file keeps what it had
+                print("microphone:", e, flush=True)
+        finally:
+            self.ready.set()
+
+    def start(self, timeout=10):
+        self.thread.start()
+        self.ready.wait(timeout)
+        if self.error:
+            raise self.error
+
+    def stop(self):
+        self.stop_ev.set()
+        self.thread.join(timeout=5)
+
+    def close(self):
+        pass
+
+
 class Recorder:
     def __init__(self):
         self.lock = threading.Lock()
@@ -77,8 +171,10 @@ class Recorder:
         return self.stream is not None
 
     def start(self, map_name=None, steamid=None, source="auto"):
-        import sounddevice as sd
         import soundfile as sf
+        b = backend()
+        if b is None:
+            raise RuntimeError(available()[1])
         with self.lock:
             if self.stream:
                 return self.meta
@@ -86,36 +182,62 @@ class Recorder:
             now = dt.datetime.now()
             rid = f"{now:%Y%m%d_%H%M%S}_{(map_name or 'match').replace('de_', '').replace('cs_', '')}"
             name = chosen_device()
-            dev = None
-            if name:  # PortAudio shortens names to 31 characters with some drivers
-                dev = next((i for i, d in enumerate(sd.query_devices()) if d["max_input_channels"] > 0
-                            and (d["name"] == name or name.startswith(d["name"]) or d["name"].startswith(name[:31]))), None)
             self.peak = 0.0
-            info = sd.query_devices(dev, kind="input")
+            mic = dev = None
             rate = SR
-            try:
-                sd.check_input_settings(device=dev, samplerate=SR, channels=1)
-            except Exception:
-                rate = int(info["default_samplerate"])  # Whisper resamples on reading
-            self.file = sf.SoundFile(os.path.join(DIR, rid + ".flac"), mode="w", samplerate=rate, channels=1, format="FLAC")
+            if b == "sc":
+                import soundcard as sc
+                if name:
+                    mic = next((m for m in sc.all_microphones(include_loopback=False) if _same_device(m.name, name)), None)
+                mic = mic or sc.default_microphone()
+                label = mic.name   # PulseAudio resamples to the rate asked for, so SR is always fine
+            else:
+                import sounddevice as sd
+                if name:
+                    dev = next((i for i, d in enumerate(sd.query_devices())
+                                if d["max_input_channels"] > 0 and _same_device(d["name"], name)), None)
+                info = sd.query_devices(dev, kind="input")
+                label = info["name"]
+                try:
+                    sd.check_input_settings(device=dev, samplerate=SR, channels=1)
+                except Exception:
+                    rate = int(info["default_samplerate"])  # Whisper resamples on reading
+            path = os.path.join(DIR, rid + ".flac")
+            self.file = sf.SoundFile(path, mode="w", samplerate=rate, channels=1, format="FLAC")
             self.meta = {"id": rid, "file": rid + ".flac", "start": time.time(), "start_iso": now.isoformat(timespec="seconds"),
-                         "map": map_name, "steamid": str(steamid or ""), "device": info["name"], "rate": rate, "source": source, "rounds": []}
+                         "map": map_name, "steamid": str(steamid or ""), "device": label, "rate": rate, "source": source,
+                         "backend": b, "rounds": []}
 
             seg = _Segmenter(rate, LIVE.push) if settings().get("live", True) else None
 
-            def cb(indata, frames, tinfo, status):
+            def block(data):
                 try:
-                    block = indata[:, 0].copy()
-                    self.file.write(block)
+                    self.file.write(data)
                     if seg is not None:
-                        seg.feed(block, time.time())
-                    p = float(abs(block).max()) if len(block) else 0.0
+                        seg.feed(data, time.time())
+                    p = float(abs(data).max()) if len(data) else 0.0
                     if p > self.peak:
                         self.peak = p
                 except Exception:
                     pass
-            self.stream = sd.InputStream(samplerate=rate, channels=1, dtype="float32", callback=cb, device=dev)
-            self.stream.start()
+
+            if b == "sc":
+                self.stream = _ScStream(mic, rate, block)
+            else:
+                import sounddevice as sd
+                self.stream = sd.InputStream(samplerate=rate, channels=1, dtype="float32", device=dev,
+                                             callback=lambda indata, frames, tinfo, status: block(indata[:, 0].copy()))
+            try:
+                self.stream.start()
+            except Exception:   # the microphone refused: nothing half-open, and the button says why
+                self.stream = None
+                self.file.close()
+                self.file = self.meta = None
+                try:
+                    os.remove(path)
+                except OSError:
+                    pass
+                raise
             self._save()
             return self.meta
 
