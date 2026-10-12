@@ -933,6 +933,18 @@ def auto_sync(every=1800):
         time.sleep(every)
 
 
+def serving(port, timeout=1.0):
+    """Something really is listening there, as opposed to a bind refused for another reason."""
+    import socket
+    with socket.socket() as s:
+        s.settimeout(timeout)
+        try:
+            s.connect(("127.0.0.1", port))
+            return True
+        except OSError:
+            return False
+
+
 if __name__ == "__main__":
     if sys.stdout is None:  # started with pythonw (no console): keep a log file instead
         sys.stdout = sys.stderr = open(os.path.join(config.CACHE, "serve.log"), "a", encoding="utf-8", buffering=1)
@@ -941,14 +953,21 @@ if __name__ == "__main__":
     if not os.path.exists(os.path.join(build_app.SITE, "index.json")):
         print("First build of the site…")
         build_app.build()
-    ThreadingHTTPServer.allow_reuse_address = False  # a second instance must fail instead of sharing the port
+    # Windows hands the port to a second socket when SO_REUSEADDR is on, so an instance there must not ask for it.
+    # Linux never gives a port to a second listener, with or without it, and without it refuses the bind for a whole
+    # minute after a stop while the last answered connections sit in TIME_WAIT (10/10, measured at 60 s on a player's
+    # PC): the app then said it was already running while nothing was.
+    ThreadingHTTPServer.allow_reuse_address = os.name != "nt"
     try:
         srv = ThreadingHTTPServer(("127.0.0.1", PORT), Handler)
-    except OSError:
-        print(f"Wily is already running: open http://127.0.0.1:{PORT}/")
-        if "--no-browser" not in sys.argv:
-            webbrowser.open(f"http://127.0.0.1:{PORT}/")   # your Review (07/10: Live is for the match)
-        sys.exit(0)
+    except OSError as e:
+        if serving(PORT):
+            print(f"Wily is already running: open http://127.0.0.1:{PORT}/")
+            if "--no-browser" not in sys.argv:
+                webbrowser.open(f"http://127.0.0.1:{PORT}/")   # your Review (07/10: Live is for the match)
+            sys.exit(0)
+        sys.exit(f"Wily cannot listen on port {PORT}: {e}. Nothing answers there: another program may hold it, or the "
+                 f"port was just released and the system still keeps it a few seconds.")
     url = f"http://127.0.0.1:{PORT}/"   # your Review first; CS2's start opens Live (cs2_page_watch)
     print(f"Wily: {url}  (Ctrl+C to stop)")
     if not os.environ.get("COACH_TEST"):
