@@ -350,7 +350,11 @@ function wireShare(v){
   const redo=async()=>{let c=null;try{c=await (await fetch("/api/contrib")).json()}catch(e){return}const k=$("#ct-card",v);if(k&&k.isConnected){k.outerHTML=shareCard(c);wireShare(v)}};
   if(on)on.onclick=async()=>{on.disabled=true;try{await api("/api/contrib/set",{on:!on.textContent.startsWith("Stop")})}catch(e){}redo()};
   if(sd)sd.onclick=async()=>{sd.disabled=true;try{await api("/api/contrib/send",{})}catch(e){}setTimeout(redo,3000)};
-  if(pl)pl.onclick=async()=>{pl.disabled=true;try{await api("/api/contrib/pull",{})}catch(e){}setTimeout(redo,5000)}}
+  if(pl)pl.onclick=async()=>{pl.disabled=true;pl.textContent="Pulling…";const b4=await (await fetch("/api/contrib")).json().catch(()=>({}));
+    try{await api("/api/contrib/pull",{})}catch(e){pl.textContent="Pull now";pl.disabled=false;pl.insertAdjacentHTML("afterend",`<span class="note"> failed: ${esc(e.message)}</span>`);return}
+    setTimeout(async()=>{await redo();const c=await (await fetch("/api/contrib")).json().catch(()=>({})),a=(b4.stats||{}),z=(c.stats||{}),k=$("#ct-pull",v);
+      const d=["joined","duplicates","refused"].map(x=>(z[x]||0)-(a[x]||0)),n=d[0]+d[1]+d[2];
+      if(k)k.insertAdjacentHTML("afterend",`<span class="note"> ${n?`pulled ${n} match(es): ${d[0]} joined, ${d[1]} already there, ${d[2]} refused`:"checked just now: nothing new"}</span>`)},5000)}}
 // a bug report (05/10, the alpha): the player writes, sees what is sent, sends; kept and sent later when offline
 function bugPage(){return `${S.view||"?"}${S.player&&S.player===D.own?" (own profile)":S.player?" (another profile)":""} ${location.pathname}${location.hash}`.slice(0,120)}
 function openReport(kind){const d=$("#bugdlg");if(!d)return;$("#bug-msg").textContent="";$("#bug-send").disabled=false;
@@ -385,7 +389,8 @@ function reportsCard(rs){if(D.role==="client"||!Array.isArray(rs))return "";
 function wireReports(v){
   $$("[data-report]",v).forEach(b=>b.onclick=()=>openReport(b.dataset.report));
   const redo=rs=>{const k=$("#rp-card",v);if(k&&k.isConnected){k.outerHTML=reportsCard(rs);wireReports(v)}};
-  const pl=$("#rp-pull",v);if(pl)pl.onclick=async()=>{pl.disabled=true;try{redo(await api("/api/reports/pull",{}))}catch(e){pl.disabled=false;pl.insertAdjacentHTML("afterend",`<span class="note">${esc(e.message)}</span>`)}};
+  const pl=$("#rp-pull",v);if(pl)pl.onclick=async()=>{pl.disabled=true;pl.textContent="Pulling…";try{const r=await api("/api/reports/pull",{});redo(r);
+      const k=$("#rp-pull",v);if(k)k.insertAdjacentHTML("afterend",`<span class="note"> checked just now: ${(r||[]).length} report(s) here</span>`)}catch(e){pl.textContent="Pull now";pl.disabled=false;pl.insertAdjacentHTML("afterend",`<span class="note"> failed: ${esc(e.message)}</span>`)}};
   $$("[data-rdone]",v).forEach(b=>b.onclick=async()=>{b.disabled=true;try{redo(await api("/api/reports/done",{id:b.dataset.rdone,done:b.dataset.v==="1"}))}catch(e){b.disabled=false}});
   $$("[data-rdiag]",v).forEach(b=>b.onclick=async()=>{const pre=b.closest("li").querySelector(".rdiag");if(!pre.hidden){pre.hidden=true;return}
     try{const r=(await (await fetch("/api/reports?id="+encodeURIComponent(b.dataset.rdiag))).json()).find(x=>x.id===b.dataset.rdiag);pre.textContent=JSON.stringify(r&&r.diag,null,1);pre.hidden=false}catch(e){}})}
@@ -415,7 +420,8 @@ function usageStatsCard(st){if(!st||D.role==="client")return "";
    <div class="btns"><button type="button" id="ust-pull">Pull now</button></div></article>`}
 function wireUsage(v){
   const on=$("#us-on",v);if(on)on.onclick=async()=>{on.disabled=true;try{const r=await api("/api/usage/set",{on:on.textContent.includes("on")&&!on.textContent.includes("off"),noticed:true});D.usage={on:r.on,noticed:true};const k=$("#us-card",v);if(k){k.outerHTML=usageCard(r);wireUsage(v)}}catch(e){on.disabled=false}};
-  const pl=$("#ust-pull",v);if(pl)pl.onclick=async()=>{pl.disabled=true;try{const r=await api("/api/usage/pull",{days:30});const k=$("#ust-card",v);if(k){k.outerHTML=usageStatsCard(r);wireUsage(v)}}catch(e){pl.disabled=false;pl.insertAdjacentHTML("afterend",`<span class="note">${esc(e.message)}</span>`)}}}
+  const pl=$("#ust-pull",v);if(pl)pl.onclick=async()=>{pl.disabled=true;try{const r=await api("/api/usage/pull",{days:30});const k=$("#ust-card",v);if(k){k.outerHTML=usageStatsCard(r);wireUsage(v);
+      const b=$("#ust-pull",v);if(b)b.insertAdjacentHTML("afterend",`<span class="note"> checked just now: ${((r||{}).totals||{}).reports||0} report(s) over ${((r||{}).totals||{}).days||0} day(s)</span>`)}}catch(e){pl.disabled=false;pl.insertAdjacentHTML("afterend",`<span class="note">${esc(e.message)}</span>`)}}}
 // the app updated with the base as it grows (04/10: "a button in the settings to update every data of the app with the
 // base that grows"): what every page reads from the base, then the profiles, yours first
 function refreshCard(r){
