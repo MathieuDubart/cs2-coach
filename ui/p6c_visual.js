@@ -220,14 +220,43 @@ function vReset(p,g){const w=resetWhy(g);if(!w)return "";
   const data=A_&&O_?(O_.won-A_.won>=3?`<small>after a tilt · won ${A_.won}% vs ${O_.won}%</small>`:O_.adr-A_.adr>=5?`<small>after a tilt · ADR ${A_.adr} vs ${O_.adr}</small>`:""):"";
   return `<div class="vreset"><b>RESET</b><span>${w.early?`✕ no dry peek before ${clock(30)}`:"👥 play the trade: next to a mate"}</span>${data}</div>`}
 // ---------- the coach's voice at the buy time: a few seconds in French, once per round, when the reset or plan card
-// shows. A local Windows voice only (Julie, Paul, Hortense: nothing leaves the PC); the browser lets a page speak only
-// after one click on it ----------
+// shows. A voice of this PC only, never a server's (Windows: Julie, Paul, Hortense; Linux: speech-dispatcher): nothing
+// leaves the PC. The browser lets a page speak only after one click on it ----------
 const VOICE={said:null};
+// getVoices() is empty until the browser has loaded them and says so: read it once at start, then on every change,
+// so a call does not go silent just because it was the first thing to ask (10/10, a player on Linux: no voice at all)
+let VOICE_LIST=[];
+const SYNTH=typeof speechSynthesis!=="undefined"?speechSynthesis:null;   // typeof: this file also runs outside a browser (checks/check_maps.js)
+function loadVoices(){try{VOICE_LIST=(SYNTH&&SYNTH.getVoices())||[]}catch(e){VOICE_LIST=[]}}
+if(SYNTH){loadVoices();try{SYNTH.addEventListener("voiceschanged",loadVoices)}catch(e){try{SYNTH.onvoiceschanged=loadVoices}catch(e2){}}}
+function voices(){if(VOICE_LIST.length)return VOICE_LIST;try{return(SYNTH&&SYNTH.getVoices())||[]}catch(e){return[]}}
 function voiceOn(){try{return localStorage.getItem("coach_voice")!=="off"}catch(e){return true}}
-function frVoice(){const vs=(window.speechSynthesis&&speechSynthesis.getVoices())||[];
-  return vs.find(v=>/^fr/i.test(v.lang)&&v.localService&&/Julie|Paul|Hortense/.test(v.name))||vs.find(v=>/^fr/i.test(v.lang)&&v.localService)||null}
-function coachSay(t){if(!window.speechSynthesis)return false;const v=frVoice();if(!v)return false;
-  const u=new SpeechSynthesisUtterance(t);u.voice=v;u.lang=v.lang;u.rate=1.08;speechSynthesis.cancel();speechSynthesis.speak(u);return true}
+// French by its tag, or by its name when the engine does not tag it (speech-dispatcher names its voices by language)
+function isFr(v){return /^fr/i.test(v.lang||"")||/fran[c\u00e7]ais|french/i.test(v.name||"")}
+// localService tells a voice of this PC from a server's, and only Windows and macOS ship remote ones. Firefox on
+// Linux answers false for every voice although they all come from speech-dispatcher, which runs espeak-ng on the PC
+// (10/10, a player's browser: 14805 voices, every one false): believing the flag there would keep the coach silent
+// for a voice that never leaves the PC. So it is believed where remote voices exist, and the platform answers elsewhere.
+function remoteVoices(){return /Windows|Mac OS X|Macintosh|iPhone|iPad/i.test(navigator.userAgent||"")}
+function frVoice(){const fr=voices().filter(isFr);
+  if(!fr.length)return null;
+  const local=fr.filter(v=>v.localService), pool=local.length?local:(remoteVoices()?[]:fr);
+  // espeak-ng crosses every language with every variant and offers no plain voice at all (10/10: 420 French ones,
+  // 3 languages x 140 variants): France before Belgium and Switzerland, and a plain or ordinary variant before one
+  // that would read a call in a whisper or as a robot grandpa
+  const odd=/whisper|croak|grandpa|grandma|klatt|robosoft|Tweaky/i;
+  const best=l=>l.find(v=>!v.name.includes("+"))||l.find(v=>!odd.test(v.name))||l[0];
+  return pool.find(v=>/Julie|Paul|Hortense/.test(v.name))
+      ||best(pool.filter(v=>/^fr-fr$/i.test(v.lang||"")))
+      ||best(pool.filter(v=>/^fr$/i.test(v.lang||"")))
+      ||best(pool)||null}
+function voiceHelp(){if(!SYNTH)return"This browser cannot speak (no speech synthesis).";
+  const vs=voices(),win=/Windows/i.test(navigator.userAgent||"");
+  if(!vs.length)return win?"No voice found on this PC.":"No voice found: on Linux the browser speaks through speech-dispatcher (with espeak-ng), which has to be running; a browser installed as a Flatpak or a Snap also needs the sandbox opened to it.";
+  if(!vs.some(isFr))return`No French voice among the ${vs.length} this PC offers: add one (Windows: Settings, Time & language, Speech; Linux: espeak-ng speaks French).`;
+  return"The French voices here are this browser's remote ones: the sentence would be sent to a server, so it is not spoken."}
+function coachSay(t){if(!SYNTH)return false;const v=frVoice();if(!v)return false;
+  const u=new SpeechSynthesisUtterance(t);u.voice=v;u.lang=v.lang;u.rate=1.08;SYNTH.cancel();SYNTH.speak(u);return true}
 const sayClock=t=>{const c=clock(t).split(":");return +c[0]?`${c[0]} minute ${+c[1]}`:`${+c[1]} secondes`};
 function coachVoice(p,g){if(!voiceOn()||!g||g.practice)return;const w=resetWhy(g);if(!w)return;const key=[g.map,g.round,w.k].join("|");if(VOICE.said===key)return;
   if(navigator.userActivation&&!navigator.userActivation.hasBeenActive)return;   // no click on the page yet: the browser would refuse

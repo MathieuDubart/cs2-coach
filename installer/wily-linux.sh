@@ -96,5 +96,19 @@ if [ -n "$MIC" ]; then   # the app itself says which sound library it found, so 
   echo "Note: $MIC"
   echo "      Everything else works without it: only your calls would be missing."
 fi
+# The coach's voice at the buy time is spoken by your browser, which on Linux speaks through speech-dispatcher with a
+# synthesiser behind it. Those are system packages: this installer asks for no root, so it names them instead (10/10,
+# a Linux tester went looking for an hour). Everything else works without them.
+miss=""
+command -v speech-dispatcher >/dev/null 2>&1 || miss="speech-dispatcher"
+command -v espeak-ng >/dev/null 2>&1 || miss="${miss:+$miss }espeak-ng"
+if [ -n "$miss" ]; then
+  echo "Note: the coach's voice needs $miss. Debian/Ubuntu: sudo apt install speech-dispatcher espeak-ng ; Fedora: sudo dnf install speech-dispatcher espeak-ng ; Arch: sudo pacman -S speech-dispatcher espeak-ng"
+elif command -v systemctl >/dev/null 2>&1 && ! systemctl --user is-enabled speech-dispatcher.socket >/dev/null 2>&1; then
+  # a browser in a sandbox cannot start the service itself, it can only connect to a socket already there
+  echo "Note: for the coach's voice, let the speech service start on demand: systemctl --user enable --now speech-dispatcher.socket"
+  echo "      A browser installed as a Flatpak or a Snap also needs the socket opened to it, for example:"
+  echo "      flatpak override --user --filesystem=xdg-run/speech-dispatcher <its application id>"
+fi
 echo "Wily is installed in $DEST. Start it from your applications menu (Wily) or with: sh \"$DEST/wily.sh\""
 echo "Then in CS2: the app installs its Game State Integration file for Live from its Settings page."
