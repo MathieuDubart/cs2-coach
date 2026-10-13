@@ -719,7 +719,9 @@ def _launch_linux(args):
     if miss:
         raise RuntimeError(miss)
     sh = os.path.join(SERVER, "game", "cs2.sh")
-    cmd = (["/bin/sh", sh] + args[1:]) if os.path.exists(sh) else args
+    # the script itself, not "sh" it: it is written for bash ([[ ... ]] to spot -dedicated) and /bin/sh is not bash on
+    # every distribution (Debian and Ubuntu: dash), where it would not see -dedicated and refuse to start outside Steam
+    cmd = ([sh] + args[1:]) if os.access(sh, os.X_OK) else args
     env = dict(os.environ)
     lib = os.path.dirname(EXE)
     env["LD_LIBRARY_PATH"] = lib + (":" + env["LD_LIBRARY_PATH"] if env.get("LD_LIBRARY_PATH") else "")
@@ -728,6 +730,43 @@ def _launch_linux(args):
     log.flush()
     return subprocess.Popen(cmd, cwd=lib, env=env, stdin=subprocess.DEVNULL, stdout=log, stderr=subprocess.STDOUT,
                             start_new_session=True, close_fds=True)
+
+
+def _linux_pid(pr, secs=30):
+    """The server's own pid, not its launcher's: cs2.sh waits on the server (it restarts it when it asks for it), so
+    Popen holds a shell, and everything here knows the server by its name ("cs2"). -> the server of that session once
+    it is up, else the shell's pid (a launch straight to the binary, or one that went nowhere)."""
+    import psutil
+    for _ in range(int(secs * 10)):
+        try:
+            p = psutil.Process(pr.pid)
+            for c in [p] + p.children(recursive=True):   # itself first: without cs2.sh Popen already holds the server
+                if config.is_cs2(c.name()):
+                    return c.pid
+        except psutil.Error:
+            break
+        if pr.poll() is not None:
+            break
+        time.sleep(0.1)
+    return pr.pid
+
+
+def _running_pid():
+    """A training server of this app's own already up on this PC, whose pid it does not have: the app was restarted, or
+    an older one left it behind (before 13/10 its pid was its launcher's on Linux, so stop() never reached it). Taken
+    over instead of starting a second one on the same port, which would only crash. -> its pid, or None."""
+    try:
+        import psutil
+    except ImportError:
+        return None
+    for p in psutil.process_iter(["name", "cmdline"]):
+        try:
+            cmd = p.info.get("cmdline") or []
+            if config.is_cs2(p.info.get("name")) and "-dedicated" in cmd and str(PORT) in cmd:
+                return p.pid
+        except psutil.Error:
+            continue
+    return None
 
 
 def _above_normal(pid):
@@ -856,6 +895,12 @@ def start(mp):
     pw = _password()   # made and saved before the state is read (08/10)
     s = _state()
     h0 = heartbeat() or {}
+    if not _pid_alive(s.get("pid")):
+        found = _running_pid()   # one of ours already up: taken over (a second one on the same port would only crash)
+        if found:
+            print(f"training server: already up (pid {found}), taken over", flush=True)
+            s.update(pid=found, map=h0.get("map") or s.get("map"), started=s.get("started") or time.time())
+            _save_state(s)
     if _dead(s):
         print(f"training server: no heartbeat for {_beat_age() or 0:.0f} s (no map?), started again", flush=True)
         _force_stop(s["pid"])
@@ -888,33 +933,36 @@ def start(mp):
             "+map", WORKSHOP_BASE if wid else mp]   # a Workshop map only once the server runs: given at launch it is ignored (07/10)
     if config.LINUX:
         pr = _launch_linux(args)
+        pid = _linux_pid(pr)   # the server behind cs2.sh: the pid this app keeps, and the one it can recognise later
     else:
         si = subprocess.STARTUPINFO()   # its own console, hidden: without one the server logs a console error every frame
         si.dwFlags |= subprocess.STARTF_USESHOWWINDOW
         si.wShowWindow = 0   # SW_HIDE: never shown, never takes the focus
         pr = subprocess.Popen(args, cwd=os.path.dirname(EXE), creationflags=subprocess.CREATE_NEW_CONSOLE, startupinfo=si)
-    _above_normal(pr.pid)
+        pid = pr.pid
+    _above_normal(pid)
     for _ in range(20):   # its console comes up within a second or two
-        if _hide_console(pr.pid):
+        if _hide_console(pid):
             break
         time.sleep(0.1)
-    s.update(pid=pr.pid, map=mp, started=time.time())
+    s.update(pid=pid, map=mp, started=time.time())
     _save_state(s)
     control(rcon=pw)   # the plugin sets it too: the server and this app always agree on it
     # rcon only once the map runs (the plugin's heartbeat): an early try counts as a failed login and the server then
     # refuses 127.0.0.1
     for _ in range(120):
         time.sleep(1)
-        _hide_console(pr.pid)   # shown again while the server starts: hidden again
-        _above_normal(pr.pid)   # its console's host comes up meanwhile: high
+        _hide_console(pid)   # shown again while the server starts: hidden again
+        _above_normal(pid)   # its console's host comes up meanwhile: high
+        if pr.poll() is not None:   # before the heartbeat: a server that stopped is not the one beating
+            raise RuntimeError("the training server stopped while starting"
+                               + (f" (what it said: {LINUX_LOG})" if config.LINUX else ""))
         h = heartbeat()
         if h and (h.get("t") or 0) > s["started"]:
             if wid:   # up on the base map: now the Workshop one
                 rcon(f"host_workshop_map {wid}")
                 _wait_map(mp)
             return status()
-        if pr.poll() is not None:
-            raise RuntimeError("the training server stopped while starting")
     raise RuntimeError("the training server did not start in 120 s")
 
 
