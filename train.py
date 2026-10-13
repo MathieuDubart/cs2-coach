@@ -302,6 +302,14 @@ def aim_map():
 AIM_MAP = AIM_FALLBACK   # the fallback; the session asks aim_map()
 
 
+def aim_botz():
+    """The Workshop id of Aim Botz when the player has not got it, else None (13/10). The aim block is written for that
+    map: you at the middle of your spawns, the targets on theirs, all of them in your view. A map of the game stands in
+    badly — on ar_pool_day most spawns cannot be seen from the others, so the targets come up hidden, and the drill can
+    only find that out once you have seen one of them yourself. Prepare says so instead of serving it in silence."""
+    return None if replay.client_workshop(replay.WORKSHOP["aim_botz"]) else replay.WORKSHOP["aim_botz"]
+
+
 def _my_guns(sid):
     """The guns you play (your demos): your T rifle, your CT rifle, your pistol (the default one unless you play another
     one a lot)."""

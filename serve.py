@@ -299,7 +299,7 @@ class Handler(BaseHTTPRequestHandler):
             where = (q.get("where") or ["random"])[0]
             if not re.fullmatch(r"random|mix|(?:(?:de|cs|ar)_\w+)(?:,(?:de|cs|ar)_\w+){0,2}", where):
                 return self.send(400, {"error": "invalid map"})
-            return self.send(200, {"blocks": train.preview(sid, mins, where)})
+            return self.send(200, {"blocks": train.preview(sid, mins, where), "aim_botz": train.aim_botz()})
         if u.path == "/api/train/struggles":   # where you lose rounds lately: what the training puts first (06/10)
             import train
             sid = (q.get("sid") or [""])[0] or str(config.settings().get("own_steamid") or "")

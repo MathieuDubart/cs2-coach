@@ -51,6 +51,8 @@ async function prepWarm(v,p,sel,st){const box=$("[data-pwarm]",v);if(!box||!D.lo
   if(!T.installed){trainInstall(box,p.steamid,T);if((T.install||{}).running)PREP.warm=setTimeout(()=>prepWarm(v,p,sel,st),2500);return}
   // the aim first, on the game's aim map (06/10), then your maps
   const B=(pv&&pv.blocks)||[],byMap=[...new Set([...B.filter(x=>!sel.includes(x.map)).map(x=>x.map),...sel])].map(mp=>({mp,b:B.filter(x=>x.map===mp)})).filter(x=>x.b.length);
+  // the aim block on a map of the game, the player having no Aim Botz (13/10): said, with the way to fix it
+  const aimfb=pv&&pv.aim_botz?B.find(x=>x.kind==="aim"):null;
   const sug=Pg.suggest||null,chose=Date.now()-(+tPref("at","0"))<12*3600e3,df=sug&&!chose?sug.diff:trainDiff(),pct=Math.max(0,Math.min(100,100*(Pg.xp-Pg.from)/Math.max(1,Pg.to-Pg.from)));
   const running=ss&&T.running,pend=PREP.pend,wait=!!(pend||T.busy);   // T.busy: a start the server side runs (a reload meanwhile)
   const say=pend?`${pend.text} (${Math.round((Date.now()-pend.t0)/1e3)} s)`:T.busy?`${T.busy.charAt(0).toUpperCase()+T.busy.slice(1)} is starting on the training server…`
@@ -59,6 +61,7 @@ async function prepWarm(v,p,sel,st){const box=$("[data-pwarm]",v);if(!box||!D.lo
   box.innerHTML=`<div class="pwarm-h"><span class="eyebrow">Warm-up · all on the training server</span></div>
     ${running?"":`<div class="btns pwlen" role="group" aria-label="Duration">${PREP_LEN.map(n=>`<button type="button" data-pwlen="${n}" aria-pressed="${st.min===n}">${n} min</button>`).join("")}</div>`}
     <ol class="pwarm-plan">${byMap.map(({mp,b})=>`${byMap.length>1?`<li class="pwmap">${esc(MAPN(mp))}</li>`:""}${b.map(x=>`<li class="k-${x.kind}"><b>${WBLOCK[x.kind]||x.kind}</b><span>${Math.max(1,Math.round(x.seconds/60))}′</span></li>`).join("")}`).join("")}</ol>
+    ${aimfb?`<p class="note">The aim part runs on ${esc(MAPN(aimfb.map))}, a map of the game: most of its spots cannot be seen from the others, so its targets often come up where you cannot find them, and the drill only learns that once you have seen one yourself. That part is written for Aim Botz: <a href="https://steamcommunity.com/sharedfiles/filedetails/?id=${esc(pv.aim_botz)}" target="_blank" rel="noopener" style="color:var(--ct)">subscribe to it</a> and the warm-up takes it instead.</p>`:""}
     ${live}
     <div class="trow"><button type="button" class="tbig" data-pwgo${wait?" disabled":""}>${running?"↻ NEW WARM-UP":"▶ WARM-UP"}</button>${running&&!T.humans&&!wait?`<button type="button" data-pwjoin>↪ Rejoin the server</button>`:""}${running&&T.humans?`<button type="button" data-pwpause${wait?" disabled":""}>${ss.paused?"▶ Resume":"⏸ Pause"}</button>`:""}${T.running?`<button type="button" data-pwstop${wait?" disabled":""}>Stop</button>`:""}<span class="note" role="status" data-pwmsg>${esc(say)}</span></div>
     <div class="trow" role="group" aria-label="Bots' level"><span class="tk2" title="Bots' level">🤖</span>${DIFF.map((n,i)=>`<button type="button" data-pwdiff="${i}" aria-pressed="${i===df}">${n}</button>`).join("")}${sug?`<span class="note">suggested: ${DIFF[sug.diff]} · ${esc(sug.why)}</span>`:""}</div>
