@@ -324,7 +324,7 @@ async function pollUpdate(v){clearTimeout(S.upTimer);
   gearDot(u);const c=$("#up-card",v);if(!c||!c.isConnected)return;
   c.outerHTML=updateCard(u);wireUpdate(v);
   if(pr.busy||pr.restarting)S.upTimer=setTimeout(()=>{if(S.view==="settings")pollUpdate(v)},1500)}
-// the coach's messages to the players' apps (14/10, notices.py): signed, under the top bar, until closed or expired
+// the coach's messages to the players' apps (14/10, tools/notices.py): signed, under the top bar, until closed or expired
 function bcast(u){const box=$("#bcast");if(!box)return;const N=((u||{}).notices||[]);
   box.hidden=!N.length;box.innerHTML=N.map(n=>`<div class="bc ${n.level==="warn"?"warn":""}" data-bc="${esc(n.id)}"><span class="bc-k">${n.level==="warn"?"⚠":"📣"} ${tl("From Wily's author")}</span><span class="bc-t">${esc(n.text)}${n.link?` <a href="${esc(n.link)}" target="_blank" rel="noopener noreferrer">${tl("More")} ↗</a>`:""}</span><button type="button" class="bc-x" aria-label="${tl("Close")}" title="${tl("Close")}">✕</button></div>`).join("");
   $$(".bc-x",box).forEach(b=>b.onclick=async()=>{const el=b.closest("[data-bc]");el.remove();box.hidden=!box.children.length;
@@ -337,7 +337,7 @@ function shareCard(c){
   if(!c)return "";
   if(!c.client){const st=c.stats||{};
     return `<article class="card" id="ct-card"><h3>${tl("Matches shared by players")}${itip(tl("The base loop pulls them every hour while it runs; each match is checked again here (the app's own tables, no real SteamID, no name) and kept once."))}</h3>
-     <p class="note">${c.token?`${tl("{a} joined the base · {b} already there · {c} refused",{a:st.joined||0,b:st.duplicates||0,c:st.refused||0})}${c.held?` · <b>${tl("{n} held",{n:c.held})}</b>${itip(tl("Sent by a build whose first-launch notice didn't mention the matches (10/10): kept out of the base. <code>python contributions.py release</code> adds them, deleting <code>out/contrib_in/held</code> drops them."))}`:""}${c.waiting?` · ${tl("{n} waiting here",{n:c.waiting})}`:""}${c.last?` · ${tl("last pull {date}",{date:when(c.last)})}`:""}`:tl("Not set up yet: python contributions.py init, then publish the site (deploy_site.py).")}</p>
+     <p class="note">${c.token?`${tl("{a} joined the base · {b} already there · {c} refused",{a:st.joined||0,b:st.duplicates||0,c:st.refused||0})}${c.held?` · <b>${tl("{n} held",{n:c.held})}</b>${itip(tl("Sent by a build whose first-launch notice didn't mention the matches (10/10): kept out of the base. <code>python -m wily.sharing.contributions release</code> adds them, deleting <code>out/contrib_in/held</code> drops them."))}`:""}${c.waiting?` · ${tl("{n} waiting here",{n:c.waiting})}`:""}${c.last?` · ${tl("last pull {date}",{date:when(c.last)})}`:""}`:tl("Not set up yet: python -m wily.sharing.contributions init, then publish the site (website/deploy.py).")}</p>
      ${c.token?`<div class="btns"><button type="button" id="ct-pull">${tl("Pull now")}</button></div>`:""}</article>`}
   return `<article class="card" id="ct-card"><h3>${tl("Share my matches with the base")} ${c.on?`<span class="pill strong">${tl("on")}</span>`:`<span class="pill">${tl("off")}</span>`}</h3>
    <p class="note">${c.on?`${tln(c.sent,"{n} match shared","{n} matches shared")}${c.waiting?` · ${tl("{n} waiting",{n:c.waiting})}`:""}${c.last?` · ${tl("last {date}",{date:when(c.last)})}`:""}`:tl("Off: nothing leaves this PC.")}${c.error?` · ${tl("last try failed: {error}",{error:esc(c.error)})}`:""}</p>

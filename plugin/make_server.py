@@ -20,7 +20,7 @@ import zipfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.dirname(HERE))
-import config  # noqa: E402
+from wily.core import config  # noqa: E402
 
 SRC = os.environ.get("COACH_CS2") or config.cs2_dir()
 DST = config.cs2server_dir()

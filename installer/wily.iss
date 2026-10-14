@@ -1,9 +1,9 @@
 ; Wily's installer (08/10, the user: "une façon beaucoup plus simple d'installer l'app"). A small setup that downloads
 ; the app's three parts from the site (the release the app's own updates use: Python, the code, the base), checks each
-; one's SHA-256 (baked in here by make_beta.py at the release), unpacks them for this Windows user only (no
+; one's SHA-256 (baked in here by tools/make_beta.py at the release), unpacks them for this Windows user only (no
 ; administrator rights), writes the player's settings ({"role": "client"}), and makes the shortcuts: Start menu,
 ; desktop, start with Windows (Wily then opens Live by itself when CS2 starts). The uninstaller stops Wily and asks
-; whether to keep the player's matches. Built by make_beta.py from this template (@...@ are filled there).
+; whether to keep the player's matches. Built by tools/make_beta.py from this template (@...@ are filled there).
 
 #define AppVersion "@VERSION@"
 #define AppVerNum "@VERNUM@"

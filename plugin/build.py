@@ -7,7 +7,7 @@ import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.dirname(HERE))
-import replay  # noqa: E402
+from wily.training import replay  # noqa: E402
 
 DOTNET = next((d for d in (os.path.join(os.path.dirname(os.path.dirname(HERE)), "..", "tools", "dotnet", "dotnet.exe"),
                            r"E:\dev\tools\dotnet\dotnet.exe") if os.path.exists(d)), "dotnet")

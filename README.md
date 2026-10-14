@@ -5,7 +5,7 @@ training server: bots come back exactly where they killed you, so you can take t
 matchmaking demos and gives you live advice on a second screen during your matches.
 
 **Download:** [wily.valentingassend.com](https://wily.valentingassend.com/) (Windows installer, Linux script) ·
-**Releases with checksums:** [GitHub releases](https://github.com/ValentinGassend/cs2-coach/releases) ·
+**Releases with checksums:** [GitHub releases](https://github.com/ValentinGassend/wily-coach/releases) ·
 **Status:** public alpha (0.0.1-alpha), expect rough edges.
 
 ## What it does
@@ -39,7 +39,7 @@ You should be careful with any tool you run next to your game. Here is what you 
 
 - **The code is public.** Every line of the app is in this repository (Python, plus a small C# plugin for the
   training server). The releases are built from it.
-- **Same checksums everywhere.** Each [GitHub release](https://github.com/ValentinGassend/cs2-coach/releases) is tied
+- **Same checksums everywhere.** Each [GitHub release](https://github.com/ValentinGassend/wily-coach/releases) is tied
   to the exact commit it was built from and lists the SHA-256 of `WilySetup.exe` and of the Linux installer, the same
   values the website shows.
 - **Signed updates.** Every update (code, base, Python runtime) is described in `latest.json`, signed with the
@@ -89,9 +89,35 @@ Useful entry points:
 | Command | What it does |
 |---|---|
 | `python serve.py` | The local app (Review, Live, Prepare, Settings) |
-| `python cs2coach.py` | Fetches and analyzes your latest matches (signed-in Steam account) |
-| `python cs2coach.py --sharecode CSGO-...` | Analyzes one match |
-| `python make_beta.py --release <version> --notes "..."` | Builds a release (code, base, runtime, installers, signed `latest.json`) |
+| `python -m wily.app.pipeline` | Fetches and analyzes your latest matches (signed-in Steam account) |
+| `python -m wily.app.pipeline --sharecode CSGO-...` | Analyzes one match |
+| `python tools/make_beta.py --release <version> --notes "..."` | Builds a release (code, base, runtime, installers, signed `latest.json`) |
+
+## Project layout
+
+```
+serve.py            the launcher: python serve.py (installers, Wily.bat and wily.sh start this file)
+wily/               the app, a Python package
+  core/             paths and settings, languages, anonymization, map data, callouts
+  demos/            reading the demos: duels, rounds, positions, grenades, per player and per map
+  matches/          getting your matches: Steam, Valve's match history, Leetify, FACEIT
+  base/             the reference base: how it grows, what every page reads from it
+  insights/         what the base teaches per map: T sides, rotations, buys, weapons, grenades, boosts, wallbangs
+  coaching/         what the coach says: advice, plan, session review, profile, team, experiments
+  live/             during a match: the game's state (GSI), the In game page's calls, your voice, Wily's commands
+  training/         the training server: situations played again, the warm-up's drills, Crossfire
+  sharing/          what leaves the PC, with consent only: shared matches, usage statistics, bug reports
+  app/              the local web server, its page, the player pipeline, the updates
+ui/                 the page's sources (python ui/assemble.py builds templates/app_template.html)
+templates/          the built page and the report's template
+resources/          the maps' data and radars, the translation catalogs
+plugin/             the training server's plugin (C#, CounterStrikeSharp)
+website/            wily.valentingassend.com: its pages, its API (root/), its deploy
+tools/              the coach's tools: the release, the messages to the players' apps, the catalogs' check
+installer/          the Windows (Inno Setup) and Linux installers
+```
+
+Any module runs on its own from the root: `python -m wily.<folder>.<module>` (for example `python -m wily.base.grow`).
 
 `cache/` (demos) and `out/` (analyses, settings, keys) are local and never versioned. The training server's plugin is in
 `plugin/CoachReplay` (C#, CounterStrikeSharp).

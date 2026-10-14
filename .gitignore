@@ -1,10 +1,13 @@
 # Données locales (démos, analyses, réglages avec clés/codes perso)
 cache/
 out/
-# Outils et radars téléchargés automatiquement au premier lancement
-tools/
-maps/*.png
-maps/csdm_default_maps.ts
+# Downloaded at the first start: the match-list tool (boiler-writter) and the radars
+vendor/
+resources/maps/*.png
+resources/maps/csdm_default_maps.ts
+# The coach's one-off fetch scripts (local)
+tools/fetch_*.py
+tools/find_nades.py
 # Python
 __pycache__/
 *.pyc
@@ -15,9 +18,9 @@ __pycache__/
 *.part
 # The players' packages (make_beta.py)
 dist/
-# the hash of the coach's contributions token, written by contributions.py init
-web/api/config.php
-web/api/steam_key.php
+# the hash of the coach's contributions token (python -m wily.sharing.contributions init), the Steam key
+website/root/api/config.php
+website/root/api/steam_key.php
 # Personal, never published (10/10 audit before opening the repo): the browser profile (cookies, sessions), the match
 # recordings (your voice and screen), the IDE settings, and the local scratch and scraping tests
 chrome_profile/
@@ -34,7 +37,7 @@ diff*.txt
 scratch_*
 *_page.html
 test_page_text.txt
-app_template_next.html
+templates/app_template_next.html
 app_template_original.html
 new_css.css
 check_js.js
@@ -44,6 +47,6 @@ process_css.py
 save_html.py
 update_review.py
 # Local only (10/10): a personal data-source module and internal notes
-csstats.py
+wily/matches/csstats.py
 legal/permission_requests.md
-pro.py
+wily/base/pro.py

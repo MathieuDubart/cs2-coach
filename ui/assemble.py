@@ -56,17 +56,17 @@ def build():
 if __name__ == "__main__":
     sys.stdout.reconfigure(encoding="utf-8")
     out, js = build()
-    dest = os.path.join(ROOT, "app_template_next.html")
+    dest = os.path.join(ROOT, "templates", "app_template_next.html")
     with open(dest, "w", encoding="utf-8") as fh:   # Windows line ends, as the page always had
         fh.write(out)
     print("written", len(out), "chars")
     # the scripts parse, or nothing else runs (05/10: a comment that swallowed the end of a line reached the app)
-    r = subprocess.run([sys.executable, os.path.join(ROOT, "checks", "check_js.py"), dest], capture_output=True, text=True, encoding="utf-8")
+    r = subprocess.run([sys.executable, os.path.join(ROOT, "tools", "checks", "check_js.py"), dest], capture_output=True, text=True, encoding="utf-8")
     print((r.stdout or r.stderr).strip())
     if r.returncode:
         sys.exit(1)
     # the regression check of the In game page on every map (checks/check_maps.js): a failure is printed, never hidden
-    r = subprocess.run(["node", os.path.join(ROOT, "checks", "check_maps.js"), dest], capture_output=True, text=True, encoding="utf-8", cwd=ROOT)
+    r = subprocess.run(["node", os.path.join(ROOT, "tools", "checks", "check_maps.js"), dest], capture_output=True, text=True, encoding="utf-8", cwd=ROOT)
     lines = (r.stdout or r.stderr or "check: no output").strip().splitlines()
     print(lines[0])
     for line in lines[1:]:
