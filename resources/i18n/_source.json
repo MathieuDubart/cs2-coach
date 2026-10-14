@@ -1,17 +1,17 @@
 {
  "!again and a drill's number, missed or all": {
   "where": [
-   "cs/Session.cs:578"
+   "cs/Session.cs:584"
   ]
  },
  "!n skips a drill, !pause pauses (!resume), !stop ends, !report and a few words tells Wily's author.": {
   "where": [
-   "cs/Session.cs:620"
+   "cs/Session.cs:626"
   ]
  },
  "!report and what's wrong, or what you'd want: it goes to Wily's author with this drill and where you stand": {
   "where": [
-   "cs/Session.cs:595"
+   "cs/Session.cs:601"
   ]
  },
  "\"Duels won\": duels won by {side}s standing in the zone. \"Holding\": share of those duels started without moving. \"Moment\": the round clock at the duel (median). Zones with at least 20 duels.": {
@@ -316,7 +316,7 @@
  "1v{n} clutch": {
   "where": [
    "p4_plan.js:252",
-   "wily/training/train.py:1904"
+   "wily/training/train.py:1907"
   ]
  },
  "2 to 3 sessions of 40 min per week. Expect energy and mood from it, not extra headshots.": {
@@ -788,13 +788,13 @@
  },
  "<b>⚠ The training puts first</b> where you lose rounds lately:": {
   "where": [
-   "p4b_prepare.js:140"
+   "p4b_prepare.js:141"
   ]
  },
  "@{handle}'s clip": {
   "where": [
    "p3_core.js:160",
-   "wily/training/train.py:1752"
+   "wily/training/train.py:1755"
   ]
  },
  "A 10-15 min break after a loss, stop after 2 losses in a row.": {
@@ -982,12 +982,12 @@
  },
  "AGAIN": {
   "where": [
-   "cs/Session.cs:763"
+   "cs/Session.cs:770"
   ]
  },
  "AIM": {
   "where": [
-   "cs/Session.cs:126"
+   "cs/Session.cs:131"
   ]
  },
  "ANTI-ECO": {
@@ -1002,12 +1002,12 @@
  },
  "ANTI-RUSH {nade} → {zone}": {
   "where": [
-   "wily/training/train.py:1650"
+   "wily/training/train.py:1653"
   ]
  },
  "AWP line": {
   "where": [
-   "wily/training/train.py:1867"
+   "wily/training/train.py:1870"
   ]
  },
  "AWP: <b>{name}</b>.": {
@@ -1192,7 +1192,7 @@
  },
  "Again: !again and a number (one drill), !again missed (the missed ones), !again all (the whole session).": {
   "where": [
-   "cs/Session.cs:1688"
+   "cs/Session.cs:1699"
   ]
  },
  "Aggressive": {
@@ -1619,7 +1619,7 @@
  },
  "BOMB EXPLODED": {
   "where": [
-   "cs/Session.cs:131"
+   "cs/Session.cs:136"
   ]
  },
  "BOMB · WHEN TO THROW": {
@@ -1630,7 +1630,7 @@
  "BOOST {place}": {
   "where": [
    "p6e_dirs.js:224",
-   "wily/training/train.py:1891"
+   "wily/training/train.py:1894"
   ]
  },
  "BRIEF": {
@@ -1938,7 +1938,7 @@
  },
  "CLEARED": {
   "where": [
-   "cs/Session.cs:129"
+   "cs/Session.cs:134"
   ]
  },
  "COVER {where}": {
@@ -1948,7 +1948,7 @@
  },
  "CROSSFIRE": {
   "where": [
-   "cs/Session.cs:127"
+   "cs/Session.cs:132"
   ]
  },
  "CS2 did not get in": {
@@ -1958,7 +1958,7 @@
  },
  "CS2 did not reach the training server": {
   "where": [
-   "wily/training/train.py:2391"
+   "wily/training/train.py:2404"
   ]
  },
  "CS2 folder not found on this PC.": {
@@ -1994,27 +1994,27 @@
  },
  "CS2 joins the server (started first if it is closed)…": {
   "where": [
-   "p4b_prepare.js:122"
+   "p4b_prepare.js:123"
   ]
  },
  "CS2 joins the server. If Steam opens its \"game info\" window instead, click \"Join game\".": {
   "where": [
-   "p4b_prepare.js:121"
+   "p4b_prepare.js:122"
   ]
  },
  "CS2 left the server while loading the map ({what} at {when})": {
   "where": [
-   "wily/training/train.py:2319"
+   "wily/training/train.py:2332"
   ]
  },
  "CS2 reached the server but did not get into the game": {
   "where": [
-   "wily/training/train.py:2389"
+   "wily/training/train.py:2402"
   ]
  },
  "CS2 refused the map file {file} (not signed by Valve) and went back to its menu": {
   "where": [
-   "wily/training/train.py:2318"
+   "wily/training/train.py:2331"
   ]
  },
  "CT PUSHES · {buy} · OF ROUNDS": {
@@ -2062,6 +2062,11 @@
    "wily/coaching/team.py:24"
   ],
   "static": true
+ },
+ "CT spawn": {
+  "where": [
+   "wily/training/momentum.py:486"
+  ]
  },
  "CT spot": {
   "where": [
@@ -2520,27 +2525,32 @@
  },
  "DEAD": {
   "where": [
-   "cs/Session.cs:130"
+   "cs/Session.cs:135"
+  ]
+ },
+ "DEAD STOP": {
+  "where": [
+   "cs/Momentum.cs:387"
   ]
  },
  "DEFEND {site} · {kit}": {
   "where": [
-   "wily/training/train.py:1106"
+   "wily/training/train.py:1109"
   ]
  },
  "DEFENSE": {
   "where": [
-   "cs/Session.cs:126"
+   "cs/Session.cs:131"
   ]
  },
  "DEFUSED": {
   "where": [
-   "cs/Session.cs:131"
+   "cs/Session.cs:136"
   ]
  },
  "DONE": {
   "where": [
-   "cs/Session.cs:129"
+   "cs/Session.cs:134"
   ]
  },
  "Damage / round": {
@@ -3137,12 +3147,12 @@
  },
  "FREE": {
   "where": [
-   "cs/Session.cs:1127"
+   "cs/Session.cs:1136"
   ]
  },
  "FROM THEIR SIDE": {
   "where": [
-   "cs/Session.cs:465"
+   "cs/Session.cs:471"
   ]
  },
  "FULL": {
@@ -3182,7 +3192,7 @@
  "Failed: {why}": {
   "where": [
    "p4b_prepare.js:102",
-   "p4b_prepare.js:123"
+   "p4b_prepare.js:124"
   ]
  },
  "Fall back one angle, call your HP, cover a teammate's trade.": {
@@ -3409,8 +3419,8 @@
  "Flash": {
   "where": [
    "p3_core.js:38",
-   "wily/training/train.py:1620",
-   "wily/training/train.py:1748"
+   "wily/training/train.py:1623",
+   "wily/training/train.py:1751"
   ]
  },
  "Flash before every peek": {
@@ -3649,13 +3659,14 @@
  "GO": {
   "where": [
    "cs/CoachReplay.cs:802",
-   "cs/Session.cs:1066",
-   "cs/Session.cs:1067"
+   "cs/Momentum.cs:157",
+   "cs/Session.cs:1074",
+   "cs/Session.cs:1075"
   ]
  },
  "GOOD": {
   "where": [
-   "cs/Session.cs:132"
+   "cs/Session.cs:137"
   ]
  },
  "Galil / FAMAS": {
@@ -3755,7 +3766,7 @@
  },
  "Go on.": {
   "where": [
-   "cs/Session.cs:654"
+   "cs/Session.cs:660"
   ]
  },
  "Go through {way}.": {
@@ -3777,7 +3788,7 @@
  },
  "Going on…": {
   "where": [
-   "p4b_prepare.js:125"
+   "p4b_prepare.js:126"
   ]
  },
  "Good": {
@@ -3877,14 +3888,19 @@
    "p6b_live.js:42"
   ]
  },
+ "HEARD": {
+  "where": [
+   "cs/Momentum.cs:270"
+  ]
+ },
  "HIT": {
   "where": [
-   "cs/Session.cs:1357"
+   "cs/Session.cs:1367"
   ]
  },
  "HOLD": {
   "where": [
-   "cs/Session.cs:1069"
+   "cs/Session.cs:1078"
   ]
  },
  "HOLD FOR THEIR HIT · {site} · WON": {
@@ -3904,7 +3920,7 @@
  },
  "HOLD {zone}": {
   "where": [
-   "cs/Session.cs:1155"
+   "cs/Session.cs:1164"
   ]
  },
  "HS %": {
@@ -4140,7 +4156,7 @@
  },
  "IN TIME": {
   "where": [
-   "cs/Session.cs:131"
+   "cs/Session.cs:136"
   ]
  },
  "INFO": {
@@ -4416,6 +4432,11 @@
    "p4_plan.js:523"
   ]
  },
+ "JUMP · {zone}": {
+  "where": [
+   "wily/training/momentum.py:575"
+  ]
+ },
  "Jiggle-peek (fast A-D) to get info without committing.": {
   "where": [
    "wily/coaching/advice_ref.py:38"
@@ -4445,7 +4466,7 @@
  },
  "KILL, THEN DEAD": {
   "where": [
-   "cs/Session.cs:130"
+   "cs/Session.cs:135"
   ]
  },
  "Keep a grenade for the retake or the post-plant.": {
@@ -4505,9 +4526,14 @@
    "p3_core.js:420"
   ]
  },
+ "LANDED": {
+  "where": [
+   "cs/Momentum.cs:338"
+  ]
+ },
  "LATE": {
   "where": [
-   "cs/Session.cs:131"
+   "cs/Session.cs:136"
   ]
  },
  "LIKELY": {
@@ -4827,12 +4853,18 @@
  },
  "MISS": {
   "where": [
-   "cs/Session.cs:132"
+   "cs/Session.cs:137"
   ]
  },
  "MISSED": {
   "where": [
-   "cs/Session.cs:1277"
+   "cs/Momentum.cs:339",
+   "cs/Session.cs:1287"
+  ]
+ },
+ "MOMENTUM": {
+  "where": [
+   "cs/Session.cs:132"
   ]
  },
  "Machine gun": {
@@ -5124,8 +5156,8 @@
  "Molotov": {
   "where": [
    "p3_core.js:38",
-   "wily/training/train.py:1620",
-   "wily/training/train.py:1748"
+   "wily/training/train.py:1623",
+   "wily/training/train.py:1751"
   ]
  },
  "Moment": {
@@ -5215,7 +5247,7 @@
  },
  "NEXT MAP": {
   "where": [
-   "cs/Session.cs:682"
+   "cs/Session.cs:688"
   ]
  },
  "NEXT {n} ROUNDS · WON": {
@@ -5236,12 +5268,17 @@
  },
  "NO KILL": {
   "where": [
-   "cs/Session.cs:131"
+   "cs/Session.cs:136"
   ]
  },
  "NO THROW": {
   "where": [
-   "cs/Session.cs:132"
+   "cs/Session.cs:137"
+  ]
+ },
+ "NOT HEARD": {
+  "where": [
+   "cs/Momentum.cs:267"
   ]
  },
  "Neither good nor bad on its own": {
@@ -5729,6 +5766,12 @@
   "where": [
    "p3c_feedback.js:10",
    "p4_plan.js:514"
+  ]
+ },
+ "OFF THE WAY": {
+  "where": [
+   "cs/Momentum.cs:259",
+   "cs/Momentum.cs:269"
   ]
  },
  "OK": {
@@ -6237,7 +6280,7 @@
  "PAUSED": {
   "where": [
    "p4b_prepare.js:82",
-   "cs/Session.cs:645"
+   "cs/Session.cs:651"
   ]
  },
  "PEEK · {zone}": {
@@ -6247,7 +6290,7 @@
  },
  "PERFECT": {
   "where": [
-   "cs/Session.cs:132"
+   "cs/Session.cs:137"
   ]
  },
  "PISTOL": {
@@ -6274,7 +6317,7 @@
  },
  "PLANTED": {
   "where": [
-   "cs/Session.cs:1495"
+   "cs/Session.cs:1505"
   ]
  },
  "PLAY": {
@@ -6294,12 +6337,12 @@
  },
  "PREFIRE {site} via {way}": {
   "where": [
-   "wily/training/train.py:1061"
+   "wily/training/train.py:1064"
   ]
  },
  "PUSH": {
   "where": [
-   "cs/Session.cs:126"
+   "cs/Session.cs:131"
   ]
  },
  "Page": {
@@ -6348,12 +6391,12 @@
  },
  "Paused · the block's clock waits · !resume goes on (that drill again from its start).": {
   "where": [
-   "cs/Session.cs:642"
+   "cs/Session.cs:648"
   ]
  },
  "Pausing (the block's clock waits)…": {
   "where": [
-   "p4b_prepare.js:125"
+   "p4b_prepare.js:126"
   ]
  },
  "Peeking": {
@@ -6783,7 +6826,7 @@
  },
  "Preparing the session (30 s, a few minutes the first time) · CS2 starts meanwhile…": {
   "where": [
-   "p4b_prepare.js:119"
+   "p4b_prepare.js:120"
   ]
  },
  "Preparing the session and starting the server (about 15 s)…": {
@@ -6990,6 +7033,11 @@
    "p6d_econ.js:238"
   ]
  },
+ "READY": {
+  "where": [
+   "cs/Momentum.cs:138"
+  ]
+ },
  "RESET": {
   "where": [
    "p6c_visual.js:223"
@@ -7003,6 +7051,11 @@
  "RETAKE {site}": {
   "where": [
    "p6f_wily.js:60"
+  ]
+ },
+ "ROTATE · {a} → {b}": {
+  "where": [
+   "wily/training/momentum.py:567"
   ]
  },
  "ROUND {n}": {
@@ -7019,6 +7072,11 @@
  "ROUNDS WON · BY TEMPO": {
   "where": [
    "p6c_visual.js:53"
+  ]
+ },
+ "RUN · {a} → {b}": {
+  "where": [
+   "wily/training/momentum.py:567"
   ]
  },
  "RUSH": {
@@ -7603,7 +7661,7 @@
  },
  "SESSION DONE": {
   "where": [
-   "cs/Session.cs:1680"
+   "cs/Session.cs:1691"
   ]
  },
  "SHOW {site}": {
@@ -7611,14 +7669,19 @@
    "p6f_wily.js:49"
   ]
  },
+ "SILENT · into {site}": {
+  "where": [
+   "wily/training/momentum.py:590"
+  ]
+ },
  "SITUATION": {
   "where": [
-   "cs/Session.cs:127"
+   "cs/Session.cs:132"
   ]
  },
  "SKIPPED": {
   "where": [
-   "cs/Session.cs:132"
+   "cs/Session.cs:137"
   ]
  },
  "SLOW": {
@@ -7649,14 +7712,24 @@
    "wily/training/crossfire.py:266"
   ]
  },
+ "STOP": {
+  "where": [
+   "cs/Momentum.cs:361"
+  ]
+ },
+ "STOP DEAD · {zone}": {
+  "where": [
+   "wily/training/momentum.py:582"
+  ]
+ },
  "STUFF": {
   "where": [
-   "cs/Session.cs:126"
+   "cs/Session.cs:131"
   ]
  },
  "SURVIVED": {
   "where": [
-   "cs/Session.cs:130"
+   "cs/Session.cs:135"
   ]
  },
  "Safe rotations": {
@@ -7858,7 +7931,7 @@
  },
  "Session done": {
   "where": [
-   "cs/Session.cs:1681"
+   "cs/Session.cs:1692"
   ]
  },
  "Session rule": {
@@ -8137,8 +8210,8 @@
  "Smoke": {
   "where": [
    "p3_core.js:38",
-   "wily/training/train.py:1620",
-   "wily/training/train.py:1748"
+   "wily/training/train.py:1623",
+   "wily/training/train.py:1751"
   ]
  },
  "Sort": {
@@ -8268,7 +8341,7 @@
  },
  "Starting the server and preparing the session (30 s, a few minutes the first time) · CS2 starts meanwhile…": {
   "where": [
-   "p4b_prepare.js:119"
+   "p4b_prepare.js:120"
   ]
  },
  "Starting the training server (about 10 s)…": {
@@ -8425,7 +8498,7 @@
  },
  "Stopping the training server…": {
   "where": [
-   "p4b_prepare.js:124"
+   "p4b_prepare.js:125"
   ]
  },
  "Strike when the CTs rotate, not before. Nothing by 0:45: join or take the empty site.": {
@@ -8518,7 +8591,7 @@
  },
  "T on {site}: {a} of {b} {kind} lost": {
   "where": [
-   "wily/training/train.py:1832"
+   "wily/training/train.py:1835"
   ]
  },
  "T opening": {
@@ -8539,6 +8612,11 @@
  "T role": {
   "where": [
    "p4_plan.js:633"
+  ]
+ },
+ "T spawn": {
+  "where": [
+   "wily/training/momentum.py:486"
   ]
  },
  "T spot": {
@@ -8564,7 +8642,7 @@
  },
  "TARGET {i}/{n}": {
   "where": [
-   "cs/Session.cs:1504"
+   "cs/Session.cs:1514"
   ]
  },
  "TEMPO?": {
@@ -8619,7 +8697,7 @@
  },
  "THEY RUSH": {
   "where": [
-   "cs/Session.cs:1078"
+   "cs/Session.cs:1087"
   ]
  },
  "THIS MATCH · EARLY CONTACT · {n} ROUNDS": {
@@ -8635,7 +8713,7 @@
  },
  "TIME'S UP": {
   "where": [
-   "cs/Session.cs:129"
+   "cs/Session.cs:134"
   ]
  },
  "TO BUY": {
@@ -8645,17 +8723,19 @@
  },
  "TOO SLOW": {
   "where": [
-   "cs/Crossfire.cs:423"
+   "cs/Crossfire.cs:423",
+   "cs/Momentum.cs:258",
+   "cs/Momentum.cs:268"
   ]
  },
  "TRADED": {
   "where": [
-   "cs/Session.cs:130"
+   "cs/Session.cs:135"
   ]
  },
  "TRAINING · {n} MIN": {
   "where": [
-   "cs/Session.cs:618"
+   "cs/Session.cs:624"
   ]
  },
  "Tab before buying, drop above $5,000": {
@@ -9465,7 +9545,7 @@
  },
  "Training {n} min": {
   "where": [
-   "cs/Session.cs:619"
+   "cs/Session.cs:625"
   ]
  },
  "Transcribe": {
@@ -9783,12 +9863,12 @@
  },
  "WALLBANG": {
   "where": [
-   "cs/Session.cs:127"
+   "cs/Session.cs:132"
   ]
  },
  "WALLBANG {from} → {to}": {
   "where": [
-   "wily/training/train.py:1867"
+   "wily/training/train.py:1870"
   ]
  },
  "WARM-UP": {
@@ -9840,7 +9920,7 @@
   "where": [
    "p6c_visual.js:499",
    "cs/Crossfire.cs:409",
-   "cs/Session.cs:130"
+   "cs/Session.cs:135"
   ]
  },
  "Waiting for your match": {
@@ -11375,6 +11455,11 @@
    "p7_review.js:25"
   ]
  },
+ "a key let go only: tap the other one": {
+  "where": [
+   "cs/Momentum.cs:384"
+  ]
+ },
  "a kill, or get traded (no kill: no point)": {
   "where": [
    "wily/training/replay.py:298"
@@ -11397,12 +11482,12 @@
  },
  "a real rush gets there at {t}: up before it": {
   "where": [
-   "wily/training/train.py:1651"
+   "wily/training/train.py:1654"
   ]
  },
  "a real rush gets to the blue ring at {t}: your grenade must be up before · it comes at GO": {
   "where": [
-   "cs/Session.cs:759"
+   "cs/Session.cs:766"
   ]
  },
  "a recording or a transcription": {
@@ -11422,7 +11507,7 @@
  },
  "a session is running: !stop first": {
   "where": [
-   "cs/Session.cs:572"
+   "cs/Session.cs:578"
   ]
  },
  "a session of {n} games in a row: fatigue builds up after each game": {
@@ -11452,7 +11537,7 @@
  },
  "about {m} min here": {
   "where": [
-   "p4b_prepare.js:115"
+   "p4b_prepare.js:116"
   ]
  },
  "add your history code": {
@@ -11605,7 +11690,7 @@
  },
  "allies dead: {where} (red crosses)": {
   "where": [
-   "cs/Session.cs:956"
+   "cs/Session.cs:963"
   ]
  },
  "alone": {
@@ -11616,12 +11701,12 @@
  "alpha · report": {
   "where": [
    "p2_shell.html:2",
-   "cs/Session.cs:611"
+   "cs/Session.cs:617"
   ]
  },
  "already paused: !resume goes on": {
   "where": [
-   "cs/Session.cs:631"
+   "cs/Session.cs:637"
   ]
  },
  "already saved": {
@@ -11766,7 +11851,7 @@
  },
  "back in {zone} (the green zone)": {
   "where": [
-   "cs/Session.cs:1249"
+   "cs/Session.cs:1259"
   ]
  },
  "back to mine": {
@@ -11816,6 +11901,13 @@
    "p4_plan.js:70"
   ]
  },
+ "base {s} s": {
+  "where": [
+   "cs/Momentum.cs:216",
+   "cs/Momentum.cs:260",
+   "cs/Momentum.cs:410"
+  ]
+ },
  "base {v}": {
   "where": [
    "p3_core.js:306"
@@ -11851,6 +11943,11 @@
    "p4_plan.js:187"
   ]
  },
+ "best run {s} s": {
+  "where": [
+   "cs/Momentum.cs:410"
+  ]
+ },
  "best {n} kills": {
   "where": [
    "wily/coaching/team.py:543"
@@ -11868,7 +11965,7 @@
  },
  "blinded {s} s here": {
   "where": [
-   "cs/Session.cs:499"
+   "cs/Session.cs:505"
   ]
  },
  "block": {
@@ -11997,6 +12094,11 @@
    "p4_plan.js:308"
   ]
  },
+ "checkpoint {i}/{n}": {
+  "where": [
+   "cs/Momentum.cs:215"
+  ]
+ },
  "clear gap": {
   "where": [
    "p7_review.js:119"
@@ -12009,7 +12111,7 @@
  },
  "clear {n}": {
   "where": [
-   "cs/Session.cs:1066"
+   "cs/Session.cs:1074"
   ]
  },
  "click this page once so I can talk": {
@@ -12063,7 +12165,7 @@
  },
  "couldn't keep it, sorry: the app's \"{tag}\" tag works too": {
   "where": [
-   "cs/Session.cs:611"
+   "cs/Session.cs:617"
   ]
  },
  "counter-strafed shots": {
@@ -12085,7 +12187,7 @@
  },
  "crosshair on the green cross · it must land in the blue ring · stand in the green ring": {
   "where": [
-   "cs/Session.cs:761"
+   "cs/Session.cs:768"
   ]
  },
  "crosshair placement": {
@@ -12107,6 +12209,17 @@
   "where": [
    "p6e_dirs.js:68"
   ]
+ },
+ "crouch in the air: the base's jumpers do": {
+  "where": [
+   "cs/Momentum.cs:335"
+  ]
+ },
+ "crouch-jump": {
+  "where": [
+   "wily/training/momentum.py:50"
+  ],
+  "static": true
  },
  "crouching": {
   "where": [
@@ -12137,7 +12250,7 @@
   "where": [
    "p3_core.js:386",
    "p4_plan.js:252",
-   "wily/training/train.py:1904"
+   "wily/training/train.py:1907"
   ]
  },
  "deaths alone in a retake": {
@@ -12229,7 +12342,7 @@
  "defuse it": {
   "where": [
    "wily/training/replay.py:414",
-   "cs/Session.cs:1263"
+   "cs/Session.cs:1273"
   ]
  },
  "died": {
@@ -12359,7 +12472,7 @@
  },
  "duels: they shoot back once they've seen you a player's reaction time · you respawn": {
   "where": [
-   "wily/training/train.py:350"
+   "wily/training/train.py:353"
   ]
  },
  "duo": {
@@ -12478,7 +12591,7 @@
  },
  "executes": {
   "where": [
-   "wily/training/train.py:1776"
+   "wily/training/train.py:1779"
   ],
   "static": true
  },
@@ -12553,6 +12666,11 @@
   ],
   "static": true
  },
+ "fell": {
+  "where": [
+   "cs/Momentum.cs:190"
+  ]
+ },
  "few cases yet": {
   "where": [
    "p3_core.js:318"
@@ -12560,12 +12678,12 @@
  },
  "find the aim": {
   "where": [
-   "cs/Session.cs:762"
+   "cs/Session.cs:769"
   ]
  },
  "find the aim and the throw": {
   "where": [
-   "cs/Session.cs:1271"
+   "cs/Session.cs:1281"
   ]
  },
  "finished": {
@@ -12601,7 +12719,7 @@
  },
  "first death": {
   "where": [
-   "wily/training/train.py:1906"
+   "wily/training/train.py:1909"
   ]
  },
  "first duel of the round": {
@@ -12653,12 +12771,12 @@
  },
  "follow the gold line": {
   "where": [
-   "cs/Session.cs:1246"
+   "cs/Session.cs:1256"
   ]
  },
  "follow the gold line: {route} · the angles CTs hold there, at their real timings": {
   "where": [
-   "wily/training/train.py:1062"
+   "wily/training/train.py:1065"
   ]
  },
  "force buy": {
@@ -12688,12 +12806,23 @@
  },
  "free": {
   "where": [
-   "cs/Session.cs:1251"
+   "cs/Session.cs:1261"
   ]
  },
  "from hearing it to your call": {
   "where": [
    "p7_review.js:39"
+  ]
+ },
+ "from the green ring": {
+  "where": [
+   "cs/Momentum.cs:305"
+  ]
+ },
+ "from the green ring, land in the blue one": {
+  "where": [
+   "wily/training/momentum.py:576",
+   "cs/Momentum.cs:318"
   ]
  },
  "from their call to your move": {
@@ -12703,7 +12832,7 @@
  },
  "from their side: {what}": {
   "where": [
-   "cs/Session.cs:505"
+   "cs/Session.cs:511"
   ]
  },
  "from {where}": {
@@ -12713,12 +12842,12 @@
  },
  "from {zone}, a spot the base throws it from": {
   "where": [
-   "wily/training/train.py:1624"
+   "wily/training/train.py:1627"
   ]
  },
  "from {zone}, your spot": {
   "where": [
-   "wily/training/train.py:1626"
+   "wily/training/train.py:1629"
   ]
  },
  "frustration": {
@@ -12857,6 +12986,11 @@
   ],
   "static": true
  },
+ "heard": {
+  "where": [
+   "cs/Momentum.cs:293"
+  ]
+ },
  "held still": {
   "where": [
    "wily/coaching/coach_notes.py:151"
@@ -12879,7 +13013,7 @@
  },
  "here is the aim": {
   "where": [
-   "cs/Session.cs:1562"
+   "cs/Session.cs:1572"
   ]
  },
  "here ~{t}": {
@@ -12906,7 +13040,7 @@
  },
  "hits": {
   "where": [
-   "wily/training/train.py:1776"
+   "wily/training/train.py:1779"
   ],
   "static": true
  },
@@ -12956,7 +13090,7 @@
  },
  "hold {zone} (the green zone)": {
   "where": [
-   "cs/Session.cs:1250"
+   "cs/Session.cs:1260"
   ]
  },
  "holding the angle": {
@@ -13018,7 +13152,7 @@
  },
  "in time": {
   "where": [
-   "cs/Session.cs:1270"
+   "cs/Session.cs:1280"
   ]
  },
  "incendiary": {
@@ -13077,12 +13211,12 @@
  },
  "it happens in the blue zone: play it your way": {
   "where": [
-   "cs/Session.cs:961"
+   "cs/Session.cs:968"
   ]
  },
  "it happens in {zone} (blue): play it your way": {
   "where": [
-   "cs/Session.cs:961"
+   "cs/Session.cs:968"
   ]
  },
  "it hurts": {
@@ -13095,6 +13229,12 @@
    "p4_plan.js:179"
   ]
  },
+ "its fastest {s} s": {
+  "where": [
+   "cs/Momentum.cs:261",
+   "cs/Momentum.cs:411"
+  ]
+ },
  "journal: {n} entries": {
   "where": [
    "p4_plan.js:29"
@@ -13103,7 +13243,14 @@
  },
  "jump": {
   "where": [
-   "p6e_dirs.js:68"
+   "p6e_dirs.js:68",
+   "wily/training/momentum.py:50"
+  ],
+  "static": true
+ },
+ "jump heard": {
+  "where": [
+   "cs/Momentum.cs:299"
   ]
  },
  "jumpthrow": {
@@ -13155,7 +13302,7 @@
  "keep it ticking": {
   "where": [
    "wily/training/replay.py:414",
-   "cs/Session.cs:1263"
+   "cs/Session.cs:1273"
   ]
  },
  "keep it to cut the CTs' view when you plant": {
@@ -13232,6 +13379,11 @@
   ],
   "static": true
  },
+ "knife out, through every ring: the base runs it in {base} s, its fastest in {best} s": {
+  "where": [
+   "wily/training/momentum.py:569"
+  ]
+ },
  "kyxsan's Connector smoke + Short molotov": {
   "where": [
    "wily/insights/clips.py:38"
@@ -13251,7 +13403,7 @@
  },
  "last": {
   "where": [
-   "cs/Session.cs:753"
+   "cs/Session.cs:760"
   ]
  },
  "last 3: {a} · before: {b} · {n} matches": {
@@ -13284,7 +13436,7 @@
  "last {date}": {
   "where": [
    "p4_plan.js:343",
-   "p4b_prepare.js:140"
+   "p4b_prepare.js:141"
   ]
  },
  "last {n} days": {
@@ -13360,7 +13512,7 @@
  },
  "loading {title}…": {
   "where": [
-   "cs/Session.cs:717"
+   "cs/Session.cs:723"
   ]
  },
  "losses": {
@@ -13566,9 +13718,14 @@
    "wily/coaching/coach_notes.py:256"
   ]
  },
+ "moving on the map: timed ways, real jumps, dead stops, silent walks": {
+  "where": [
+   "p4b_prepare.js:17"
+  ]
+ },
  "needs your own matches on this map": {
   "where": [
-   "wily/training/train.py:2067"
+   "wily/training/train.py:2077"
   ]
  },
  "neutral": {
@@ -13594,7 +13751,7 @@
  },
  "next one": {
   "where": [
-   "cs/Session.cs:1277"
+   "cs/Session.cs:1287"
   ]
  },
  "night (11pm-6am)": {
@@ -13622,7 +13779,7 @@
  },
  "no bombsite on this map": {
   "where": [
-   "wily/training/train.py:2065"
+   "wily/training/train.py:2075"
   ]
  },
  "no clear difference for you. Repositioning still keeps you unpredictable; only re-peek with a teammate ready to trade.": {
@@ -13648,7 +13805,7 @@
  },
  "no damage here": {
   "where": [
-   "cs/Session.cs:501"
+   "cs/Session.cs:507"
   ]
  },
  "no dry peek before {t}": {
@@ -13669,6 +13826,11 @@
    "p6c_visual.js:394"
   ]
  },
+ "no jump from the green ring": {
+  "where": [
+   "cs/Momentum.cs:423"
+  ]
+ },
  "no kevlar": {
   "where": [
    "p3_core.js:46"
@@ -13676,7 +13838,7 @@
  },
  "no kill": {
   "where": [
-   "cs/Session.cs:1622"
+   "cs/Session.cs:1633"
   ]
  },
  "no kit (10 s to defuse), {s} s left, {n} to kill first: lost in advance": {
@@ -13692,6 +13854,16 @@
  "no round here": {
   "where": [
    "p6_ingame.js:34"
+  ]
+ },
+ "no run": {
+  "where": [
+   "cs/Momentum.cs:405"
+  ]
+ },
+ "no run through every ring, in order": {
+  "where": [
+   "cs/Momentum.cs:405"
   ]
  },
  "no rush in the {k} rounds you know of this half": {
@@ -13711,18 +13883,18 @@
  },
  "no session running": {
   "where": [
-   "cs/Session.cs:630",
-   "cs/Session.cs:649"
+   "cs/Session.cs:636",
+   "cs/Session.cs:655"
   ]
  },
  "no session to play again yet": {
   "where": [
-   "cs/Session.cs:571"
+   "cs/Session.cs:577"
   ]
  },
  "no session {id}": {
   "where": [
-   "cs/Session.cs:532"
+   "cs/Session.cs:538"
   ]
  },
  "no standard throw right now: {what}": {
@@ -13730,9 +13902,20 @@
    "p6_ingame.js:316"
   ]
  },
+ "no stop": {
+  "where": [
+   "cs/Momentum.cs:383",
+   "cs/Momentum.cs:434"
+  ]
+ },
  "no trade": {
   "where": [
    "p4_plan.js:252"
+  ]
+ },
+ "no walk": {
+  "where": [
+   "cs/Momentum.cs:444"
   ]
  },
  "no warm-up": {
@@ -13769,8 +13952,9 @@
  },
  "none found on this map yet": {
   "where": [
-   "wily/training/train.py:2069",
-   "wily/training/train.py:2074"
+   "wily/training/train.py:2079",
+   "wily/training/train.py:2081",
+   "wily/training/train.py:2086"
   ]
  },
  "none on this map yet": {
@@ -13805,7 +13989,7 @@
  },
  "not blinded from here: it pops out of their sight": {
   "where": [
-   "cs/Session.cs:499"
+   "cs/Session.cs:505"
   ]
  },
  "not called: {why}": {
@@ -13829,15 +14013,20 @@
    "p6_ingame.js:28"
   ]
  },
+ "not heard": {
+  "where": [
+   "cs/Momentum.cs:445"
+  ]
+ },
  "not in the base yet": {
   "where": [
    "p3_core.js:162",
-   "wily/training/train.py:1749"
+   "wily/training/train.py:1752"
   ]
  },
  "not paused": {
   "where": [
-   "cs/Session.cs:650"
+   "cs/Session.cs:656"
   ]
  },
  "not planted yet (in the match: {site}, {s} s after this starts)": {
@@ -13857,7 +14046,7 @@
  },
  "not traded": {
   "where": [
-   "wily/training/train.py:1906"
+   "wily/training/train.py:1909"
   ]
  },
  "not used yet": {
@@ -13877,14 +14066,14 @@
  },
  "nothing missed: well played": {
   "where": [
-   "cs/Session.cs:578"
+   "cs/Session.cs:584"
   ]
  },
  "nothing of this module on this map yet": {
   "where": [
    "p4b_prepare.js:88",
-   "wily/training/train.py:1950",
-   "wily/training/train.py:2030"
+   "wily/training/train.py:1953",
+   "wily/training/train.py:2040"
   ]
  },
  "now": {
@@ -13896,7 +14085,7 @@
  },
  "now from their side": {
   "where": [
-   "cs/Session.cs:1554"
+   "cs/Session.cs:1564"
   ]
  },
  "now: eco": {
@@ -13991,6 +14180,11 @@
    "p6c_visual.js:343"
   ]
  },
+ "off the way": {
+  "where": [
+   "cs/Momentum.cs:446"
+  ]
+ },
  "off · optional": {
   "where": [
    "p4_plan.js:494"
@@ -14021,7 +14215,7 @@
  },
  "on a teammate's head: {n}× in my base, {k} kills from up there for {d} deaths · they stand still where those players stood": {
   "where": [
-   "wily/training/train.py:1892"
+   "wily/training/train.py:1895"
   ]
  },
  "on site {a}-{b}": {
@@ -14040,7 +14234,7 @@
  },
  "on the aim map: no real duels of this map yet": {
   "where": [
-   "wily/training/train.py:2093"
+   "wily/training/train.py:2105"
   ]
  },
  "on the site at {t}": {
@@ -14050,7 +14244,12 @@
  },
  "on the site: play it where you want": {
   "where": [
-   "cs/Session.cs:1127"
+   "cs/Session.cs:1136"
+  ]
+ },
+ "on top, but off the blue ring": {
+  "where": [
+   "cs/Momentum.cs:336"
   ]
  },
  "on {site} after ~{s} s": {
@@ -14090,12 +14289,12 @@
  },
  "onto {zone}, where they come at you from your spot": {
   "where": [
-   "wily/training/train.py:1626"
+   "wily/training/train.py:1629"
   ]
  },
  "onto {zone}, where they come from": {
   "where": [
-   "wily/training/train.py:1624"
+   "wily/training/train.py:1627"
   ]
  },
  "opening": {
@@ -14145,7 +14344,7 @@
  },
  "orange posts": {
   "where": [
-   "cs/Session.cs:1245"
+   "cs/Session.cs:1255"
   ]
  },
  "other options: {list}": {
@@ -14215,7 +14414,7 @@
  },
  "pistol: still targets, head only · they don't shoot": {
   "where": [
-   "wily/training/train.py:352"
+   "wily/training/train.py:355"
   ]
  },
  "pistols": {
@@ -14408,7 +14607,7 @@
  },
  "priority: {why} lately": {
   "where": [
-   "wily/training/train.py:1999"
+   "wily/training/train.py:2009"
   ]
  },
  "profile not found": {
@@ -14419,6 +14618,12 @@
  "pros": {
   "where": [
    "p6_ingame.js:386"
+  ]
+ },
+ "pros {s} s": {
+  "where": [
+   "cs/Momentum.cs:261",
+   "cs/Momentum.cs:412"
   ]
  },
  "pros {v}": {
@@ -14672,6 +14877,22 @@
    "p6e_dirs.js:68"
   ]
  },
+ "run left and right (A, D)": {
+  "where": [
+   "cs/Momentum.cs:220"
+  ]
+ },
+ "run left and right (A, D) at full speed; on STOP, stop dead: tap the other key (counter-strafe)": {
+  "where": [
+   "wily/training/momentum.py:583"
+  ]
+ },
+ "run {i}/{n}": {
+  "where": [
+   "cs/Momentum.cs:138",
+   "cs/Momentum.cs:215"
+  ]
+ },
  "run-throw (moving forward)": {
   "where": [
    "p3_core.js:41",
@@ -14684,6 +14905,18 @@
    "p7_review.js:25",
    "cs/I18n.cs:119"
   ]
+ },
+ "running crouch-jump": {
+  "where": [
+   "wily/training/momentum.py:50"
+  ],
+  "static": true
+ },
+ "running jump": {
+  "where": [
+   "wily/training/momentum.py:50"
+  ],
+  "static": true
  },
  "rush": {
   "where": [
@@ -14720,7 +14953,7 @@
  },
  "rushes": {
   "where": [
-   "wily/training/train.py:1776"
+   "wily/training/train.py:1779"
   ],
   "static": true
  },
@@ -14793,6 +15026,11 @@
   ],
   "static": true
  },
+ "short of the top: jump at the edge of the green ring": {
+  "where": [
+   "cs/Momentum.cs:335"
+  ]
+ },
  "shotguns": {
   "where": [
    "p3_core.js:216"
@@ -14861,7 +15099,7 @@
  },
  "skipped": {
   "where": [
-   "cs/Session.cs:726"
+   "cs/Session.cs:732"
   ]
  },
  "slow": {
@@ -14980,12 +15218,17 @@
  },
  "still targets across the map: flick to the head, one bullet · they don't shoot": {
   "where": [
-   "wily/training/train.py:346"
+   "wily/training/train.py:349"
   ]
  },
  "stop playing it alone": {
   "where": [
    "wily/coaching/coach_notes.py:170"
+  ]
+ },
+ "stop {i}/{n}": {
+  "where": [
+   "cs/Momentum.cs:219"
   ]
  },
  "stopped at {t}": {
@@ -14995,7 +15238,7 @@
  },
  "strafing targets: stop, then shoot (counter-strafe) · they don't shoot": {
   "where": [
-   "wily/training/train.py:348"
+   "wily/training/train.py:351"
   ]
  },
  "straight {site}: {p}%": {
@@ -15052,7 +15295,7 @@
  },
  "survive": {
   "where": [
-   "cs/Session.cs:950"
+   "cs/Session.cs:957"
   ]
  },
  "suspicion": {
@@ -15080,7 +15323,7 @@
  },
  "target {i}/{n}": {
   "where": [
-   "cs/Session.cs:1268"
+   "cs/Session.cs:1278"
   ]
  },
  "team flashes per match: on you vs by you": {
@@ -15136,6 +15379,12 @@
    "p4_plan.js:301"
   ]
  },
+ "the base jumps it in {n} matches": {
+  "where": [
+   "wily/training/momentum.py:577"
+  ],
+  "one": "the base jumps it in {n} match"
+ },
  "the base's worst quarter starts at {v}": {
   "where": [
    "wily/matches/leetify.py:173"
@@ -15143,7 +15392,7 @@
  },
  "the block's clock waits · {cmd} goes on": {
   "where": [
-   "cs/Session.cs:645"
+   "cs/Session.cs:651"
   ]
  },
  "the bomb is down": {
@@ -15177,7 +15426,7 @@
  },
  "the gold line takes you to the blue zone": {
   "where": [
-   "cs/Session.cs:1264"
+   "cs/Session.cs:1274"
   ]
  },
  "the grey positions on each map": {
@@ -15203,9 +15452,19 @@
   ],
   "static": true
  },
+ "the other key held too long: you went the other way": {
+  "where": [
+   "cs/Momentum.cs:383"
+  ]
+ },
  "the plant": {
   "where": [
    "p7_review.js:25"
+  ]
+ },
+ "the pros: {pro} s": {
+  "where": [
+   "wily/training/momentum.py:570"
   ]
  },
  "the push routes with their prefire angles": {
@@ -15215,7 +15474,7 @@
  },
  "the recap is in the chat: !again to play some again": {
   "where": [
-   "cs/Session.cs:1680"
+   "cs/Session.cs:1691"
   ]
  },
  "the references are being updated": {
@@ -15286,7 +15545,7 @@
  },
  "their view through it: cut": {
   "where": [
-   "cs/Session.cs:500"
+   "cs/Session.cs:506"
   ]
  },
  "their {nade}": {
@@ -15296,7 +15555,7 @@
  },
  "there at {t}": {
   "where": [
-   "cs/Session.cs:1078"
+   "cs/Session.cs:1087"
   ]
  },
  "there ~{t}": {
@@ -15308,12 +15567,12 @@
  },
  "they are coming": {
   "where": [
-   "cs/Session.cs:1069"
+   "cs/Session.cs:1078"
   ]
  },
  "they don't move, they don't shoot": {
   "where": [
-   "wily/training/train.py:1064"
+   "wily/training/train.py:1067"
   ]
  },
  "they fake": {
@@ -15323,7 +15582,7 @@
  },
  "they get there at {t}": {
   "where": [
-   "cs/Session.cs:1270"
+   "cs/Session.cs:1280"
   ]
  },
  "they kill a lot from here for the little time they spend there: check it": {
@@ -15348,7 +15607,7 @@
  },
  "they rush: your grenade up on its spot in time · it comes at GO": {
   "where": [
-   "cs/Session.cs:760"
+   "cs/Session.cs:767"
   ]
  },
  "they rushed and won the last round": {
@@ -15375,7 +15634,7 @@
  },
  "they were there before it": {
   "where": [
-   "cs/Session.cs:1545"
+   "cs/Session.cs:1555"
   ]
  },
  "they {what} · you said": {
@@ -15407,18 +15666,18 @@
  },
  "through the wall with the {weapon}: {n} kills from here in my base, {p}% through the wall · they stand still behind it, they don't shoot · a few bullets where they stand": {
   "where": [
-   "wily/training/train.py:1868"
+   "wily/training/train.py:1871"
   ]
  },
  "throw {i}": {
   "where": [
-   "cs/Session.cs:1552"
+   "cs/Session.cs:1562"
   ]
  },
  "throw {i}/3": {
   "where": [
-   "cs/Session.cs:1270",
-   "cs/Session.cs:1562"
+   "cs/Session.cs:1280",
+   "cs/Session.cs:1572"
   ]
  },
  "thrown early": {
@@ -15471,7 +15730,8 @@
  },
  "too slow": {
   "where": [
-   "cs/Crossfire.cs:439"
+   "cs/Crossfire.cs:439",
+   "cs/Momentum.cs:446"
   ]
  },
  "total {money}": {
@@ -15481,7 +15741,7 @@
  },
  "total {n}": {
   "where": [
-   "cs/Session.cs:1657"
+   "cs/Session.cs:1668"
   ]
  },
  "tradable deaths traded": {
@@ -15545,6 +15805,11 @@
  "trio": {
   "where": [
    "p4_plan.js:53"
+  ]
+ },
+ "try {i}/{n}": {
+  "where": [
+   "cs/Momentum.cs:218"
   ]
  },
  "turn on game detection": {
@@ -15631,6 +15896,11 @@
    "p6e_dirs.js:19"
   ]
  },
+ "via {via}": {
+  "where": [
+   "wily/training/momentum.py:568"
+  ]
+ },
  "via {way}": {
   "where": [
    "p6c_visual.js:219",
@@ -15689,6 +15959,11 @@
  "walk": {
   "where": [
    "p6e_dirs.js:68"
+  ]
+ },
+ "walk in (Shift), not one footstep heard: {s} s at most": {
+  "where": [
+   "wily/training/momentum.py:591"
   ]
  },
  "walking": {
@@ -15787,7 +16062,7 @@
  },
  "where they really stand: watch it come": {
   "where": [
-   "cs/Session.cs:465"
+   "cs/Session.cs:471"
   ]
  },
  "where · how many · how hurt": {
@@ -15860,7 +16135,7 @@
  },
  "you died here {n}×": {
   "where": [
-   "wily/training/train.py:286"
+   "wily/training/train.py:289"
   ]
  },
  "you died right after": {
@@ -15870,7 +16145,7 @@
  },
  "you died to {who} ({weapon})": {
   "where": [
-   "wily/training/train.py:1905"
+   "wily/training/train.py:1908"
   ]
  },
  "you have the bomb: in the match you planted {site} {s} s in": {
@@ -15880,12 +16155,12 @@
  },
  "you lost it": {
   "where": [
-   "wily/training/train.py:1905"
+   "wily/training/train.py:1908"
   ]
  },
  "you master most of your lineups": {
   "where": [
-   "wily/training/train.py:2207"
+   "wily/training/train.py:2220"
   ]
  },
  "you mostly play standing still": {
@@ -15905,7 +16180,7 @@
  },
  "you played a match less than two hours ago": {
   "where": [
-   "wily/training/train.py:2202"
+   "wily/training/train.py:2215"
   ]
  },
  "you played in a group more often than usual": {
@@ -16028,7 +16303,7 @@
  },
  "your last level": {
   "where": [
-   "wily/training/train.py:2189"
+   "wily/training/train.py:2202"
   ]
  },
  "your last session ({n} games, on {date})": {
@@ -16069,7 +16344,7 @@
  },
  "your progress is in the app.": {
   "where": [
-   "cs/Session.cs:1681"
+   "cs/Session.cs:1692"
   ]
  },
  "your role: <b>{role}</b>": {
@@ -16079,7 +16354,7 @@
  },
  "your route in the match": {
   "where": [
-   "cs/Session.cs:1264"
+   "cs/Session.cs:1274"
   ]
  },
  "your smoke": {
@@ -16253,6 +16528,11 @@
    "cs/Crossfire.cs:441"
   ]
  },
+ "{a}/{b} dead stops": {
+  "where": [
+   "cs/Momentum.cs:434"
+  ]
+ },
  "{a}/{b} drills passed · {p} pts": {
   "where": [
    "wily/coaching/feedback.py:99"
@@ -16261,6 +16541,13 @@
  "{a}/{b} duels won": {
   "where": [
    "cs/Crossfire.cs:454"
+  ]
+ },
+ "{a}/{b} landed": {
+  "where": [
+   "cs/Momentum.cs:218",
+   "cs/Momentum.cs:338",
+   "cs/Momentum.cs:423"
   ]
  },
  "{a}/{b} rounds": {
@@ -16301,7 +16588,7 @@
  },
  "{d} u from the spot": {
   "where": [
-   "cs/Session.cs:1529"
+   "cs/Session.cs:1539"
   ]
  },
  "{d}% deaths on the way over {n} rotations": {
@@ -16331,7 +16618,7 @@
  },
  "{i}/{n}, then free": {
   "where": [
-   "cs/Session.cs:1155"
+   "cs/Session.cs:1164"
   ]
  },
  "{kd} there": {
@@ -16373,6 +16660,16 @@
  "{map} when it has 20+, all maps otherwise": {
   "where": [
    "p6_ingame.js:212"
+  ]
+ },
+ "{ms} ms to react": {
+  "where": [
+   "cs/Momentum.cs:436"
+  ]
+ },
+ "{ms} ms to stop": {
+  "where": [
+   "cs/Momentum.cs:435"
   ]
  },
  "{m} matches · compared with {p} players of the base and {pro} pros": {
@@ -16451,6 +16748,12 @@
    "cs/Crossfire.cs:442"
   ]
  },
+ "{n} checkpoints missed": {
+  "where": [
+   "cs/Momentum.cs:259"
+  ],
+  "one": "{n} checkpoint missed"
+ },
  "{n} come back next time": {
   "where": [
    "p4b_prepare.js:77"
@@ -16477,8 +16780,8 @@
  "{n} deaths": {
   "where": [
    "wily/coaching/coach_notes.py:28",
-   "cs/Session.cs:1607",
-   "cs/Session.cs:1613"
+   "cs/Session.cs:1618",
+   "cs/Session.cs:1624"
   ],
   "one": "{n} death"
  },
@@ -16524,7 +16827,8 @@
  },
  "{n} drills": {
   "where": [
-   "p4b_prepare.js:115"
+   "p4b_prepare.js:114",
+   "p4b_prepare.js:116"
   ],
   "one": "{n} drill"
  },
@@ -16551,7 +16855,7 @@
  },
  "{n} enemies, one by one, where they were when you fought here": {
   "where": [
-   "wily/training/train.py:286"
+   "wily/training/train.py:289"
   ]
  },
  "{n} entries so far": {
@@ -16583,6 +16887,12 @@
    "wily/coaching/advice.py:129"
   ],
   "one": "{n} flash thrown"
+ },
+ "{n} footsteps": {
+  "where": [
+   "cs/Momentum.cs:270"
+  ],
+  "one": "{n} footstep"
  },
  "{n} from Leetify": {
   "where": [
@@ -16653,14 +16963,20 @@
    "p4_plan.js:17"
   ]
  },
+ "{n} jumps": {
+  "where": [
+   "cs/Momentum.cs:270"
+  ],
+  "one": "{n} jump"
+ },
  "{n} kills": {
   "where": [
    "p6f_wily.js:34",
    "wily/coaching/coach_notes.py:24",
    "cs/CoachReplay.cs:1230",
-   "cs/Session.cs:1067",
-   "cs/Session.cs:1606",
-   "cs/Session.cs:1613"
+   "cs/Session.cs:1075",
+   "cs/Session.cs:1617",
+   "cs/Session.cs:1624"
   ],
   "one": "{n} kill"
  },
@@ -16670,6 +16986,12 @@
   ],
   "one": "{n} kill after"
  },
+ "{n} kills from up there": {
+  "where": [
+   "wily/training/momentum.py:578"
+  ],
+  "one": "{n} kill from up there"
+ },
  "{n} late hits": {
   "where": [
    "p3_core.js:394"
@@ -16678,13 +17000,13 @@
  },
  "{n} left": {
   "where": [
-   "cs/Session.cs:1245",
-   "cs/Session.cs:1297"
+   "cs/Session.cs:1255",
+   "cs/Session.cs:1307"
   ]
  },
  "{n} left: {where}": {
   "where": [
-   "cs/Session.cs:1245"
+   "cs/Session.cs:1255"
   ]
  },
  "{n} lineups with almost no effect (under 5 damage, or almost nobody flashed)": {
@@ -16763,7 +17085,7 @@
  },
  "{n} missed drills come first next time you train there": {
   "where": [
-   "cs/Session.cs:1691"
+   "cs/Session.cs:1702"
   ],
   "one": "{n} missed drill comes first next time you train there"
  },
@@ -16829,7 +17151,7 @@
  },
  "{n} plants": {
   "where": [
-   "cs/Session.cs:1613"
+   "cs/Session.cs:1624"
   ],
   "one": "{n} plant"
  },
@@ -16944,6 +17266,12 @@
   ],
   "one": "{n} round, {w}% won"
  },
+ "{n} runs off the way": {
+  "where": [
+   "cs/Momentum.cs:413"
+  ],
+  "one": "{n} run off the way"
+ },
  "{n} rushes": {
   "where": [
    "p3_core.js:394",
@@ -16974,6 +17302,12 @@
    "p4_plan.js:29"
   ],
   "one": "{n} session"
+ },
+ "{n} sounds heard": {
+  "where": [
+   "cs/Momentum.cs:447"
+  ],
+  "one": "{n} sound heard"
  },
  "{n} spots": {
   "where": [
@@ -17019,7 +17353,7 @@
  "{n} throws in the base, {p} by pros": {
   "where": [
    "p3_core.js:162",
-   "wily/training/train.py:1749"
+   "wily/training/train.py:1752"
   ],
   "one": "{n} throw in the base, {p} by pros"
  },
@@ -17062,7 +17396,7 @@
  },
  "{n} you rarely check in your matches": {
   "where": [
-   "wily/training/train.py:1063"
+   "wily/training/train.py:1066"
   ]
  },
  "{n} zones with fewer than 6 duels of yours (too few to judge)": {
@@ -17078,8 +17412,8 @@
  },
  "{ok}/{n} drills ✔": {
   "where": [
-   "cs/Session.cs:1680",
-   "cs/Session.cs:1681"
+   "cs/Session.cs:1691",
+   "cs/Session.cs:1692"
   ]
  },
  "{pd} player-day(s) over {d} day(s) · Live during a match: {lu} player-day(s), {lm} min · days with page errors: {er} ({e} errors) · versions: {v} · screens: {s}": {
@@ -17094,12 +17428,12 @@
  },
  "{p} % of your last drills ✔: one level down": {
   "where": [
-   "wily/training/train.py:2193"
+   "wily/training/train.py:2206"
   ]
  },
  "{p} % of your last drills ✔: one level up": {
   "where": [
-   "wily/training/train.py:2191"
+   "wily/training/train.py:2204"
   ]
  },
  "{p} pro players analyzed on {m} maps of recent matches (HLTV demos). Similarity = average closeness over 15 style stats. Watch their demos or POVs to see your role played at the highest level.": {
@@ -17220,7 +17554,7 @@
  },
  "{side} on {site}: {a} of {b} rounds lost to {kind}": {
   "where": [
-   "wily/training/train.py:1831"
+   "wily/training/train.py:1834"
   ]
  },
  "{side}s die most at {list}.": {
@@ -17314,12 +17648,12 @@
  },
  "{s} s before them": {
   "where": [
-   "cs/Session.cs:1536"
+   "cs/Session.cs:1546"
   ]
  },
  "{s} s each": {
   "where": [
-   "cs/Session.cs:1606"
+   "cs/Session.cs:1617"
   ]
  },
  "{s} s in and no site taken yet: late attacks go {site} more often": {
@@ -17334,7 +17668,7 @@
  },
  "{s} s on average": {
   "where": [
-   "cs/Session.cs:1622"
+   "cs/Session.cs:1633"
   ]
  },
  "{s} s to kill": {
@@ -17344,7 +17678,7 @@
  },
  "{s} s · {n} at a time, the ways real hits come: {ways} · {goal} frags · you respawn": {
   "where": [
-   "wily/training/train.py:1107"
+   "wily/training/train.py:1110"
   ]
  },
  "{s}s ago": {
@@ -17429,7 +17763,7 @@
  },
  "{who} got there before your grenade": {
   "where": [
-   "cs/Session.cs:1099"
+   "cs/Session.cs:1108"
   ]
  },
  "{who} got you from {zone} ({weapon})": {
@@ -17612,7 +17946,7 @@
  },
  "−{hp} HP here": {
   "where": [
-   "cs/Session.cs:501"
+   "cs/Session.cs:507"
   ]
  },
  "≈ HLTV 2.0: under 0.85 red, over 1.20 bright green": {
@@ -17627,7 +17961,7 @@
  },
  "📨 noted: it goes to Wily's author with this drill and where you stand. Thanks!": {
   "where": [
-   "cs/Session.cs:609"
+   "cs/Session.cs:615"
   ]
  },
  "🧪 = the weapon of your running experiment.": {

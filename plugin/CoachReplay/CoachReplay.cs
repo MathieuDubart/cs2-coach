@@ -933,7 +933,7 @@ public partial class CoachReplay : BasePlugin
             else PlantBomb();
         }
         SessionTick();
-        if (cur == null || phase != "live" || cur.Kind is "aim" or "nade") return;   // their end is the session's
+        if (cur == null || phase != "live" || cur.Kind is "aim" or "nade" or "momentum") return;   // their end is the session's
         while (nextNade < cur.Nades.Count && cur.Nades[nextNade].F <= f) Throw(cur.Nades[nextNade++]);
         if (mode == "spec" && devN > 0 && (now - t0) % 320 == 0)
             Log($"drift {devSum / devN:F1} u over {devN} samples");

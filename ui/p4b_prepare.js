@@ -14,8 +14,8 @@ const PREP={tick:null,watch:null,warm:null,sec:null,pend:null,note:null,base:nul
 const PREP_BLOCK=[10,15,20];
 const FOCUS_DESC={crossfire:tl("real duels: hold an angle, peek, one spray for two"),defend:tl("hold a bombsite against the real hits, wave after wave"),
   push:tl("the push routes with their prefire angles"),nade:tl("your lineups: guided, then on your own"),wallbang:tl("the wallbangs and boosts that kill there"),
-  situation:tl("your own rounds again, where they went wrong")};
-const WBLOCK={aim:"🎯 "+tl("Aim"),crossfire:"🎯 Crossfire",defend:"🛡 "+tl("Defense"),push:"🚶 "+tl("Prefire"),nade:"💨 "+tl("Utility"),wallbang:"🧱 "+tl("Wallbang"),situation:"🔁 "+tl("Situations")};
+  situation:tl("your own rounds again, where they went wrong"),momentum:tl("moving on the map: timed ways, real jumps, dead stops, silent walks")};   // 14/10, rework section 9
+const WBLOCK={aim:"🎯 "+tl("Aim"),crossfire:"🎯 Crossfire",defend:"🛡 "+tl("Defense"),push:"🚶 "+tl("Prefire"),nade:"💨 "+tl("Utility"),wallbang:"🧱 "+tl("Wallbang"),situation:"🔁 "+tl("Situations"),momentum:"🏃 Momentum"};
 // what you chose today (your browser): the maps, the duration, the blocks done, the one running
 function prepState(){const day=new Date().toDateString();let st=store("prep");
   if(!st||st.day!==day)st={day,maps:[],min:20,done:{},cur:null,t0:null,mode:st&&st.mode,focus:st&&st.focus,bmin:st&&st.bmin};   // the warm-up's type kept from day to day
@@ -111,6 +111,7 @@ async function prepWarm(v,p,sel,st){const box=$("[data-pwarm]",v);if(!box||!D.lo
       $$("[data-pfn]",box).forEach(el=>{const k=el.dataset.pfn,n=c.counts[k],bt=el.closest("button");if(n==null||bt.disabled){el.textContent="";return}
         if(k==="crossfire"){el.textContent=n?tln(n,"{n} spot","{n} spots"):"";return}
         if(!n){el.textContent=tl("none on this map yet");bt.disabled=true;if(k===focus)gone=true;return}
+        if(k==="momentum"){el.textContent=tln(n,"{n} drill","{n} drills");return}   // its ways and jumps come back until its time is full
         const m=Math.max(1,Math.round(n*c.repeat*(c.est[k]||60)/60));   // each drill three times at most: a short block
         el.textContent=m<mins?`${tln(n,"{n} drill","{n} drills")} · ${tl("about {m} min here",{m})}`:tln(n,"{n} drill","{n} drills")});
       if(gone){const f=$$("[data-pfocus]",box).find(x=>!x.disabled);if(f){st.focus=f.dataset.pfocus;prepSave(st);prepWarm(v,p,sel,st)}}};

@@ -3527,5 +3527,87 @@
  },
  "Restart Wily to use focus blocks.": "Redémarre Wily pour utiliser les blocs intensifs.",
  "From Wily's author": "De l'auteur de Wily",
- "More": "En savoir plus"
+ "More": "En savoir plus",
+ "CT spawn": "spawn CT",
+ "T spawn": "spawn T",
+ "DEAD STOP": "ARRÊT NET",
+ "HEARD": "ENTENDU",
+ "JUMP · {zone}": "SAUT · {zone}",
+ "LANDED": "RÉUSSI",
+ "MOMENTUM": "MOMENTUM",
+ "NOT HEARD": "PAS ENTENDU",
+ "OFF THE WAY": "HORS ROUTE",
+ "READY": "PRÊT",
+ "ROTATE · {a} → {b}": "ROTATION · {a} → {b}",
+ "RUN · {a} → {b}": "COURSE · {a} → {b}",
+ "SILENT · into {site}": "SILENCIEUX · entrée sur {site}",
+ "STOP": "STOP",
+ "STOP DEAD · {zone}": "ARRÊT NET · {zone}",
+ "a key let go only: tap the other one": "touche juste relâchée : tape l'autre",
+ "base {s} s": "base {s} s",
+ "best run {s} s": "meilleure course {s} s",
+ "checkpoint {i}/{n}": "point {i}/{n}",
+ "crouch in the air: the base's jumpers do": "accroupis-toi en l'air : les joueurs de la base le font",
+ "crouch-jump": "saut accroupi",
+ "fell": "tombé",
+ "from the green ring": "depuis l'anneau vert",
+ "from the green ring, land in the blue one": "depuis l'anneau vert, atterris dans le bleu",
+ "heard": "entendu",
+ "its fastest {s} s": "ses plus rapides {s} s",
+ "jump heard": "saut entendu",
+ "knife out, through every ring: the base runs it in {base} s, its fastest in {best} s": "au couteau, par chaque anneau : la base la court en {base} s, ses plus rapides en {best} s",
+ "moving on the map: timed ways, real jumps, dead stops, silent walks": "le mouvement sur la map : routes chronométrées, vrais sauts, arrêts nets, marche silencieuse",
+ "no jump from the green ring": "aucun saut depuis l'anneau vert",
+ "no run": "aucune course",
+ "no run through every ring, in order": "aucune course par tous les anneaux, dans l'ordre",
+ "no stop": "pas d'arrêt",
+ "no walk": "aucune marche",
+ "not heard": "pas entendu",
+ "off the way": "hors route",
+ "on top, but off the blue ring": "en haut, mais hors de l'anneau bleu",
+ "pros {s} s": "pros {s} s",
+ "run left and right (A, D)": "cours de gauche à droite (strafe)",
+ "run left and right (A, D) at full speed; on STOP, stop dead: tap the other key (counter-strafe)": "cours de gauche à droite à pleine vitesse ; au STOP, arrête-toi net : tape la touche opposée (counter-strafe)",
+ "run {i}/{n}": "course {i}/{n}",
+ "running crouch-jump": "saut accroupi avec élan",
+ "running jump": "saut avec élan",
+ "short of the top: jump at the edge of the green ring": "trop court : saute au bord de l'anneau vert",
+ "stop {i}/{n}": "arrêt {i}/{n}",
+ "the base jumps it in {n} matches": {
+  "one": "la base le saute dans {n} match",
+  "other": "la base le saute dans {n} matchs"
+ },
+ "the other key held too long: you went the other way": "touche opposée tenue trop longtemps : tu es reparti dans l'autre sens",
+ "the pros: {pro} s": "les pros : {pro} s",
+ "try {i}/{n}": "essai {i}/{n}",
+ "via {via}": "par {via}",
+ "walk in (Shift), not one footstep heard: {s} s at most": "entre en marchant (Shift), sans un bruit de pas : {s} s au plus",
+ "{a}/{b} dead stops": "{a}/{b} arrêts nets",
+ "{a}/{b} landed": "{a}/{b} réussis",
+ "{ms} ms to react": "{ms} ms de réaction",
+ "{ms} ms to stop": "{ms} ms pour s'arrêter",
+ "{n} checkpoints missed": {
+  "one": "{n} point manqué",
+  "other": "{n} points manqués"
+ },
+ "{n} footsteps": {
+  "one": "{n} pas",
+  "other": "{n} pas"
+ },
+ "{n} jumps": {
+  "one": "{n} saut",
+  "other": "{n} sauts"
+ },
+ "{n} kills from up there": {
+  "one": "{n} kill de là-haut",
+  "other": "{n} kills de là-haut"
+ },
+ "{n} runs off the way": {
+  "one": "{n} course hors route",
+  "other": "{n} courses hors route"
+ },
+ "{n} sounds heard": {
+  "one": "{n} bruit entendu",
+  "other": "{n} bruits entendus"
+ }
 }
