@@ -138,7 +138,12 @@ public partial class CoachReplay
     List<Vector3> rangeTheirs = new();
     // 07/10: the aim range left aim_map (an unsigned 2023 file the game no longer loads from a server) for a map with
     // cover: a spot of theirs you can't see from yours is dropped for the map (a target unseen 3 s moves on)
-    readonly HashSet<int> rangeBlind = new();
+    // the spots themselves, not their place in rangeTheirs: that list is built again for each drill and narrowed by a
+    // cone that depends on the variant (a duel's is 60 deg where a flick's is 80), while this set is only emptied when
+    // the map changes, so kept as numbers its entries came to mean other spots from one drill to the next (13/10)
+    readonly List<Vector3> rangeBlind = new();
+
+    bool Blind(Vector3 p) => rangeBlind.Any(q => Vector3.Distance(q, p) < 2f);
     readonly Dictionary<int, int> rangeSeenAt = new();
     string rangeMap = "";
     bool rangeSpots;   // a target has been seen this drill: the game's spotting works for them, so unseen means hidden
@@ -821,7 +826,7 @@ public partial class CoachReplay
         }
         s.Players.Add(new Track { Sid = "me", Name = "you", Team = d.Team, Me = true, Hp = 100, Armor = 100, Helmet = true, Weapons = d.Weapons,
             Active = d.Weapons.LastOrDefault(), Path = new[] { me.X, me.Y, me.Z, YawTo(me, far), 0f } });
-        var order = rangeTheirs.Where((p, i) => !rangeBlind.Contains(i)).OrderBy(_ => Rng.Next()).ToList();
+        var order = rangeTheirs.Where(p => !Blind(p)).OrderBy(_ => Rng.Next()).ToList();
         if (order.Count == 0) order = rangeTheirs.OrderBy(_ => Rng.Next()).ToList();
         for (int k = 0; k < Math.Max(1, d.Count); k++)
         {
@@ -846,8 +851,8 @@ public partial class CoachReplay
         if (c == null || !c.IsValid) return;
         var me = Humans().Select(h => h.PlayerPawn.Value?.AbsOrigin).FirstOrDefault(o => o != null) is { } mo ? new Vector3(mo.X, mo.Y, mo.Z) : Pos(cur.Players.First(p => p.Me), 0);
         var taken = bots.Where(b => b.Key != slot && !gone.Contains(b.Value.Sid)).Select(b => Pos(b.Value, 0)).ToList();
-        var free_ = rangeTheirs.Where((p, i) => !rangeBlind.Contains(i) && taken.All(q => Vector3.Distance(p, q) > 120) && Vector3.Distance(p, Pos(t, 0)) > 120).ToList();
-        if (free_.Count == 0) free_ = rangeTheirs.Where((p, i) => !rangeBlind.Contains(i)).ToList();
+        var free_ = rangeTheirs.Where(p => !Blind(p) && taken.All(q => Vector3.Distance(p, q) > 120) && Vector3.Distance(p, Pos(t, 0)) > 120).ToList();
+        if (free_.Count == 0) free_ = rangeTheirs.Where(p => !Blind(p)).ToList();
         if (free_.Count == 0) free_ = rangeTheirs;
         var p = free_.Count > 0 ? free_[Rng.Next(free_.Count)] : Pos(t, 0);
         t.Path = new[] { p.X, p.Y, p.Z, YawTo(p, me), 0f };
@@ -878,8 +883,11 @@ public partial class CoachReplay
             var since = Math.Max(cameAt.GetValueOrDefault(slot, t0), rangeSeenAt.GetValueOrDefault(slot, 0));
             if (now - since < 3 * 64) continue;
             var here = Pos(t, 0);
-            var i = rangeTheirs.FindIndex(q => Vector3.Distance(q, here) < 2f);
-            if (i >= 0 && rangeTheirs.Count - rangeBlind.Count > 4) { rangeBlind.Add(i); Log("range: their spot {i} unseen from yours, dropped ({n} left)", i, rangeTheirs.Count - rangeBlind.Count); }
+            if (!Blind(here) && rangeTheirs.Count(q => !Blind(q)) > 4)
+            {
+                rangeBlind.Add(here);
+                Log("range: their spot {s} unseen from yours, dropped ({n} left)", $"{here.X:F0} {here.Y:F0}", rangeTheirs.Count(q => !Blind(q)));
+            }
             rangeSeenAt[slot] = now;
             RangeAgain(generation, slot);
         }
