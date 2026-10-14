@@ -1033,6 +1033,42 @@ public partial class CoachReplay : BasePlugin
         ThrowAs(c, pawn, n);
     }
 
+    // the game's own Create for a smoke, an HE or a molotov. Its byte patterns above are of the Windows build: on Linux
+    // the same code is in libserver.so, built for another ABI, so nothing there can match them, and libserver.so keeps
+    // no symbol to reach it by name either. A MemoryFunction of a pattern that was not found is not null and only fails
+    // when it is called, so every grenade of every bot raised "Invalid function pointer" and was dropped, once per
+    // grenade. Said once per type now, with what it means, instead of at every throw.
+    // Making the projectile ourselves is not a way out, and that is measured, not assumed (13/10): built by hand a smoke
+    // comes up with no fuse and no think (det 0.00, think -1) where a flashbang comes up with both from its own Spawn,
+    // which is why flashes are the only ones that go off here. Writing the fuse and the think by hand changes nothing:
+    // 2 s later the fuse had passed, the think tick was still the one written, the smoke had not gone off. The engine
+    // schedules thinks itself, so a smoke, an HE or a molotov simply cannot be set off from here without that function.
+    // -> true when the game threw it; false when this server cannot, and then it is not thrown at all rather than
+    // dropped in the world as an object that never goes off.
+    bool GameThrow(CCSPlayerController c, CCSPlayerPawn pawn, Nade n)
+    {
+        if (n.Type is not ("smoke" or "he" or "molotov")) return false;
+        if (n.Type == "smoke" ? smokeCreate == null : n.Type == "he" ? heCreate == null : molotovCreate == null) return false;
+        var o = new CVector(n.P[0], n.P[1], n.P[2]);
+        var v = new CVector(n.V[0], n.V[1], n.V[2]);
+        var spin = new CVector(600, 0, 0);
+        try
+        {
+            if (n.Type == "smoke") smokeCreate!.Invoke(o.Handle, new QAngle(0, 0, 0).Handle, v.Handle, spin.Handle, pawn.Handle, 45, c.TeamNum);
+            else if (n.Type == "he") heCreate!.Invoke(o.Handle, new QAngle(0, 0, 0).Handle, v.Handle, spin.Handle, pawn.Handle, 44);
+            else molotovCreate!.Invoke(o.Handle, new QAngle(0, 0, 0).Handle, v.Handle, spin.Handle, pawn.Handle, n.Inc ? 48 : 46);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            if (n.Type == "smoke") smokeCreate = null;
+            else if (n.Type == "he") heCreate = null;
+            else molotovCreate = null;
+            Log("nade {t}: this server cannot throw one ({m}); the bots' {t} are off for this server", n.Type, ex.Message);
+            return false;
+        }
+    }
+
     void ThrowAs(CCSPlayerController c, CCSPlayerPawn pawn, Nade n)
     {
         var cls = n.Type switch { "smoke" => "smokegrenade_projectile", "flash" => "flashbang_projectile", "he" => "hegrenade_projectile",
@@ -1042,13 +1078,8 @@ public partial class CoachReplay : BasePlugin
         {
             if (n.Type is "smoke" or "he" or "molotov")
             {
-                var o = new CVector(n.P[0], n.P[1], n.P[2]);
-                var v = new CVector(n.V[0], n.V[1], n.V[2]);
-                var spin = new CVector(600, 0, 0);
-                if (n.Type == "smoke" && smokeCreate != null) smokeCreate.Invoke(o.Handle, new QAngle(0, 0, 0).Handle, v.Handle, spin.Handle, pawn.Handle, 45, c.TeamNum);
-                else if (n.Type == "he" && heCreate != null) heCreate.Invoke(o.Handle, new QAngle(0, 0, 0).Handle, v.Handle, spin.Handle, pawn.Handle, 44);
-                else if (n.Type == "molotov" && molotovCreate != null) molotovCreate.Invoke(o.Handle, new QAngle(0, 0, 0).Handle, v.Handle, spin.Handle, pawn.Handle, n.Inc ? 48 : 46);
-                else return;
+                if (!GameThrow(c, pawn, n))
+                    return;
                 Log("nade {t} by {n} at {f}", n.Type, c.PlayerName, n.F);
                 return;
             }
