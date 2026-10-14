@@ -168,8 +168,16 @@ def write_teams(out_dir=SITE):
     config.write_json(os.path.join(dst, "index.json"), team.index())
 
 
-def shell_html(index, local=False):
+def _voice_keys():
+    """The lines the coach says out loud (tv() in the page), as tools/i18n_extract.py listed them."""
+    src = config.read_json(os.path.join(config.HERE, "i18n", "_source.json"), {}) or {}
+    return [k for k, v in src.items() if isinstance(v, dict) and v.get("voice")]
+
+
+def shell_html(index, local=False, lang=None, relang=False):
     s = config.settings()
+    import i18n
+    lang = lang if lang in i18n.LANGS else i18n.current()
     # a player's first launch (05/10): the Steam account signed in on this PC until they analyze or sign in
     own = str(s.get("own_steamid") or (config.logged_in_account()[0] if config.role() == "client" else None) or "")
     import usage
@@ -178,7 +186,13 @@ def shell_html(index, local=False):
             "setup": bool(s.get("setup_done")) or config.role() != "client",   # the setup guide was done or skipped (08/10)
             "usage": {"on": usage.enabled(), "noticed": usage.noticed()},
             "default": own if any(e["steamid"] == own for e in index) else (index[0]["steamid"] if index else None),
-            "local": local, "generated": dt.datetime.now().isoformat(timespec="minutes")}
+            "local": local, "generated": dt.datetime.now().isoformat(timespec="minutes"),
+            # 12/10, a Linux tester could not find the training server's switch (Settings > Game detection): Prepare shows it
+            "linux": config.LINUX, "linux_training": bool(s.get("linux_training")),
+            # 13/10, the app in the player's language: its catalog, the coach's spoken lines in every language, the choice
+            "lang": lang, "L": i18n.page_catalog(lang), "LV": i18n.voice_catalogs(_voice_keys()), "langs": i18n.LANGS,
+            "ui_lang": s.get("ui_lang") if s.get("ui_lang") in i18n.LANGS else "auto",
+            "relang": bool(relang)}   # your analysis is being written again in the page's language (serve.relang_own)
     return open(TEMPLATE, encoding="utf-8").read().replace("__DATA__", json.dumps(data, ensure_ascii=False, separators=(",", ":")))
 
 

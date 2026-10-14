@@ -13,6 +13,7 @@ from collections import Counter, defaultdict
 import pandas as pd
 
 import config
+from i18n import N_, tr
 
 SESSION_GAP_MIN = 45        # more than 45 min between two games = new session
 JOURNAL = os.path.join(config.OUT, "journal")
@@ -157,6 +158,16 @@ def add_checkin(steamid, entry):
     return e
 
 
+# the factors' titles and groups: English keys while comparing (plan.py and review.py look for "Group", "solo"), in the
+# player's language in the output (key: the English one)
+_LABELS = [N_("Time of day"), N_("Game in the session"), N_("After the previous result"), N_("Group"), N_("Day"), N_("Rest before the session"),
+           N_("Sleep (journal)"), N_("Warm-up (journal)"), N_("Energy (journal)"), N_("morning (6am-12pm)"), N_("afternoon (12pm-6pm)"),
+           N_("evening (6pm-11pm)"), N_("night (11pm-6am)"), N_("1st game"), N_("2nd game"), N_("3rd game"), N_("4th game and later"),
+           N_("after a win"), N_("after a loss"), N_("after 2+ losses"), N_("solo"), N_("duo"), N_("group of 3"), N_("group of 4"), N_("group of 5"),
+           N_("weekend"), N_("weekday"), N_("under 12 h"), N_("12 h or more"), N_("under 6 h"), N_("6 h to 7.5 h"), N_("7.5 h or more"),
+           N_("no warm-up"), N_("warmed up"), N_("low (1-2)"), N_("medium (3)"), N_("high (4-5)")]
+
+
 def _bucket_hour(h):
     return "morning (6am-12pm)" if 6 <= h < 12 else "afternoon (12pm-6pm)" if 12 <= h < 18 else "evening (6pm-11pm)" if 18 <= h < 23 else "night (11pm-6am)"
 
@@ -297,6 +308,10 @@ def analyze(steamid):
     slen = [len(s) for s in sessions]
     tilt = sum(1 for s in sessions for i in range(2, len(s)) if s[i - 1]["result"] == "loss" and s[i - 2]["result"] == "loss")
     recs = recommendations(F, overall, sessions, partners)
+    for f in F:   # the output in the player's language, the English kept as the key
+        f["key"], f["title"] = f["title"], tr(f["title"])
+        for r in f["rows"]:
+            r["key"], r["group"] = r["group"], tr(r["group"])
     return {"n": len(ms), "overall": {a: b for a, b in overall.items() if a != "sd"}, "factors": F, "partners": partners,
             "sessions": {"n": len(sessions), "avg_games": round(sum(slen) / len(slen), 1), "max_games": max(slen),
                          "games_after_2_losses": tilt, "last": [{"start": s[0]["start"].isoformat(timespec="minutes"), "games": len(s),
@@ -334,28 +349,31 @@ def recommendations(F, overall, sessions, partners):
     idx = fx.get("Game in the session", {})
     late = idx.get("4th game and later") if sure(idx.get("4th game and later")) else idx.get("3rd game")
     if sure(late) and (late["delta"] or 0) < 0:
-        which = "Your games from the 4th of a session on" if late["group"].startswith("4") else "Your 3rd games of a session"
-        R.append({"kind": "stop", "level": late["level"], "text": f"{which} are clearly worse (rating {_fr(late['perf'])} vs {_fr(overall['perf'])} on average, over {late['n']} games): set yourself a limit of {2 if late['group'].startswith('3') else 3} games per session."})
+        a, b, n, lim = _fr(late['perf']), _fr(overall['perf']), late['n'], 2 if late['group'].startswith('3') else 3
+        R.append({"kind": "stop", "level": late["level"], "text": tr("Your games from the 4th of a session on are clearly worse (rating {a} vs {b} on average, over {n} games): set yourself a limit of {lim} games per session.", a=a, b=b, n=n, lim=lim)
+                  if late["group"].startswith("4") else tr("Your 3rd games of a session are clearly worse (rating {a} vs {b} on average, over {n} games): set yourself a limit of {lim} games per session.", a=a, b=b, n=n, lim=lim)})
     after = fx.get("After the previous result", {}).get("after 2+ losses")
     if sure(after) and (after["delta"] or 0) < 0:
-        R.append({"kind": "tilt", "level": after["level"], "text": f"After 2 losses in a row: {after['winrate']}% wins and a rating of {_fr(after['perf'])} ({after['n']} games). Rule: a break of at least 30 min, or end the session."})
+        R.append({"kind": "tilt", "level": after["level"], "text": tr("After 2 losses in a row: {w}% wins and a rating of {r} ({n} games). Rule: a break of at least 30 min, or end the session.", w=after['winrate'], r=_fr(after['perf']), n=after['n'])})
     hours = fx.get("Time of day", {})
     good = [r for r in hours.values() if sure(r) and (r["delta"] or 0) > 0]
     bad = [r for r in hours.values() if sure(r) and (r["delta"] or 0) < 0]
     for r in good[:1]:
-        R.append({"kind": "hour", "level": r["level"], "text": f"You play best in the {r['group']}: rating {_fr(r['perf'])} over {r['n']} games. Schedule your ranked sessions in that slot."})
+        R.append({"kind": "hour", "level": r["level"], "text": tr("You play best in the {slot}: rating {r} over {n} games. Schedule your ranked sessions in that slot.", slot=tr(r['group']), r=_fr(r['perf']), n=r['n'])})
     for r in bad[:1]:
-        R.append({"kind": "hour", "level": r["level"], "text": f"In the {r['group']}, your rating drops to {_fr(r['perf'])} ({r['n']} games): keep that slot for Deathmatch or lineup practice."})
+        R.append({"kind": "hour", "level": r["level"], "text": tr("In the {slot}, your rating drops to {r} ({n} games): keep that slot for Deathmatch or lineup practice.", slot=tr(r['group']), r=_fr(r['perf']), n=r['n'])})
     grp = fx.get("Group", {})
     solo, duo = grp.get("solo"), grp.get("duo")
     if solo and duo and solo["perf"] is not None and duo["perf"] is not None and (sure(solo) or sure(duo)):
         better = "as a duo" if duo["perf"] > solo["perf"] else "solo"
+        kw = dict(a=_fr(max(duo['perf'], solo['perf'])), b=_fr(min(duo['perf'], solo['perf'])), d=duo['n'], s=solo['n'])
         R.append({"kind": "party", "level": _level(duo.get("z"), duo["n"]) if better == "as a duo" else _level(solo.get("z"), solo["n"]),
-                  "text": f"You perform better {better}: rating {_fr(max(duo['perf'], solo['perf']))} vs {_fr(min(duo['perf'], solo['perf']))} ({duo['n']} games as a duo, {solo['n']} solo)."})
+                  "text": tr("You perform better as a duo: rating {a} vs {b} ({d} games as a duo, {s} solo).", **kw) if better == "as a duo"
+                  else tr("You perform better solo: rating {a} vs {b} ({d} games as a duo, {s} solo).", **kw)})
     for p in partners[:2]:
         if p["n"] >= 3:
             R.append({"kind": "partner", "level": "trend" if p["n"] >= 5 else "not enough data",
-                      "text": f"With {p['name']}: {p['w']} wins, {p['l']} losses, rating {_fr(p['perf'])} ({p['n']} games together)."})
+                      "text": tr("With {name}: {w} wins, {l} losses, rating {r} ({n} games together).", name=p['name'], w=p['w'], l=p['l'], r=_fr(p['perf']), n=p['n'])})
     return R
 
 

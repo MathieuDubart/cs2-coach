@@ -1,54 +1,55 @@
 <div class="bar"><div class="bar-in">
-  <div class="bar-left"><span class="brand">Wily</span><button type="button" class="alphatag" id="alphatag" hidden title="This is an alpha: report a bug or an idea">alpha · report</button>
-  <nav aria-label="Views">
-    <a href="#review" data-view="review" title="After your matches and the next day">Review</a>
-    <a href="#prepare" data-view="prepare" title="Before you play: the warm-up">Prepare</a>
+  <div class="bar-left"><span class="brand">Wily</span><button type="button" class="alphatag" id="alphatag" hidden title="Alpha version: report a bug or suggest an idea" data-t-title data-t>alpha · report</button>
+  <nav aria-label="Views" data-t-aria-label>
+    <a href="#review" data-view="review" title="After your matches" data-t-title data-t>Review</a>
+    <a href="#prepare" data-view="prepare" title="Before you play: warm up" data-t-title data-t>Prepare</a>
   </nav>
   <span class="whochip" id="whochip"></span></div>
-  <div class="bar-mid"><a href="#ingame" class="livebtn" data-view="ingame" title="During your match, on a 2nd screen">Live</a>
+  <div class="bar-mid"><a href="#ingame" class="livebtn" data-view="ingame" title="During your match, on a second screen" data-t-title data-t>Live</a>
   <form class="search bar-search" id="search" role="search" autocomplete="off">
-    <input id="q" name="q" type="search" placeholder="Steam link, SteamID64, name or share code" aria-label="Open a player or a match: Steam profile link, SteamID64, name or CSGO-… share code">
-    <button type="submit" id="qbtn">Open</button>
+    <input id="q" name="q" type="search" placeholder="Steam link, SteamID64, name or share code" data-t-placeholder aria-label="Open a player or a match: Steam profile link, SteamID64, name or CSGO-… share code" data-t-aria-label>
+    <button type="submit" id="qbtn" data-t>Open</button>
   </form></div>
   <div class="bar-right">
     <div class="acct" id="acct" hidden><button type="button" class="acct-btn" id="acctbtn" aria-haspopup="true" aria-expanded="false" aria-controls="acctmenu"></button>
       <div class="acct-menu" id="acctmenu" hidden>
-        <div class="am-sec"><span class="am-h">Favorites</span><div class="favlist" id="favlist"></div></div>
+        <div class="am-sec"><span class="am-h" data-t>Favorites</span><div class="favlist" id="favlist"></div></div>
         <div class="am-sec">
-          <button type="button" class="am-item" id="updbtn" hidden title="Fetch your new matches from Steam and analyze them">↻ Update my matches</button>
-          <a href="#settings" class="am-item gear" data-view="settings">Settings</a>
+          <button type="button" class="am-item" id="updbtn" hidden title="Fetch your new matches from Steam and analyze them" data-t-title data-t>↻ Update my matches</button>
+          <a href="#settings" class="am-item gear" data-view="settings" data-t>Settings</a>
         </div>
       </div>
     </div>
   </div>
 </div><div class="subnav" id="subnav" hidden></div></div>
 <dialog class="bugdlg" id="bugdlg" aria-labelledby="bug-h"><form method="dialog" id="bugform">
-  <h3 id="bug-h">Something broke? Tell me.</h3>
-  <p class="note">I'm still in alpha, so thanks for telling me. Your report reaches my author with only what you see here.</p>
-  <div class="btns" role="group" aria-label="Kind"><label><input type="radio" name="kind" value="bug" checked> A bug</label><label><input type="radio" name="kind" value="idea"> An idea</label></div>
-  <label><span>What happened? What were you doing?</span><textarea id="bug-text" rows="5" required maxlength="15000"></textarea></label>
-  <label><span>What did you expect? <span class="note">(optional)</span></span><textarea id="bug-exp" rows="2" maxlength="6000"></textarea></label>
-  <label><span>Your email, only if you want an answer <span class="note">(optional)</span></span><input id="bug-email" type="email" maxlength="200" autocomplete="email"></label>
-  <label class="chk"><input type="checkbox" id="bug-diag" checked> Include the technical details (versions, Windows, this page's errors, the end of the app's log without SteamIDs, emails or names)</label>
-  <details id="bug-prev"><summary>See exactly what is sent</summary><pre id="bug-pre">…</pre></details>
+  <h3 id="bug-h" data-t>Found a bug? Have an idea?</h3>
+  <p class="note" data-t>Wily is in alpha, so thanks for reporting. It goes to the developer with exactly what you see below, nothing more.</p>
+  <div class="btns" role="group" aria-label="Kind" data-t-aria-label><label><input type="radio" name="kind" value="bug" checked> <span data-t>A bug</span></label><label><input type="radio" name="kind" value="idea"> <span data-t>An idea</span></label></div>
+  <label><span data-t>What happened? What were you doing?</span><textarea id="bug-text" rows="5" required maxlength="15000"></textarea></label>
+  <label><span><span data-t>What did you expect?</span> <span class="note" data-t>(optional)</span></span><textarea id="bug-exp" rows="2" maxlength="6000"></textarea></label>
+  <label><span><span data-t>Your email, if you'd like a reply</span> <span class="note" data-t>(optional)</span></span><input id="bug-email" type="email" maxlength="200" autocomplete="email"></label>
+  <label class="chk"><input type="checkbox" id="bug-diag" checked> <span data-t>Include technical details: versions, OS, the errors on this page and the end of the app's log (SteamIDs, emails and names removed)</span></label>
+  <details id="bug-prev"><summary data-t>See exactly what will be sent</summary><pre id="bug-pre">…</pre></details>
   <p class="note" id="bug-msg" role="status"></p>
-  <div class="btns"><button type="button" class="primary" id="bug-send">Send</button><button type="button" id="bug-close">Close</button></div>
+  <div class="btns"><button type="button" class="primary" id="bug-send" data-t>Send</button><button type="button" id="bug-close" data-t>Close</button></div>
 </form></dialog>
 <dialog class="bugdlg fbdlg" id="fbdlg" aria-labelledby="fb-h"><form method="dialog">
-  <h3 id="fb-h">How was it?</h3>
+  <h3 id="fb-h" data-t>How did it go?</h3>
   <p class="fb-sum" id="fb-sum"></p>
-  <p class="note">Wily is in <b>closed alpha</b>: a handful of players and one developer. What you say here goes straight to him and decides what gets fixed and built next. A tap on a face is enough; a sentence helps even more.</p>
-  <div class="fb-rate" id="fb-rate" role="group" aria-label="How it went"></div>
-  <div class="chips fb-tags" id="fb-tags" role="group" aria-label="What it was about"></div>
-  <label><span>What worked, what didn't, what you'd want next <span class="note">(optional)</span></span><textarea id="fb-text" rows="3" maxlength="6000"></textarea></label>
-  <p class="note" id="fb-hint">In game, <b>!report</b> followed by a few words sends a note with the drill you're on.</p>
+  <p class="note" data-t>Wily is in alpha and built by one developer: what you say here decides what gets fixed and built next. A tap on a face is enough, a sentence helps even more.</p>
+  <div class="fb-rate" id="fb-rate" role="group" aria-label="How it went" data-t-aria-label></div>
+  <div class="chips fb-tags" id="fb-tags" role="group" aria-label="What stood out" data-t-aria-label></div>
+  <label><span><span data-t>What worked, what didn't, what you'd like next</span> <span class="note" data-t>(optional)</span></span><textarea id="fb-text" rows="3" maxlength="6000"></textarea></label>
+  <p class="note" id="fb-hint" data-t>In game, type <b>!report</b> and a few words to send a note about the drill you're on.</p>
   <p class="note" id="fb-msg" role="status"></p>
-  <div class="btns"><button type="button" class="primary" id="fb-send">Send</button><button type="button" id="fb-later">Not now</button></div>
-  <label class="chk note"><input type="checkbox" id="fb-stop"> Don't ask after each warm-up and match (Settings turns it back on)</label>
+  <div class="btns"><button type="button" class="primary" id="fb-send" data-t>Send</button><button type="button" id="fb-later" data-t>Not now</button></div>
+  <label class="chk note"><input type="checkbox" id="fb-stop"> <span data-t>Don't ask after every warm-up and match (you can turn it back on in Settings)</span></label>
 </form></dialog>
-<div class="usage-note" id="usage-note" role="region" aria-label="What this alpha shares" hidden><p><b>This alpha helps me improve, anonymously.</b> Two things are on by default:</p><ul><li><b>Your matches, anonymized:</b> what the app extracts from each demo (positions, duels, grenades, buys, rounds), every SteamID replaced by a random id used for that match only, every name removed. Never your demos, your voice, your settings or your profile.</li><li><b>How you use the app:</b> pages opened and for how long, buttons used, errors, per day. No identifier, no SteamID, no name, nothing you write.</li></ul><p>The base grows with your matches and I see what to fix. You can turn either off now or at any time in Settings.</p>
-  <div class="btns"><button type="button" class="primary" id="un-ok">OK</button><button type="button" id="un-off">Turn both off</button><button type="button" id="un-more">Choose in Settings</button></div></div>
+<div class="usage-note" id="usage-note" role="region" aria-label="What this alpha shares" data-t-aria-label hidden><p data-t><b>Help improve Wily, anonymously.</b> Two things are on by default:</p><ul><li data-t><b>Your matches, anonymized:</b> what the app extracts from each demo (positions, duels, grenades, buys, rounds). Every SteamID is replaced by a random ID used for that match only, and every name is removed. Never your demos, your voice, your settings or your profile.</li><li data-t><b>How you use the app:</b> which pages you open and for how long, the buttons you use and the errors, per day. No ID, no SteamID, no name, nothing you type.</li></ul><p data-t>Your matches grow the reference base, and the usage stats show what needs fixing. You can turn either one off now, or any time in Settings.</p>
+  <div class="btns"><button type="button" class="primary" id="un-ok" data-t>OK</button><button type="button" id="un-off" data-t>Turn both off</button><button type="button" id="un-more" data-t>Choose in Settings</button></div></div>
 <div class="jobpanel" id="job" hidden><div class="in" role="status" aria-live="polite"></div></div>
+<div class="bcast" id="bcast" hidden></div>
 <main>
   <section class="view" id="v-ingame"></section>
   <section class="view" id="v-prepare" hidden></section>

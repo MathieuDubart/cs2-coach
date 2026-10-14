@@ -1,4 +1,5 @@
 """Reference population benchmarks: where a player stands versus every player of every analyzed demo."""
+from i18n import N_
 import numpy as np
 import pandas as pd
 
@@ -6,36 +7,36 @@ import population
 
 # metric -> (label, higher_is_better, unit)
 METRICS = {
-    "traded_pct": ("deaths traded by a teammate", True, "%"),
-    "nades_unused_24": ("grenades that died with you per match (24 rounds)", False, ""),
-    "flash_eff": ("enemies blinded per flash", True, ""),
-    "flash_mates_rate": ("teammates blinded per flash", False, ""),
-    "flash_duels_pct": ("duels against a flashed enemy", True, "%"),
-    "pistol_moving": ("pistol shots fired while moving", False, "%"),
-    "rifle_moving": ("rifle shots fired while moving", False, "%"),
-    "b1_hit": ("1st bullet hitting (rifle)", True, "%"),
-    "b9_hit": ("bullets 9+ hitting (rifle)", True, "%"),
-    "xhair": ("crosshair offset before the duel", False, "°"),
-    "hold_win": ("duels won holding", True, "%"),
-    "peek_win": ("duels won peeking", True, "%"),
-    "lowhp_win": ("duels won under 50 HP", True, "%"),
-    "close_win": ("duels won under 10 m", True, "%"),
-    "far_win": ("duels won beyond 20 m", True, "%"),
-    "open_win": ("opening duels won", True, "%"),
-    "early_death_pct": ("deaths before 20 s", False, "%"),
-    "last_alive_pct": ("deaths as the last one alive", False, "%"),
-    "adr": ("damage per round", True, ""),
-    "hs_pct": ("headshot kills", True, "%"),
-    "kd": ("kills per death", True, ""),
+    "traded_pct": (N_("deaths traded by a teammate"), True, "%"),
+    "nades_unused_24": (N_("grenades that died with you per match (24 rounds)"), False, ""),
+    "flash_eff": (N_("enemies blinded per flash"), True, ""),
+    "flash_mates_rate": (N_("teammates blinded per flash"), False, ""),
+    "flash_duels_pct": (N_("duels against a flashed enemy"), True, "%"),
+    "pistol_moving": (N_("pistol shots fired while moving"), False, "%"),
+    "rifle_moving": (N_("rifle shots fired while moving"), False, "%"),
+    "b1_hit": (N_("1st bullet hitting (rifle)"), True, "%"),
+    "b9_hit": (N_("bullets 9+ hitting (rifle)"), True, "%"),
+    "xhair": (N_("crosshair offset before the duel"), False, "°"),
+    "hold_win": (N_("duels won holding"), True, "%"),
+    "peek_win": (N_("duels won peeking"), True, "%"),
+    "lowhp_win": (N_("duels won under 50 HP"), True, "%"),
+    "close_win": (N_("duels won under 10 m"), True, "%"),
+    "far_win": (N_("duels won beyond 20 m"), True, "%"),
+    "open_win": (N_("opening duels won"), True, "%"),
+    "early_death_pct": (N_("deaths before 20 s"), False, "%"),
+    "last_alive_pct": (N_("deaths as the last one alive"), False, "%"),
+    "adr": (N_("damage per round"), True, ""),
+    "hs_pct": (N_("headshot kills"), True, "%"),
+    "kd": (N_("kills per death"), True, ""),
 }
 # rare events, pooled over each player's matches (a rate per match would be 0 or 100 %):
 # metric -> (numerator, denominator, minimum denominator, label, higher_is_better, unit)
 POOLED = {
     # clutches are rare: with 4 a player, most of the base had 0 and the median said 0 % (04/10); 12 at least
-    "clutch_win_pct": ("clutch_won", "clutch_n", 12, "1v2+ clutches won", True, "%"),
-    "clutch_multi_pct": ("clutch_multi", "clutch_n", 12, "1v2+ clutches where 2+ enemies see you at once", False, "%"),
-    "flash_used_pct": ("flash_used", "flash_blind", 8, "enemies you flash that your team hits while blind", True, "%"),
-    "untraded_pct": ("untraded_n", "dead_n", 15, "deaths without impact (not traded, no damage of yours)", False, "%"),
+    "clutch_win_pct": ("clutch_won", "clutch_n", 12, N_("1v2+ clutches won"), True, "%"),
+    "clutch_multi_pct": ("clutch_multi", "clutch_n", 12, N_("1v2+ clutches where 2+ enemies see you at once"), False, "%"),
+    "flash_used_pct": ("flash_used", "flash_blind", 8, N_("enemies you flash that your team hits while blind"), True, "%"),
+    "untraded_pct": ("untraded_n", "dead_n", 15, N_("deaths without impact (not traded, no damage of yours)"), False, "%"),
 }
 
 

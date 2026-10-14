@@ -14,15 +14,18 @@ from collections import Counter
 
 import pandas as pd
 
+import i18n
+from i18n import N_, tr, trn
+
 KPI = {  # key: (label, unit, higher is better)
-    "rating": ("Match rating (≈ HLTV 2.0)", "", True),
-    "adr": ("Damage per round", "", True),
-    "traded": ("Deaths traded", "%", True),
-    "isolated": ("Isolated deaths (per 24 rounds)", "", False),
-    "adv_throw": ("Man advantages thrown", "%", False),
-    "nades": ("Grenades that died with you (per 24 rounds)", "", False),
-    "xhair": ("Crosshair offset before the duel", "°", False),
-    "open": ("Opening duels won", "%", True),
+    "rating": (N_("Match rating (≈ HLTV 2.0)"), "", True),
+    "adr": (N_("Damage per round"), "", True),
+    "traded": (N_("Deaths traded"), "%", True),
+    "isolated": (N_("Isolated deaths (per 24 rounds)"), "", False),
+    "adv_throw": (N_("Man advantages thrown"), "%", False),
+    "nades": (N_("Grenades that died with you (per 24 rounds)"), "", False),
+    "xhair": (N_("Crosshair offset before the duel"), "°", False),
+    "open": (N_("Opening duels won"), "%", True),
 }
 # experiments whose measure is one of these numbers
 EXP_KPI = {"trade_distance": "isolated", "nades_40s": "nades", "prefire": "xhair", "advantage": "adv_throw", "opening": "open",
@@ -295,7 +298,12 @@ def _mean_sd(xs):
 
 # the windows the Review can show (07/10, the user: "la dernière session exactement comme tu fais, mais un bouton pour
 # changer en last 7 days, this week, this month"): each compared with as many matches just before it (12 at least)
-PERIODS = {"7d": "the last 7 days", "week": "this week", "month": "this month", "30d": "the last 30 days"}
+def _md(d):
+    """A day and month as the player's language writes them (i18n.day_month)."""
+    return i18n.day_month(d)
+
+
+PERIODS = {"7d": N_("the last 7 days"), "week": N_("this week"), "month": N_("this month"), "30d": N_("the last 30 days")}
 
 
 def _window(rows, period, now=None):
@@ -361,8 +369,8 @@ def build(sid, stats, mid_rows, ctx, exps, adv, mb=None, period="session"):
         if len(recent) < 2:
             recent = rows[-3:]
         before = [r for r in rows if r["time"] < recent[0]["time"]][-12:]
-        label = (f"your last session ({len(recent)} games, on {recent[0]['time']:%m/%d})" if len(recent) >= 2 and
-                 (recent[-1]["time"] - recent[0]["time"]).total_seconds() < 6 * 3600 else f"your last {len(recent)} matches")
+        label = (tr("your last session ({n} games, on {date})", n=len(recent), date=_md(recent[0]['time'])) if len(recent) >= 2 and
+                 (recent[-1]["time"] - recent[0]["time"]).total_seconds() < 6 * 3600 else trn(len(recent), "your last match", "your last {n} matches"))
     # context of each window, for the reasons
     def share_late(win):
         return sum(1 for r in win if r["time"].hour >= 23 or r["time"].hour < 6) / max(len(win), 1)
@@ -379,25 +387,27 @@ def build(sid, stats, mid_rows, ctx, exps, adv, mb=None, period="session"):
     reasons_bad, reasons_good = [], []
     if before and share_late(recent) >= 0.5 and share_late(before) < 0.3:
         n = sum(1 for r in recent if r["time"].hour >= 23 or r["time"].hour < 6)
-        reasons_bad.append(f"{n} of these {len(recent)} games after 11pm")
+        reasons_bad.append(tr("{n} of these {m} games after 11pm", n=n, m=len(recent)))
     if len(recent) >= 4 and period not in PERIODS:   # a span of days is not one sitting
-        reasons_bad.append(f"a session of {len(recent)} games in a row: fatigue builds up after each game")
+        reasons_bad.append(tr("a session of {n} games in a row: fatigue builds up after each game", n=len(recent)))
     half = max(2, math.ceil(len(recent) / 2))
     if worst_map and sum(1 for r in recent if r["map"] == worst_map) >= half:
-        reasons_bad.append(f"{sum(1 for r in recent if r['map'] == worst_map)} game(s) on {worst_map.split('_')[-1].capitalize()}, your hardest map ({map_win[worst_map]:.0f}% of rounds won)")
+        reasons_bad.append(tr("{n} game(s) on {map}, your hardest map ({p}% of rounds won)", n=sum(1 for r in recent if r['map'] == worst_map),
+                              map=worst_map.split('_')[-1].capitalize(), p=f"{map_win[worst_map]:.0f}"))
     if best_map and sum(1 for r in recent if r["map"] == best_map) >= half:
-        reasons_good.append(f"{sum(1 for r in recent if r['map'] == best_map)} game(s) on {best_map.split('_')[-1].capitalize()}, your best map ({map_win[best_map]:.0f}% of rounds won)")
+        reasons_good.append(tr("{n} game(s) on {map}, your best map ({p}% of rounds won)", n=sum(1 for r in recent if r['map'] == best_map),
+                               map=best_map.split('_')[-1].capitalize(), p=f"{map_win[best_map]:.0f}"))
     party = {m["id"]: m.get("party_size") for m in ms}
     pr = [party.get(r["id"]) for r in recent if party.get(r["id"])]
     pb = [party.get(r["id"]) for r in before if party.get(r["id"])]
     if pr and pb:
         solo_r, solo_b = sum(1 for p in pr if p == 1) / len(pr), sum(1 for p in pb if p == 1) / len(pb)
-        grp = next((f for f in (ctx or {}).get("factors", []) if f["title"] == "Group"), None)
-        solo_perf = next((row["delta"] for row in (grp or {}).get("rows", []) if row["group"] == "solo"), None)
+        grp = next((f for f in (ctx or {}).get("factors", []) if f.get("key", f["title"]) == "Group"), None)
+        solo_perf = next((row["delta"] for row in (grp or {}).get("rows", []) if row.get("key", row["group"]) == "solo"), None)
         if solo_r - solo_b >= 0.5:
-            (reasons_bad if (solo_perf or 0) < 0 else reasons_good).append("you played solo more often than usual")
+            (reasons_bad if (solo_perf or 0) < 0 else reasons_good).append(tr("you played solo more often than usual"))
         elif solo_b - solo_r >= 0.5:
-            (reasons_good if (solo_perf or 0) < 0 else reasons_bad).append("you played in a group more often than usual")
+            (reasons_good if (solo_perf or 0) < 0 else reasons_bad).append(tr("you played in a group more often than usual"))
     started = [e for e in (exps or {}).get("experiments", []) if e.get("started") and
                dt.datetime.fromisoformat(e["started"]) <= recent[-1]["time"] and dt.datetime.fromisoformat(e["started"]) >= (before[-1]["time"] if before else rows[0]["time"])]
     changes, stable = [], []
@@ -419,7 +429,7 @@ def build(sid, stats, mid_rows, ctx, exps, adv, mb=None, period="session"):
             continue
         for e in started:
             if EXP_KPI.get(e["template"]) == k:
-                item["why"].append(f"matches the experiment '{e['title']}' started on {dt.datetime.fromisoformat(e['started']):%m/%d}")
+                item["why"].append(tr("matches the experiment '{title}' started on {date}", title=e['title'], date=_md(dt.datetime.fromisoformat(e['started']))))
         if k in ("rating", "adr", "traded", "open"):
             item["why"] += reasons_good if better else reasons_bad
         changes.append(item)
@@ -435,7 +445,7 @@ def build(sid, stats, mid_rows, ctx, exps, adv, mb=None, period="session"):
             hib = KPI[k][2]
             trend = "better" if (a > b) == hib and abs(a - b) > 0.05 * max(abs(b), 1) else "worse" if abs(a - b) > 0.05 * max(abs(b), 1) else "stable"
         axes.append({"id": r.get("id"), "title": r.get("title"), "short": r.get("short"), "do": (r.get("do") or [])[:2],
-                     "drills": (r.get("drills") or [])[:1], "kpi": k, "kpi_label": KPI[k][0] if k else None, "unit": KPI[k][1] if k else None,
+                     "drills": (r.get("drills") or [])[:1], "kpi": k, "kpi_label": tr(KPI[k][0]) if k else None, "unit": KPI[k][1] if k else None,
                      "before": None if b is None else round(b, 2), "after": None if a is None else round(a, 2), "trend": trend,
                      "sources": (r.get("sources") or [])[:2]})
     wins = sum(1 for r in recent if r["result"] == "win")
@@ -446,10 +456,12 @@ def build(sid, stats, mid_rows, ctx, exps, adv, mb=None, period="session"):
     nxt = None
     worse = [c for c in changes if not c["better"]]
     if worse:
-        nxt = f"Fix what is slipping: {worse[0]['label'].lower()} ({worse[0]['before']:g} → {worse[0]['after']:g}).".replace(".", ",", 0)
+        nxt = tr("Fix what is slipping: {what} ({a} → {b}).", what=tr(worse[0]['label']).lower(), a=f"{worse[0]['before']:g}", b=f"{worse[0]['after']:g}")
     elif axes:
-        nxt = f"Stay on track with your #1 focus: {axes[0]['short'].lower()}."
+        nxt = tr("Stay on track with your #1 focus: {what}.", what=(axes[0]['short'] or "").lower())
+    # 13/10, the user: "get few data on dot hover (map, result, rating, adr)": each dot carries its score and ADR too
     trend = [{"id": r["id"], "time": r["time"].isoformat(timespec="minutes"), "map": r["map"], "result": r["result"],
+              "score": r.get("score"), "adr": round(r["adr"], 1) if r.get("adr") is not None else None,
               "rating": round(r["rating"], 2), "recent": r in recent} for r in before + recent]
     try:
         # the session's matches get their reads from their demo when they miss them; a longer span reads what is there

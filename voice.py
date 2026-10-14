@@ -20,6 +20,7 @@ import threading
 import time
 
 import config
+from i18n import N_, tr, trn
 
 DIR = os.path.join(config.OUT, "voice")
 SR = 16000
@@ -927,7 +928,7 @@ def analyze(rid, sid):
            "moods": {k: sum(1 for u in utts for mo in u.get("moods") or [] if mo["kind"] == k) for k in MOODS + ("note",)}}
     if mid and live:
         res.update(_heard(rid, meta, mid, sid, live, utts))
-    res["tips"] = tips(res)
+    res["tip_k"], res["tips"] = tips(res)   # tip_k: each tip's English (the page picks its own by it)
     res["v"] = ANALYSIS_V
     json.dump(res, open(os.path.join(DIR, rid + ".analysis.json"), "w", encoding="utf-8"), ensure_ascii=False, indent=1)
     return res
@@ -961,23 +962,37 @@ def _heard(rid, meta, mid, sid, live, utts):
     return out
 
 
+# tips(): their keys, for tools/i18n_extract.py
+_TIPS = [N_("{n} deaths out of {m} without any info in the 10 s before: call what you see before taking the duel, not after."),
+         N_("Only {p}% of your calls say where AND how many (or the damage): 'two B, one tagged for 80' rather than 'they're B'."),
+         N_("{n} grenades called out of {m}: say 'flash' before throwing it, your teammates turn away."),
+         N_("You talked during {n} teammate clutch(es): one useful piece of info, then silence."),
+         N_("{n} frustrated phrases: after a mistake, one breath, then one useful piece of info for the team."),
+         N_("No call in {n} rounds out of {m}: even when lurking, call what you hear (rotations, steps)."),
+         N_("Your calls are clean: keep saying where, how many and what you are going to do.")]
+
+
 def tips(a):
+    """-> (the tips in English, the tips in the player's language): the page finds its own by their English."""
     T = []
+
+    def add(key, **kw):
+        T.append((key.format(**kw), tr(key, **kw)))
     if a["aligned"] and a["deaths"] and a["silent_deaths"] / a["deaths"] >= 0.4:
-        T.append(f"{a['silent_deaths']} deaths out of {a['deaths']} without any info in the 10 s before: call what you see before taking the duel, not after.")
+        add("{n} deaths out of {m} without any info in the 10 s before: call what you see before taking the duel, not after.", n=a['silent_deaths'], m=a['deaths'])
     if a["info"] >= 5 and a["complete_share"] < 50:
-        T.append(f"Only {a['complete_share']}% of your calls say where AND how many (or the damage): 'two B, one tagged for 80' rather than 'they're B'.")
+        add("Only {p}% of your calls say where AND how many (or the damage): 'two B, one tagged for 80' rather than 'they're B'.", p=a['complete_share'])
     if a["throws"] >= 4 and a["announced"] / a["throws"] < 0.5:
-        T.append(f"{a['announced']} grenades called out of {a['throws']}: say 'flash' before throwing it, your teammates turn away.")
+        add("{n} grenades called out of {m}: say 'flash' before throwing it, your teammates turn away.", n=a['announced'], m=a['throws'])
     if a["clutch_talk_rounds"]:
-        T.append(f"You talked during {a['clutch_talk_rounds']} teammate clutch(es): one useful piece of info, then silence.")
+        add("You talked during {n} teammate clutch(es): one useful piece of info, then silence.", n=a['clutch_talk_rounds'])
     if a["tilt"] >= 3:
-        T.append(f"{a['tilt']} frustrated phrases: after a mistake, one breath, then one useful piece of info for the team.")
+        add("{n} frustrated phrases: after a mistake, one breath, then one useful piece of info for the team.", n=a['tilt'])
     if a["aligned"] and a["rounds_n"] and a["silent_rounds"] / a["rounds_n"] >= 0.4:
-        T.append(f"No call in {a['silent_rounds']} rounds out of {a['rounds_n']}: even when lurking, call what you hear (rotations, steps).")
+        add("No call in {n} rounds out of {m}: even when lurking, call what you hear (rotations, steps).", n=a['silent_rounds'], m=a['rounds_n'])
     if not T:
-        T.append("Your calls are clean: keep saying where, how many and what you are going to do.")
-    return T
+        add("Your calls are clean: keep saying where, how many and what you are going to do.")
+    return [k for k, _ in T], [t for _, t in T]
 
 
 def mood_stats(sid):

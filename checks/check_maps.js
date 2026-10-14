@@ -1,16 +1,20 @@
 // Regression check of the In game page on every map of the base: the page's own code (taken from the template) runs
 // the key moments of a match on both sides (pistol, round 2 eco, eco and force against a full buy, full buys, live,
 // after the plant, anti-eco, warm-up brief, last round of a half) and checks what must always hold.
-// Usage: node checks/check_maps.js [template.html] [steamid]      exit code 1 when a check fails
+// Usage: node checks/check_maps.js [template.html] [steamid] [lang]      exit code 1 when a check fails
+// lang (13/10): the page in that language, with its catalog (i18n/<lang>.json); English by default
 const fs = require("fs"), vm = require("vm"), path = require("path");
 const ROOT = path.join(__dirname, "..");
 const tpl = fs.readFileSync(process.argv[2] || path.join(ROOT, "app_template.html"), "utf8");
 // the SteamID is read as text: as a JSON number, 64 bits don't fit in a JavaScript number
 const settings = (() => { try { return fs.readFileSync(path.join(ROOT, "out", "settings.json"), "utf8") } catch (e) { return "" } })();
 const sid = process.argv[3] || ((settings.match(/"own_steamid"\s*:\s*"?(\d+)/) || [])[1] || "");
+const lang = process.argv[4] || "en";
+const cat = lang === "en" ? {} : JSON.parse(fs.readFileSync(path.join(ROOT, "i18n", `${lang}.json`), "utf8"));
 const player = JSON.parse(fs.readFileSync(path.join(ROOT, "out", "site", "players", `${sid}.json`), "utf8"));
+const data = { index: [], players: {}, viewboxes: {}, radars: {}, lang, L: cat, LV: lang === "en" ? {} : { [lang]: cat } };
 const js = [...tpl.matchAll(/<script>([\s\S]*?)<\/script>/g)].map(m => m[1]).join("\n")
-  .replace(/__DATA__/g, '{"index":[],"players":{},"viewboxes":{},"radars":{}}');   // the page's start-up runs on empty data
+  .replace(/__DATA__/g, () => JSON.stringify(data));   // the page's start-up runs on empty data
 
 // a tiny DOM: SVG elements the radar draws into, and nothing else
 class N {constructor(t){this.tag=t;this.attrs={};this.kids=[];this.text=""}
@@ -105,7 +109,7 @@ for (const map of maps) {
     }
     const warm = base(map, side, { round: null, money: 800, map_phase: "warmup", round_phase: null });
     const brief = run(`${side} warm-up`, warm, () => J("nowVisual(__p,__g,true)"));
-    if (brief != null && !/BRIEF/.test(brief)) fail(map, `${side} warm-up: no brief`);
+    if (brief != null && !brief.includes(J('tl("BRIEF")'))) fail(map, `${side} warm-up: no brief`);
   }
   const M = player.advice.plan.tside.maps[map] || {};
   if ((M.n_rounds || 0) < 300) warn(map, `${M.n_rounds} T rounds only: thin data`);

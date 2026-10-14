@@ -4,8 +4,8 @@ page's errors, whether Live runs during a match, to sort the app and rework its 
 A player's PC: the page counts (ui: the usage tracker), this module adds it up per day in out/usage/<day>.json. A day
 once over goes to the coach's site (api/usage.php) with the app's version and a screen size class: no identifier,
 no SteamID, no name, nothing the player wrote. There each report is added to the day's totals and thrown away.
-On by default with a notice the first time (anonymous audience measurement); Settings turns it off: nothing more is
-counted or sent.
+On by default with a notice the first time (anonymous audience measurement), and nothing sent before the player saw
+it (12/10); Settings turns it off: nothing more is counted or sent.
 
 The coach's PC: the days' totals pulled from the site (contributions.pull_usage) into out/usage_all, ranked here."""
 import datetime as dt
@@ -28,7 +28,8 @@ SCREENS = {"phone", "tablet", "laptop", "desktop", "wide"}
 LOCK = threading.Lock()
 
 
-NOTICE_V = 2   # the first-launch notice's version: 2 (10/10) also tells that the anonymized matches are shared by default
+NOTICE_V = 3   # the first-launch notice's version: 2 (10/10) tells that the anonymized matches are shared by default;
+              # 3 (12/10): the builds of 10/10 still had the old notice page, so everyone sees the right one once
 
 
 def settings():
@@ -119,7 +120,7 @@ def send_pending():
         if day < (dt.date.today() - dt.timedelta(days=8)).isoformat():   # too old for the site: kept here only
             os.replace(p, p[:-5] + ".sent.json")
             continue
-        if not enabled():   # turned off: nothing leaves the PC
+        if not enabled() or not noticed():   # turned off, or the notice not seen yet (12/10): nothing leaves the PC
             continue
         try:
             if _post(day, config.read_json(p, {}) or {}).get("ok"):

@@ -14,6 +14,7 @@ fakedef (the site to fake, from where), retake (the site, through where), seen (
 rush, slow), call (how many on a site, without the bomb), cancel."""
 import re
 import unicodedata
+from i18n import LANGS, tr
 
 WAKE = re.compile(r"\b(?:wh?[iy]l+(?:y|ie|i|ey|ier|is|ee)|wylie|wiley|wili|wall?(?:y|i|ie|ey)|woll?(?:y|ie)|woody|jarv[iy]s|jerv[iy]s|jarvi)\b", re.I)
 NUM = {"un": 1, "une": 1, "one": 1, "deux": 2, "two": 2, "trois": 3, "three": 3, "quatre": 4, "four": 4, "cinq": 5, "five": 5,
@@ -219,52 +220,56 @@ def parse(text, zones=()):
     return out
 
 
-ACK = {"rush": "rush", "slow": "slow", "control": "contrôle map"}
 SAY = {"A": "A", "B": "B", "MID": "mid"}
 
 
-def ack(orders):
-    """What Wily says back, a few words in French (the page's voice): the plan first ("rush A"), then the rest."""
+def ack(orders, lang="en"):
+    """What Wily says back, a few words in a language of the app (12/10: French and English; 13/10: every language,
+    gsi.wily keeps one per language for the voice): the plan first ("rush A"), then the rest."""
+    sy = lambda x: tr("mid", lang) if x == "MID" else SAY.get(x, x)
     O = {o["k"]: o for o in orders}
     plan = []
     if "tempo" in O:
-        plan.append(ACK[O["tempo"]["v"]])
+        plan.append({"rush": tr("rush", lang), "slow": tr("slow", lang), "control": tr("map control", lang)}[O["tempo"]["v"]])
     if "fake" in O:
         f = O["fake"]
-        plan.append(f"fake {f['site']}" + (f", puis {SAY.get(f['then'], f['then'])}" if f.get("then") else ""))
+        plan.append(tr("fake {site}, then {then}", lang, site=f['site'], then=sy(f['then'])) if f.get("then") else tr("fake {site}", lang, site=f['site']))
     elif "exec" in O:
-        plan.append(f"exec {O['exec']['site']}")
+        plan.append(tr("exec {site}", lang, site=O['exec']['site']))
     elif "split" in O:
-        plan.append(f"split {O['split']['site']}")
+        plan.append(tr("split {site}", lang, site=O['split']['site']))
     elif "dir" in O:
-        plan.append(SAY.get(O["dir"]["v"], O["dir"]["v"]) + (f" par {O['dir']['via']}" if O["dir"].get("via") else ""))
+        d = sy(O["dir"]["v"])
+        plan.append(tr("{way} through {via}", lang, way=d, via=O['dir']['via']) if O["dir"].get("via") else d)
     parts = [" ".join(plan)] if plan else []
     for o in orders:
         k = o["k"]
         if k == "stuff" or (k == "exec"):
-            parts.append("je te mets le stuff")
+            parts.append(tr("your utility is up", lang))
         elif k in ("plant", "post"):
-            parts.append(f"post-plant {SAY.get(o.get('site'), '')}".strip())
+            parts.append(tr("post-plant {site}", lang, site=sy(o.get('site'))).strip() if o.get("site") else tr("post-plant", lang))
         elif k == "cover":
-            parts.append(f"cover {SAY.get(o['where'], o['where'])}")
+            parts.append(tr("cover {where}", lang, where=sy(o['where'])))
         elif k == "buy":
-            parts.append({"force": "force-buy", "eco": "éco", "full": "full buy", "pistol": "pistol"}[o["v"]])
+            parts.append({"force": tr("force-buy", lang), "eco": tr("eco", lang), "full": tr("full buy", lang), "pistol": tr("pistol", lang)}[o["v"]])
         elif k == "their":
-            parts.append("anti-éco")
+            parts.append(tr("anti-eco", lang))
         elif k == "counter":
-            parts.append(f"contre rush {o.get('site') or ''}".strip())
+            parts.append(tr("vs rush {site}", lang, site=o['site']) if o.get("site") else tr("vs rush", lang))
         elif k == "fakedef":
-            parts.append(f"fake défense {o.get('site') or ''}".strip())
+            parts.append(tr("fake defense {site}", lang, site=o['site']) if o.get("site") else tr("fake defense", lang))
         elif k == "retake":
-            parts.append("reprise" + (f" {o['site']}" if o.get("site") else "") + (f" par {o['via']}" if o.get("via") else ""))
+            r = tr("retake {site}", lang, site=o['site']) if o.get("site") else tr("retake", lang)
+            parts.append(tr("{retake} through {via}", lang, retake=r, via=o['via']) if o.get("via") else r)
         elif k == "seen":
-            parts.append(f"{o['rounds']} rounds en {SAY.get(o['site'], o['site'])}, noté")
+            parts.append(tr("{n} rounds on {site}, noted", lang, n=o['rounds'], site=sy(o['site'])))
         elif k == "tendency":
-            parts.append({"fake": "ils fakent, noté", "rush": "ils rushent, noté", "slow": "ils jouent lent, noté", "stack": "ils stack, noté"}[o["v"]])
+            they = {"fake": tr("they fake", lang), "rush": tr("they rush", lang), "slow": tr("they play slow", lang), "stack": tr("they stack", lang)}[o["v"]]
+            parts.append(tr("{what}, noted", lang, what=they))
         elif k == "call":
-            parts.append(f"{o['n']} {SAY.get(o['site'], o['site'])} sans bombe, noté")
+            parts.append(tr("{n} {site} without the bomb, noted", lang, n=o['n'], site=sy(o['site'])))
         elif k == "cancel":
-            parts.append("annulé")
+            parts.append(tr("cancelled", lang))
     seen = []
     for x in parts:
         if x and x not in seen:

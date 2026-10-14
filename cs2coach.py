@@ -16,6 +16,7 @@ import sys
 import traceback
 
 import config
+import i18n
 import matchlist
 from coach import DemoGone, decompress, download, game_mode
 
@@ -359,7 +360,7 @@ def analyze_player(steamid, reg):
         lm = leetify.matches(steamid)
         adv = leetify.light_advice(prof, lm, steamid)
         adv["light"] = True
-        json.dump(adv, open(os.path.join(pdir, "advice.json"), "w", encoding="utf-8"), ensure_ascii=False, indent=1)
+        json.dump(_written(adv), open(os.path.join(pdir, "advice.json"), "w", encoding="utf-8"), ensure_ascii=False, indent=1)
         log(f"No demo available: light profile built from Leetify ({prof.get('total_matches')} matches)")
         return pdir
     res = cross.run(steamid, set(ids))
@@ -368,8 +369,15 @@ def analyze_player(steamid, reg):
     adv = advice.build(pdir)
     if prof:
         adv["leetify"] = leetify.light_advice(prof, leetify.matches(steamid), steamid)["leetify"]
-    json.dump(adv, open(os.path.join(pdir, "advice.json"), "w", encoding="utf-8"), ensure_ascii=False, indent=1)
+    json.dump(_written(adv), open(os.path.join(pdir, "advice.json"), "w", encoding="utf-8"), ensure_ascii=False, indent=1)
     return pdir
+
+
+def _written(adv):
+    """advice.json as it is saved (13/10): its fixed sentences in the app's language, and that language, so the page
+    can have it written again when the app's language changes (serve.relang_if_needed)."""
+    adv["written_lang"] = i18n.current()
+    return i18n.tr_static(adv)
 
 
 def rebuild_advice(steamid):
@@ -383,7 +391,7 @@ def rebuild_advice(steamid):
     old = json.load(open(p, encoding="utf-8"))
     new = advice.build(pdir)
     new.update({k: v for k, v in old.items() if k not in new and k != "plan"})
-    config.write_json(p, new, indent=1)
+    config.write_json(p, _written(new), indent=1)
     return True
 
 
@@ -456,7 +464,7 @@ def attach_plan(sid):
         log(f"Progress plan unavailable: {e}")
         traceback.print_exc()
         adv["plan_error"] = f"{type(e).__name__}: {e}"[:200]   # the previous plan stays; the page says it is not up to date
-        config.write_json(p, adv, indent=1, default=str)
+        config.write_json(p, _written(adv), indent=1, default=str)
         return
     try:   # the focus of the week: the first axis, kept 7 days (Live, Prepare and Review show it)
         import focus
@@ -479,7 +487,7 @@ def attach_plan(sid):
     except Exception as e:
         log(f"Map notes unavailable: {e}")
         adv["plan"].setdefault("unavailable", []).append("map notes")
-    config.write_json(p, adv, indent=1, default=str)
+    config.write_json(p, _written(adv), indent=1, default=str)
 
 
 PARTIAL_HOOK = None  # called with the SteamID once a first profile can be displayed
@@ -501,7 +509,7 @@ def quick_profile(sid):
     os.makedirs(pdir, exist_ok=True)
     adv = leetify.light_advice(prof, leetify.matches(sid), sid)
     adv["light"] = True
-    json.dump(adv, open(adv_p, "w", encoding="utf-8"), ensure_ascii=False, indent=1)
+    json.dump(_written(adv), open(adv_p, "w", encoding="utf-8"), ensure_ascii=False, indent=1)
     log(f"Leetify profile shown ({prof.get('total_matches')} matches tracked): analyzing demos…")
     if PARTIAL_HOOK:
         PARTIAL_HOOK(sid)
@@ -535,7 +543,7 @@ def attach_extras(sid, ex=None):
         return
     adv = json.load(open(p, encoding="utf-8"))
     adv.update(ex if ex is not None else extras(sid))
-    json.dump(adv, open(p, "w", encoding="utf-8"), ensure_ascii=False, indent=1)
+    json.dump(_written(adv), open(p, "w", encoding="utf-8"), ensure_ascii=False, indent=1)
 
 
 def minimal_profile(sid, ex):
@@ -545,25 +553,27 @@ def minimal_profile(sid, ex):
     maps = sorted((m for m in cs.get("maps", []) if m["rank"] > 0), key=lambda m: -m["rank"])  # rank 0 = unranked
     if len(maps) >= 2 and maps[0]["rank"] - maps[-1]["rank"] >= 2:
         b, w = maps[0], maps[-1]
-        rules.append({"id": "maps", "score": 20, "short": f"Play {b['map'].split('_')[-1].capitalize()} first",
-                      "title": f"Your best Competitive map: {b['map'].split('_')[-1].capitalize()} ({b['rank_name']}), your weakest: {w['map'].split('_')[-1].capitalize()} ({w['rank_name']})",
-                      "why": [f"Competitive ranks per map (csstats.gg): " + ", ".join(f"{m['map'].split('_')[-1].capitalize()} {m['rank_name']}" for m in maps[:6]) + "."],
-                      "do": ["Pick your best map when you want to win, work on the weakest in Deathmatch and practice mode."]})
+        bn, wn = b['map'].split('_')[-1].capitalize(), w['map'].split('_')[-1].capitalize()
+        rules.append({"id": "maps", "score": 20, "short": i18n.tr("Play {map} first", map=bn),
+                      "title": i18n.tr("Your best Competitive map: {a} ({ra}), your weakest: {b} ({rb})", a=bn, ra=b['rank_name'], b=wn, rb=w['rank_name']),
+                      "why": [i18n.tr("Competitive ranks per map: {list}.", list=", ".join(f"{m['map'].split('_')[-1].capitalize()} {m['rank_name']}" for m in maps[:6]))],
+                      "do": [i18n.tr("Pick your best map when you want to win, work on the weakest in Deathmatch and practice mode.")]})
     prem = [x for x in cs.get("premier", []) if x.get("current")]
     if len(prem) >= 2:
         cur, prev = prem[0], prem[1]
         delta = cur["current"] - prev["current"]
-        rules.append({"id": "premier", "score": 15, "short": "Premier: " + ("improving" if delta > 0 else "dropping"),
-                      "title": f"Premier {cur['season']}: {cur['current']:,} (best {cur['best']:,}), vs {prev['current']:,} in {prev['season']}",
-                      "why": [f"{cur['wins']} wins this season."], "do": []})
-    rules.append({"id": "unlock", "score": 1, "short": "Unlock the full analysis",
-                  "title": "No demo and no Leetify profile: analysis limited to public rankings",
-                  "why": ["Valve doesn't give a player's history from their SteamID alone."],
-                  "do": ["Paste a match share code (CS2 → Watch → Your Matches → share, CSGO-… format) in the search bar, with or without the profile link.",
-                         "Or create a free account on leetify.com with this Steam account: its next matches will become analyzable automatically."]})
+        rules.append({"id": "premier", "score": 15, "short": i18n.tr("Premier: improving") if delta > 0 else i18n.tr("Premier: dropping"),
+                      "title": i18n.tr("Premier {season}: {cur} (best {best}), vs {prev} in {pseason}", season=cur['season'], cur=f"{cur['current']:,}",
+                                       best=f"{cur['best']:,}", prev=f"{prev['current']:,}", pseason=prev['season']),
+                      "why": [i18n.tr("{n} wins this season.", n=cur['wins'])], "do": []})
+    rules.append({"id": "unlock", "score": 1, "short": i18n.tr("Unlock the full analysis"),
+                  "title": i18n.tr("No demo and no Leetify profile: analysis limited to public rankings"),
+                  "why": [i18n.tr("Valve doesn't give a player's history from their SteamID alone.")],
+                  "do": [i18n.tr("Paste a match share code (CS2 → Watch → Your Matches → share, CSGO-… format) in the search bar, with or without the profile link."),
+                         i18n.tr("Or create a free account on leetify.com with this Steam account: its next matches will become analyzable automatically.")]})
     adv = {"rules": rules, "strengths": [], "maps": {}, "match_notes": {}, "light": True, "minimal": True, **ex}
     os.makedirs(config.player_dir(sid), exist_ok=True)
-    json.dump(adv, open(os.path.join(config.player_dir(sid), "advice.json"), "w", encoding="utf-8"), ensure_ascii=False, indent=1)
+    json.dump(_written(adv), open(os.path.join(config.player_dir(sid), "advice.json"), "w", encoding="utf-8"), ensure_ascii=False, indent=1)
 
 
 def run_for(query, fetch=True):

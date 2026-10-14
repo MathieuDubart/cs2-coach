@@ -1,0 +1,288 @@
+"""Crossfire: the warm-up's aim on the real maps, from real duels (13/10, the user: "Crossfire : simule de vrais duels
+avec des bots utilisant des mouvements réalistes pour travailler le counter-strafing et la tenue d'angles + spray
+practice: two bots picking the same angle at 2 different positions and 2 different timings, one spray, 30 bullets at
+most"). It replaces the aim map at the warm-up's start.
+
+From the base's demos (on the coach's PC, shipped with the base like the entries): rifle duels where one player held
+still and the other came into his sight moving. out/train_crossfire/
+<map>.json keeps, for each spot (a side, a place, one angle) at least 3 duels were fought from:
+- where he stood and where his crosshair was when the peeker came into sight (the angle to hold);
+- the real peeks: each peeker's way over the 1.25 s before the enemy team saw him, up to the kill (every 2 ticks);
+- pairs of peeks onto about the same angle, one from the left, one from the right (v3): the spray drill's two bots."""
+import json
+import math
+import os
+import random
+from collections import Counter
+
+import numpy as np
+import pandas as pd
+
+import config
+import i18n
+import replay
+
+CF_D = os.path.join(config.OUT, "train_crossfire")
+STEP = 2   # ticks per frame of a peek's way
+RIFLES = {"ak47", "m4a1", "m4a1_silencer", "galilar", "famas", "sg556", "aug"}
+WIN = 160   # ticks read before each kill (2.5 s)
+
+
+DEMOS = 200   # demos read per map (13/10: 30 gave Mirage 7 spots)
+# 2 (14/10, his test on Inferno): no jump-peek (a bot can't jump: put on the jump's top, standing, it stayed stuck in
+# the ceiling of Apps), the spray's two enemies come with their real peeks ("faut pas qu'ils spawn, faut qu'ils me
+# peekent, à des timings différents")
+# 3 (14/10, his second test): a peek starts out of sight half a second at least ("il spawn déjà sur moi"); the spray's
+# two come onto one angle from both sides ("un qui peek à gauche, un qui peek à droite, sur le même angle")
+V = 3
+
+
+def load(mp, build=True):
+    """The map's crossfire data (cached); {} where it can't be built (a player's copy, a hostage map, no demo)."""
+    os.makedirs(CF_D, exist_ok=True)
+    cf = os.path.join(CF_D, f"{mp}.json")
+    try:
+        c = json.load(open(cf, encoding="utf-8"))
+        if c.get("v") == V:
+            return c
+    except (OSError, ValueError):
+        pass
+    if not build or mp.startswith("cs_") or config.role() == "client":
+        return {}
+    return replay.in_worker(_build, mp, DEMOS)
+
+
+def _yaw_mean(a):
+    a = np.radians(np.asarray(a, float))
+    return float(np.degrees(np.arctan2(np.sin(a).mean(), np.cos(a).mean())))
+
+
+def _bearing(a, b):
+    return math.degrees(math.atan2(b[1] - a[1], b[0] - a[0]))
+
+
+def _build(mp, demos=DEMOS):
+    from demoparser2 import DemoParser
+    import nades
+    os.makedirs(CF_D, exist_ok=True)
+    cf = os.path.join(CF_D, f"{mp}.json")
+    dirs = []
+    for d in sorted(os.listdir(config.DEEP), reverse=True):
+        try:
+            if json.load(open(os.path.join(config.DEEP, d, "meta.json"), encoding="utf-8")).get("map") == mp \
+                    and os.path.exists(os.path.join(config.CACHE, f"{d}.dem")):
+                dirs.append(d)
+        except (OSError, ValueError):
+            continue
+    rows = []
+    for d in dirs[:demos]:
+        config.wait_for_match_end(what="crossfire")   # your match first
+        try:
+            D = pd.read_parquet(os.path.join(config.DEEP, d, "duels.parquet"))
+            D = D[D.weapon.isin(RIFLES) & (D.killer_side != D.victim_side) & D.killer_side.isin(["T", "CT"])]
+            hold_k = (D.killer_speed < 60) & (D.victim_speed > 110)   # the killer held, the victim came
+            hold_v = (D.victim_speed < 60) & (D.killer_speed > 110)   # the victim held, the killer came
+            D = D[hold_k | hold_v].copy()
+            D["holder"] = np.where(hold_k[D.index], "killer", "victim")
+            D = D[(D.distance > 7) & (D.distance < 60)]   # meters: 280 to 2,400 u
+            if not len(D):
+                continue
+            want = sorted({t for k in D.tick for t in range(int(k) - WIN, int(k) + 1, STEP)})
+            dp = DemoParser(os.path.join(config.CACHE, f"{d}.dem"))
+            T = dp.parse_ticks(["X", "Y", "Z", "yaw", "pitch", "is_alive", "last_place_name", "spotted", "is_airborne"], ticks=want)
+            T["steamid"] = T.steamid.astype(str)
+        except Exception as e:
+            print("crossfire", d, e, flush=True)
+            continue
+        T = T.set_index(["steamid", "tick"]).sort_index()
+        for _, r in D.iterrows():
+            k = int(r.tick)
+            hs, ps = (str(r.killer), str(r.victim)) if r.holder == "killer" else (str(r.victim), str(r.killer))
+            hside = r.killer_side if r.holder == "killer" else r.victim_side
+            try:
+                H = T.loc[hs].loc[k - WIN:k]
+                P = T.loc[ps].loc[k - WIN:k]
+            except KeyError:
+                continue
+            # this kill's own ticks (2 apart): another duel's window next to it brings ticks of the other parity, a way
+            # read with them would play at half speed there
+            H = H[(H.index - k) % STEP == 0]
+            P = P[(P.index - k) % STEP == 0]
+            H = H[H.index.isin(P.index)]
+            P = P[P.index.isin(H.index)]
+            if len(P) < 40 or len(H) < 40:
+                continue
+            sp = P.spotted.astype(object).eq(True).to_numpy()
+            # the last time he came into the other team's sight before the kill
+            ks = len(sp) - 1
+            while ks > 0 and sp[ks - 1]:
+                ks -= 1
+            if not sp[ks] or ks < 20:   # seen from the window's start: no peek to replay
+                continue
+            j = ks - 1   # the last time they saw him before: his way starts after it, out of sight
+            while j >= 0 and not sp[j]:
+                j -= 1
+            a = max(j + 1, ks - 40)   # 1.25 s before at most
+            if ks - a < 16:   # half a second out of sight at least
+                continue
+            way = P.iloc[a:]
+            if way.is_airborne.fillna(False).astype(bool).any():   # a jump on the way: a bot can't replay it
+                continue
+            W = way[["X", "Y", "Z"]].to_numpy(float)
+            if len(W) < 30 or np.hypot(*(W[-1, :2] - W[0, :2])) < 60:
+                continue
+            Hs = H[["X", "Y", "Z"]].to_numpy(float)[a:]
+            if np.hypot(Hs[:, 0] - Hs[0, 0], Hs[:, 1] - Hs[0, 1]).max() > 48:   # he held a spot
+                continue
+            hk = H.iloc[min(ks, len(H) - 1)]
+            path = []
+            for x, y, z, yw, pi in zip(way.X, way.Y, way.Z, way.yaw, way.pitch):
+                path += [round(float(x), 1), round(float(y), 1), round(float(z), 1), round(float(yw)), round(float(pi))]
+            pl = way.last_place_name.fillna("").iloc[0]
+            hl = H.last_place_name.fillna("").iloc[-1]
+            k16 = max(0, len(W) - 17)   # where he went the last half second: across the holder's sight, to his left or right
+            u = W[-1, :2] - np.array([float(hk.X), float(hk.Y)])
+            v = W[-1, :2] - W[k16, :2]
+            lat = float((u[0] * v[1] - u[1] * v[0]) / (np.hypot(*u) or 1.0))
+            rows.append({"side": hside, "lat": lat, "hpos": [float(hk.X), float(hk.Y), float(hk.Z)], "hang": [float(hk.pitch), float(hk.yaw)],
+                         "hzone": nades.humanize(hl, mp) if hl else None, "pzone": nades.humanize(pl, mp) if pl else None,
+                         "path": path, "end": [float(v) for v in W[-1]], "won": r.holder == "killer", "w": r.weapon})
+    out = {"v": V, "spots": []}
+    # one spot: a side, a place 80 u around, one angle (the crosshair's yaw within 25 degrees): the peeks of a spot
+    # come out where its angle looks
+    groups = []
+    for x in sorted(rows, key=lambda x: random.random()):
+        for g in groups:
+            c = g[0]
+            if c["side"] == x["side"] and math.dist(c["hpos"][:2], x["hpos"][:2]) < 80 and abs(c["hpos"][2] - x["hpos"][2]) < 64 \
+                    and abs((c["hang"][1] - x["hang"][1] + 180) % 360 - 180) < 25:
+                g.append(x)
+                break
+        else:
+            groups.append([x])
+    cand = []
+    for g in groups:
+        side = g[0]["side"]
+        if len(g) < 3:
+            continue
+        P = np.array([x["hpos"] for x in g])
+        med = np.median(P, axis=0)
+        me = g[int(np.argmin(np.hypot(P[:, 0] - med[0], P[:, 1] - med[1])))]["hpos"]   # a spot a player really stood on
+        ang = [round(float(np.median([x["hang"][0] for x in g])), 1), round(_yaw_mean([x["hang"][1] for x in g]), 1)]
+        peeks, ends = [], []
+        for x in sorted(g, key=lambda x: random.random()):   # different peeks: their spots 60 u apart
+            if all(math.dist(x["end"][:2], e[:2]) > 60 for e in ends):
+                ends.append(x["end"])
+                peeks.append({"zone": x["pzone"] or "?", "path": x["path"]})
+            if len(peeks) == 12:
+                break
+        took = []
+        E = [x["end"] for x in g]
+        # the spray's pairs (14/10): two peeks onto about the same angle (12 degrees at most), one coming from the left,
+        # the other from the right (each crossed the holder's sight 20 u or more the last half second), not on one spot
+        for i in range(len(E)):
+            for j in range(i + 1, len(E)):
+                a_, b_ = E[i], E[j]
+                da, db = math.dist(me[:2], a_[:2]), math.dist(me[:2], b_[:2])
+                diff = abs(((_bearing(me, a_) - _bearing(me, b_)) + 180) % 360 - 180)
+                li, lj = g[i]["lat"], g[j]["lat"]
+                if 300 < min(da, db) and max(da, db) < 2200 and diff <= 12 and 30 < math.dist(a_[:2], b_[:2]) < 700 \
+                        and abs(a_[2] - b_[2]) < 120 and min(abs(li), abs(lj)) >= 20 and li * lj < 0 \
+                        and all(math.dist(a_, E[p]) > 40 or math.dist(b_, E[q]) > 40 for p, q in took):
+                    took.append((i, j))
+        # each one with the real peek that brought its player there (the spray's enemies come out, they don't appear)
+        pairs = [[{"end": [round(v, 1) for v in E[k]], "path": [round(v) for v in g[k]["path"]]} for k in pq] for pq in took]
+        zones = Counter(x["hzone"] for x in g if x["hzone"])
+        cand.append({"side": side, "pos": [round(v, 1) for v in me], "ang": ang, "zone": zones.most_common(1)[0][0] if zones else "?",
+                     "n": len(g), "won": round(100 * sum(x["won"] for x in g) / len(g)), "peeks": peeks, "pairs": pairs[:6]})
+    for side in ("T", "CT"):   # the most fought spots of each side, 14 at most
+        out["spots"] += sorted([c for c in cand if c["side"] == side], key=lambda c: -c["n"])[:14]
+    json.dump(out, open(cf, "w", encoding="utf-8"), separators=(",", ":"))
+    return out
+
+
+def level_of(sid):
+    """The player's training level (rework_entrainement.md, section 4): the app's level key (Premier rating, else the
+    Competitive rank) from his analysis; None when unknown."""
+    try:
+        adv = json.load(open(os.path.join(config.player_dir(str(sid)), "advice.json"), encoding="utf-8"))
+        return ((adv.get("plan") or {}).get("level") or {}).get("key")
+    except (OSError, ValueError):
+        return None
+
+
+# what each level works on (13/10, the user: "l'apprentissage du stuff et du spray transfer n'est pas forcément la
+# priorité chez le débutant, la priorité c'est déjà de garder des angles, d'avoir le crosshair au bon endroit")
+VARIANTS = {"debut": ["hold", "peek"], "inter": ["hold", "peek", "hold", "spray"], None: ["hold", "peek", "spray"]}
+SECS = {"hold": 75, "peek": 75, "spray": 60}
+REPS = {"hold": 6, "peek": 6, "spray": 5}
+
+
+def _id(mp, side, sp, v):
+    return f"crossfire:{mp}:{side}:{sp['zone']}:{round(sp['pos'][0])}:{round(sp['pos'][1])}:{v}"
+
+
+def drills(sid, mp, secs, guns, rifle, items=None, nsess=0):
+    """The Crossfire block: as many drills as its time holds, in the order of the player's level, on different spots,
+    both sides in turn: the ones missed and due first (the training's boxes: items, nsess), then the ones never
+    played, the most fought first, then the others. guns: (T rifle, CT rifle, pistol) as train._my_guns gives them;
+    rifle: side -> the bots' rifle."""
+    data = load(mp, build=False)
+    spots = data.get("spots") or []
+    if not spots:
+        return []
+    lv = level_of(sid)
+    order = VARIANTS.get(lv, VARIANTS[None])
+    tr_, cr_, _ = guns
+    by_side = {s: [x for x in spots if x["side"] == s] for s in ("T", "CT")}
+    used = {"T": 0, "CT": 0}
+    out, total, k = [], 0, 0
+    while total < secs - 20 and k < max(12, secs // 30):   # a focus block of 20 min: about 18 drills
+        v = order[k % len(order)]
+        side = ("CT", "T")[k % 2] if all(by_side.values()) else ("CT" if by_side["CT"] else "T")
+        k += 1
+        cands = by_side[side]
+        if v == "spray":
+            cands = [x for x in cands if x["pairs"]]
+        elif v == "peek":
+            cands = [x for x in cands if x["peeks"]]
+        if not cands:
+            continue
+        items = items or {}
+
+        def rank(x, v=v, side=side):
+            it = items.get(_id(mp, side, x, v))
+            return (1, -x["n"]) if it is None else (0, it["box"]) if it["next"] <= nsess else (2, it["next"])
+        cands = sorted(cands, key=rank)
+        sp = cands[used[side] % len(cands)]
+        used[side] += 1
+        me_side = side if v != "peek" else ("T" if side == "CT" else "CT")   # peek: you are the one who comes
+        team = 2 if me_side == "T" else 3
+        gun = replay._item(tr_ if me_side == "T" else cr_) or rifle[team]
+        pistol = "weapon_glock" if team == 2 else "weapon_usp_silencer"
+        foe = rifle[5 - team]
+        zone = sp["zone"]
+        title = {"hold": i18n.tr("HOLD THE ANGLE · {zone}", zone=zone), "peek": i18n.tr("PEEK · {zone}", zone=zone),
+                 "spray": i18n.tr("SPRAY · {zone}", zone=zone)}[v]
+        tip = {"hold": i18n.tr("{n} real peeks from the base: crosshair where they come out, kill before they kill you", n=REPS["hold"]),
+               "peek": i18n.tr("you peek an angle the base holds there: stop before you shoot (counter-strafe)"),
+               "spray": i18n.tr("two enemies come out on the same line, one after the other: kill both in one spray, without letting go, 30 bullets at most")}[v]
+        d = {"id": _id(mp, side, sp, v), "kind": "aim", "mode": "crossfire",
+             "variant": v, "map": mp, "team": team, "title": title, "tip": tip, "seconds": SECS[v], "count": REPS[v],
+             "weapons": ["weapon_knife", pistol, gun], "bot_weapons": ["weapon_knife", foe], "armor": 100, "helmet": True}
+        if v == "hold":
+            d.update(me={"pos": sp["pos"], "ang": sp["ang"]}, tracks=[{"zone": p["zone"], "path": p["path"]} for p in sp["peeks"]])
+        elif v == "peek":
+            d.update(me={"pos": sp["peeks"][0]["path"][:3], "ang": [0, sp["peeks"][0]["path"][3]]},
+                     bots=[{"pos": sp["pos"], "ang": sp["ang"], "zone": sp["zone"]}],
+                     tracks=[{"zone": p["zone"], "path": p["path"][:5]} for p in sp["peeks"]])
+        else:   # the pairs' two enemies and their real peeks, in the same order
+            d.update(me={"pos": sp["pos"], "ang": sp["ang"]},
+                     bots=[{"pos": q["end"], "ang": [0, _bearing(q["end"], sp["pos"])], "zone": zone} for pair in sp["pairs"] for q in pair],
+                     tracks=[{"zone": zone, "path": q["path"]} for pair in sp["pairs"] for q in pair])
+        out.append(d)
+        total += SECS[v]
+    # 14/10, the user: "mets tout le travail de spray ensemble, tout le travail de peek ensemble, tout le hold the angle
+    # ensemble": each variant's drills in a row, in the level's order
+    out.sort(key=lambda d: order.index(d["variant"]))
+    return out

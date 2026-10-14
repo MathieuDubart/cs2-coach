@@ -7,6 +7,12 @@ by two players, or already in the base), then processed like a match of the base
     python contributions.py pull     downloads the waiting zips into out/contrib_in, then deletes them on the site
     python contributions.py ingest   checks them and adds their matches to the base
     python contributions.py          both (the base loop does it every hour while it runs)
+    python contributions.py release  the held uploads (below) into the base after all
+
+Held, not in the base (12/10): an upload whose manifest does not say its player saw the notice that speaks of the
+matches (usage.NOTICE_V 3). The builds of 10/10 showed an older notice, about the usage statistics only, and shared
+the matches all the same; the site's privacy page says they leave "once you have seen that notice". They wait in
+out/contrib_in/held until the coach decides: release, or delete the folder.
 
 A match is refused when: its id is not a shared one (8 + 18 digits), a file is not one of the app's tables, a table
 has a column the app does not write, a real SteamID or a name is left in it, its map is unknown, or its numbers are not
@@ -28,6 +34,8 @@ import config
 
 API = os.environ.get("COACH_CONTRIB_API") or "https://wily.valentingassend.com/api/"
 INBOX = os.path.join(config.OUT, "contrib_in")
+HELD = os.path.join(INBOX, "held")
+NOTICE_MIN = 3   # usage.NOTICE_V since the notice speaks of the matches in every build (12/10)
 SEEN_F = os.path.join(config.OUT, "contrib_seen.json")
 CONFIG_PHP = os.path.join(config.HERE, "web", "api", "config.php")
 TABLES = {"duels", "grenades", "samples", "rounds", "loadout", "deaths_w", "steps", "sounds"}
@@ -156,24 +164,41 @@ def _seen():
     return s
 
 
-def ingest(dest=None, follow=True):
-    """The pulled zips: every match checked, the new ones into out/deep (or dest), then the base's per-match tables.
+def held():
+    """How many matches wait in out/contrib_in/held (each upload's count, from the site's note of it)."""
+    n = 0
+    for f in os.listdir(HELD) if os.path.isdir(HELD) else []:
+        if f.endswith(".zip"):
+            n += int((config.read_json(os.path.join(HELD, f[:-4] + ".json"), {}) or {}).get("matches") or 1)
+    return n
+
+
+def ingest(dest=None, follow=True, release=False):
+    """The pulled zips: every match checked, the new ones into out/deep (or dest), then the base's per-match tables;
+    an upload sent before its player saw the notice that speaks of the matches: held (release: those, into the base).
     -> how many matches joined."""
     dest = dest or config.DEEP
-    zips = sorted(f for f in os.listdir(INBOX) if f.endswith(".zip")) if os.path.isdir(INBOX) else []
+    src = HELD if release else INBOX
+    zips = sorted(f for f in os.listdir(src) if f.endswith(".zip")) if os.path.isdir(src) else []
     if not zips:
         return 0
     expected, maps, s = _expected(), _maps(), _seen()
     fps, added = s["fingerprints"], 0
     stats = s.setdefault("stats", {"joined": 0, "duplicates": 0, "refused": 0})
     for zf in zips:
-        p = os.path.join(INBOX, zf)
+        p = os.path.join(src, zf)
         try:
             z = zipfile.ZipFile(p)
-            groups = {}
+            groups, man = {}, {}
             for m in z.infolist():
                 name = m.filename
-                if name == "manifest.json" or name.endswith("/"):
+                if name == "manifest.json":
+                    try:
+                        man = json.loads(z.read(m))
+                    except ValueError:
+                        pass
+                    continue
+                if name.endswith("/"):
                     continue
                 mid, _, f = name.partition("/")
                 if not (len(mid) == 19 and mid.startswith("8") and mid.isdigit() and f and "/" not in f) or m.file_size > 300 * 2 ** 20:
@@ -183,6 +208,15 @@ def ingest(dest=None, follow=True):
             log(f"{zf}: refused ({e})")
             stats["refused"] += 1
             shutil.move(p, p + ".refused")
+            continue
+        notice = man.get("notice") if isinstance(man, dict) else None
+        if not release and not (isinstance(notice, int) and notice >= NOTICE_MIN):
+            z.close()
+            os.makedirs(HELD, exist_ok=True)
+            for a in (zf, zf[:-4] + ".json"):
+                if os.path.exists(os.path.join(src, a)):
+                    shutil.move(os.path.join(src, a), os.path.join(HELD, a))
+            log(f"{zf}: held, {len(groups)} match(es) sent before the notice that speaks of them (python contributions.py release)")
             continue
         for mid, files in groups.items():
             bad = check_match(files, expected, maps)
@@ -286,7 +320,7 @@ def status():
     waiting = len([f for f in os.listdir(INBOX) if f.endswith(".zip")]) if os.path.isdir(INBOX) else 0
     new_reports = len([f for f in os.listdir(REPORTS) if f.endswith(".json")]) if os.path.isdir(REPORTS) else 0
     return {"token": bool(config.settings().get("contrib_token")), "stats": s.get("stats") or {}, "last": s.get("last"), "waiting": waiting,
-            "reports": new_reports}
+            "held": held(), "reports": new_reports}
 
 
 if __name__ == "__main__":
@@ -298,6 +332,8 @@ if __name__ == "__main__":
         for r in reports():
             print(time.strftime("%d/%m %H:%M", time.localtime(r.get("at") or 0)), r.get("app"), "|", (r.get("text") or "")[:100].replace("\n", " "),
                   "| done" if r["done"] else "")
+    elif "release" in sys.argv:
+        print(f"{ingest(release=True)} match(es) joined the base from the held uploads")
     else:
         if "ingest" not in sys.argv:
             pull()

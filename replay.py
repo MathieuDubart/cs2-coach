@@ -25,12 +25,12 @@ import numpy as np
 import pandas as pd
 
 import config
+import i18n
 
 SERVER = config.cs2server_dir()   # COACH_CS2SERVER, the settings, or next to the game (any PC)
 EXE = os.path.join(SERVER, "game", "bin", *(("linuxsteamrt64", "cs2") if config.LINUX else ("win64", "cs2.exe")))
 LINUX_LOG = os.path.join(config.OUT, "train_server.log")   # Linux: the server's own output (its first runs: what to fix)
-EXPERIMENTAL = ("The training server is experimental on Linux: turn it on in Settings (Training server on Linux), "
-                "then try again. Review and Live work without it.")
+EXPERIMENTAL = i18n.N_("The training server is experimental on Linux: turn it on in Settings (Training server on Linux), then try again. Review and Live work without it.")   # said with i18n.tr where it is raised
 CSGO = os.path.join(SERVER, "game", "csgo")
 COACH = os.path.join(CSGO, "coach")   # scenarios/, results.jsonl, live.json (the plugin's heartbeat)
 SCEN = os.path.join(COACH, "scenarios")
@@ -293,11 +293,11 @@ def _build(sid, mid, rnd, kind="death", t=None):
     danger = ""
     if kind == "death" and len(md):   # who got you, from where, with what
         k0 = md.iloc[0]
-        danger = f"{k0.killer_name} got you from {nades.humanize(k0.killer_zone, mp) or '?'} ({k0.weapon})"
+        danger = i18n.tr("{who} got you from {zone} ({weapon})", who=k0.killer_name, zone=nades.humanize(k0.killer_zone, mp) or '?', weapon=k0.weapon)
     bomb, plant = _bomb(p, R, rnd, t0, t_end, start, end, me)
-    goal = "win the round (a kill at least)" if kind == "clutch" else "a kill, or get traded (no kill: no point)"
+    goal = i18n.tr("win the round (a kill at least)") if kind == "clutch" else i18n.tr("a kill, or get traded (no kill: no point)")
     if bomb and bomb["f"] == 0 and kind == "clutch":   # after the plant the bomb decides the round
-        goal = "win the round: defuse it" if me["team"] == 3 else "win the round: the bomb blows up, or they all die"
+        goal = i18n.tr("win the round: defuse it") if me["team"] == 3 else i18n.tr("win the round: the bomb blows up, or they all die")
     try:   # your way in the match, drawn on the ground like the prefire's (04/10: "give me the route on the ground")
         import train
         line = train._ground_line(np.array(me["path"], float).reshape(-1, 5), mp) if len(me["path"]) >= 10 else []
@@ -343,7 +343,7 @@ def _build(sid, mid, rnd, kind="death", t=None):
     if me["team"] == 3 and bomb and bomb["f"] == 0 and not me.get("kit"):
         foes = sum(1 for q in players if q["team"] != me["team"])
         if bomb["left"] < 12 + 4 * foes:
-            lost = f"no kit (10 s to defuse), {bomb['left']:.0f} s left, {foes} to kill first: lost in advance"
+            lost = i18n.tr("no kit (10 s to defuse), {s} s left, {n} to kill first: lost in advance", s=f"{bomb['left']:.0f}", n=foes)
             try:
                 L = json.load(open(LOST_F, encoding="utf-8"))
             except (OSError, ValueError):
@@ -399,23 +399,23 @@ def _bomb(p, R, rnd, t0, t_end, start, end, me):
         ev = None
     rows = ev[(ev.tick >= t0) & (ev.tick <= t_end)] if ev is not None and len(ev) else []
     if not len(rows):
-        return None, "not planted: no plant in this round"
+        return None, i18n.tr("not planted: no plant in this round")
     b = rows.iloc[0]
     tick, by = int(b.tick), str(b.user_steamid)
     site = R.plant_site.get(rnd) if "plant_site" in R.columns else None
     if site not in ("A", "B"):
         site = "B" if str(b.get("user_last_place_name") or "").endswith("B") else "A"
     if tick > end:
-        return None, f"not planted yet (in the match: {site}, {round((tick - start) / 64)} s after this starts)"
+        return None, i18n.tr("not planted yet (in the match: {site}, {s} s after this starts)", site=site, s=round((tick - start) / 64))
     left = C4_TIMER - max(0, start - tick) / 64
     bomb = {"f": max(0, (tick - start) // STEP), "pos": [round(float(b[f"user_{c}"]), 1) for c in "XYZ"],
             "site": 0 if site == "A" else 1, "left": round(left, 1), "by": by}
     if tick <= start:
-        return bomb, f"planted at {site} · {left:.0f} s left · " + ("defuse it" if me["team"] == 3 else "keep it ticking")
+        return bomb, i18n.tr("planted at {site} · {s} s left", site=site, s=f"{left:.0f}") + " · " + (i18n.tr("defuse it") if me["team"] == 3 else i18n.tr("keep it ticking"))
     secs = round((tick - start) / 64)
     if by == me["sid"]:
-        return bomb, f"you have the bomb: in the match you planted {site} {secs} s in"
-    return bomb, f"not planted yet: in the match they plant {site} {secs} s in"
+        return bomb, i18n.tr("you have the bomb: in the match you planted {site} {s} s in", site=site, s=secs)
+    return bomb, i18n.tr("not planted yet: in the match they plant {site} {s} s in", site=site, s=secs)
 
 
 NADES = {"CSmokeGrenadeProjectile": "smoke", "CFlashbangProjectile": "flash", "CHEGrenadeProjectile": "he",
@@ -651,7 +651,7 @@ def install():
     """The training server made on this PC from the app (05/10, the beta: a player without plugin/make_server.py at
     hand): CS2's files linked next to the game (no copy, a few minutes), Metamod, CounterStrikeSharp and the plugin."""
     if not config.linux_training():
-        raise RuntimeError(EXPERIMENTAL)
+        raise RuntimeError(i18n.tr(EXPERIMENTAL))
     if INSTALL["running"]:
         return status()
 
@@ -719,7 +719,9 @@ def _launch_linux(args):
     if miss:
         raise RuntimeError(miss)
     sh = os.path.join(SERVER, "game", "cs2.sh")
-    cmd = (["/bin/sh", sh] + args[1:]) if os.path.exists(sh) else args
+    # the script itself, not "sh" it: it is written for bash ([[ ... ]] to spot -dedicated) and /bin/sh is not bash on
+    # every distribution (Debian and Ubuntu: dash), where it would not see -dedicated and refuse to start outside Steam
+    cmd = ([sh] + args[1:]) if os.access(sh, os.X_OK) else args
     env = dict(os.environ)
     lib = os.path.dirname(EXE)
     env["LD_LIBRARY_PATH"] = lib + (":" + env["LD_LIBRARY_PATH"] if env.get("LD_LIBRARY_PATH") else "")
@@ -728,6 +730,49 @@ def _launch_linux(args):
     log.flush()
     return subprocess.Popen(cmd, cwd=lib, env=env, stdin=subprocess.DEVNULL, stdout=log, stderr=subprocess.STDOUT,
                             start_new_session=True, close_fds=True)
+
+
+def _linux_pid(pr, secs=30):
+    """The server's own pid, not its launcher's: cs2.sh waits on the server (it restarts it when it asks for it), so
+    Popen holds a shell, and everything here knows the server by its name ("cs2"). -> the server of that session once
+    it is up, else the shell's pid (a launch straight to the binary, or one that went nowhere)."""
+    import psutil
+    for _ in range(int(secs * 10)):
+        try:
+            p = psutil.Process(pr.pid)
+            for c in [p] + p.children(recursive=True):   # itself first: without cs2.sh Popen already holds the server
+                if config.is_cs2(c.name()):
+                    return c.pid
+        except psutil.Error:
+            break
+        if pr.poll() is not None:
+            break
+        time.sleep(0.1)
+    return pr.pid
+
+
+def _running_pid():
+    """A training server of this app's own already up on this PC, whose pid it does not have: the app was restarted, or
+    an older one left it behind (before 13/10 its pid was its launcher's on Linux, so stop() never reached it). Taken
+    over instead of starting a second one on the same port, which would only crash. Known as ours by the RCON password
+    this app gave it (random, kept in its state): a CS2 server of the player's own on that port is never taken over,
+    so never stopped by start() either. Not by its folder: on Linux the training server's files are links to the
+    game's, the process's executable is the game's own. -> its pid, or None."""
+    try:
+        import psutil
+    except ImportError:
+        return None
+    pw = _state().get("rcon")
+    if not pw:   # no password given yet: no server of ours ever started
+        return None
+    for p in psutil.process_iter(["name", "cmdline"]):
+        try:
+            cmd = p.info.get("cmdline") or []
+            if config.is_cs2(p.info.get("name")) and "-dedicated" in cmd and str(PORT) in cmd and pw in cmd:
+                return p.pid
+        except psutil.Error:
+            continue
+    return None
 
 
 def _above_normal(pid):
@@ -804,6 +849,25 @@ def control(**kw):
         print("training server control:", e, flush=True)
 
 
+def write_ui(lang=None):
+    """The training server's words in the app's language (13/10): coach/ui.json, read by the plugin when a session or a
+    situation starts (i18n.plugin_catalog). Written only when it changes: the plugin reads it again on a new date."""
+    try:
+        data = json.dumps(i18n.plugin_catalog(lang), ensure_ascii=False, separators=(",", ":"))
+        f = os.path.join(COACH, "ui.json")
+        try:
+            if open(f, encoding="utf-8").read() == data:
+                return
+        except OSError:
+            pass
+        os.makedirs(COACH, exist_ok=True)
+        with open(f + ".tmp", "w", encoding="utf-8") as o:
+            o.write(data)
+        os.replace(f + ".tmp", f)
+    except (OSError, ValueError) as e:
+        print("training server language:", e, flush=True)
+
+
 def _gone(pid, secs):
     for _ in range(int(secs * 2)):
         if not _pid_alive(pid):
@@ -850,12 +914,18 @@ def _answers():
 def start(mp):
     """The server on this map (started hidden, or its map changed); back when it answers."""
     if not config.linux_training():
-        raise RuntimeError(EXPERIMENTAL)
+        raise RuntimeError(i18n.tr(EXPERIMENTAL))
     if not installed():
         raise RuntimeError("The training server is not installed yet: install it from the Prepare page")
     pw = _password()   # made and saved before the state is read (08/10)
     s = _state()
     h0 = heartbeat() or {}
+    if not _pid_alive(s.get("pid")):
+        found = _running_pid()   # one of ours already up: taken over (a second one on the same port would only crash)
+        if found:
+            print(f"training server: already up (pid {found}), taken over", flush=True)
+            s.update(pid=found, map=h0.get("map") or s.get("map"), started=s.get("started") or time.time())
+            _save_state(s)
     if _dead(s):
         print(f"training server: no heartbeat for {_beat_age() or 0:.0f} s (no map?), started again", flush=True)
         _force_stop(s["pid"])
@@ -888,33 +958,36 @@ def start(mp):
             "+map", WORKSHOP_BASE if wid else mp]   # a Workshop map only once the server runs: given at launch it is ignored (07/10)
     if config.LINUX:
         pr = _launch_linux(args)
+        pid = _linux_pid(pr)   # the server behind cs2.sh: the pid this app keeps, and the one it can recognise later
     else:
         si = subprocess.STARTUPINFO()   # its own console, hidden: without one the server logs a console error every frame
         si.dwFlags |= subprocess.STARTF_USESHOWWINDOW
         si.wShowWindow = 0   # SW_HIDE: never shown, never takes the focus
         pr = subprocess.Popen(args, cwd=os.path.dirname(EXE), creationflags=subprocess.CREATE_NEW_CONSOLE, startupinfo=si)
-    _above_normal(pr.pid)
+        pid = pr.pid
+    _above_normal(pid)
     for _ in range(20):   # its console comes up within a second or two
-        if _hide_console(pr.pid):
+        if _hide_console(pid):
             break
         time.sleep(0.1)
-    s.update(pid=pr.pid, map=mp, started=time.time())
+    s.update(pid=pid, map=mp, started=time.time())
     _save_state(s)
     control(rcon=pw)   # the plugin sets it too: the server and this app always agree on it
     # rcon only once the map runs (the plugin's heartbeat): an early try counts as a failed login and the server then
     # refuses 127.0.0.1
     for _ in range(120):
         time.sleep(1)
-        _hide_console(pr.pid)   # shown again while the server starts: hidden again
-        _above_normal(pr.pid)   # its console's host comes up meanwhile: high
+        _hide_console(pid)   # shown again while the server starts: hidden again
+        _above_normal(pid)   # its console's host comes up meanwhile: high
+        if pr.poll() is not None:   # before the heartbeat: a server that stopped is not the one beating
+            raise RuntimeError("the training server stopped while starting"
+                               + (f" (what it said: {LINUX_LOG})" if config.LINUX else ""))
         h = heartbeat()
         if h and (h.get("t") or 0) > s["started"]:
             if wid:   # up on the base map: now the Workshop one
                 rcon(f"host_workshop_map {wid}")
                 _wait_map(mp)
             return status()
-        if pr.poll() is not None:
-            raise RuntimeError("the training server stopped while starting")
     raise RuntimeError("the training server did not start in 120 s")
 
 
@@ -967,6 +1040,7 @@ def idle_check(after=20 * 60):
 def play(sid, mid, rnd, kind="death", mode="actor", diff=2):
     """Build the scenario, the server on its map, and tell the plugin: it starts as soon as you are in (or now)."""
     sc = build(sid, mid, rnd, kind)
+    write_ui()
     start(sc["map"])
     rcon(f"css_replay {sc['id']} {mode} {max(0, min(3, int(diff)))}")
     return {**status(), "scenario": {k: sc[k] for k in ("id", "title", "map", "round", "kind")}}

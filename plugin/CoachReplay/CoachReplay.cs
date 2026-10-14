@@ -196,7 +196,7 @@ public partial class CoachReplay : BasePlugin
         // your shots: the bots on their path that hear them react (they fight on their own)
         RegisterEventHandler<EventWeaponFire>((e, _) =>
         {
-            if (cur == null || phase != "live" || mode != "actor" || e.Userid is not { IsValid: true, IsBot: false } h) return HookResult.Continue;
+            if (cur == null || phase != "live" || mode != "actor" || drill?.Mode == "crossfire" || e.Userid is not { IsValid: true, IsBot: false } h) return HookResult.Continue;   // Crossfire: the real peek, heard or not
             var w = e.Weapon ?? "";
             if (w.Contains("knife") || w.Contains("grenade") || w.Contains("flashbang") || w.Contains("molotov") || w.Contains("decoy")) return HookResult.Continue;
             if (h.PlayerPawn.Value?.AbsOrigin is not { } o) return HookResult.Continue;
@@ -227,7 +227,7 @@ public partial class CoachReplay : BasePlugin
         AddCommand("css_p", "previous situation of this map", (p, c) => Cycle(-1));
         AddCommand("css_spec", "switch between playing your spot and watching", (p, c) => { mode = mode == "spec" ? "actor" : "spec"; if (cur != null) Setup(); });
         AddCommand("css_list", "situations of this map", (p, c) => { foreach (var s in List()) Say(p, s); });
-        AddCommand("css_diff", "bot difficulty 0-3", (p, c) => { if (int.TryParse(c.GetArg(1), out var d)) difficulty = Math.Clamp(d, 0, 3); Say(p, $"difficulty {difficulty}"); if (cur != null) Setup(); });
+        AddCommand("css_diff", "bot difficulty 0-3", (p, c) => { if (int.TryParse(c.GetArg(1), out var d)) difficulty = Math.Clamp(d, 0, 3); Say(p, F("difficulty {n}", "n", difficulty)); if (cur != null) Setup(); });
         AddCommand("css_dbg", "state of the bots", (p, c) =>
         {
             foreach (var cls in new[] { "smokegrenade_projectile", "hegrenade_projectile", "flashbang_projectile", "molotov_projectile" })
@@ -374,8 +374,9 @@ public partial class CoachReplay : BasePlugin
 
     void CmdReplay(CCSPlayerController? p, CommandInfo c)
     {
+        UseUi(ReadUi());   // the app's language (written with the situation)
         var s = Peek(c.GetArg(1));
-        if (s == null) { Say(p, $"no scenario {c.GetArg(1)}"); return; }
+        if (s == null) { Say(p, F("no scenario {id}", "id", c.GetArg(1))); return; }
         if (c.ArgCount > 2 && (c.GetArg(2) == "spec" || c.GetArg(2) == "actor")) mode = c.GetArg(2);
         if (c.ArgCount > 3 && int.TryParse(c.GetArg(3), out var d)) difficulty = Math.Clamp(d, 0, 3);
         cur = s;
@@ -701,6 +702,7 @@ public partial class CoachReplay : BasePlugin
     // a bot leaves its recorded path and plays on its own: it moves again by itself, with its grenades
     void Free(int slot, CCSPlayerController c, Track t)
     {
+        if (drill?.Mode == "crossfire" && phase == "live" && CfPlant(c, t)) return;   // Crossfire: it stops there and fights you (14/10)
         if (!free.Add(slot)) return;
         var pw = c.PlayerPawn.Value;
         if (pw != null && pw.IsValid) Freeze(pw, false);
@@ -797,7 +799,7 @@ public partial class CoachReplay : BasePlugin
         // an aim drill: a reaction time before a target can hurt you (04/10, Office: killed 0.06 s after GO)
         if (cur?.Kind == "aim") protectUntil = Server.TickCount + 48;
         SessionGo();
-        foreach (var h in Humans()) { var pw = h.PlayerPawn.Value; if (pw != null) Freeze(pw, false); h.PrintToCenter("GO"); }
+        foreach (var h in Humans()) { var pw = h.PlayerPawn.Value; if (pw != null) Freeze(pw, false); h.PrintToCenter(T("GO")); }
     }
 
     bool Alive(string sid)
@@ -818,6 +820,7 @@ public partial class CoachReplay : BasePlugin
         if (now < hudSent) hudSent = 0;
         HudTick();
         CamTick();
+        CfRadar();   // a Crossfire enemy shown at a rep's start: on your radar too
         if (cur == null || (phase != "countdown" && phase != "live")) return;
         if (phase == "countdown" && now >= countdownEnd) Go();
         var f = phase == "live" ? (now - t0) / (float)cur.Step : 0f;
@@ -842,7 +845,12 @@ public partial class CoachReplay : BasePlugin
             {
                 // a target on its spot. A prefire's, a wallbang's or a flick's holds its angle and never fires (06/10: "fais
                 // pas bouger les bots sur le préfire"); a duel's aims on its own and counts how long it has seen you
-                pawn.Teleport(Pos(t, 0), t.Still ? Upright(Ang(t, 0)) : null, Vector3.Zero);
+                // put back only once it drifted: a teleport every tick also moved the ground under the one standing on a
+                // boost's bot, likely counted as in the air then (11/10, a tester: "22 boost didnt work. Scoped weapons
+                // are odd": a sniper's shot in the air goes anywhere)
+                var at0 = pawn.AbsOrigin;
+                if (at0 == null || Vector3.DistanceSquared(new Vector3(at0.X, at0.Y, at0.Z), Pos(t, 0)) > 4f)
+                    pawn.Teleport(Pos(t, 0), t.Still ? Upright(Ang(t, 0)) : null, Vector3.Zero);
                 if (t.Still) HoldAim(pawn, Ang(t, 0), t.Duck);
                 else if (phase == "live" && seen != null && (seen[slot / 32] & (1u << (slot % 32))) != 0) contact[slot] = contact.GetValueOrDefault(slot) + 1;
                 continue;
@@ -880,10 +888,14 @@ public partial class CoachReplay : BasePlugin
             // joueurs"), then it plays on its own
             var eng = engaged.TryGetValue(slot, out var et);
             if (eng && Server.TickCount - et > EngageTicks) { Free(slot, c, t); continue; }
-            if (!eng && !t.Runner && phase == "live" && seen != null && (seen[slot / 32] & (1u << (slot % 32))) != 0 && (contact[slot] = contact.GetValueOrDefault(slot) + 1) >= ReactTicks)
-            { engaged[slot] = Server.TickCount; eng = true; Log("contact {n} at {f}", t.Name, (int)f); }
+            if (!eng && !t.Runner && phase == "live" && seen != null && (seen[slot / 32] & (1u << (slot % 32))) != 0 && (contact[slot] = contact.GetValueOrDefault(slot) + 1) >= (drill?.Mode == "crossfire" ? DuelReact : ReactTicks))
+            {
+                engaged[slot] = Server.TickCount; eng = true; Log("contact {n} at {f}", t.Name, (int)f);
+                // Crossfire (14/10, his test: "il tire bizarrement" while walking): it has seen you, it stops and shoots
+                if (drill?.Mode == "crossfire" && !CfSpray) { Free(slot, c, t); continue; }
+            }
             var here = pawn.AbsOrigin is { } ho ? new Vector3(ho.X, ho.Y, ho.Z) : pos;
-            if (phase == "live" && mePos != null && t.Team != cur.Team && !t.Runner && Vector3.DistanceSquared(here, mePos.Value) < Near * Near)
+            if (phase == "live" && mePos != null && t.Team != cur.Team && !t.Runner && drill?.Mode != "crossfire" && Vector3.DistanceSquared(here, mePos.Value) < Near * Near)
             {   // you are right on it: a player would notice you, path or not
                 Free(slot, c, t); Log("close {n} at {f}", t.Name, (int)f); continue;
             }
@@ -1033,6 +1045,42 @@ public partial class CoachReplay : BasePlugin
         ThrowAs(c, pawn, n);
     }
 
+    // the game's own Create for a smoke, an HE or a molotov. Its byte patterns above are of the Windows build: on Linux
+    // the same code is in libserver.so, built for another ABI, so nothing there can match them, and libserver.so keeps
+    // no symbol to reach it by name either. A MemoryFunction of a pattern that was not found is not null and only fails
+    // when it is called, so every grenade of every bot raised "Invalid function pointer" and was dropped, once per
+    // grenade. Said once per type now, with what it means, instead of at every throw.
+    // Making the projectile ourselves is not a way out, and that is measured, not assumed (13/10): built by hand a smoke
+    // comes up with no fuse and no think (det 0.00, think -1) where a flashbang comes up with both from its own Spawn,
+    // which is why flashes are the only ones that go off here. Writing the fuse and the think by hand changes nothing:
+    // 2 s later the fuse had passed, the think tick was still the one written, the smoke had not gone off. The engine
+    // schedules thinks itself, so a smoke, an HE or a molotov simply cannot be set off from here without that function.
+    // -> true when the game threw it; false when this server cannot, and then it is not thrown at all rather than
+    // dropped in the world as an object that never goes off.
+    bool GameThrow(CCSPlayerController c, CCSPlayerPawn pawn, Nade n)
+    {
+        if (n.Type is not ("smoke" or "he" or "molotov")) return false;
+        if (n.Type == "smoke" ? smokeCreate == null : n.Type == "he" ? heCreate == null : molotovCreate == null) return false;
+        var o = new CVector(n.P[0], n.P[1], n.P[2]);
+        var v = new CVector(n.V[0], n.V[1], n.V[2]);
+        var spin = new CVector(600, 0, 0);
+        try
+        {
+            if (n.Type == "smoke") smokeCreate!.Invoke(o.Handle, new QAngle(0, 0, 0).Handle, v.Handle, spin.Handle, pawn.Handle, 45, c.TeamNum);
+            else if (n.Type == "he") heCreate!.Invoke(o.Handle, new QAngle(0, 0, 0).Handle, v.Handle, spin.Handle, pawn.Handle, 44);
+            else molotovCreate!.Invoke(o.Handle, new QAngle(0, 0, 0).Handle, v.Handle, spin.Handle, pawn.Handle, n.Inc ? 48 : 46);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            if (n.Type == "smoke") smokeCreate = null;
+            else if (n.Type == "he") heCreate = null;
+            else molotovCreate = null;
+            Log("nade {t}: this server cannot throw one ({m}); the bots' {t} are off for this server", n.Type, ex.Message);
+            return false;
+        }
+    }
+
     void ThrowAs(CCSPlayerController c, CCSPlayerPawn pawn, Nade n)
     {
         var cls = n.Type switch { "smoke" => "smokegrenade_projectile", "flash" => "flashbang_projectile", "he" => "hegrenade_projectile",
@@ -1042,13 +1090,8 @@ public partial class CoachReplay : BasePlugin
         {
             if (n.Type is "smoke" or "he" or "molotov")
             {
-                var o = new CVector(n.P[0], n.P[1], n.P[2]);
-                var v = new CVector(n.V[0], n.V[1], n.V[2]);
-                var spin = new CVector(600, 0, 0);
-                if (n.Type == "smoke" && smokeCreate != null) smokeCreate.Invoke(o.Handle, new QAngle(0, 0, 0).Handle, v.Handle, spin.Handle, pawn.Handle, 45, c.TeamNum);
-                else if (n.Type == "he" && heCreate != null) heCreate.Invoke(o.Handle, new QAngle(0, 0, 0).Handle, v.Handle, spin.Handle, pawn.Handle, 44);
-                else if (n.Type == "molotov" && molotovCreate != null) molotovCreate.Invoke(o.Handle, new QAngle(0, 0, 0).Handle, v.Handle, spin.Handle, pawn.Handle, n.Inc ? 48 : 46);
-                else return;
+                if (!GameThrow(c, pawn, n))
+                    return;
                 Log("nade {t} by {n} at {f}", n.Type, c.PlayerName, n.F);
                 return;
             }
@@ -1083,7 +1126,7 @@ public partial class CoachReplay : BasePlugin
         if (v != null && v.IsValid && bots.TryGetValue(v.Slot, out var t)) gone.Add(t.Sid);
         Log("death {f}/{s}: {v} by {a} ({w})", (Server.TickCount - t0) / cur.Step, cur.Id, v?.PlayerName, e.Attacker?.PlayerName, e.Weapon);
         if (e.Attacker is { IsValid: true, IsBot: false } && v != null && v.IsBot) kills++;
-        if (drill?.Kind == "aim" && e.Attacker is { IsValid: true, IsBot: false } killer && v is { IsBot: true })
+        if (drill?.Kind == "aim" && !CfSpray && e.Attacker is { IsValid: true, IsBot: false } killer && v is { IsBot: true })   // a spray: one magazine for both
             AddTimer(0.05f, () => { if (killer.IsValid) FullMag(killer); });
         if (humanDead && v != null && v.IsValid && v.Slot == tradeKiller && Server.TickCount <= tradeUntil) traded = true;   // your killer died right after: traded
         if (cur.Kind is "death" or "clutch" && v is { IsValid: true, IsBot: true } && bots.TryGetValue(v.Slot, out var tv) && tv.Team == cur.Team
@@ -1156,6 +1199,9 @@ public partial class CoachReplay : BasePlugin
             // time (06/10: "ils me préfirent, ils savent où je suis, c'est un temps de réaction terrible")
             if (drill?.Mode == "range" && vc is { IsBot: false } && ac is { IsBot: true } && (drill.Variant != "duel" || contact.GetValueOrDefault(ac.Slot) < DuelReact))
                 return HookResult.Handled;
+            // Crossfire (13/10): the same, its enemies fight you once they have seen you a player's reaction time; a spray's never
+            if (drill?.Mode == "crossfire" && vc is { IsBot: false } && ac is { IsBot: true } && (CfSpray || contact.GetValueOrDefault(ac.Slot) < DuelReact))
+                return HookResult.Handled;
         }
         catch (Exception) { }
         return HookResult.Continue;
@@ -1174,14 +1220,14 @@ public partial class CoachReplay : BasePlugin
             ["kills"] = kills, ["dmg"] = dmg, ["alive_s"] = Math.Round(alive, 1), ["difficulty"] = difficulty,
             ["drift"] = devN > 0 ? Math.Round(devSum / devN, 1) : -1 });
         Append("results.jsonl", line);
-        var msg = outcome switch { "won" => "\x04WON\x01", "survived" => "\x04SURVIVED\x01", "traded" => "\x04TRADED\x01",
-            "kill" => "\x04KILL, THEN DEAD\x01", "passive" => "\x02NO KILL\x01", "dead" => "\x02DEAD\x01",
-            "defused" => BombWon(outcome) ? "\x04DEFUSED\x01" : "\x02DEFUSED\x01", "exploded" => BombWon(outcome) ? "\x04BOMB EXPLODED\x01" : "\x02BOMB EXPLODED\x01",
-            _ => outcome };
-        All($"{msg} · {kills} kill(s) · {dmg} dmg · {alive:F1} s — again in 3 s (!n next · !p previous · !spec · !stop)");
+        var good = outcome is "won" or "survived" or "traded" or "kill" || BombWon(outcome);
+        All($"{(good ? "\x04" : "\x02")}{Shown(outcome)}\x01 · {SitDetail(alive)} — {T("again in 3 s (!n next · !p previous · !spec · !stop)")}");
         var g = generation;
         AddTimer(3f, () => { if (g == generation && phase == "done" && cur != null) Setup(); });
     }
+
+    // a situation's try: your kills, your damage, how long you lived
+    string SitDetail(double alive) => $"{Tn(kills, "{n} kill", "{n} kills")} · {F("{n} dmg", "n", dmg)} · {alive.ToString("F1", System.Globalization.CultureInfo.InvariantCulture)} s";
 
     // a situation's outcome: a kill or a trade is needed. won / survived with no kill of yours: passive; dead after a
     // kill: kill (one for one); traded and dead stay

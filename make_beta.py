@@ -48,12 +48,19 @@ PY_URL = "https://www.python.org/ftp/python/3.11.9/python-3.11.9-embed-amd64.zip
 PIP_URL = "https://bootstrap.pypa.io/get-pip.py"
 # the versions this app runs with here: the players' copy behaves the same (cryptography: the updates' signature)
 REQS = {"demoparser2": "0.42.0", "pandas": "2.3.3", "numpy": "2.3.4", "pyarrow": "25.0.1", "pillow": "12.0.0", "psutil": "7.2.2",
-        "scikit-learn": "1.7.2", "soundfile": "0.13.1", "sounddevice": "0.5.6", "soundcard": "0.4.6", "faster-whisper": "1.2.1", "av": "18.1.0",
+        "scikit-learn": "1.7.2", "soundfile": "0.13.1", "sounddevice": "0.5.6", "soundcard": "0.4.6", "faster-whisper": "1.2.1",
         "cryptography": "50.0.1"}
+# a library the ones above pull in, held back because its next version breaks them (12/10): PyAV 19 removed av.open's
+# metadata_errors, which faster-whisper 1.2.1 passes, so no recording could be transcribed. It needs Python 3.12+: the
+# Windows runtime (3.11) already holds 18.1.0, but a Linux install on Python 3.12/3.13 got 19 (PR #2, a Fedora tester).
+# Kept out of runtime_key: a new key rebuilds the Windows runtime with fresh indirect libraries (untested) and makes
+# every player download it again (234 MB) for a version it already has. Pinned in requirements.txt (Linux) and in any
+# future runtime build.
+PINS = {"av": "18.1.0"}
 ENTRIES = ["serve", "refresh_all", "grow", "voice", "replay", "train", "build_app", "chatcalls", "focus", "heard", "cs2coach",
            "updater", "contrib"]
 FILES = ["app_template.html", "report_template.html", "wily.sh", "wily.png"]   # wily.sh, wily.png: the Linux launcher and icon
-DIRS = ["maps", os.path.join("tools", "boiler")]
+DIRS = ["maps", "i18n", os.path.join("tools", "boiler")]   # i18n: the catalogs (13/10)
 SERVER_ZIPS = ["mmsource.zip", "css-runtime.zip"]   # Metamod:Source and CounterStrikeSharp for the training server
 KEY_F = os.path.join(config.OUT, "release_key.pem")   # Ed25519: signs latest.json; its public half ships in the code
 RELEASES_URL = "https://wily.valentingassend.com/releases/"   # where the installer downloads the parts from
@@ -64,7 +71,7 @@ PER_MATCH = [os.path.join("population"), os.path.join("population", "buys"), os.
 PUBLIC = [os.path.join("population", "midround_pro"), os.path.join("population", "routes_pro"), "style_pro", "deep_pro"]
 BASE_FILES = ["train_sites.json", "train_spots.json", "train_zones.json", "hostage.json", "cross.json", "cross_notes.json",
               os.path.join("pro", "matches.json")]
-BASE_DIRS = ["train_entries", os.path.join("site", "radars")]
+BASE_DIRS = ["train_entries", "train_crossfire", os.path.join("site", "radars")]
 DAILYCSNADES = [os.path.join("site", "nadecat")]   # + out/lineups/*_dailycsnades.json
 FRESH = 120   # a file the base loop wrote in the last 2 minutes may be half-written: left for the next package
 SITUATIONS = 20   # situations to replay built per map of the player
@@ -125,7 +132,7 @@ def runtime(dst):
         subprocess.run([py, "-s", fetch(PIP_URL), "--no-warn-script-location"], check=True, env=env)
         log("the libraries…")
         subprocess.run([py, "-s", "-m", "pip", "install", "--no-warn-script-location", "--disable-pip-version-check",
-                        *[f"{k}=={v}" for k, v in REQS.items()]], check=True, env=env)
+                        *[f"{k}=={v}" for k, v in {**REQS, **PINS}.items()]], check=True, env=env)
         subprocess.run([py, "-s", "-m", "pip", "check"], check=True, env=env)   # every dependency there, in versions that fit
         subprocess.run([py, "-s", "-c", "import pandas, pyarrow, demoparser2, sklearn, scipy, psutil, PIL, soundfile, sounddevice, "
                                         "soundcard, faster_whisper, ctranslate2, av, cryptography; print('libraries ok')"], check=True, env=env)
@@ -197,7 +204,7 @@ def copy_code(dst, version, build=None):
         shutil.copy2(make_server._zip(z), pl)
     shutil.copytree(os.path.join(config.HERE, "legal", "licenses"), os.path.join(dst, "LICENSES"), dirs_exist_ok=True)
     shutil.copy2(os.path.join(config.HERE, "legal", "THIRD_PARTY_NOTICES.txt"), dst)
-    open(os.path.join(dst, "requirements.txt"), "w", encoding="utf-8").write("".join(f"{k}=={v}\n" for k, v in REQS.items()))
+    open(os.path.join(dst, "requirements.txt"), "w", encoding="utf-8").write("".join(f"{k}=={v}\n" for k, v in {**REQS, **PINS}.items()))
     open(os.path.join(dst, "release_key.pub"), "w").write(public_key_hex())
     # the build: what tells two publications of one version apart (the version only changes when the coach says so)
     config.write_json(os.path.join(dst, "VERSION.json"), {"app": version, "build": build or time.strftime("%Y%m%d-%H%M"), "runtime": runtime_key(),
@@ -597,6 +604,21 @@ def installer(man, base_url=RELEASES_URL, out_dir=RELEASES):
     return exe
 
 
+def page_current():
+    """The page ui/ builds is the one shipped: app_template.html is copied as it is, nothing here assembles it (12/10:
+    the builds of 10/10 shipped the page of 10/10 00:25, without the first-launch notice that speaks of the shared
+    matches nor the Linux switch, both already in ui/). -> nothing, or stops the build with what to do."""
+    r = subprocess.run([sys.executable, os.path.join(config.HERE, "ui", "assemble.py")], capture_output=True, text=True,
+                       encoding="utf-8", cwd=config.HERE)
+    if r.returncode:
+        raise SystemExit(f"ui/assemble.py failed, nothing built:\n{(r.stdout or '') + (r.stderr or '')}")
+    new, cur = (open(os.path.join(config.HERE, f), "rb").read().replace(b"\r\n", b"\n") for f in ("app_template_next.html", "app_template.html"))
+    if new != cur:
+        raise SystemExit("app_template.html is not the page ui/ builds (python ui/assemble.py just wrote app_template_next.html):"
+                         " check it, copy it over app_template.html, then build again")
+    log("the page: the one ui/ builds")
+
+
 def main():
     sys.stdout.reconfigure(encoding="utf-8")
     arg = lambda k: sys.argv[sys.argv.index(k) + 1] if k in sys.argv else None
@@ -611,6 +633,7 @@ def main():
     if sid and not os.path.exists(os.path.join(config.player_dir(sid), "advice.json")):
         raise SystemExit(f"no profile for {sid} here: analyze them first")
     update = "--update" in sys.argv and not generic
+    page_current()
     # a player's package carries the published version it is built with: their app then offers only what is newer
     pub = config.read_json(os.path.join(RELEASES, "latest.json"), {}) or {}
     version = version or pub.get("app") or "dev-" + time.strftime("%Y%m%d-%H%M")

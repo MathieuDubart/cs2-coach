@@ -22,19 +22,28 @@ def read(f):
 
 FONTS = {"Barlow Condensed": ("barlow-condensed", (500, 600, 700)), "IBM Plex Sans": ("ibm-plex-sans", (400, 500, 600)),
          "JetBrains Mono": ("jetbrains-mono", (400, 600))}
+# the Cyrillic letters (13/10, the app in Russian): Plex and JetBrains have their own; Barlow has none, so its
+# Cyrillic comes from Roboto Condensed (the closest condensed grotesque), under the same family name
+CYRILLIC = {"Barlow Condensed": "roboto-condensed", "IBM Plex Sans": "ibm-plex-sans", "JetBrains Mono": "jetbrains-mono"}
+CYR_RANGE = "U+0301,U+0400-045F,U+0490-0491,U+04B0-04B1,U+2116"
 
 
 def fonts_css():
     """@font-face rules with the font files inside (base64): the page needs no font server (05/10: no request to
-    Google Fonts from any player's PC, and the page works offline). The fonts are under the SIL Open Font License."""
+    Google Fonts from any player's PC, and the page works offline). The fonts are under the SIL Open Font License.
+    Chinese uses the system's fonts (p0_base.css, :lang(zh)): a CJK font is megabytes."""
     import base64
+
+    def face(family, w, path, rng=""):
+        with open(os.path.join(UI, "fonts", path), "rb") as fh:
+            b = base64.b64encode(fh.read()).decode()
+        return (f"@font-face{{font-family:'{family}';font-style:normal;font-weight:{w};font-display:swap;"
+                f"src:url(data:font/woff2;base64,{b}) format('woff2'){f';unicode-range:{rng}' if rng else ''}}}")
     out = []
     for family, (fid, weights) in FONTS.items():
         for w in weights:
-            with open(os.path.join(UI, "fonts", f"{fid}-latin-{w}-normal.woff2"), "rb") as fh:
-                b = base64.b64encode(fh.read()).decode()
-            out.append(f"@font-face{{font-family:'{family}';font-style:normal;font-weight:{w};font-display:swap;"
-                       f"src:url(data:font/woff2;base64,{b}) format('woff2')}}")
+            out.append(face(family, w, f"{fid}-latin-{w}-normal.woff2"))
+            out.append(face(family, w, f"{CYRILLIC[family]}-cyrillic-{w}-normal.woff2", CYR_RANGE))
     return "".join(out)
 
 

@@ -18,25 +18,29 @@ import pandas as pd
 import config
 import knowledge as K
 from map_analysis import humanize
+from i18n import N_, tr, trn, tr_static
+
+# the zone groups' names (R.group()): English while the plan is built, translated where it is saved
+_GROUPS = [N_("A site"), N_("B site"), N_("Mid"), N_("A approach (T side)"), N_("B approach (T side)"), N_("CT side / rotations"), N_("Spawns")]
 
 TEAMS = os.path.join(config.OUT, "teams")
 META = os.path.join(config.OUT, "population", "map_meta.json")
 PREMIER = ["de_ancient", "de_anubis", "de_cache", "de_dust2", "de_inferno", "de_mirage", "de_nuke"]
-ROLE_FR = {"entry": "Entry", "trader": "Second / trade", "support": "Support", "lurker": "Lurker", "awper": "AWPer",
-           "flex": "Rifler flex", "anchor": "Anchor", "closer": "Closer"}
+ROLE_FR = {"entry": N_("Entry"), "trader": N_("Second / trade"), "support": N_("Support"), "lurker": N_("Lurker"), "awper": N_("AWPer"),
+           "flex": N_("Rifler flex"), "anchor": N_("Anchor"), "closer": N_("Closer")}
 T_ROLE_DO = {
-    "entry": "First onto the site, behind the support's flash. Your job: take space and call what you see, even if you die.",
-    "trader": "Stick to the entry within trade distance (1 to 2 s behind, not on the same line) and avenge them right away.",
-    "support": "Throw the execute's smokes and flashes, then go in third. Keep a grenade for the post-plant.",
-    "lurker": "Opposite side of the execute: walk, listen to the rotations and cut them when the team goes in.",
-    "awper": "Take the first pick on the long angle, then cover the entry or the flank. Never re-peek the same angle.",
-    "flex": "Backup for the execute or a second lurker depending on the info. Play the end of the round: clutch, post-plant.",
+    "entry": N_("First onto the site, behind the support's flash. Your job: take space and call what you see, even if you die."),
+    "trader": N_("Stick to the entry within trade distance (1 to 2 s behind, not on the same line) and avenge them right away."),
+    "support": N_("Throw the execute's smokes and flashes, then go in third. Keep a grenade for the post-plant."),
+    "lurker": N_("Opposite side of the execute: walk, listen to the rotations and cut them when the team goes in."),
+    "awper": N_("Take the first pick on the long angle, then cover the entry or the flank. Never re-peek the same angle."),
+    "flex": N_("Backup for the execute or a second lurker depending on the info. Play the end of the round: clutch, post-plant."),
 }
 CT_SLOT_DO = {
-    "anchor": "Hold the site: survive 10 s, call how many they are and their grenades, fall back rather than die first.",
-    "support": "Backup for the most attacked site: delaying utility, then trade the anchor.",
-    "mid": "Mid control: info early in the round, then a fast rotation to the attacked site.",
-    "awp": "The long angle that hurts the Ts. One shot, then change position.",
+    "anchor": N_("Hold the site: survive 10 s, call how many they are and their grenades, fall back rather than die first."),
+    "support": N_("Backup for the most attacked site: delaying utility, then trade the anchor."),
+    "mid": N_("Mid control: info early in the round, then a fast rotation to the attacked site."),
+    "awp": N_("The long angle that hurts the Ts. One shot, then change position."),
 }
 
 
@@ -176,8 +180,8 @@ def igl(M):
     res = []
     for m in M:
         vals, why = [], []
-        for key, where, label in (("adv_conv", "mid", "converts advantages"), ("adv_throw", "mid", "rarely throws the advantage"),
-                                  ("isolated", "mid", "rarely dies isolated"), ("traded_pct", "bench", "plays as a team (deaths traded)")):
+        for key, where, label in (("adv_conv", "mid", N_("converts advantages")), ("adv_throw", "mid", N_("rarely throws the advantage")),
+                                  ("isolated", "mid", N_("rarely dies isolated")), ("traded_pct", "bench", N_("plays as a team (deaths traded)"))):
             p = _pct(m, key, where)
             if p is not None:
                 vals.append(p)
@@ -185,14 +189,14 @@ def igl(M):
                     why.append(label)
         role = m["arch"].get("role")
         bonus = 8 if role in ("support", "anchor", "closer", "lurker") else -8 if role in ("entry", "awper") else 0
-        art = {"support": "Support", "anchor": "Anchor", "closer": "Closer", "lurker": "Lurker"}.get(role)
+        art = {"support": N_("Support"), "anchor": N_("Anchor"), "closer": N_("Closer"), "lurker": N_("Lurker")}.get(role)
         hours = ((m["plan"].get("level") or {}).get("hours")) or 0
         exp = min(hours / 500, 8)
         score = (sum(vals) / len(vals) if vals else 50) + bonus + exp
         if bonus > 0:
-            why.append(f"{art} profile: often in the back, sees the round unfold")
+            why.append(tr("{role} profile: often in the back, sees the round unfold", role=tr(art)))
         if hours >= 1500:
-            why.append(f"{hours:,} h played")
+            why.append(tr("{n} h played", n=f"{hours:,}"))
         res.append({"steamid": m["steamid"], "name": m["name"], "score": round(score), "why": why})
     res.sort(key=lambda x: -x["score"])
     return res
@@ -462,7 +466,7 @@ def _lane_nades(M, mp, key, member_sid):
     return []
 
 
-CT_LABEL = {"anchor": "{site} anchor", "support": "{site} support", "mid": "Mid / rotation", "awp": "AWP"}
+CT_LABEL = {"anchor": N_("{site} anchor"), "support": N_("{site} support"), "mid": N_("Mid / rotation"), "awp": "AWP"}
 
 
 def ct_setup(M, mp, ref, R, TH, size):
@@ -534,19 +538,19 @@ def ct_setup(M, mp, ref, R, TH, size):
                 sl["base_zone"] = sl["zone"] + (f" ({sl['base']} in duels)" if sl.get("base") else "")
                 sl["base"] = None
             sl.update(zone=top["name"], px=top["px"], level=top.get("level") or sl["level"], yours=True)
-            why.append(f"your spot: {_kd(top.get('k'), top.get('d'))} in duels")
+            why.append(tr("your spot: {kd} in duels", kd=_kd(top.get('k'), top.get('d'))))
             if top.get("multi2"):
-                why.append(f"{top['multi2']} multi-kill round{'s' if top['multi2'] > 1 else ''}" + (f", best {top['best']} kills" if (top.get("best") or 0) >= 3 else ""))
+                why.append(trn(top['multi2'], "{n} multi-kill round", "{n} multi-kill rounds") + (", " + tr("best {n} kills", n=top['best']) if (top.get("best") or 0) >= 3 else ""))
         else:
             z = _zone_perf(m, mp, "CT", R.key.get(sl["zone"], sl["zone"]))
             if z and z["k"] + z["d"] >= 4:
-                why.append(f"{_kd(z['k'], z['d'])} there")
+                why.append(tr("{kd} there", kd=_kd(z['k'], z['d'])))
             elif z and (z.get("presence") or 0) >= 5:
-                why.append(f"plays there {z['presence']:.0f}% of the time")
+                why.append(tr("plays there {p}% of the time", p=f"{z['presence']:.0f}"))
         if sl["kind"] == "awp" and m["scores"]["awper"] >= 55:
-            why.append("AWPer profile")
+            why.append(tr("AWPer profile"))
         if sl["kind"] == "anchor" and m["scores"]["anchor"] >= 60:
-            why.append("anchor profile")
+            why.append(tr("anchor profile"))
         sl["why"] = why
     extra = 0
     for sl in slots:
@@ -654,17 +658,17 @@ def t_plays(M, mp, ref, R, TH, troles, missing):
             do = T_ROLE_DO[role]
             if role == "lurker" and not p["key"].startswith(("rush", "split")) and lurk:
                 ln = {"name": lurk["name"], "px": lurk["px"], "level": lurk.get("level"), "lurk": True}
-                do = f"Show yourself through {lurk['name']} early to pull a CT, then cut the rotation when the team goes in."
+                do = tr("Show yourself through {zone} early to pull a CT, then cut the rotation when the team goes in.", zone=lurk['name'])
             elif role == "lurker" and p["key"].startswith("rush"):
                 ln = {k: ls[lane][k] for k in ("name", "px", "level")} if lane is not None else None
-                do = "Last of the rush: watch the flank behind the pack, then hold the bomb's way in."
+                do = tr("Last of the rush: watch the flank behind the pack, then hold the bomb's way in.")
             else:
                 ln = {k: ls[lane][k] for k in ("name", "px", "level")} if lane is not None else None
                 if p["key"].startswith("split") and lane == second and role != "lurker":
-                    do = f"Second lane: arrive at the same time as the pack, from {ls[second]['name']}."
+                    do = tr("Second lane: arrive at the same time as the pack, from {zone}.", zone=ls[second]['name'])
             if not sid:
                 extra += 1
-            rows.append({"member": sid, "name": names.get(sid) or f"Extra player {extra}", "extra": not sid, "role": role,
+            rows.append({"member": sid, "name": names.get(sid) or tr("Extra player {n}", n=extra), "extra": not sid, "role": role,
                          "role_name": ROLE_FR[role], "lane": ln, "do": do})
         # grenades: lineups landing on the site, thrown from the lanes the play uses (a rush keeps flashes and one molotov)
         c0 = site_px.get(L)
@@ -763,13 +767,13 @@ def synergy(M):
 
 def collective(M):
     """Team averages of the percentiles that decide team rounds: the three weakest become collective goals."""
-    checks = [("traded_pct", "bench", "Play in pairs (trades)", "Entry + trader always together, 1-2 s apart. In Team Deathmatch or on a retake server: no duel without a teammate in range."),
-              ("flash_duels_pct", "bench", "Flash for the others", "Every execute starts with a flash thrown for the entry. Call 'flash' before throwing it."),
-              ("nades_unused_24", "bench", "Empty the grenades", "Team 40-second rule: at 1:15 on the clock as T, all grenades are gone."),
-              ("adv_conv", "mid", "Convert advantages", "At 5v4: regroup on a site, crossfires, no more solo duels."),
-              ("isolated", "mid", "Spacing", "Nobody dies alone: everyone must be tradable within 2 s."),
-              ("rt_solo", "mid", "Grouped retakes", "Bomb planted: regroup and go in together on the same flash."),
-              ("rot_died", "mid", "Safe rotations", "A single voice calls the rotation, on solid info, and we rotate through the covered route.")]
+    checks = [("traded_pct", "bench", N_("Play in pairs (trades)"), N_("Entry + trader always together, 1-2 s apart. In Team Deathmatch or on a retake server: no duel without a teammate in range.")),
+              ("flash_duels_pct", "bench", N_("Flash for the others"), N_("Every execute starts with a flash thrown for the entry. Call 'flash' before throwing it.")),
+              ("nades_unused_24", "bench", N_("Empty the grenades"), N_("Team 40-second rule: at 1:15 on the clock as T, all grenades are gone.")),
+              ("adv_conv", "mid", N_("Convert advantages"), N_("At 5v4: regroup on a site, crossfires, no more solo duels.")),
+              ("isolated", "mid", N_("Spacing"), N_("Nobody dies alone: everyone must be tradable within 2 s.")),
+              ("rt_solo", "mid", N_("Grouped retakes"), N_("Bomb planted: regroup and go in together on the same flash.")),
+              ("rot_died", "mid", N_("Safe rotations"), N_("A single voice calls the rotation, on solid info, and we rotate through the covered route."))]
     res = []
     for key, where, title, do in checks:
         vals = [(_pct(m, key, where), m["name"]) for m in M]
@@ -816,9 +820,10 @@ def economy(M, troles, awp_ok):
     names = {m["steamid"]: m["name"] for m in M}
     return {"awp": names.get(awper) if awper else None, "awp_ok": awp_ok, "members": rows,
             "drop_order": [names[s] for s in order], "pistol_openers": [r["name"] for r in rows if r["pistol"]],
-            "rules": ["We buy together: full, force or eco, called before buy time.",
-                      "The richest drops first, in this order: " + ", ".join(names[s] for s in order) + (" (the AWP first)." if awper else "."),
-                      "Force only if everyone's money plus the loss bonus still pays a full buy next round ($3,700 as T, $3,900 as CT)."],
+            "rules": [tr("We buy together: full, force or eco, called before buy time."),
+                      tr("The richest drops first, in this order: {names} (the AWP first).", names=", ".join(names[s] for s in order)) if awper
+                      else tr("The richest drops first, in this order: {names}.", names=", ".join(names[s] for s in order)),
+                      tr("Force only if everyone's money plus the loss bonus still pays a full buy next round ($3,700 as T, $3,900 as CT).")],
             "src": K.src("sw_economy", "h2k_economy")}
 
 
@@ -903,7 +908,7 @@ def build(ids, owner=None):
                          if set(p["tags"]) & {"rotation", "retake", "advantage", "postplant"}],
             "party": {k: {"title": v["title"], "items": v["items"], "src": K.src(*v["src"])} for k, v in K.PARTY.items()}}
     plan["party_key"] = {2: "duo", 3: "trio", 4: "quatuor", 5: "five"}[len(M)]
-    config.write_json(os.path.join(TEAMS, f"{plan['id']}.json"), json.loads(json.dumps(plan, default=str)))
+    config.write_json(os.path.join(TEAMS, f"{plan['id']}.json"), tr_static(json.loads(json.dumps(plan, default=str))))   # its fixed sentences in the player's language
     return plan
 
 

@@ -12,6 +12,7 @@ import numpy as np
 
 import config
 import knowledge as K
+from i18n import N_, tr
 from map_analysis import humanize
 
 MID_TAGS = {  # mid-round metric -> playbook tags / phase items it points to
@@ -20,20 +21,20 @@ MID_TAGS = {  # mid-round metric -> playbook tags / phase items it points to
     "isolated": ["lurk", "duel"], "steps_alone": ["lurk"], "steps_clutch": ["clutch"], "pp_surv": ["postplant"], "pp_kpr": ["postplant"],
 }
 MID_FIX = {
-    "rot_died": "Leave on solid info and take the route that keeps you covered. If the site has already fallen, wait for your teammates at the entrance.",
-    "rot_react": "As soon as the bomb is seen or 3 players are called, go: every second counts for the retake.",
-    "anchor_hold": "As the anchor, your job is to survive 10 s and call the numbers: fall back one angle instead of dying first.",
-    "lurk_died": "Your lurk dies too often: wait for the CTs to rotate before showing yourself, and walk.",
-    "t_late": "Stick to the execute: arrive with the last flash, not 10 s later.",
-    "rt_solo": "Bomb planted: no solo retake. Wait for your teammates, go in on the same flash.",
-    "adv_throw": "When your team has one more player: no more solo duels, play the trade and the clock.",
-    "adv_conv": "With the advantage, regroup and play crossfires: structure converts, not one more kill.",
-    "lost_died": "Alone against 3 or more with little time: save your weapon.",
-    "isolated": "Too many deaths with nobody next to you to trade: get closer to a teammate before taking a duel.",
-    "steps_alone": "You run when you are alone near enemies: Shift, and reload by holding R.",
-    "steps_clutch": "In a clutch, walk: every step gives you away.",
-    "pp_surv": "After the plant: don't look for the duel, make the CTs come into your crossfires.",
-    "pp_kpr": "After the plant, position yourself to punish the defuser rather than peeking.",
+    "rot_died": N_("Leave on solid info and take the route that keeps you covered. If the site has already fallen, wait for your teammates at the entrance."),
+    "rot_react": N_("As soon as the bomb is seen or 3 players are called, go: every second counts for the retake."),
+    "anchor_hold": N_("As the anchor, your job is to survive 10 s and call the numbers: fall back one angle instead of dying first."),
+    "lurk_died": N_("Your lurk dies too often: wait for the CTs to rotate before showing yourself, and walk."),
+    "t_late": N_("Stick to the execute: arrive with the last flash, not 10 s later."),
+    "rt_solo": N_("Bomb planted: no solo retake. Wait for your teammates, go in on the same flash."),
+    "adv_throw": N_("When your team has one more player: no more solo duels, play the trade and the clock."),
+    "adv_conv": N_("With the advantage, regroup and play crossfires: structure converts, not one more kill."),
+    "lost_died": N_("Alone against 3 or more with little time: save your weapon."),
+    "isolated": N_("Too many deaths with nobody next to you to trade: get closer to a teammate before taking a duel."),
+    "steps_alone": N_("You run when you are alone near enemies: Shift, and reload by holding R."),
+    "steps_clutch": N_("In a clutch, walk: every step gives you away."),
+    "pp_surv": N_("After the plant: don't look for the duel, make the CTs come into your crossfires."),
+    "pp_kpr": N_("After the plant, position yourself to punish the defuser rather than peeking."),
 }
 
 
@@ -83,8 +84,8 @@ def level(adv, sid=None):
 # what a mid-round habit costs in rounds: a player lost on a rotation or an advantage thrown away costs the round,
 # an audible step rarely does (used to order the weak points, most costly first)
 MID_FIX.update({
-    "fake_pulled": "One noise or one grenade on the other site is how a fake works: wait for a second piece of info (a body, the bomb, 3 players) before leaving your site, or only go halfway.",
-    "repeek": "After a kill the numbers are on your side: fall back to a spot a teammate can trade from instead of peeking again for the second kill.",
+    "fake_pulled": N_("One noise or one grenade on the other site is how a fake works: wait for a second piece of info (a body, the bomb, 3 players) before leaving your site, or only go halfway."),
+    "repeek": N_("After a kill the numbers are on your side: fall back to a spot a teammate can trade from instead of peeking again for the second kill."),
 })
 MID_TAGS.update({"fake_pulled": ["rotation"], "repeek": ["advantage"]})
 MID_WEIGHT = {"fake_pulled": 2, "repeek": 2, "rot_died": 3, "adv_conv": 3, "adv_throw": 3, "isolated": 2, "rt_solo": 2, "t_late": 2, "pp_surv": 2,
@@ -104,8 +105,8 @@ def mid_findings(mb):
         u = m["unit"]
         fmt = lambda v: "—" if v is None else (f"{v:.0f}%" if u == "%" else f"{v:.1f}{u}")
         item = {"id": k, "label": m["label"], "you": m["you"], "median": m["median"], "pro": m.get("pro"), "percentile": m["percentile"],
-                "unit": u, "text": f"{m['label'][0].upper() + m['label'][1:]}: you {fmt(m['you'])}, base median {fmt(m['median'])}"
-                                   + (f", pros {fmt(m['pro'])}" if m.get("pro") is not None else "") + f" (out of {m['n_you']:.0f})."}
+                "unit": u, "text": tr("{what}: you {a}, base median {b}", what=tr(m['label'])[0].upper() + tr(m['label'])[1:], a=fmt(m['you']), b=fmt(m['median']))
+                                   + (", " + tr("pros {v}", v=fmt(m['pro'])) if m.get("pro") is not None else "") + " " + tr("(out of {n}).", n=f"{m['n_you']:.0f}")}
         gap = abs(m["you"] - m["median"]) if m.get("median") is not None else None
         hb, pro = m.get("higher_better"), m.get("pro")
         pros_same = pro is not None and hb is not None and ((pro <= m["you"]) if hb else (pro >= m["you"]))
@@ -123,8 +124,8 @@ def mid_findings(mb):
     notes = []
     if rr and rd and rr.get("pro") and rd.get("pro") is not None and rr["you"] is not None and rd["you"] is not None:
         if rr["pro"] > rr["you"] + 2 and rd["pro"] < rd["you"]:
-            notes.append(f"Pros rotate later than you ({rr['pro']:.0f} s after the Ts reach the site, vs {rr['you']:.0f} s), "
-                         f"but die less on the way ({rd['pro']:.0f}% vs {rd['you']:.0f}%): they wait for solid info and arrive grouped.")
+            notes.append(tr("Pros rotate later than you ({a} s after the Ts reach the site, vs {b} s), but die less on the way ({c}% vs {d}%): they wait for solid info and arrive grouped.",
+                            a=f"{rr['pro']:.0f}", b=f"{rr['you']:.0f}", c=f"{rd['pro']:.0f}", d=f"{rd['you']:.0f}"))
     return bad + [{"id": "note", "text": t, "percentile": None} for t in notes], good
 
 
@@ -180,19 +181,19 @@ def weapon_positions(wz, maps):
                 if wc != "pro_awp":
                     zones = sorted(zones, key=lambda z: -(z["duel_win"] or 0))
                 out.setdefault(mp, {}).setdefault(side, {})[wc] = {
-                    "label": "Pro AWPers (HLTV demos)" if wc == "pro_awp" else K_CLASS.get(wc, wc), "rounds": v["rounds"],
+                    "label": tr("Pro AWPers (HLTV demos)") if wc == "pro_awp" else tr(K_CLASS.get(wc, wc)), "rounds": v["rounds"],
                     "zones": [{**z, "name": _zone(z["zone"], mp)} for z in zones[:5]]}
     return out
 
 
-K_CLASS = {"awp": "AWP", "scout": "Scout", "rifle": "Rifles (AK, M4, AUG, SG)", "rifle_eco": "Galil / FAMAS", "smg": "SMG", "shotgun": "Shotguns"}
+K_CLASS = {"awp": "AWP", "scout": "Scout", "rifle": N_("Rifles (AK, M4, AUG, SG)"), "rifle_eco": N_("Galil / FAMAS"), "smg": "SMG", "shotgun": "Shotguns"}
 
 
 def _miss(plan, what, e):
     """A part of the plan could not be computed: the log says why, the page says which part is missing (it used
     to just disappear)."""
     print(f"{what} unavailable:", e, flush=True)
-    plan.setdefault("unavailable", []).append(what)
+    plan.setdefault("unavailable", []).append(tr(what))
 
 
 def training(adv, deep, mb):
@@ -209,24 +210,24 @@ def training(adv, deep, mb):
     # and for the crosshair the measure of the whole app (offset before the duel, every duel of every match) decides;
     # the pre-aim of the deep analysis only stands in when it is missing
     if react is not None and react < 35:
-        blocks.append(("reaction", f"Your reaction time is slower than {100 - react}% of the players in your matches."))
+        blocks.append(("reaction", tr("Your reaction time is slower than {p}% of the players in your matches.", p=100 - react)))
     xh = pct("xhair") if pct("xhair") is not None else pre
     if (xh is not None and xh < 40) or "xhair" in rid:
-        blocks.append(("xhair", "Your crosshair is not at head height yet when the enemy appears."))
+        blocks.append(("xhair", tr("Your crosshair is not at head height yet when the enemy appears.")))
     if "pistol" in rid or (pct("pistol_moving") is not None and pct("pistol_moving") < 40):
-        blocks.append(("pistol", "Too many pistol shots while moving."))
+        blocks.append(("pistol", tr("Too many pistol shots while moving.")))
     if "spray" in rid or (pct("b9_hit") is not None and pct("b9_hit") < 40):
-        blocks.append(("spray", "Your spray falls apart after a few bullets."))
+        blocks.append(("spray", tr("Your spray falls apart after a few bullets.")))
     if len(blocks) < 2:
-        blocks.append(("precision", "First-shot accuracy."))
-    blocks = blocks[:2] + [("dm", "Get into rhythm before the game.")]
+        blocks.append(("precision", tr("First-shot accuracy.")))
+    blocks = blocks[:2] + [("dm", tr("Get into rhythm before the game."))]
     if "nades" in rid:
-        blocks.append(("nades", "You often die with your grenades."))
+        blocks.append(("nades", tr("You often die with your grenades.")))
     warm = [{"drill": k, "why": why, **{a: b for a, b in K.DRILLS[k].items() if a != "src"}, "src": K.src(*K.DRILLS[k]["src"])} for k, why in blocks]
     week = [
-        {"title": "1 demo session", "text": "Rewatch your 5 most costly deaths of the week in the 2D replay (Matches tab), asking yourself: could I be traded?"},
-        {"title": "1 experiment at a time", "text": "Start an experiment from the Progress tab and keep it until the verdict."},
-        {"title": "4 maps ready", "text": "Reread the T and CT sheets of your 4 Premier maps (map picks since September 22, 2026)."},
+        {"title": tr("1 demo session"), "text": tr("Rewatch your 5 most costly deaths of the week in the 2D replay (Matches tab), asking yourself: could I be traded?")},
+        {"title": tr("1 experiment at a time"), "text": tr("Start an experiment from the Progress tab and keep it until the verdict.")},
+        {"title": tr("4 maps ready"), "text": tr("Reread the T and CT sheets of your 4 Premier maps (map picks since September 22, 2026).")},
     ]
     return {"warmup": warm, "total_min": sum(w["min"] for w in warm), "week": week}
 
@@ -254,9 +255,9 @@ def kpis(sid, stats, mid_rows):
             series["isolated"].append([t, round(g("isolated_deaths") / max(g("rounds"), 1) * 24, 1)])
             if g("adv_rounds") >= 3:
                 series["adv_throw"].append([t, round(100 * g("adv_throw") / g("adv_rounds"))])
-    meta = {"rating": ("Match rating (≈ HLTV 2.0)", "", True), "adr": ("Damage per round", "", True), "traded": ("Deaths traded", "%", True),
-            "nades": ("Grenades that died with you (per 24 rounds)", "", False), "xhair": ("Crosshair offset", "°", False),
-            "isolated": ("Isolated deaths (per 24 rounds)", "", False), "adv_throw": ("Man advantages thrown", "%", False)}
+    meta = {"rating": (tr("Match rating (≈ HLTV 2.0)"), "", True), "adr": (tr("Damage per round"), "", True), "traded": (tr("Deaths traded"), "%", True),
+            "nades": (tr("Grenades that died with you (per 24 rounds)"), "", False), "xhair": (tr("Crosshair offset"), "°", False),
+            "isolated": (tr("Isolated deaths (per 24 rounds)"), "", False), "adv_throw": (tr("Man advantages thrown"), "%", False)}
     out = []
     for k, s in series.items():
         s = sorted([x for x in s if x[0]], key=lambda x: x[0])
@@ -538,9 +539,9 @@ def build(steamid, adv, cross=None, deep=None, light=False):
     if ctx:
         ctx["matches"] = ctx["matches"][-40:]
     plan["context"] = ctx
-    grp = next((f for f in (ctx or {}).get("factors", []) if f["title"] == "Group"), None)
+    grp = next((f for f in (ctx or {}).get("factors", []) if f.get("key", f["title"]) == "Group"), None)
     if grp and grp["rows"]:
-        top = max(grp["rows"], key=lambda r: r["n"])["group"]
+        top = (lambda r: r.get("key", r["group"]))(max(grp["rows"], key=lambda r: r["n"]))
         plan["party_mode"] = {"solo": "solo", "duo": "duo", "group of 3": "trio", "group of 4": "quatuor", "group of 5": "five"}.get(top, "solo")
     plan["videos"] = {mp: K.src(*K.MAP_VIDEOS[mp]) for mp in maps if mp in K.MAP_VIDEOS}
     plan["training"] = training(adv, deep, mb)

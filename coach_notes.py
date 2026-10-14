@@ -9,6 +9,7 @@ import json
 import os
 
 import config
+from i18n import tr, trn
 
 SIDE_FR = {"T": "attack", "CT": "defense"}
 SITE = {"BombsiteA": "A", "BombsiteB": "B"}
@@ -19,8 +20,12 @@ def map_name(mp):
     return n[:1].upper() + n[1:]
 
 
-def _p(n, one, many):
-    return f"{n} {one if abs(n) == 1 else many}"
+def _kills(n):
+    return trn(n, "{n} kill", "{n} kills")
+
+
+def _deaths(n):
+    return trn(n, "{n} death", "{n} deaths")
 
 
 def _site(name):
@@ -32,7 +37,7 @@ def _site(name):
 
 def nm(name):
     """A Site -> A site (in a sentence)."""
-    return f"{_site(name)} site" if _site(name) else name
+    return tr("{site} site", site=_site(name)) if _site(name) else name
 
 
 def cap(name):
@@ -42,7 +47,7 @@ def cap(name):
 
 def at(name):
     """'on A site', 'at Outside'."""
-    return f"on {_site(name)} site" if _site(name) else f"at {name}"
+    return tr("on {site} site", site=_site(name)) if _site(name) else tr("at {zone}", zone=name)
 
 
 def _nade_to(nd, zone_key, to_name, types=("smoke", "flash", "molotov")):
@@ -73,21 +78,20 @@ def _near(x):
     c = [(((z["px"][0] - x["to_px"][0]) ** 2 + (z["px"][1] - x["to_px"][1]) ** 2) ** .5, n) for n, z in _ZONES.items()
          if n != x["to"] and z.get("px") and (not lv or not z.get("level") or z["level"] == lv)]
     d, n = min(c) if c else (1e9, None)
-    return f"{nm(x['to'])}, near {n}" if n and d < 140 else nm(x["to"])
+    return tr("{zone}, near {other}", zone=nm(x['to']), other=n) if n and d < 140 else nm(x["to"])
 
 
 def _nade_txt(t, x, side):
-    name = {"flash": "The flash", "smoke": "The smoke", "he": "The HE", "molotov": "The incendiary" if side == "CT" else "The molotov"}[t]
+    name = {"flash": tr("The flash"), "smoke": tr("The smoke"), "he": tr("The HE"), "molotov": tr("The incendiary") if side == "CT" else tr("The molotov")}[t]
     if t == "flash":
-        eff = f"it flashes an enemy {x.get('blind')}% of the time"
+        eff = tr("it flashes an enemy {p}% of the time", p=x.get('blind'))
     elif t == "he":
-        eff = f"{x.get('dmg')} damage on average"
-    elif t == "molotov":
-        eff = f"thrown in {round(x.get('per100') or 0)} rounds out of 100"
+        eff = tr("{n} damage on average", n=x.get('dmg'))
+    elif t == "smoke" and x.get("win") is not None:
+        eff = tr("thrown in {n} rounds out of 100, {p}% of rounds won when it's used", n=round(x.get('per100') or 0), p=x['win'])
     else:
-        eff = f"thrown in {round(x.get('per100') or 0)} rounds out of 100" + \
-              (f", {x['win']}% of rounds won when it's used" if x.get("win") is not None else "")
-    return f"{name} {nm(x['from'])} → {_near(x)}, around {x['timer']}: {eff} (base)."
+        eff = tr("thrown in {n} rounds out of 100", n=round(x.get('per100') or 0))
+    return tr("{nade} {from} → {to}, around {t}: {effect} (base).", nade=name, **{"from": nm(x['from'])}, to=_near(x), t=x['timer'], effect=eff)
 
 
 def side_notes(mp, side, S, nd, regions, n_matches):
@@ -129,59 +133,59 @@ def side_notes(mp, side, S, nd, regions, n_matches):
                             and az["k"] + az["d"] >= 3 and az["k"] > az["d"] and not (side == "T" and az["key"] in SITE):
                         alt = (None, az)
                         break
-            txt = f"You spend {round(z['presence'])}% of your time there for {_p(k, 'kill', 'kills')} and {_p(d, 'death', 'deaths')}"
             src = nm(kz)
-            txt += f", {kn} of them from {src}." if kz and kn >= 2 else "."
+            txt = (tr("You spend {p}% of your time there for {k} and {d}, {n} of them from {zone}.", p=round(z['presence']), k=_kills(k), d=_deaths(d), n=kn, zone=src)
+                   if kz and kn >= 2 else tr("You spend {p}% of your time there for {k} and {d}.", p=round(z['presence']), k=_kills(k), d=_deaths(d)))
             if moving and spot and (spot.get("hold_pct") or 0) >= 35:
-                head, kind = "change how you play it", "avoid"
-                txt += f" You take your duels there while moving ({z['my_speed_med']} u/s median)."
+                head, kind = tr("change how you play it"), "avoid"
+                txt += " " + tr("You take your duels there while moving ({v} u/s median).", v=z['my_speed_med'])
                 if ow is not None:
-                    txt += f" Other players win {ow}% of their duels there, and the best spot ({_p(spot['k'], 'kill', 'kills')}, {_p(spot['d'], 'death', 'deaths')}) is a held angle, around {_timer(spot['t_med'])}."
+                    txt += " " + tr("Other players win {p}% of their duels there, and the best spot ({k}, {d}) is a held angle, around {t}.",
+                                    p=ow, k=_kills(spot['k']), d=_deaths(spot['d']), t=_timer(spot['t_med']))
             elif alt:
                 b, az = alt
-                head, kind = (f"fall back to {nm(az['name'])}" if side == "CT" else f"go through {nm(az['name'])} instead"), "avoid"
-                where = at(az["name"])
-                txt += f" {where[:1].upper() + where[1:]}, you go {az['k']}-{az['d']}"
+                head, kind = (tr("fall back to {zone}", zone=nm(az['name'])) if side == "CT" else tr("go through {zone} instead", zone=nm(az['name']))), "avoid"
+                where = (tr("On {site} site, you go {k}-{d}", site=_site(az["name"]), k=az['k'], d=az['d']) if _site(az["name"])
+                         else tr("At {zone}, you go {k}-{d}", zone=az["name"], k=az['k'], d=az['d']))
                 if b:
-                    held = ", held still" if (b.get("hold_pct") or 0) >= 40 else ""
-                    txt += f", and the other players' best spot is there: {_p(b['k'], 'kill', 'kills')} for {_p(b['d'], 'death', 'deaths')}{held}."
+                    held = ", " + tr("held still") if (b.get("hold_pct") or 0) >= 40 else ""
+                    txt += " " + tr("{where}, and the other players' best spot is there: {k} for {d}{held}.", where=where, k=_kills(b['k']), d=_deaths(b['d']), held=held)
                 else:
-                    txt += "."
+                    txt += " " + where + "."
                 if same and kn >= 2:
-                    txt += f" {kn} of your deaths are close-range fights inside the zone itself."
+                    txt += " " + tr("{n} of your deaths are close-range fights inside the zone itself.", n=kn)
             elif nade:
                 t, x = nade
-                verb = {"smoke": f"smoke {nm(kz)}", "flash": f"flash {nm(kz)}", "molotov": f"molotov {nm(kz)}"}[t]
-                goal = "setting up" if side == "CT" else "pushing"
-                head, kind = f"{verb} before {goal}", "tip"
+                verb = {"smoke": tr("smoke {zone}", zone=nm(kz)), "flash": tr("flash {zone}", zone=nm(kz)), "molotov": tr("molotov {zone}", zone=nm(kz))}[t]
+                head, kind = (tr("{action} before setting up", action=verb) if side == "CT" else tr("{action} before pushing", action=verb)), "tip"
                 txt += " " + _nade_txt(t, x, side)
                 cited.add((t, x["from"], x["to"]))
             elif same and kn >= 2:
-                head, kind = "hold it from further back", "avoid"
-                txt += f" These are close-range duels inside the zone itself: hold an angle further back that the enemy has to come and take."
+                head, kind = tr("hold it from further back"), "avoid"
+                txt += " " + tr("These are close-range duels inside the zone itself: hold an angle further back that the enemy has to come and take.")
             elif ow is not None and ow <= 45:
-                head, kind = "avoid it", "avoid"
-                txt += f" Other players only win {ow}% of their duels there."
+                head, kind = tr("avoid it"), "avoid"
+                txt += " " + tr("Other players only win {p}% of their duels there.", p=ow)
             else:
-                head, kind = "stop playing it alone", "avoid"
-                txt += f" Others win {ow if ow is not None else '—'}% there: play it with a teammate within trade distance, or hold the angle instead of taking it."
+                head, kind = tr("stop playing it alone"), "avoid"
+                txt += " " + tr("Others win {p}% there: play it with a teammate within trade distance, or hold the angle instead of taking it.", p=ow if ow is not None else '—')
             out.append((z["presence"] * (d - k + 1), kind, f"<b>{cap(z['name'])}: {head}.</b> {txt}"))
             used.add(z["key"])
             if kind == "avoid":
                 avoided.add(z["key"])
         elif good:
-            txt = f"You go {_p(k, 'kill', 'kills')} for {_p(d, 'death', 'deaths')} there ({w}%)"
-            txt += f", while other players only win {ow}% there." if ow is not None and ow < w else "."
+            txt = (tr("You go {k} for {d} there ({w}%), while other players only win {o}% there.", k=_kills(k), d=_deaths(d), w=w, o=ow) if ow is not None and ow < w
+                   else tr("You go {k} for {d} there ({w}%).", k=_kills(k), d=_deaths(d), w=w))
             site = SITE.get(z["key"])
             if site and side == "T":
-                txt += f" Plant {site} and play the post-plant."
+                txt += " " + tr("Plant {site} and play the post-plant.", site=site)
             elif site:
-                txt += " Keep it as your default position."
+                txt += " " + tr("Keep it as your default position.")
             nf = _nade_from(nd, z["key"])
             if nf and (nf[0], nf[1]["from"], nf[1]["to"]) not in cited:
                 txt += " " + _nade_txt(nf[0], nf[1], side)
                 cited.add((nf[0], nf[1]["from"], nf[1]["to"]))
-            out.append((z["presence"] * (k - d + 2) / 2, "good", f"<b>{cap(z['name'])}: your strong spot.</b> {txt}"))
+            out.append((z["presence"] * (k - d + 2) / 2, "good", f"<b>{cap(z['name'])}: {tr('your strong spot')}.</b> {txt}"))
             used.add(z["key"])
     # a zone you play a lot, neither good nor bad, where your deaths come from one place a grenade can deal with
     for z in main:
@@ -195,11 +199,12 @@ def side_notes(mp, side, S, nd, regions, n_matches):
         if not nade or (nade[0], nade[1]["from"], nade[1]["to"]) in cited:
             continue
         t, x = nade
-        verb = {"smoke": f"smoke {nm(kz)}", "flash": f"flash {nm(kz)}", "molotov": f"molotov {nm(kz)}"}[t]
-        goal = "setting up" if side == "CT" else "pushing"
+        verb = {"smoke": tr("smoke {zone}", zone=nm(kz)), "flash": tr("flash {zone}", zone=nm(kz)), "molotov": tr("molotov {zone}", zone=nm(kz))}[t]
+        head = tr("{action} before setting up", action=verb) if side == "CT" else tr("{action} before pushing", action=verb)
         src = nm(kz)
-        out.append((z["presence"] * 0.8, "tip", f"<b>{cap(z['name'])}: {verb} before {goal}.</b> You spend {round(z['presence'])}% of your time there "
-                                                f"({z['k']}-{z['d']}), and you get killed {kn} times from {src}. {_nade_txt(t, x, side)}"))
+        out.append((z["presence"] * 0.8, "tip", f"<b>{cap(z['name'])}: {head}.</b> "
+                    + tr("You spend {p}% of your time there ({k}-{d}), and you get killed {n} times from {zone}.", p=round(z['presence']), k=z['k'], d=z['d'], n=kn, zone=src)
+                    + " " + _nade_txt(t, x, side)))
         cited.add((t, x["from"], x["to"]))
         used.add(z["key"])
     # a zone where everybody dies, and where you still go
@@ -207,20 +212,20 @@ def side_notes(mp, side, S, nd, regions, n_matches):
         on, od = z.get("others_k") or 0, z.get("others_d") or 0
         if z["key"] in used or on + od < 15 or (z.get("others_win") or 100) > 35 or (z.get("presence") or 0) < 2:
             continue
-        out.append((z["presence"] * 1.5 + 4, "avoid", f"<b>{cap(z['name'])}: avoid it.</b> Players in the base lose most of their duels there: "
-                                                     f"{_p(on, 'kill', 'kills')} for {_p(od, 'death', 'deaths')} ({z['others_win']}%). You: {z['k']}-{z['d']}."))
+        out.append((z["presence"] * 1.5 + 4, "avoid", f"<b>{cap(z['name'])}: {tr('avoid it')}.</b> "
+                    + tr("Players in the base lose most of their duels there: {k} for {d} ({p}%). You: {a}-{b}.", k=_kills(on), d=_deaths(od), p=z['others_win'], a=z['k'], b=z['d'])))
         used.add(z["key"])
     # zones you rarely play but win in
     more = [z for z in zones if z["key"] not in used and (z.get("presence") or 0) < 8 and z["k"] + z["d"] >= 3 and (z.get("win") or 0) >= 60]
     if more:
         more = sorted(more, key=lambda z: -(z["k"] - z["d"]))[:2]
         held = all((z.get("my_speed_med") or 999) < 60 for z in more)
-        names = " and ".join(f"{nm(z['name'])} ({z['k']}-{z['d']})" for z in more)
-        pron = "them" if len(more) > 1 else "it"
-        how = ", holding the angle" if held else ""
+        each = [f"{nm(z['name'])} ({z['k']}-{z['d']})" for z in more]
+        names = tr("{a} and {b}", a=each[0], b=each[1]) if len(each) > 1 else each[0]
+        how = ", " + tr("holding the angle") if held else ""
         pres = max(1, round(sum(z.get("presence") or 0 for z in more)))
-        out.append((6, "good", f"<b>{names[:1].upper() + names[1:]}: play {pron} more often.</b> You win more duels than you lose there{how}, "
-                              f"but you only spend {pres}% of your time there."))
+        out.append((6, "good", f"<b>{names[:1].upper() + names[1:]}: {tr('play them more often') if len(more) > 1 else tr('play it more often')}.</b> "
+                    + tr("You win more duels than you lose there{how}, but you only spend {p}% of your time there.", how=how, p=pres)))
     # the opening grenade from your main zone
     main_ok = [z for z in main if z["key"] not in avoided]
     if main_ok:
@@ -235,26 +240,27 @@ def side_notes(mp, side, S, nd, regions, n_matches):
                 break
         if first:
             t, x = first
-            name = {"smoke": "your smoke", "molotov": "your incendiary" if side == "CT" else "your molotov", "flash": "your flash"}[t]
+            name = {"smoke": tr("your smoke"), "molotov": tr("your incendiary") if side == "CT" else tr("your molotov"), "flash": tr("your flash")}[t]
             txt = _nade_txt(t, x, side)
             ec = next((z.get("early_contact_s") for z in main if z["name"] == x["from"] and z.get("early_contact_s")), z0.get("early_contact_s"))
             if ec:
-                txt += f" The first contact {at(x['from'])} comes around {_timer(ec)}."
-            head = f"Open the round with {name} toward {nm(x['to'])}" if side == "CT" else f"Before going in, {name} toward {nm(x['to'])}"
+                txt += " " + tr("The first contact {where} comes around {t}.", where=at(x['from']), t=_timer(ec))
+            head = (tr("Open the round with {nade} toward {zone}", nade=name, zone=nm(x['to'])) if side == "CT"
+                    else tr("Before going in, {nade} toward {zone}", nade=name, zone=nm(x['to'])))
             out.append((5, "tip", f"<b>{head}.</b> {txt}"))
     # a position that pays off for everybody on this side and that you never play
     tries = [z for z in pool if (z.get("win") or 0) >= 60 and z["k"] + z["d"] >= 15 and (z.get("my_presence") or 0) < 1
              and (z.get("others_presence") or 0) >= 1 and "spawn" not in str(z.get("key", "")).lower()]
     if tries:
         z = max(tries, key=lambda z: z["k"] - z["d"])
-        how = ", mostly holding the angle" if (z.get("hold_pct") or 0) >= 40 else ""
-        out.append((3, "tip", f"<b>{cap(z['name'])}: worth a try.</b> Players in the base win {z['win']}% of their duels there ({z['k']}-{z['d']}){how}, "
-                              f"around {_timer(z['t_med'])}. You almost never play there."))
+        how = ", " + tr("mostly holding the angle") if (z.get("hold_pct") or 0) >= 40 else ""
+        out.append((3, "tip", f"<b>{cap(z['name'])}: {tr('worth a try')}.</b> "
+                    + tr("Players in the base win {p}% of their duels there ({k}-{d}){how}, around {t}. You almost never play there.", p=z['win'], k=z['k'], d=z['d'], how=how, t=_timer(z['t_med']))))
     out.sort(key=lambda b: -b[0])
     out = out[:5]
     if not out:
         return None
-    title = f"{map_name(mp)} as {side} ({SIDE_FR[side]})" + (" · only 1 match here: to be confirmed" if n_matches == 1 else f" · {n_matches} matches")
+    title = tr("{map} as {side} ({role})", map=map_name(mp), side=side, role=tr(SIDE_FR[side])) + " · " + (tr("only 1 match here: to be confirmed") if n_matches == 1 else trn(n_matches, "{n} match", "{n} matches"))
     return {"title": title, "plan": [b[2] for b in out], "kinds": [b[1] for b in out], "auto": True}
 
 

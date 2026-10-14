@@ -12,11 +12,12 @@ from collections import Counter
 import pandas as pd
 
 import config
+from i18n import N_, tr, trn
 from map_analysis import humanize
 
 OUT = os.path.join(config.OUT, "population", "buys")
 TYPES = ["pistol", "eco", "force", "full", "anti-eco"]
-TYPE_FR = {"pistol": "Pistol round", "eco": "Eco", "force": "Force-buy", "full": "Full buy", "anti-eco": "Anti-eco"}
+TYPE_FR = {"pistol": N_("Pistol round"), "eco": N_("Eco"), "force": N_("Force-buy"), "full": N_("Full buy"), "anti-eco": N_("Anti-eco")}
 ARMOR_FR = {"none": "no kevlar", "kevlar": "kevlar", "helmet": "kevlar + helmet"}
 DEFAULT_PISTOLS = {"Glock-18", "USP-S", "P2000"}
 # weapons a side cannot buy: holding one means it was picked up (often after winning), not a buy choice
@@ -197,8 +198,8 @@ def advise(sid, maps):
 
 
 # ---------- adapted to the player's profile ----------
-ROLE_FR = {"entry": "entry", "trader": "second / trade", "support": "support", "lurker": "lurker", "awper": "AWPer",
-           "anchor": "anchor", "closer": "closer"}
+ROLE_FR = {"entry": N_("entry"), "trader": N_("second / trade"), "support": N_("support"), "lurker": N_("lurker"), "awper": N_("AWPer"),
+           "anchor": N_("anchor"), "closer": N_("closer")}
 
 
 def peers(sid, arch):
@@ -241,11 +242,11 @@ def _blend(b, p, m, key, by, bonus=None, need=(12, 8, 3)):
             s_m = ((dm + s_p * 10) / (nm + 10)) / 200
         why = []
         if nm:
-            why.append(f"you: {int(wm)} round{'s' if wm != 1 else ''} won out of {nm}" if by == "win" else f"you: {dm / nm:.0f} damage per round over {nm}")
+            why.append(trn(int(wm), "you: {n} round won out of {m}", "you: {n} rounds won out of {m}", m=nm) if by == "win" else tr("you: {d} damage per round over {m}", d=f"{dm / nm:.0f}", m=nm))
         if np_ >= 5:
-            why.append(f"players of your profile: {100 * wp / np_:.0f}% over {np_}" if by == "win" else f"players of your profile: {dp / np_:.0f} damage over {np_}")
+            why.append(tr("players of your profile: {p}% over {n}", p=f"{100 * wp / np_:.0f}", n=np_) if by == "win" else tr("players of your profile: {d} damage over {n}", d=f"{dp / np_:.0f}", n=np_))
         if nb >= 8:
-            why.append(f"base: {100 * wb / nb:.0f}% over {nb}" if by == "win" else f"base: {db / nb:.0f} damage over {nb}")
+            why.append(tr("base: {p}% over {n}", p=f"{100 * wb / nb:.0f}", n=nb) if by == "win" else tr("base: {d} damage over {n}", d=f"{db / nb:.0f}", n=nb))
         score = s_m
         if bonus:
             add, reason = bonus(k)
@@ -272,7 +273,7 @@ def _real_buys(kits, rt):
         kits = [k for k in kits if "kevlar" in k["key"]] + [k for k in kits if "kevlar" not in k["key"]]
     # one AWP per team: when it comes first, say so and keep the best rifle right behind it
     if kits and kits[0]["key"].startswith("AWP"):
-        kits[0] = dict(kits[0], why=kits[0]["why"] + ["if the AWP is free on your team"])
+        kits[0] = dict(kits[0], why=kits[0]["why"] + [tr("if the AWP is free on your team")])
         alt = next((i for i, k in enumerate(kits) if not k["key"].startswith("AWP")), None)
         if alt and alt > 1:
             kits.insert(1, kits.pop(alt))
@@ -301,8 +302,8 @@ def adapted(sid, maps, arch=None, zone_duels=None, weapons_info=None):
         if not d or r is None or d.get("n", 0) < 10:
             return 0, None
         edge = float(max(-0.06, min(0.06, (d["win"] - r) / 100 * 0.3)))
-        return edge, f"your {w}: {d['win']}% of duels won (base {r}%)"
-    res = {"profile": [ROLE_FR.get(r, r) for r in roles], "n_peers": len(ids), "types": {}, "maps": {}}
+        return edge, tr("your {w}: {p}% of duels won (base {b}%)", w=w, p=d['win'], b=r)
+    res = {"profile": [tr(ROLE_FR.get(r, r)) for r in roles], "n_peers": len(ids), "types": {}, "maps": {}}
     for rt in TYPES:
         by = "adr" if rt == "eco" else "win"
         b, p, m = (fits(x[x.rtype == rt], rt) for x in (Bf, Pf, me))
@@ -328,7 +329,7 @@ def adapted(sid, maps, arch=None, zone_duels=None, weapons_info=None):
                     return 0, None
                 k, d = kd
                 # your own duels in the zone weigh in clearly: a 4-8 spot is not the one to send you to, whatever the base
-                return float(0.75 * ((k + 3) / (k + d + 6) - 0.5)), f"your duels here (all rounds): {k}-{d}"
+                return float(0.75 * ((k + 3) / (k + d + 6) - 0.5)), tr("your duels here (all rounds): {k}-{d}", k=k, d=d)
             for rt in TYPES:
                 by = "adr" if rt == "eco" else "win"
                 sel = lambda x: x[(x["map"] == mp) & (x.side == side) & (x.rtype == rt)]

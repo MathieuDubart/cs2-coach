@@ -12,6 +12,7 @@ import numpy as np
 import pandas as pd
 
 import config
+from i18n import N_, tr, trn
 from rounds import PISTOLS, WCLASS
 
 GUNS = set(WCLASS) | PISTOLS
@@ -19,8 +20,8 @@ DEFAULT_PISTOLS = {"Glock-18", "USP-S", "P2000"}
 
 WZ = os.path.join(config.OUT, "population", "weapon_zones.json")
 WPOP = os.path.join(config.OUT, "population", "weapons.json")
-CLASS_FR = {"awp": "AWP", "scout": "Scout (SSG 08)", "rifle": "rifles (AK, M4, AUG, SG)", "rifle_eco": "Galil / FAMAS", "smg": "SMG",
-            "shotgun": "shotguns", "heavy": "mitrailleuses", "pistol": "pistol only", "auto": "auto-snipers"}
+CLASS_FR = {"awp": "AWP", "scout": N_("Scout (SSG 08)"), "rifle": N_("rifles (AK, M4, AUG, SG)"), "rifle_eco": N_("Galil / FAMAS"), "smg": "SMG",
+            "shotgun": "shotguns", "heavy": N_("machine guns"), "pistol": N_("pistol only"), "auto": "auto-snipers"}
 
 
 def _load(mid, name):
@@ -143,28 +144,32 @@ def player(steamid, mids):
     for w, d in sorted(duels.items(), key=lambda x: -x[1]["n"]):
         r = ref_duel(w)
         if d["n"] >= 12 and r is not None and d["win"] <= r - 10:
-            suggestions.append({"kind": "weapon_weak", "weapon": w, "text": f"{w}: {d['win']}% of duels won out of {d['n']} (base: {r}%). "
-                                f"Try another weapon at the same price for 5 games (experiment '{w}').", "n": d["n"]})
+            suggestions.append({"kind": "weapon_weak", "weapon": w, "text": tr("{w}: {p}% of duels won out of {n} (base: {b}%). Try another weapon at the same price for 5 games (experiment '{w}').",
+                                                                                w=w, p=d['win'], n=d['n'], b=r), "n": d["n"]})
         elif d["n"] >= 12 and r is not None and d["win"] >= r + 8:
             if w in DEFAULT_PISTOLS:
-                suggestions.append({"kind": "pistol_strong", "weapon": w, "text": f"{w}: {d['win']}% of duels won out of {d['n']} (base: {r}%). Your pistol rounds are a strength: take the opening duels with the pistol.", "n": d["n"]})
+                suggestions.append({"kind": "pistol_strong", "weapon": w, "text": tr("{w}: {p}% of duels won out of {n} (base: {b}%). Your pistol rounds are a strength: take the opening duels with the pistol.",
+                                                                                   w=w, p=d['win'], n=d['n'], b=r), "n": d["n"]})
             else:
-                suggestions.append({"kind": "weapon_strong", "weapon": w, "text": f"{w}: {d['win']}% of duels won out of {d['n']} (base: {r}%). One of your best weapons: buy it when the economy allows.", "n": d["n"]})
+                suggestions.append({"kind": "weapon_strong", "weapon": w, "text": tr("{w}: {p}% of duels won out of {n} (base: {b}%). One of your best weapons: buy it when the economy allows.",
+                                                                                   w=w, p=d['win'], n=d['n'], b=r), "n": d["n"]})
     for side in ("T", "CT"):
         fs = [x for x in (summarize_rounds(force[force.side == side], "primary") if len(force) else [])
               if x["rounds"] >= 10 and x["key"] not in ("AWP", "AK-47", "M4A4", "M4A1-S", "AUG", "SG 553", "G3SG1", "SCAR-20")]
         if len(fs) >= 2:
             best, worst = max(fs, key=lambda x: x["adr"]), min(fs, key=lambda x: x["adr"])
             if best["key"] != worst["key"] and best["adr"] - worst["adr"] >= 20:
-                suggestions.append({"kind": "force", "side": side, "text": f"On a {side} force-buy, you do {best['adr']} damage per round with the {best['key']} vs {worst['adr']} with the {worst['key']} "
-                                    f"({best['rounds']} and {worst['rounds']} rounds). Prefer the {best['key']} while the gap holds.", "n": best["rounds"] + worst["rounds"]})
+                suggestions.append({"kind": "force", "side": side, "text": tr("On a {side} force-buy, you do {a} damage per round with the {wa} vs {b} with the {wb} ({na} and {nb} rounds). Prefer the {wa} while the gap holds.",
+                                                                              side=side, a=best['adr'], wa=best['key'], b=worst['adr'], wb=worst['key'], na=best['rounds'], nb=worst['rounds']),
+                                    "n": best["rounds"] + worst["rounds"]})
     m4 = {w: g for w, g in ct_full.groupby("primary")}
     if "M4A4" in m4 and "M4A1-S" in m4 and min(len(m4["M4A4"]), len(m4["M4A1-S"])) >= 15:
         a, b = m4["M4A4"], m4["M4A1-S"]
         better = "M4A4" if a.damage.mean() > b.damage.mean() else "M4A1-S"
         gap = abs(a.damage.mean() - b.damage.mean())
-        verdict = f"Edge to the {better} for you." if gap >= 12 else "No real difference: take the one you're most comfortable with."
-        suggestions.append({"kind": "m4", "text": f"On CT full buys, M4A4: {a.damage.mean():.0f} damage per round ({len(a)} rounds); M4A1-S: {b.damage.mean():.0f} ({len(b)} rounds). {verdict}"})
+        verdict = tr("Edge to the {w} for you.", w=better) if gap >= 12 else tr("No real difference: take the one you're most comfortable with.")
+        suggestions.append({"kind": "m4", "text": tr("On CT full buys, M4A4: {a} damage per round ({na} rounds); M4A1-S: {b} ({nb} rounds).", a=f"{a.damage.mean():.0f}", na=len(a),
+                                                     b=f"{b.damage.mean():.0f}", nb=len(b)) + " " + verdict})
     keep = {x["key"] for x in by_w[:12]} | {w for w, _ in sorted(duels.items(), key=lambda x: -x[1]["n"])[:12]}
     return {"by_weapon": by_w[:12], "by_buy": by_buy, "force": force_w, "duels": dict(sorted(((w, d) for w, d in duels.items() if w in keep), key=lambda x: -x[1]["n"])),
             "ref_duels": {w: ref_duel(w) for w in duels}, "ref_rounds": {w: ref.get("rounds", {}).get(w) for w in list(duels)[:12]},

@@ -18,6 +18,7 @@ import numpy as np
 import pandas as pd
 
 import config
+from i18n import N_, tr, trn
 
 OUT = os.path.join(config.OUT, "population", "nades.parquet")
 SUMMARY = os.path.join(config.OUT, "population", "nades_summary.json")
@@ -28,8 +29,8 @@ TYPE_FR = {"flash": "flash", "smoke": "smoke", "he": "HE", "molotov": "molotov"}
 ROUND_TIME = 115.0
 # moments of the round, in seconds after the freeze time (the timer starts at 1:55)
 WINDOWS = [("debut", 0, 20), ("prise", 20, 40), ("action", 40, 70), ("fin", 70, 999)]
-WINDOW_FR = {"debut": "start of the round (1:55 to 1:35)", "prise": "info gathering (1:35 to 1:15)", "action": "site attack (1:15 to 0:45)",
-             "fin": "end of the round (after 0:45)", "post": {"T": "after the plant", "CT": "retake"}}
+WINDOW_FR = {"debut": N_("start of the round (1:55 to 1:35)"), "prise": N_("info gathering (1:35 to 1:15)"), "action": N_("site attack (1:15 to 0:45)"),
+             "fin": N_("end of the round (after 0:45)"), "post": {"T": N_("after the plant"), "CT": N_("retake")}}
 COLS = ["map", "match", "round", "t", "type", "thrower", "side", "zone", "land_zone", "X", "Y", "Z", "pitch", "yaw", "px", "py",
         "level", "land_px", "land_py", "land_level", "land_X", "land_Y", "land_Z", "jump", "speed", "crouch", "walk", "click",
         "flight_s", "damage", "enemies_blind", "mates_blind", "kills_after", "post", "won", "buy", "self_kill", "died"]

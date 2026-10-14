@@ -13,6 +13,7 @@ import numpy as np
 import pandas as pd
 
 import config
+from i18n import N_, tr, trn
 import midround
 from deep import read_nades   # a match with no grenade has an empty table without columns
 
@@ -23,11 +24,11 @@ RUSH = 30.0          # site taken in the first 30 s (timer above 1:25): a rush
 LATE = 75.0          # site taken after 75 s (timer under 0:40): a late hit
 LONE = 1000.0        # a T with no teammate within 1000 units (about 25 m) is alone
 ROUND_TIME = 115.0
-DYN_FR = {"rush": "rush", "fast": "fast push by 1-2 Ts", "exec": "execute", "late": "late hit", "none": "no attack"}
+DYN_FR = {"rush": N_("rush"), "fast": N_("fast push by 1-2 Ts"), "exec": N_("execute"), "late": N_("late hit"), "none": N_("no attack")}
 CONTEXTS = ["pistol", "r2_win", "r2_loss", "eco", "force", "full"]
-CTX_FR = {"pistol": "Pistol round", "r2_win": "Round 2, Ts won the pistol", "r2_loss": "Round 2, Ts lost the pistol",
-          "eco": "T eco", "force": "T force-buy", "full": "T full buy"}
-BUY_FR = {"eco": "eco", "force": "force-buy", "full": "full buy"}
+CTX_FR = {"pistol": N_("Pistol round"), "r2_win": N_("Round 2, Ts won the pistol"), "r2_loss": N_("Round 2, Ts lost the pistol"),
+          "eco": "T eco", "force": N_("T force-buy"), "full": N_("T full buy")}
+BUY_FR = {"eco": "eco", "force": "force-buy", "full": N_("full buy")}
 
 
 def humanize(z, mp=None):
@@ -491,10 +492,10 @@ def _switch_table(df):
     """After a hit on one site, how often the next hit is on the other one, by result and streak."""
     h = df[df.site.isin(["A", "B"]) & df.prev_site.isin(["A", "B"])]
     out = []
-    for label, sel in (("after a site take they won", h.prev_won == True),
-                       ("after a site take they lost", h.prev_won == False),
-                       ("after 2+ takes of the same site, the last one lost", (h.streak >= 2) & (h.prev_won == False)),
-                       ("after 2+ takes of the same site, the last one won", (h.streak >= 2) & (h.prev_won == True))):
+    for label, sel in ((N_("after a site take they won"), h.prev_won == True),
+                       (N_("after a site take they lost"), h.prev_won == False),
+                       (N_("after 2+ takes of the same site, the last one lost"), (h.streak >= 2) & (h.prev_won == False)),
+                       (N_("after 2+ takes of the same site, the last one won"), (h.streak >= 2) & (h.prev_won == True))):
         x = h[sel]
         if len(x) >= 15:
             out.append({"label": label, "n": int(len(x)), "switch": _pct((x.site != x.prev_site).mean())})
@@ -533,8 +534,8 @@ def _fit(X, y, off, l2=1.0, it=30):
 
 
 FEATURES = ["repeat_won", "repeat_lost", "streak2", "pref"]
-FEATURES_FR = {"repeat_won": "the same site after a take they won", "repeat_lost": "the same site after a take they lost",
-               "streak2": "the same site after 2 takes in a row or more", "pref": "the site they took most this half"}
+FEATURES_FR = {"repeat_won": N_("the same site after a take they won"), "repeat_lost": N_("the same site after a take they lost"),
+               "streak2": N_("the same site after 2 takes in a row or more"), "pref": N_("the site they took most this half")}
 
 
 def _features(d):
@@ -566,7 +567,7 @@ def model(df):
 
 
 TEMPO = ["rush_won", "half_excess"]
-TEMPO_FR = {"rush_won": "they rushed and won the last round", "half_excess": "they rushed more than usual this half"}
+TEMPO_FR = {"rush_won": N_("they rushed and won the last round"), "half_excess": N_("they rushed more than usual this half")}
 
 
 def _rush_rates(df):

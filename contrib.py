@@ -11,7 +11,9 @@ grenades, buys, rounds), where
 - the match's Valve id becomes a random number (a Valve id leads to the match and its players);
 - nothing else: not the demo, not the voice, not the settings, not the player's profile.
 With them: a random id of this installation (to refuse a flood and to delete what one installation sent if it asks),
-the app's version, each match's map and a fingerprint of its rounds (the same match shared twice is kept once).
+the app's version and build, the version of the first-launch notice the player saw (12/10: the builds of 10/10 showed
+an older one, which did not speak of the matches: their uploads are told apart by its absence), each match's map and a
+fingerprint of its rounds (the same match shared twice is kept once).
 
 Sent to https://wily.valentingassend.com/api/contribute.php; the coach's PC pulls them from there (contributions.py).
 The matches that came from the base with a player's package are not sent back (base_pack.json "player_matches")."""
@@ -123,8 +125,10 @@ def pack(mids):
                 z.writestr(f"{new}/{f}", b)
             done.append(mid)
             man.append(entry)
-        version = (config.read_json(os.path.join(config.HERE, "VERSION.json"), {}) or {}).get("app")
-        z.writestr("manifest.json", json.dumps({"install": s["install_id"], "app": version, "matches": man}))
+        v = config.read_json(os.path.join(config.HERE, "VERSION.json"), {}) or {}
+        import usage
+        z.writestr("manifest.json", json.dumps({"install": s["install_id"], "app": v.get("app"), "build": v.get("build"),
+                                                "notice": usage.NOTICE_V if usage.noticed() else 0, "matches": man}))
     return buf.getvalue(), done
 
 

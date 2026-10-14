@@ -13,68 +13,69 @@ import pandas as pd
 
 import config
 import context
+from i18n import N_, tr
 
 DIR = os.path.join(config.OUT, "experiments")
 
 # metric: (label, unit, higher_is_better)
 METRICS = {
-    "rating": ("match rating (≈ HLTV 2.0 rating)", "", True),
-    "adr": ("damage per round", "", True),
-    "traded_pct": ("deaths traded", "%", True),
-    "nades_unused_pr": ("grenades that died with you per round", "", False),
-    "xhair": ("crosshair offset before the duel", "°", False),
-    "pistol_moving": ("pistol shots fired while moving", "%", False),
-    "isolated_pr": ("isolated deaths per round", "", False),
-    "adv_throw": ("man advantages thrown (per advantage round)", "%", False),
-    "rot_died": ("deaths during a rotation", "%", False),
-    "rt_solo": ("deaths alone in a retake", "%", False),
-    "steps_alone_pr": ("audible steps when you are alone, per round", "", False),
-    "open_win": ("opening duels won", "%", True),
-    "weapon_duels": ("duels won with the weapon", "%", True),
-    "weapon_adr": ("damage per round with the weapon", "", True),
-    "zone_duels": ("duels won in the zone", "%", True),
-    "first_game": ("rating of the first game of the session", "", True),
-    "ct_full_duels": ("duels won on your CT full buys", "%", True),
-    "call_before_death": ("deaths with a call in the 10 s before", "%", True),
+    "rating": (N_("match rating (≈ HLTV 2.0 rating)"), "", True),
+    "adr": (N_("damage per round"), "", True),
+    "traded_pct": (N_("deaths traded"), "%", True),
+    "nades_unused_pr": (N_("grenades that died with you per round"), "", False),
+    "xhair": (N_("crosshair offset before the duel"), "°", False),
+    "pistol_moving": (N_("pistol shots fired while moving"), "%", False),
+    "isolated_pr": (N_("isolated deaths per round"), "", False),
+    "adv_throw": (N_("man advantages thrown (per advantage round)"), "%", False),
+    "rot_died": (N_("deaths during a rotation"), "%", False),
+    "rt_solo": (N_("deaths alone in a retake"), "%", False),
+    "steps_alone_pr": (N_("audible steps when you are alone, per round"), "", False),
+    "open_win": (N_("opening duels won"), "%", True),
+    "weapon_duels": (N_("duels won with the weapon"), "%", True),
+    "weapon_adr": (N_("damage per round with the weapon"), "", True),
+    "zone_duels": (N_("duels won in the zone"), "%", True),
+    "first_game": (N_("rating of the first game of the session"), "", True),
+    "ct_full_duels": (N_("duels won on your CT full buys"), "%", True),
+    "call_before_death": (N_("deaths with a call in the 10 s before"), "%", True),
 }
 
 TEMPLATES = {
-    "weapon_swap": {"cat": "Weapon", "title": "Replace {weapon} with {alt}", "metric": "weapon_duels", "min": 25, "unit_n": "duels",
-                    "how": ["For 5 games, buy {alt} every time you would have bought {weapon}.", "The coach compares your duels and your damage with each of the two weapons."]},
-    "weapon_keep": {"cat": "Weapon", "title": "Play {weapon} first", "metric": "weapon_adr", "min": 20, "unit_n": "rounds",
-                    "how": ["Buy {weapon} as soon as the economy allows, for 5 games."]},
+    "weapon_swap": {"cat": "Weapon", "title": N_("Replace {weapon} with {alt}"), "metric": "weapon_duels", "min": 25, "unit_n": "duels",
+                    "how": [N_("For 5 games, buy {alt} every time you would have bought {weapon}."), N_("The coach compares your duels and your damage with each of the two weapons.")]},
+    "weapon_keep": {"cat": "Weapon", "title": N_("Play {weapon} first"), "metric": "weapon_adr", "min": 20, "unit_n": "rounds",
+                    "how": [N_("Buy {weapon} as soon as the economy allows, for 5 games.")]},
     "zone": {"cat": "Position", "title": "Play {zone_name} on {map_name} as {side}", "metric": "zone_duels", "min": 12, "unit_n": "duels",
              "how": ["On {map_name} as {side}, take {zone_name} whenever it's free, for 3 to 5 games on this map.", "The coach measures your duels in the zone."]},
-    "trade_distance": {"cat": "Habit", "title": "Stay within trade distance", "metric": "isolated_pr", "min": 4, "unit_n": "games",
-                       "how": ["Before every duel, a teammate must be able to avenge you within 2 seconds.", "If nobody covers you: fall back or wait."]},
-    "nades_40s": {"cat": "Habit", "title": "40-second rule: grenades thrown", "metric": "nades_unused_pr", "min": 4, "unit_n": "games",
-                  "how": ["As T, at 1:15 on the clock, all your grenades must be gone.", "As CT, slow down the first contact with a molotov or an HE."]},
-    "advantage": {"cat": "Habit", "title": "With a man advantage, I play the trade", "metric": "adv_throw", "min": 4, "unit_n": "games",
-                  "how": ["As soon as your team has one more player: no more solo duels, you play in pairs and run the clock.", "Regroup on a site rather than looking for one more kill."]},
-    "rotation": {"cat": "Mi-round", "title": "Rotations through the safe route, on the right signal", "metric": "rot_died", "min": 4, "unit_n": "games",
-                 "how": ["Only rotate on solid info (bomb seen, 3 players, 2 flashes or more).", "Take the route that keeps you covered and call 'rotating'."]},
-    "retake_group": {"cat": "Mi-round", "title": "Grouped retake, never alone", "metric": "rt_solo", "min": 4, "unit_n": "games",
-                     "how": ["Bomb planted: wait for your teammates and go in on the same flash.", "Alone against 3 or more with little time: save your weapon."]},
-    "silent": {"cat": "Habit", "title": "Walk (Shift) when you are alone", "metric": "steps_alone_pr", "min": 4, "unit_n": "games",
-               "how": ["As soon as you are more than 1,200 units away from a teammate as T, and in every clutch: Shift.", "Silent reload (hold R) if an enemy is close."]},
-    "prefire": {"cat": "Training", "title": "10 min of prefire before playing", "metric": "xhair", "min": 5, "unit_n": "games",
-                "how": ["Before each session: 10 minutes of a prefire map (workshop) on the map you are about to play.", "In game: crosshair at head height on the next angle, not on the floor."]},
-    "counter_strafe": {"cat": "Training", "title": "Counter-strafe with pistols", "metric": "pistol_moving", "min": 5, "unit_n": "games",
-                       "how": ["Aim Botz, 5 min with a pistol: A-D, stop, one shot, never while moving.", "Pistol-only Deathmatch for 5 min before the session."]},
-    "warmup": {"cat": "Session", "title": "15-min warm-up before the 1st game", "metric": "first_game", "min": 4, "unit_n": "sessions",
-               "how": ["5 min of Aim Botz or Aim Rush, 5 min of Deathmatch, 5 min of lineups on the day's map.", "Note it in the pre-session journal."]},
-    "session_limit": {"cat": "Session", "title": "At most 3 games per session, stop after 2 losses", "metric": "rating", "min": 6, "unit_n": "games",
-                      "how": ["After 3 games or 2 losses in a row: a break of at least 30 minutes, or end of session."]},
-    "full_rifle_ct": {"cat": "Weapon", "title": "Full buy as CT: an M4, not the MAG-7", "metric": "ct_full_duels", "min": 25, "unit_n": "duels",
-                      "how": ["As CT, when your team full-buys: M4A1-S or M4A4, not the MAG-7 (the buy card shows the M4).",
-                              "Keep the MAG-7 for force-buys if you like it there.",
-                              "The coach compares your duels on CT full buys before and after."]},
-    "calls": {"cat": "Habit", "title": "Call before the duel, say 'flash'", "metric": "call_before_death", "min": 4, "unit_n": "games",
-              "how": ["Say what you see (where, how many) before you take the duel, not after: your rounds with a call before your death are won far more often.",
-                      "Say 'flash' before you throw it: your teammates turn away and peek behind it.",
-                      "Measured on your recorded matches (Your calls on)."]},
-    "opening": {"cat": "Habit", "title": "Only open with a flash", "metric": "open_win", "min": 5, "unit_n": "games",
-                "how": ["No more dry opening duels: flash (yours or a teammate's) or you leave the opening to someone else."]},
+    "trade_distance": {"cat": "Habit", "title": N_("Stay within trade distance"), "metric": "isolated_pr", "min": 4, "unit_n": "games",
+                       "how": [N_("Before every duel, a teammate must be able to avenge you within 2 seconds."), N_("If nobody covers you: fall back or wait.")]},
+    "nades_40s": {"cat": "Habit", "title": N_("40-second rule: grenades thrown"), "metric": "nades_unused_pr", "min": 4, "unit_n": "games",
+                  "how": [N_("As T, at 1:15 on the clock, all your grenades must be gone."), N_("As CT, slow down the first contact with a molotov or an HE.")]},
+    "advantage": {"cat": "Habit", "title": N_("With a man advantage, I play the trade"), "metric": "adv_throw", "min": 4, "unit_n": "games",
+                  "how": [N_("As soon as your team has one more player: no more solo duels, you play in pairs and run the clock."), N_("Regroup on a site rather than looking for one more kill.")]},
+    "rotation": {"cat": "Mi-round", "title": N_("Rotations through the safe route, on the right signal"), "metric": "rot_died", "min": 4, "unit_n": "games",
+                 "how": [N_("Only rotate on solid info (bomb seen, 3 players, 2 flashes or more)."), N_("Take the route that keeps you covered and call 'rotating'.")]},
+    "retake_group": {"cat": "Mi-round", "title": N_("Grouped retake, never alone"), "metric": "rt_solo", "min": 4, "unit_n": "games",
+                     "how": [N_("Bomb planted: wait for your teammates and go in on the same flash."), N_("Alone against 3 or more with little time: save your weapon.")]},
+    "silent": {"cat": "Habit", "title": N_("Walk (Shift) when you are alone"), "metric": "steps_alone_pr", "min": 4, "unit_n": "games",
+               "how": [N_("As soon as you are more than 1,200 units away from a teammate as T, and in every clutch: Shift."), N_("Silent reload (hold R) if an enemy is close.")]},
+    "prefire": {"cat": "Training", "title": N_("10 min of prefire before playing"), "metric": "xhair", "min": 5, "unit_n": "games",
+                "how": [N_("Before each session: 10 minutes of a prefire map (workshop) on the map you are about to play."), N_("In game: crosshair at head height on the next angle, not on the floor.")]},
+    "counter_strafe": {"cat": "Training", "title": N_("Counter-strafe with pistols"), "metric": "pistol_moving", "min": 5, "unit_n": "games",
+                       "how": [N_("Aim Botz, 5 min with a pistol: A-D, stop, one shot, never while moving."), N_("Pistol-only Deathmatch for 5 min before the session.")]},
+    "warmup": {"cat": "Session", "title": N_("15-min warm-up before the 1st game"), "metric": "first_game", "min": 4, "unit_n": "sessions",
+               "how": [N_("5 min of Aim Botz or Aim Rush, 5 min of Deathmatch, 5 min of lineups on the day's map."), N_("Note it in the pre-session journal.")]},
+    "session_limit": {"cat": "Session", "title": N_("At most 3 games per session, stop after 2 losses"), "metric": "rating", "min": 6, "unit_n": "games",
+                      "how": [N_("After 3 games or 2 losses in a row: a break of at least 30 minutes, or end of session.")]},
+    "full_rifle_ct": {"cat": "Weapon", "title": N_("Full buy as CT: an M4, not the MAG-7"), "metric": "ct_full_duels", "min": 25, "unit_n": "duels",
+                      "how": [N_("As CT, when your team full-buys: M4A1-S or M4A4, not the MAG-7 (the buy card shows the M4)."),
+                              N_("Keep the MAG-7 for force-buys if you like it there."),
+                              N_("The coach compares your duels on CT full buys before and after.")]},
+    "calls": {"cat": "Habit", "title": N_("Call before the duel, say 'flash'"), "metric": "call_before_death", "min": 4, "unit_n": "games",
+              "how": [N_("Say what you see (where, how many) before you take the duel, not after: your rounds with a call before your death are won far more often."),
+                      N_("Say 'flash' before you throw it: your teammates turn away and peek behind it."),
+                      N_("Measured on your recorded matches (Your calls on).")]},
+    "opening": {"cat": "Habit", "title": N_("Only open with a flash"), "metric": "open_win", "min": 5, "unit_n": "games",
+                "how": [N_("No more dry opening duels: flash (yours or a teammate's) or you leave the opening to someone else.")]},
 }
 
 
@@ -97,7 +98,7 @@ def title_of(template, params):
     p = dict(params or {})
     if "map" in p:
         p["map_name"] = p["map"].split("_")[-1].capitalize()
-    return t["title"].format(**p) if p else t["title"]
+    return tr(t["title"], **p)
 
 
 def start(sid, template, params=None):
@@ -290,8 +291,8 @@ def evaluate(sid, e, hist=None, stats_by_id=None):
         verdict = "it works" if good >= 1.64 else "it hurts" if good <= -1.64 else "no clear effect"
     elif have >= need:
         verdict = "not enough data to compare yet"
-    return {**e, "title": title_of(e["template"], e.get("params") or {}), "category": tpl["cat"], "how": [h.format(**{**(e.get("params") or {}), "map_name": (e.get("params") or {}).get("map", "").split("_")[-1].capitalize()}) for h in tpl["how"]],
-            "metric": label, "unit": unit, "higher_better": hib, "before": b, "after": a, "progress": [min(have, need), need, tpl["unit_n"]],
+    return {**e, "title": title_of(e["template"], e.get("params") or {}), "category": tpl["cat"], "how": [tr(h, **{**(e.get("params") or {}), "map_name": (e.get("params") or {}).get("map", "").split("_")[-1].capitalize()}) for h in tpl["how"]],
+            "metric": tr(label), "unit": unit, "higher_better": hib, "before": b, "after": a, "progress": [min(have, need), need, tpl["unit_n"]],
             "z": None if z is None else round(z, 2), "verdict": verdict}
 
 
@@ -302,7 +303,7 @@ def suggestions(sid, adv, mid_bench=None, weapons_info=None, ctx=None, cross=Non
 
     def add(template, why, params=None, prio=5):
         S.append({"template": template, "params": params or {}, "title": title_of(template, params), "why": why,
-                  "category": TEMPLATES[template]["cat"], "metric": METRICS[TEMPLATES[template]["metric"]][0], "prio": prio})
+                  "category": TEMPLATES[template]["cat"], "metric": tr(METRICS[TEMPLATES[template]["metric"]][0]), "prio": prio})
     for s in (weapons_info or {}).get("suggestions", []):
         if s["kind"] == "weapon_weak":
             alt = {"M4A1-S": "M4A4", "M4A4": "M4A1-S", "Galil AR": "XM1014", "FAMAS": "XM1014", "MP9": "MP5-SD", "MAC-10": "Galil AR",
@@ -312,28 +313,28 @@ def suggestions(sid, adv, mid_bench=None, weapons_info=None, ctx=None, cross=Non
         elif s["kind"] == "weapon_strong":
             add("weapon_keep", s["text"], {"weapon": s["weapon"]}, 3)
     if "trade" in rid or "lastalive" in rid:
-        add("trade_distance", "Your deaths rarely get traded: this is the most profitable thing to work on.", prio=9)
+        add("trade_distance", tr("Your deaths rarely get traded: this is the most profitable thing to work on."), prio=9)
     if "nades" in rid:
-        add("nades_40s", "You often die with grenades in your pockets.", prio=7)
+        add("nades_40s", tr("You often die with grenades in your pockets."), prio=7)
     if "xhair" in rid:
-        add("prefire", "Your crosshair is far from the head when the duel starts.", prio=7)
+        add("prefire", tr("Your crosshair is far from the head when the duel starts."), prio=7)
     if "pistol" in rid:
-        add("counter_strafe", "Many of your pistol shots are fired while moving.", prio=6)
+        add("counter_strafe", tr("Many of your pistol shots are fired while moving."), prio=6)
     if "open" in rid or "early" in rid:
-        add("opening", "Your opening duels cost rounds.", prio=6)
+        add("opening", tr("Your opening duels cost rounds."), prio=6)
     MB = (mid_bench or {}).get("metrics", {})
     if (MB.get("adv_throw") or {}).get("percentile") is not None and MB["adv_throw"]["percentile"] <= 35:
-        add("advantage", f"You throw away the man advantage more often than {100 - MB['adv_throw']['percentile']:.0f}% of players.", prio=8)
+        add("advantage", tr("You throw away the man advantage more often than {p}% of players.", p=f"{100 - MB['adv_throw']['percentile']:.0f}"), prio=8)
     if (MB.get("rot_died") or {}).get("percentile") is not None and MB["rot_died"]["percentile"] <= 35:
-        add("rotation", "You often die during your rotations.", prio=7)
+        add("rotation", tr("You often die during your rotations."), prio=7)
     if (MB.get("rt_solo") or {}).get("percentile") is not None and MB["rt_solo"]["percentile"] <= 35:
-        add("retake_group", "You often die alone in retakes.", prio=7)
+        add("retake_group", tr("You often die alone in retakes."), prio=7)
     if (MB.get("steps_alone") or {}).get("percentile") is not None and MB["steps_alone"]["percentile"] <= 40:
-        add("silent", "You make noise within enemy earshot when you are alone: the basics of your lurker role.", prio=6)
+        add("silent", tr("You make noise within enemy earshot when you are alone: the basics of your lurker role."), prio=6)
     recs = (ctx or {}).get("recs", [])
     if any(r["kind"] in ("stop", "tilt") for r in recs) or (ctx and ctx["sessions"]["max_games"] >= 4):
-        add("session_limit", "Long sessions or sessions after losses lower your rating.", prio=5)
-    add("warmup", "Measure the effect of a real warm-up on your first game.", prio=4)
+        add("session_limit", tr("Long sessions or sessions after losses lower your rating."), prio=5)
+    add("warmup", tr("Measure the effect of a real warm-up on your first game."), prio=4)
     # positions the base wins in and the player rarely plays
     for m in (cross or {}).get("maps", [])[:3]:
         for side, Sd in m["sides"].items():
@@ -341,7 +342,7 @@ def suggestions(sid, adv, mid_bench=None, weapons_info=None, ctx=None, cross=Non
                   and "spawn" not in z["key"].lower() and z["t_med"] <= 45]
             if pz:
                 z = pz[0]
-                add("zone", f"On {m['map'].split('_')[-1].capitalize()} as {side}, players in the base win {z['win']}% of their duels in {z['name']} and you almost never go there.",
+                add("zone", tr("On {map} as {side}, players in the base win {p}% of their duels in {zone} and you almost never go there.", map=m['map'].split('_')[-1].capitalize(), side=side, p=z['win'], zone=z['name']),
                     {"map": m["map"], "side": side, "zone": z["key"], "zone_name": z["name"]}, 4)
                 break
     seen, out = set(), []

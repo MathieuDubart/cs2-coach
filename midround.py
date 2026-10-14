@@ -16,6 +16,7 @@ import numpy as np
 import pandas as pd
 
 import config
+from i18n import N_
 
 OUT = os.path.join(config.OUT, "population", "midround")
 OUT_R = os.path.join(config.OUT, "population", "routes")
@@ -423,26 +424,26 @@ def load_routes(pro=False):
 # ---------- benchmarks ----------
 # metric: (numerator, denominator, min denominator, label, higher_is_better, unit, scale)
 BENCH = {
-    "rot_react": ("rot_react_sum", "rot_react_n", 4, "time before rotating after the site is hit", False, " s", 1),
-    "rot_died": ("rot_died_way", "rot_done", 5, "rotations where you die on the way", False, "%", 100),
-    "rot_early": ("rot_early", "rot_done", 5, "rotations started before the hit (anticipated)", None, "%", 100),
-    "rot_stayed": ("rot_stayed", "rot_needed", 5, "hits on the other site where you stay in place", None, "%", 100),
-    "anchor_hold": ("anchor_hold5", "anchor_n", 5, "hits on your site where you hold at least 5 s", True, "%", 100),
-    "anchor_kpr": ("anchor_kills", "anchor_n", 5, "kills per attack faced as anchor", True, "", 1),
-    "lurk_kpr": ("lurk_kills", "lurk_n", 5, "kills per lurk round", True, "", 1),
-    "lurk_died": ("lurk_died", "lurk_n", 5, "lurk rounds where you die", False, "%", 100),
-    "t_late": ("t_late", "t_follow_n", 5, "executes where you arrive more than 10 s after the others", False, "%", 100),
-    "pp_surv": ("pp_survived", "pp_n", 5, "survival after the plant (T)", True, "%", 100),
-    "pp_kpr": ("pp_kills", "pp_n", 5, "kills after the plant (T)", True, "", 1),
-    "rt_solo": ("rt_solo_death", "rt_n", 5, "deaths alone in a retake (CT)", False, "%", 100),
-    "adv_throw": ("adv_throw", "adv_rounds", 8, "man advantages thrown (untraded death)", False, "%", 100),
-    "adv_conv": ("adv_won", "adv_rounds", 8, "rounds won after having the advantage", True, "%", 100),
-    "lost_died": ("lost_died", "lost_n", 3, "lost-cause rounds where you die instead of saving", False, "%", 100),
-    "isolated": ("isolated_deaths", "rounds", 30, "isolated deaths (no teammate nearby) per 24 rounds", False, "", 24),
-    "steps_alone": ("steps_alone", "rounds", 30, "audible steps when alone as T, per 24 rounds", False, "", 24),
-    "steps_clutch": ("steps_clutch", "clutch_rounds", 3, "audible steps per clutch", False, "", 1),
-    "fake_pulled": ("fake_pulled", "fake_n", 5, "hits on your site after you had left it (pulled by a fake)", False, "%", 100),
-    "repeek": ("repeek", "kill_rounds", 8, "rounds with a kill where you die within 8 s of it", False, "%", 100),
+    "rot_react": ("rot_react_sum", "rot_react_n", 4, N_("time before rotating after the site is hit"), False, " s", 1),
+    "rot_died": ("rot_died_way", "rot_done", 5, N_("rotations where you die on the way"), False, "%", 100),
+    "rot_early": ("rot_early", "rot_done", 5, N_("rotations started before the hit (anticipated)"), None, "%", 100),
+    "rot_stayed": ("rot_stayed", "rot_needed", 5, N_("hits on the other site where you stay in place"), None, "%", 100),
+    "anchor_hold": ("anchor_hold5", "anchor_n", 5, N_("hits on your site where you hold at least 5 s"), True, "%", 100),
+    "anchor_kpr": ("anchor_kills", "anchor_n", 5, N_("kills per attack faced as anchor"), True, "", 1),
+    "lurk_kpr": ("lurk_kills", "lurk_n", 5, N_("kills per lurk round"), True, "", 1),
+    "lurk_died": ("lurk_died", "lurk_n", 5, N_("lurk rounds where you die"), False, "%", 100),
+    "t_late": ("t_late", "t_follow_n", 5, N_("executes where you arrive more than 10 s after the others"), False, "%", 100),
+    "pp_surv": ("pp_survived", "pp_n", 5, N_("survival after the plant (T)"), True, "%", 100),
+    "pp_kpr": ("pp_kills", "pp_n", 5, N_("kills after the plant (T)"), True, "", 1),
+    "rt_solo": ("rt_solo_death", "rt_n", 5, N_("deaths alone in a retake (CT)"), False, "%", 100),
+    "adv_throw": ("adv_throw", "adv_rounds", 8, N_("man advantages thrown (untraded death)"), False, "%", 100),
+    "adv_conv": ("adv_won", "adv_rounds", 8, N_("rounds won after having the advantage"), True, "%", 100),
+    "lost_died": ("lost_died", "lost_n", 3, N_("lost-cause rounds where you die instead of saving"), False, "%", 100),
+    "isolated": ("isolated_deaths", "rounds", 30, N_("isolated deaths (no teammate nearby) per 24 rounds"), False, "", 24),
+    "steps_alone": ("steps_alone", "rounds", 30, N_("audible steps when alone as T, per 24 rounds"), False, "", 24),
+    "steps_clutch": ("steps_clutch", "clutch_rounds", 3, N_("audible steps per clutch"), False, "", 1),
+    "fake_pulled": ("fake_pulled", "fake_n", 5, N_("hits on your site after you had left it (pulled by a fake)"), False, "%", 100),
+    "repeek": ("repeek", "kill_rounds", 8, N_("rounds with a kill where you die within 8 s of it"), False, "%", 100),
 }
 
 

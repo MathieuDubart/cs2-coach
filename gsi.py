@@ -422,7 +422,7 @@ def wily(orders, text=None, said=None):
     if "ask" in cur and cur.get("ask", {}).get("for") not in [f.get("k") for f in [cur.get("focus") or {}]]:
         cur.pop("ask", None)
     import wily as W
-    cur.update(t=time.time(), text=str(text or "")[:120], ack=W.ack(orders), orders=orders)
+    cur.update(t=time.time(), text=str(text or "")[:120], ack=W.ack(orders, "fr"), ack_en=W.ack(orders, "en"), acks={l: W.ack(orders, l) for l in W.LANGS}, orders=orders)
     with LOCK:
         STATE["wily"] = cur
         if mtch:

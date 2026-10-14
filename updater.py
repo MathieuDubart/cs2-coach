@@ -11,7 +11,10 @@ Three parts, each one only when it changed:
 The check runs at start-up then every 30 minutes, never during a match. Automatic updates (08/10, on unless the player
 turns them off in Settings): the new parts are downloaded when the app has nothing to do, and installed when nobody
 uses it (no CS2, no analysis, no recording, no Wily page open for 5 minutes), so the restart is never in the way.
-The coach's own app (role "server") makes the releases and never updates itself."""
+The coach's own app (role "server") makes the releases and never updates itself.
+
+The coach's messages (14/10, notices.py): releases/notices.json, signed with the same key, fetched with the check; the
+ones for this app (its platform, its build, not expired, not closed) are shown under the top bar."""
 import base64
 import hashlib
 import json
@@ -20,6 +23,7 @@ import subprocess
 import sys
 import threading
 import time
+import urllib.error
 import urllib.request
 import zipfile
 
@@ -98,6 +102,15 @@ def check(force=False):
         st.update(checked=time.time(), latest=man, raw=raw.decode(), sig=sig, error=None)
     except Exception as e:
         st.update(checked=time.time(), error=f"{type(e).__name__}: {str(e)[:160]}")
+    try:   # the coach's messages: only what his key signed; none published is none to show
+        raw = _get(URL + "notices.json").read()
+        sig = _get(URL + "notices.json.sig").read().decode().strip()
+        st["notices"] = (json.loads(raw).get("notices") or []) if verify(raw, sig) else []
+    except urllib.error.HTTPError as e:
+        if e.code == 404:
+            st["notices"] = []
+    except Exception as e:   # offline: the last ones kept
+        print("notices:", e, flush=True)
     config.write_json(STATE_F, st)
     return status()
 
@@ -108,7 +121,42 @@ def status():
     man = st.get("latest") or {}
     return {"enabled": enabled(), "auto": auto_on(), "current": cur, "checked": st.get("checked"), "error": st.get("error"),
             "latest": {k: man.get(k) for k in ("app", "released", "notes")} if man else None,
-            "available": _available(man, cur) if man and enabled() else [], "progress": dict(ST)}
+            "available": _available(man, cur) if man and enabled() else [], "progress": dict(ST),
+            "notices": notices() if enabled() else []}
+
+
+def notices():
+    """The coach's messages for this app now: not expired, for its platform, for its build (an older one: one that
+    should update), not closed by the player; in the app's language, else in English. Plain text and an https link."""
+    import i18n
+    st = config.read_json(STATE_F, {}) or {}
+    lang, build = i18n.current(), current().get("build") or ""
+    plat = "linux" if config.LINUX else "windows"
+    gone = set(st.get("dismissed") or [])
+    out = []
+    for n in st.get("notices") or []:
+        try:
+            if n["id"] in gone or float(n.get("until") or 0) < time.time() or (n.get("platform") and n["platform"] != plat):
+                continue
+            if n.get("before_build") and build and build >= str(n["before_build"]):
+                continue
+            text = n["text"].get(lang) or n["text"].get("en")
+            if not text:
+                continue
+            link = n.get("link") if str(n.get("link") or "").startswith("https://") else None
+            out.append({"id": str(n["id"])[:40], "level": "warn" if n.get("level") == "warn" else "info", "text": str(text)[:600], "link": link})
+        except (KeyError, TypeError, AttributeError, ValueError):
+            continue
+    return out
+
+
+def dismiss(nid):
+    """A message closed by the player: not shown again on this PC."""
+    st = config.read_json(STATE_F, {}) or {}
+    gone = [x for x in st.get("dismissed") or [] if x != nid] + [str(nid)[:40]]
+    st["dismissed"] = gone[-200:]
+    config.write_json(STATE_F, st)
+    return notices()
 
 
 def _download(entry):

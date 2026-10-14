@@ -4,6 +4,7 @@
 // (Leitner boxes: what you missed comes back next session).
 //
 // Commands during a session: !n skips the drill, !pause / !resume, !stop ends the session.
+using System.Globalization;
 using System.Numerics;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -122,8 +123,15 @@ public partial class CoachReplay
     static readonly Random Rng = new();
     string introHtml = "";
     // the blocks: defending a site (CT), the push routes (T), aim on hostage maps, the stuff, the situations
-    static readonly Dictionary<string, string> KindName = new() { ["defend"] = "DEFENSE", ["push"] = "PUSH", ["aim"] = "AIM", ["nade"] = "STUFF", ["situation"] = "SITUATION", ["wallbang"] = "WALLBANG" };
-    static readonly Dictionary<string, string> KindColor = new() { ["defend"] = "#4fc3a1", ["push"] = "#ff8a3d", ["aim"] = "#ff8a3d", ["nade"] = "#5ab4ff", ["situation"] = "#e0a030", ["wallbang"] = "#c792ea" };
+    static readonly Dictionary<string, string> KindName = new() { ["defend"] = N("DEFENSE"), ["push"] = N("PUSH"), ["aim"] = N("AIM"), ["nade"] = N("STUFF"),
+        ["situation"] = N("SITUATION"), ["wallbang"] = N("WALLBANG"), ["crossfire"] = N("CROSSFIRE") };
+    // a drill's end as the screen and the chat say it (the results keep the English word: the app reads them)
+    static readonly Dictionary<string, string> OutcomeName = new() { ["cleared"] = N("CLEARED"), ["done"] = N("DONE"), ["timeout"] = N("TIME'S UP"),
+        ["dead"] = N("DEAD"), ["won"] = N("WON"), ["survived"] = N("SURVIVED"), ["traded"] = N("TRADED"), ["kill"] = N("KILL, THEN DEAD"),
+        ["passive"] = N("NO KILL"), ["defused"] = N("DEFUSED"), ["exploded"] = N("BOMB EXPLODED"), ["late"] = N("LATE"), ["in time"] = N("IN TIME"),
+        ["perfect"] = N("PERFECT"), ["good"] = N("GOOD"), ["miss"] = N("MISS"), ["no throw"] = N("NO THROW"), ["skipped"] = N("SKIPPED") };
+    string Shown(string outcome) => OutcomeName.TryGetValue(outcome, out var s) ? T(s) : outcome.ToUpper();
+    static readonly Dictionary<string, string> KindColor = new() { ["defend"] = "#4fc3a1", ["push"] = "#ff8a3d", ["aim"] = "#ff8a3d", ["nade"] = "#5ab4ff", ["situation"] = "#e0a030", ["wallbang"] = "#c792ea", ["crossfire"] = "#ff8a3d" };
     int postIdx = -1;   // a defense: the spot you hold now (Posts), Posts.Count: free
     // a defense's attackers come in waves, all of them at once (09/10): the wave's number, its first death (tick), the
     // next one called
@@ -138,7 +146,12 @@ public partial class CoachReplay
     List<Vector3> rangeTheirs = new();
     // 07/10: the aim range left aim_map (an unsigned 2023 file the game no longer loads from a server) for a map with
     // cover: a spot of theirs you can't see from yours is dropped for the map (a target unseen 3 s moves on)
-    readonly HashSet<int> rangeBlind = new();
+    // the spots themselves, not their place in rangeTheirs: that list is built again for each drill and narrowed by a
+    // cone that depends on the variant (a duel's is 60 deg where a flick's is 80), while this set is only emptied when
+    // the map changes, so kept as numbers its entries came to mean other spots from one drill to the next (13/10)
+    readonly List<Vector3> rangeBlind = new();
+
+    bool Blind(Vector3 p) => rangeBlind.Any(q => Vector3.Distance(q, p) < 2f);
     readonly Dictionary<int, int> rangeSeenAt = new();
     string rangeMap = "";
     bool rangeSpots;   // a target has been seen this drill: the game's spotting works for them, so unseen means hidden
@@ -156,6 +169,7 @@ public partial class CoachReplay
         AddCommand("css_go", "go on with a paused session", (p, c) => Resume(p));
         AddCommand("css_again", "the last session's drills again: !again <number>[,<number>], missed or all", (p, c) => Again(p, c.ArgString));
         RegisterWorkshopGuard();
+        RegisterCrossfire();
         RegisterEventHandler<EventSmokegrenadeDetonate>((e, _) => { NadeHit(e.Userid, e.X, e.Y); return HookResult.Continue; });
         RegisterEventHandler<EventFlashbangDetonate>((e, _) => { NadeHit(e.Userid, e.X, e.Y); return HookResult.Continue; });
         RegisterEventHandler<EventHegrenadeDetonate>((e, _) => { NadeHit(e.Userid, e.X, e.Y); return HookResult.Continue; });
@@ -202,7 +216,7 @@ public partial class CoachReplay
     // removed, and a load by name goes through the map's Workshop id.
     int wsCut;
 
-    static string HowClick(Drill d) => d.Click != "" ? $"{d.How} · {d.Click}" : d.How;
+    string HowClick(Drill d) => d.Click != "" ? $"{How(d.How)} · {How(d.Click)}" : How(d.How);
 
     static bool MapLogic(string n) => n.StartsWith("logic_") || n.StartsWith("math_") || n.StartsWith("trigger_")
         || n is "point_servercommand" or "point_clientcommand" or "point_broadcastclientcommand" or "point_script" or "point_template"
@@ -448,7 +462,7 @@ public partial class CoachReplay
             pawn.Teleport(new Vector3(v.Pos[0], v.Pos[1], v.Pos[2]), Upright(new Vector3(v.Ang[0], v.Ang[1], 0)), Vector3.Zero);
             Freeze(pawn, true);
         }
-        SetMain($"<font color='#5ab4ff'>FROM THEIR SIDE</font> · {drill.Title}<br><font class='fontSize-s'>where they really stand: watch it come</font>");
+        SetMain($"<font color='#5ab4ff'>{T("FROM THEIR SIDE")}</font> · {drill.Title}<br><font class='fontSize-s'>{T("where they really stand: watch it come")}</font>");
         var g = sessGen;
         AddTimer(0.8f, () =>
         {
@@ -482,13 +496,13 @@ public partial class CoachReplay
         foreach (var h in Humans()) { var pw = h.PlayerPawn.Value; if (pw != null) Freeze(pw, false); }
         var what = drill.Type switch
         {
-            "flash" => theirsFlash > 0.3f ? $"blinded {theirsFlash:F1} s here" : "not blinded from here: it pops out of their sight",
-            "smoke" => "their view through it: cut",
-            _ => theirsDmg > 0 ? $"−{theirsDmg} HP here" : "no damage here",
+            "flash" => theirsFlash > 0.3f ? F("blinded {s} s here", "s", theirsFlash.ToString("F1", CultureInfo.InvariantCulture)) : T("not blinded from here: it pops out of their sight"),
+            "smoke" => T("their view through it: cut"),
+            _ => theirsDmg > 0 ? F("−{hp} HP here", "hp", theirsDmg) : T("no damage here"),
         };
         var r = theirsRes.Value;
         theirsRes = null;
-        DrillDone(r.ok, r.outcome, r.pts, $"{r.detail} · from their side: {what}");
+        DrillDone(r.ok, r.outcome, r.pts, $"{r.detail} · {F("from their side: {what}", "what", what)}");
     }
 
     // prefire: where the last ones are (the game's place names: "BombsiteA" -> "Bombsite A")
@@ -509,10 +523,13 @@ public partial class CoachReplay
         {
             Session? s = null;
             string? err = null;
-            try { if (File.Exists(f)) s = JsonSerializer.Deserialize<Session>(File.ReadAllText(f)); else err = $"no session {id}"; }
+            var u = ReadUi();   // the app's language: written with the session
+            try { if (File.Exists(f)) s = JsonSerializer.Deserialize<Session>(File.ReadAllText(f)); else err = "?"; }
             catch (Exception e) { err = e.Message; }
             OnGame(() =>
             {
+                UseUi(u);
+                if (err == "?") err = F("no session {id}", "id", id);
                 if (err != null) { Say(p is { IsValid: true } ? p : null, err); return; }
                 if (s == null || s.Blocks.Count == 0) { sess = null; return; }
                 StartSession(s);
@@ -551,18 +568,18 @@ public partial class CoachReplay
     // inputs to replay the situations I missed, the defenses, the prefires, or restart the whole session")
     void Again(CCSPlayerController? p, string arg)
     {
-        if (lastSess == null || lastDone.Count == 0) { Say(p, "no session to play again yet"); return; }
-        if (sess != null) { Say(p, "a session is running: !stop first"); return; }
+        if (lastSess == null || lastDone.Count == 0) { Say(p, T("no session to play again yet")); return; }
+        if (sess != null) { Say(p, T("a session is running: !stop first")); return; }
         arg = arg.Trim().ToLowerInvariant();
         var pick = arg is "" or "all" ? lastDone.Select(x => x.d).ToList()
             : arg == "missed" ? lastDone.Where(x => !x.ok).Select(x => x.d).ToList()
             : arg.Split(new[] { ',', ' ' }, StringSplitOptions.RemoveEmptyEntries).Select(x => int.TryParse(x, out var n) ? n - 1 : -1)
                  .Where(n => n >= 0 && n < lastDone.Count).Distinct().Select(n => lastDone[n].d).ToList();
-        if (pick.Count == 0) { Say(p, arg == "missed" ? "nothing missed: well played" : "!again <number>, missed or all"); return; }
+        if (pick.Count == 0) { Say(p, arg == "missed" ? T("nothing missed: well played") : T("!again and a drill's number, missed or all")); return; }
         var blocks = new List<Block>();
         foreach (var d in pick)   // the drills of one map and one kind in a row: one block
         {
-            var kind = d.Kind != "aim" ? d.Kind : d.Mode == "defend" ? "defend" : d.Mode == "prefire" ? "push" : "aim";
+            var kind = d.Kind != "aim" ? d.Kind : d.Mode == "defend" ? "defend" : d.Mode == "prefire" ? "push" : d.Mode == "crossfire" ? "crossfire" : "aim";
             if (blocks.Count > 0 && blocks[^1].Map == d.Map && blocks[^1].Kind == kind) blocks[^1].Drills.Add(d);
             else blocks.Add(new Block { Map = d.Map, Kind = kind, Seconds = 3600, Drills = new() { d } });
         }
@@ -575,7 +592,7 @@ public partial class CoachReplay
     void Report(CCSPlayerController? p, string? text)
     {
         text = (text ?? "").Trim().Trim('"').Trim();
-        if (text.Length == 0) { Say(p, "!report <what's wrong, or what you'd want>: it goes to Wily's author with this drill and where you stand"); return; }
+        if (text.Length == 0) { Say(p, T("!report and what's wrong, or what you'd want: it goes to Wily's author with this drill and where you stand")); return; }
         var pw = p?.PlayerPawn.Value;
         var o = pw?.AbsOrigin;
         var a = pw?.EyeAngles;
@@ -589,17 +606,18 @@ public partial class CoachReplay
         try
         {
             Append("reports.jsonl", JsonSerializer.Serialize(rec));
-            Say(p, "📨 noted: it goes to Wily's author with this drill and where you stand. Thanks!");
+            Say(p, T("📨 noted: it goes to Wily's author with this drill and where you stand. Thanks!"));
         }
-        catch (Exception e) { Log("report: {m}", e.Message); Say(p, "couldn't keep it, sorry: the app's \"alpha · report\" works too"); }
+        catch (Exception e) { Log("report: {m}", e.Message); Say(p, F("couldn't keep it, sorry: the app's \"{tag}\" tag works too", "tag", T("alpha · report"))); }
     }
 
     void Welcome()
     {
         if (sess == null) return;
-        var order = string.Join(" → ", sess.Blocks.Select(b => KindName[b.Kind]).Distinct());
-        Html($"<font color='#e0a030'>TRAINING · {sess.Minutes} MIN</font><br><font class='fontSize-l'>{string.Join(" · ", sess.Maps.Select(MapName))}</font><br>{order}", 4);
-        All($"Training {sess.Minutes} min · {string.Join(", ", sess.Maps.Select(MapName))} · {order}. !n skips a drill, !pause pauses (!resume), !stop ends, !report <text> tells Wily's author.");
+        var order = string.Join(" → ", sess.Blocks.Select(b => T(KindName[b.Kind])).Distinct());
+        Html($"<font color='#e0a030'>{F("TRAINING · {n} MIN", "n", sess.Minutes)}</font><br><font class='fontSize-l'>{string.Join(" · ", sess.Maps.Select(MapName))}</font><br>{order}", 4);
+        All($"{F("Training {n} min", "n", sess.Minutes)} · {string.Join(", ", sess.Maps.Select(MapName))} · {order}. "
+            + T("!n skips a drill, !pause pauses (!resume), !stop ends, !report and a few words tells Wily's author."));
     }
 
     // 09/10, his warm-up: "si je mets stop, ça se met en pause ? Il faudrait pouvoir la mettre en pause, et la reprendre":
@@ -609,8 +627,8 @@ public partial class CoachReplay
 
     void Pause(CCSPlayerController? p)
     {
-        if (sess == null) { Say(p, "no session running"); return; }
-        if (paused) { Say(p, "already paused: !resume goes on"); return; }
+        if (sess == null) { Say(p, T("no session running")); return; }
+        if (paused) { Say(p, T("already paused: !resume goes on")); return; }
         paused = true;
         pausedAt = DateTime.UtcNow;
         sessGen++; generation++;   // the timers on their way (next drill, a bot back, the setup) do nothing
@@ -620,18 +638,20 @@ public partial class CoachReplay
         bots.Clear(); builtFor = null;
         Server.ExecuteCommand("bot_quota 0");
         Server.ExecuteCommand("bot_kick");
-        SetMain("<font color='#e0a030'>⏸ PAUSED</font><br>the block's clock waits · <b>!resume</b> goes on");
-        All("Paused · the block's clock waits · !resume goes on (that drill again from its start).");
+        SetMain(PausedHtml());
+        All(T("Paused · the block's clock waits · !resume goes on (that drill again from its start)."));
     }
+
+    string PausedHtml() => $"<font color='#e0a030'>⏸ {T("PAUSED")}</font><br>{F("the block's clock waits · {cmd} goes on", "cmd", "<b>!resume</b>")}";
 
     void Resume(CCSPlayerController? p)
     {
-        if (sess == null) { Say(p, "no session running"); return; }
-        if (!paused) { Say(p, "not paused"); return; }
+        if (sess == null) { Say(p, T("no session running")); return; }
+        if (!paused) { Say(p, T("not paused")); return; }
         paused = false;
         if (blockEnd != DateTime.MinValue) blockEnd += DateTime.UtcNow - pausedAt;
         SetMain("");
-        All("Go on.");
+        All(T("Go on."));
         if (drill != null) RunDrill(drill); else NextDrill();
     }
 
@@ -639,7 +659,7 @@ public partial class CoachReplay
     void SessionResume()
     {
         if (sess == null || !Humans().Any()) return;
-        if (paused) { SetMain("<font color='#e0a030'>⏸ PAUSED</font><br>the block's clock waits · <b>!resume</b> goes on"); return; }
+        if (paused) { SetMain(PausedHtml()); return; }
         if (blockIdx < 0) { Welcome(); AddTimer(4f, NextBlock); return; }
         var b = sess.Blocks[blockIdx];
         if (Server.MapName != b.Map) { ChangeMap(b.Map); return; }
@@ -659,7 +679,7 @@ public partial class CoachReplay
         if (Server.MapName != b.Map)
         {
             phase = "setup"; cur = null;
-            Html($"<font color='#e0a030'>NEXT MAP</font><br><font class='fontSize-l'>{MapName(b.Map)}</font>", 4);
+            Html($"<font color='#e0a030'>{T("NEXT MAP")}</font><br><font class='fontSize-l'>{MapName(b.Map)}</font>", 4);
             AddTimer(2f, () => ChangeMap(b.Map));
             return;
         }
@@ -684,7 +704,7 @@ public partial class CoachReplay
         if (sess == null) return;
         sessGen++;
         var pending = false;
-        var s = d.Kind switch { "situation" => d.Scenario != null ? PeekSoon(d.Scenario, out pending) : null, "aim" => d.Mode == "range" ? RangeScenario(d) : AimScenario(d),
+        var s = d.Kind switch { "situation" => d.Scenario != null ? PeekSoon(d.Scenario, out pending) : null, "aim" => d.Mode == "range" ? RangeScenario(d) : d.Mode == "crossfire" ? CrossfireScenario(d) : AimScenario(d),
             "nade" => NadeScenario(d), _ => null };
         if (pending)
         {
@@ -694,7 +714,7 @@ public partial class CoachReplay
         }
         if (s == null && d.Kind == "situation" && waitFile++ < 20)   // the app is still building it from the demo
         {
-            Html($"<font color='#e0a030'>SITUATION</font><br>loading {d.Title}…", 2);
+            Html($"<font color='#e0a030'>{T(KindName["situation"])}</font><br>{F("loading {title}…", "title", d.Title)}", 2);
             var g = sessGen;
             AddTimer(2f, () => { if (g == sessGen && drill == d) RunDrill(d); });
             return;
@@ -703,8 +723,8 @@ public partial class CoachReplay
         if (s == null) { Log("drill {id}: nothing to play", d.Id); NextDrill(); return; }
         if (!string.IsNullOrEmpty(s.Lost))
         {   // 07/10: "la situation est perdue d'avance, autant pas me la faire jouer"
-            All($"\x10SITUATION\x01 {d.Title}: {s.Lost} · skipped");
-            Html($"<font color='#e0a030'>SKIPPED</font> · {d.Title}<br>{s.Lost}", 3);
+            All($"\x10{T(KindName["situation"])}\x01 {d.Title}: {s.Lost} · {T("skipped")}");
+            Html($"<font color='#e0a030'>{Shown("skipped")}</font> · {d.Title}<br>{s.Lost}", 3);
             var g2 = sessGen;
             AddTimer(3f, () => { if (g2 == sessGen) NextDrill(); });
             return;
@@ -723,30 +743,29 @@ public partial class CoachReplay
         cameAt.Clear(); strafe.Clear(); lastKill = 0;
         // the targets that must stay still idle: a prefire's, a wallbang's, the aim map's flicks and strafers (06/10)
         Zombie(d.Kind == "aim" && (d.Mode == "prefire" || d.Id.StartsWith("wallbang") || d.Id.StartsWith("boost") || (d.Mode == "range" && d.Variant != "duel")));
-        DontShoot(d.Rush);   // a rush's runners run their way like a situation's players (driven, not idle), and never fire
+        DontShoot(d.Rush || (d.Mode == "crossfire" && d.Variant == "spray"));   // Crossfire's spray: two targets, nothing else   // a rush's runners run their way like a situation's players (driven, not idle), and never fire
         BotStop(false);   // Aim Botz's config stops them (07/10)
         Ammo(d.Kind == "aim");   // 07/10: "chargeur infini dans le sens où ... il faut que je recharge": the reserve never ends
         Intro(d);
         Setup();
     }
 
-    string Left() { var l = blockEnd - DateTime.UtcNow; return l.TotalSeconds > 0 ? $"{(int)l.TotalMinutes}:{l.Seconds:D2}" : "last"; }
+    string Left() { var l = blockEnd - DateTime.UtcNow; return l.TotalSeconds > 0 ? $"{(int)l.TotalMinutes}:{l.Seconds:D2}" : T("last"); }
 
     void Intro(Drill d)
     {
         var how = d.Kind == "situation" && cur != null ? SituationText() : d.Kind != "nade" ? d.Tip : d.Level switch
         {
-            0 or 1 when d.Rush => $"{HowClick(d)} — a real rush gets to the blue ring at {RoundClock(d.RushAt)}: your {d.Type} must be up before · the grenade comes at GO",
-            _ when d.Rush => $"they rush: your {d.Type} up on its spot in time · the grenade comes at GO",
-            0 or 1 => $"<font color='#ffd34d' class='fontSize-l'>{d.How.ToUpper()}</font>{(d.Click != "" ? $" · {d.Click}" : "")}<br>crosshair on the green cross · it must land in the blue ring · stand in the green ring",
-            _ => $"<font color='#ffd34d' class='fontSize-l'>{d.How.ToUpper()}</font>{(d.Click != "" ? $" · {d.Click}" : "")} · find the aim",
-        };
-        var again = tries > 0 ? " · AGAIN" : "";
-        introHtml = $"<font color='{KindColor[d.Kind]}'>{KindName[d.Kind]}{again}</font> · {Left()} · ⭐ {points}<br><font class='fontSize-l'>{d.Title}</font><br>{how}";
+            0 or 1 when d.Rush => $"{HowClick(d)} — {F("a real rush gets to the blue ring at {t}: your grenade must be up before · it comes at GO", "t", RoundClock(d.RushAt))}",
+            _ when d.Rush => T("they rush: your grenade up on its spot in time · it comes at GO"),
+            0 or 1 => $"<font color='#ffd34d' class='fontSize-l'>{How(d.How).ToUpper()}</font>{(d.Click != "" ? $" · {How(d.Click)}" : "")}<br>{T("crosshair on the green cross · it must land in the blue ring · stand in the green ring")}",
+            _ => $"<font color='#ffd34d' class='fontSize-l'>{How(d.How).ToUpper()}</font>{(d.Click != "" ? $" · {How(d.Click)}" : "")} · {T("find the aim")}",
+        };        var again = tries > 0 ? $" · {T("AGAIN")}" : "";
+        introHtml = $"<font color='{KindColor[d.Kind]}'>{T(KindName[d.Kind])}{again}</font> · {Left()} · ⭐ {points}<br><font class='fontSize-l'>{d.Title}</font><br>{how}";
         hudFlash = "";
         SetMain(introHtml);
         var plain = System.Text.RegularExpressions.Regex.Replace(how.Replace("<br>", " · "), "<[^>]+>", "");
-        All($"\x10{KindName[d.Kind]}{again}\x01 {d.Title} — {plain}");
+        All($"\x10{T(KindName[d.Kind])}{again}\x01 {d.Title} — {plain}");
     }
 
     Scenario AimScenario(Drill d)
@@ -821,7 +840,7 @@ public partial class CoachReplay
         }
         s.Players.Add(new Track { Sid = "me", Name = "you", Team = d.Team, Me = true, Hp = 100, Armor = 100, Helmet = true, Weapons = d.Weapons,
             Active = d.Weapons.LastOrDefault(), Path = new[] { me.X, me.Y, me.Z, YawTo(me, far), 0f } });
-        var order = rangeTheirs.Where((p, i) => !rangeBlind.Contains(i)).OrderBy(_ => Rng.Next()).ToList();
+        var order = rangeTheirs.Where(p => !Blind(p)).OrderBy(_ => Rng.Next()).ToList();
         if (order.Count == 0) order = rangeTheirs.OrderBy(_ => Rng.Next()).ToList();
         for (int k = 0; k < Math.Max(1, d.Count); k++)
         {
@@ -846,8 +865,8 @@ public partial class CoachReplay
         if (c == null || !c.IsValid) return;
         var me = Humans().Select(h => h.PlayerPawn.Value?.AbsOrigin).FirstOrDefault(o => o != null) is { } mo ? new Vector3(mo.X, mo.Y, mo.Z) : Pos(cur.Players.First(p => p.Me), 0);
         var taken = bots.Where(b => b.Key != slot && !gone.Contains(b.Value.Sid)).Select(b => Pos(b.Value, 0)).ToList();
-        var free_ = rangeTheirs.Where((p, i) => !rangeBlind.Contains(i) && taken.All(q => Vector3.Distance(p, q) > 120) && Vector3.Distance(p, Pos(t, 0)) > 120).ToList();
-        if (free_.Count == 0) free_ = rangeTheirs.Where((p, i) => !rangeBlind.Contains(i)).ToList();
+        var free_ = rangeTheirs.Where(p => !Blind(p) && taken.All(q => Vector3.Distance(p, q) > 120) && Vector3.Distance(p, Pos(t, 0)) > 120).ToList();
+        if (free_.Count == 0) free_ = rangeTheirs.Where(p => !Blind(p)).ToList();
         if (free_.Count == 0) free_ = rangeTheirs;
         var p = free_.Count > 0 ? free_[Rng.Next(free_.Count)] : Pos(t, 0);
         t.Path = new[] { p.X, p.Y, p.Z, YawTo(p, me), 0f };
@@ -878,8 +897,11 @@ public partial class CoachReplay
             var since = Math.Max(cameAt.GetValueOrDefault(slot, t0), rangeSeenAt.GetValueOrDefault(slot, 0));
             if (now - since < 3 * 64) continue;
             var here = Pos(t, 0);
-            var i = rangeTheirs.FindIndex(q => Vector3.Distance(q, here) < 2f);
-            if (i >= 0 && rangeTheirs.Count - rangeBlind.Count > 4) { rangeBlind.Add(i); Log("range: their spot {i} unseen from yours, dropped ({n} left)", i, rangeTheirs.Count - rangeBlind.Count); }
+            if (!Blind(here) && rangeTheirs.Count(q => !Blind(q)) > 4)
+            {
+                rangeBlind.Add(here);
+                Log("range: their spot {s} unseen from yours, dropped ({n} left)", $"{here.X:F0} {here.Y:F0}", rangeTheirs.Count(q => !Blind(q)));
+            }
             rangeSeenAt[slot] = now;
             RangeAgain(generation, slot);
         }
@@ -925,17 +947,18 @@ public partial class CoachReplay
     string SituationText()
     {
         var mine = cur?.Players.FirstOrDefault(p => p.Me);
-        var lines = new List<string> { string.IsNullOrEmpty(cur?.Goal) ? "survive" : cur!.Goal };
+        var lines = new List<string> { string.IsNullOrEmpty(cur?.Goal) ? T("survive") : cur!.Goal };
         if (mine != null && cur != null)
         {
             var al = cur.Players.Count(p => p.Team == mine.Team);
             var en = cur.Players.Count(p => p.Team != mine.Team);
             var dead = cur.Dead.Where(x => x.Team == mine.Team && x.At != "").Select(x => x.At).Distinct().ToList();
-            lines.Add($"{al}v{en}{(dead.Count > 0 ? $" · allies dead: {string.Join(", ", dead)} (red crosses)" : "")}");
+            lines.Add($"{al}v{en}{(dead.Count > 0 ? $" · {F("allies dead: {where} (red crosses)", "where", string.Join(", ", dead))}" : "")}");
         }
         if (!string.IsNullOrEmpty(cur?.Plant)) lines.Add($"💣 {cur!.Plant}");   // planted or not: what you have to do (04/10)
         if (!string.IsNullOrEmpty(cur?.Danger)) lines.Add($"⚠ {cur!.Danger}");
-        if (!string.IsNullOrEmpty(cur?.ZoneName) || cur?.ZonePoly.Count >= 3) lines.Add($"🔵 it happens in {(string.IsNullOrEmpty(cur!.ZoneName) ? "the blue zone" : cur.ZoneName + " (blue)")}: play it your way");
+        if (!string.IsNullOrEmpty(cur?.ZoneName) || cur?.ZonePoly.Count >= 3)
+            lines.Add("🔵 " + (string.IsNullOrEmpty(cur!.ZoneName) ? T("it happens in the blue zone: play it your way") : F("it happens in {zone} (blue): play it your way", "zone", cur.ZoneName)));
         return string.Join("<br>", lines);
     }
 
@@ -969,7 +992,8 @@ public partial class CoachReplay
             foreach (var x in cur.Dead.Where(x => x.Team == cur.Team && x.Pos.Length >= 3)) DrawX(new Vector3(x.Pos[0], x.Pos[1], x.Pos[2]));
         if (sess == null || cur == null) return;
         if (drill?.Mode == "prefire" && drill.Line.Count > 1) DrawLine(drill.Line);
-        if (cur.Kind == "aim" && drill?.Mode == "range")
+        if (cur.Kind == "aim" && drill?.Mode == "crossfire") CfPlaced();
+        else if (cur.Kind == "aim" && drill?.Mode == "range")
         {
             aimOrder.Clear();
             aimOrder.AddRange(bots.Keys);
@@ -1039,9 +1063,10 @@ public partial class CoachReplay
         aimSpawn = Server.TickCount;
         lastHud = Server.TickCount;
         if (cur.Kind == "aim" && string.IsNullOrEmpty(drill?.Mode)) AimCard();
-        if (drill?.Mode == "prefire") { Html($"<font color='#ff8a3d'>GO</font> · clear {aimOrder.Count} · {drill.Seconds} s", 2); preKillAt = Server.TickCount; }
-        if (drill?.Mode == "range") { Html($"<font color='#ff8a3d'>GO</font> · {drill.Goal} kills · {drill.Seconds} s", 2); lastKill = Server.TickCount; foreach (var sl in bots.Keys) cameAt[sl] = Server.TickCount; }
-        if (drill?.Mode == "defend") { postIdx = -1; Html($"<font color='#ff8a3d'>HOLD</font> · {drill.Seconds} s · they are coming", 2); }
+        if (drill?.Mode == "prefire") { Html($"<font color='#ff8a3d'>{T("GO")}</font> · {F("clear {n}", "n", aimOrder.Count)} · {drill.Seconds} s", 2); preKillAt = Server.TickCount; }
+        if (drill?.Mode == "range") { Html($"<font color='#ff8a3d'>{T("GO")}</font> · {Tn(drill.Goal, "{n} kill", "{n} kills")} · {drill.Seconds} s", 2); lastKill = Server.TickCount; foreach (var sl in bots.Keys) cameAt[sl] = Server.TickCount; }
+        if (drill?.Mode == "crossfire") CfGo();
+        if (drill?.Mode == "defend") { postIdx = -1; Html($"<font color='#ff8a3d'>{T("HOLD")}</font> · {drill.Seconds} s · {T("they are coming")}", 2); }
         if (drill is { Rush: true })
         {
             foreach (var h in Humans())
@@ -1050,7 +1075,7 @@ public partial class CoachReplay
                 h.GiveNamedItem(drill.Item);
                 h.ExecuteClientCommandFromServer($"use {drill.Item}");
             }
-            Html($"<font color='#ff5a5a'>THEY RUSH</font>{(drill.Level < 2 ? $" · there at {RoundClock(drill.RushAt)}" : "")}", 2);
+            Html($"<font color='#ff5a5a'>{T("THEY RUSH")}</font>{(drill.Level < 2 ? $" · {F("there at {t}", "t", RoundClock(drill.RushAt))}" : "")}", 2);
         }
     }
 
@@ -1071,7 +1096,7 @@ public partial class CoachReplay
             Log("rush: {n} on the spot at {s:F1} s", t.Name, (rushIn - t0) / 64.0);
             if (!nadeWait) return;   // up already (scored at its pop)
             nadeWait = false;
-            DrillDone(false, "late", 0, $"{t.Name} got there before your {drill.Type}");
+            DrillDone(false, "late", 0, F("{who} got there before your grenade", "who", t.Name));
             return;
         }
     }
@@ -1099,7 +1124,7 @@ public partial class CoachReplay
                         pw0.Teleport(new Vector3(site.Pos[0], site.Pos[1], site.Pos[2]), new Vector3(0, site.Ang[1], 0), Vector3.Zero);
                         if (me0 != null) Loadout(h, me0, 100);
                     }
-            Html("<font color='#4fc3a1'>FREE</font> · on the site: play it where you want", 3);
+            Html($"<font color='#4fc3a1'>{T("FREE")}</font> · {T("on the site: play it where you want")}", 3);
             return;
         }
         var p = drill.Posts[ph];
@@ -1127,7 +1152,7 @@ public partial class CoachReplay
                 pw.Teleport(at, new Vector3(0, p.Ang[1], 0), Vector3.Zero);
                 if (meT != null) Loadout(h, meT, 100);
             }
-        Html($"<font color='#4fc3a1'>HOLD {p.Zone}</font> · {ph + 1}/{drill.Posts.Count}, then free", 3);
+        Html($"<font color='#4fc3a1'>{F("HOLD {zone}", "zone", p.Zone)}</font> · {F("{i}/{n}, then free", "i", ph + 1, "n", drill.Posts.Count)}", 3);
     }
 
     // out of the place you hold (its outline drawn on the ground): the panel says to go back in it
@@ -1155,8 +1180,9 @@ public partial class CoachReplay
         if (sess == null || cur == null || phase != "live") return;
         // dead without the drill knowing it (killed before GO: OnDeath only counts live deaths; 06/10, a minute on the
         // floor while the aim drill's targets came and went): the drill ends as dead, its retry puts you back on your spot
-        if (drill?.Mode is not ("defend" or "range") && !humanDead && Humans().Any() && Humans().All(h => !h.PawnIsAlive)) { Finish("dead"); return; }
+        if (drill?.Mode is not ("defend" or "range" or "crossfire") && !humanDead && Humans().Any() && Humans().All(h => !h.PawnIsAlive)) { Finish("dead"); return; }
         var el = (Server.TickCount - t0) / 64f;
+        if (drill?.Mode == "crossfire") { CfTick(el); return; }
         if (drill?.Mode == "range")
         {
             if (el >= drill.Seconds || frags >= drill.Goal * 2) { Finish(frags >= drill.Goal ? "cleared" : "done"); return; }
@@ -1213,11 +1239,16 @@ public partial class CoachReplay
             if (drill.Mode == "prefire" && aimOrder.Count - frags <= 2 && Server.TickCount - preKillAt > 8 * 64) Beacons();
             {
                 var left = (int)(drill.Seconds - el);
-                var where = drill.Mode == "prefire" && aimOrder.Count - frags <= 3 ? LeftPlaces() : "";
+                var n = aimOrder.Count - frags;
+                var where = drill.Mode == "prefire" && n <= 3 ? LeftPlaces() : "";
                 SetMain(drill.Mode == "prefire"
-                    ? $"<font color='#ff8a3d'>{drill.Title}</font> · {aimOrder.Count - frags} left{(where != "" ? $": {where}" : "")}{(beaconed.Count > 0 ? " (orange posts)" : "")} · {left} s<br><font class='fontSize-s'>{string.Join(" → ", drill.Route)} · follow the gold line</font>"
+                    ? $"<font color='#ff8a3d'>{drill.Title}</font> · {(where != "" ? F("{n} left: {where}", "n", n, "where", where) : F("{n} left", "n", n))}{(beaconed.Count > 0 ? $" ({T("orange posts")})" : "")}"
+                      + $" · {left} s<br><font class='fontSize-s'>{string.Join(" → ", drill.Route)} · {T("follow the gold line")}</font>"
                     : $"<font color='#ff8a3d'>{drill.Title}</font> · {left} s · ⚔ {frags} · ☠ {deaths}"
-                      + (drill.Posts.Count == 0 || postIdx < 0 ? "" : postIdx < drill.Posts.Count ? (OutOfPost() ? $"<br><font color='#ff5a5a'>⚠ back in {drill.Posts[postIdx].Zone} (the green zone)</font>" : $"<br><font class='fontSize-s'>hold {drill.Posts[postIdx].Zone} (the green zone)</font>") : "<br><font class='fontSize-s'>free</font>"));
+                      + (drill.Posts.Count == 0 || postIdx < 0 ? "" : postIdx < drill.Posts.Count
+                          ? (OutOfPost() ? $"<br><font color='#ff5a5a'>⚠ {F("back in {zone} (the green zone)", "zone", drill.Posts[postIdx].Zone)}</font>"
+                                         : $"<br><font class='fontSize-s'>{F("hold {zone} (the green zone)", "zone", drill.Posts[postIdx].Zone)}</font>")
+                          : $"<br><font class='fontSize-s'>{T("free")}</font>"));
             }
             return;
         }
@@ -1229,20 +1260,21 @@ public partial class CoachReplay
             var bomb = "";
             if (bombLive)   // the bomb's clock, and what it asks of you
                 foreach (var c4 in Utilities.FindAllEntitiesByDesignerName<CPlantedC4>("planted_c4"))
-                    bomb = $"<br><font color='#ff5a5a'>💣 {(c4.BombSite == 1 ? "B" : "A")} · {Math.Max(0, c4.C4Blow - Server.CurrentTime):F0} s</font>{(cur.Team == 3 ? " · defuse it" : " · keep it ticking")}";
-            var way = cur.Line.Count > 1 ? "the gold line takes you to the blue zone" : "your route in the match";
+                    bomb = $"<br><font color='#ff5a5a'>💣 {(c4.BombSite == 1 ? "B" : "A")} · {Math.Max(0, c4.C4Blow - Server.CurrentTime):F0} s</font> · {(cur.Team == 3 ? T("defuse it") : T("keep it ticking"))}";
+            var way = cur.Line.Count > 1 ? T("the gold line takes you to the blue zone") : T("your route in the match");
             SetMain($"<font color='#e0a030'>{drill?.Title}</font>{bomb}{(next != null ? $"<br>→ {next} <font class='fontSize-s'>({way})</font>" : "")}");
         }
         if (cur.Kind == "aim" && string.IsNullOrEmpty(drill?.Mode))
-            SetMain($"<font color='#ff8a3d'>{drill?.Title}</font> · target {Math.Max(1, aimNext)}/{aimOrder.Count}");
+            SetMain($"<font color='#ff8a3d'>{drill?.Title}</font> · {F("target {i}/{n}", "i", Math.Max(1, aimNext), "n", aimOrder.Count)}");
         if (cur.Kind == "nade" && drill != null)
-            SetMain($"<font color='#5ab4ff'>{drill.Title}</font>{(drill.Rush ? (drill.Level < 2 ? $" · they get there at {RoundClock(drill.RushAt)}" : " · in time") : $" · throw {Math.Min(3, attempts + 1)}/3")}<br><font class='fontSize-s'>{(drill.Level < 2 ? HowClick(drill) : "find the aim and the throw")}</font>");
+            SetMain($"<font color='#5ab4ff'>{drill.Title}</font> · {(drill.Rush ? (drill.Level < 2 ? F("they get there at {t}", "t", RoundClock(drill.RushAt)) : T("in time")) : F("throw {i}/3", "i", Math.Min(3, attempts + 1)))}"
+                    + $"<br><font class='fontSize-s'>{(drill.Level < 2 ? HowClick(drill) : T("find the aim and the throw"))}</font>");
         // a target not found in 12 s goes away (missed), the next one comes
         if (cur.Kind == "aim" && aimSpawn > 0 && Server.TickCount - aimSpawn > 12 * 64)
         {
             aimSpawn = 0;
             var slot = aimOrder.ElementAtOrDefault(aimNext - 1);
-            Html("<font color='#ff5a5a'>MISSED</font> · next one", 1);
+            Html($"<font color='#ff5a5a'>{T("MISSED")}</font> · {T("next one")}", 1);
             Utilities.GetPlayerFromSlot(slot)?.PlayerPawn.Value?.CommitSuicide(false, true);
         }
         if (cur.Kind == "aim" && Server.TickCount - t0 > 120 * 64) Finish("timeout");
@@ -1254,6 +1286,7 @@ public partial class CoachReplay
     bool SessionDeath(EventPlayerDeath e, CCSPlayerController? v)
     {
         if (sess == null || cur?.Kind != "aim" || drill == null || v == null) return false;
+        if (drill.Mode == "crossfire") return CfDeath(e, v);
         if (drill.Mode == "prefire")
         {
             if (!v.IsBot) return false;
@@ -1261,7 +1294,7 @@ public partial class CoachReplay
             if (peekAt.ContainsKey(v.Slot)) return false;   // a hidden one going to wait for its timing
             var left = bots.Count(b => !gone.Contains(b.Value.Sid) && b.Key != v.Slot) + peekAt.Count;
             if (left == 0) AddTimer(0.3f, () => Finish("cleared"));
-            else Html($"<font color='#ff8a3d'>{left} left</font>{(e.Headshot ? " · HS" : "")}", 1);
+            else Html($"<font color='#ff8a3d'>{F("{n} left", "n", left)}</font>{(e.Headshot ? " · HS" : "")}", 1);
             return false;
         }
         if (drill.Mode == "range")
@@ -1321,7 +1354,7 @@ public partial class CoachReplay
         {
             reacts.Add((Server.TickCount - aimSpawn) / 64.0);
             if (e.Headshot) aimHs++;
-            Html($"<font color='#ff8a3d'>HIT</font> {reacts[^1]:F2} s{(e.Headshot ? " · HS" : "")} · {reacts.Count}/{aimOrder.Count}", 1);
+            Html($"<font color='#ff8a3d'>{T("HIT")}</font> {reacts[^1]:F2} s{(e.Headshot ? " · HS" : "")} · {reacts.Count}/{aimOrder.Count}", 1);
         }
         aimSpawn = 0;
         if (aimNext < aimOrder.Count)
@@ -1459,7 +1492,7 @@ public partial class CoachReplay
     {
         if (sess == null || drill?.Mode != "defend" || phase != "live") return;
         plants++;
-        Html("<font color='#ff5a5a'>PLANTED</font> · −60", 2);
+        Html($"<font color='#ff5a5a'>{T("PLANTED")}</font> · −60", 2);
         AddTimer(0.2f, () => { foreach (var c4 in Utilities.FindAllEntitiesByDesignerName<CPlantedC4>("planted_c4")) c4.Remove(); });
     }
 
@@ -1468,7 +1501,7 @@ public partial class CoachReplay
     {
         var slot = aimOrder.ElementAtOrDefault(aimNext - 1);
         var where = bots.TryGetValue(slot, out var t) ? t.Name : "";
-        Html($"<font color='#ff8a3d'>TARGET {aimNext}/{aimOrder.Count}</font> → <font class='fontSize-l'>{where}</font>", 2);
+        Html($"<font color='#ff8a3d'>{F("TARGET {i}/{n}", "i", aimNext, "n", aimOrder.Count)}</font> → <font class='fontSize-l'>{where}</font>", 2);
     }
 
     void NadeHit(CCSPlayerController? u, float x, float y)
@@ -1492,32 +1525,33 @@ public partial class CoachReplay
         attempts++;
         // a flash or an HE pops in the air, a molotov's fire spreads: wider than a smoke
         var (ok1, ok2) = drill.Type switch { "flash" or "he" => (120, 260), "molotov" => (120, 240), _ => (80, 180) };
-        var q = double.IsNaN(dist) ? "NO THROW" : dist <= ok1 ? "PERFECT" : dist <= ok2 ? "GOOD" : "MISS";
-        var away = double.IsNaN(dist) ? "" : $"{dist:F0} u from the spot";
+        var q = double.IsNaN(dist) ? "no throw" : dist <= ok1 ? "perfect" : dist <= ok2 ? "good" : "miss";
+        var away = double.IsNaN(dist) ? "" : F("{d} u from the spot", "d", Math.Round(dist));
         if (drill.Rush)
         {   // a timing smoke: up on its spot before the runners, one throw (they ran past otherwise: all again)
             nadeWait = false;
             var el = (Server.TickCount - t0) / 64f - rushDelay;
             var first = drill.Tracks.Where(x => x.Arrive >= 0).Select(x => x.Arrive).DefaultIfEmpty(99f).Min();
             var margin = first - el;
-            if (q is "PERFECT" or "GOOD" && rushIn < 0)
+            var before = F("{s} s before them", "s", margin.ToString("F1", CultureInfo.InvariantCulture));
+            if (q is "perfect" or "good" && rushIn < 0)
             {
-                var pts = (int)((q == "PERFECT" ? 150 : 100) * (margin < 1.5f ? 1.2 : 1.0) * (1 + 0.25 * drill.Level));
-                Html($"<font color='#5ad15a'>✔ IN TIME</font> · {margin:F1} s before them<br>{away}", 3);
+                var pts = (int)((q == "perfect" ? 150 : 100) * (margin < 1.5f ? 1.2 : 1.0) * (1 + 0.25 * drill.Level));
+                Html($"<font color='#5ad15a'>✔ {Shown("in time")}</font> · {before}<br>{away}", 3);
                 var g1 = sessGen;
-                AddTimer(3f, () => { if (g1 == sessGen) DrillDone(true, "in time", pts, $"{margin:F1} s before them · {away}"); });   // they run into it
+                AddTimer(3f, () => { if (g1 == sessGen) DrillDone(true, "in time", pts, $"{before} · {away}"); });   // they run into it
                 return;
             }
-            DrillDone(false, rushIn >= 0 ? "late" : q.ToLower(), 0, rushIn >= 0 ? $"they were there before it · {away}" : away);
+            DrillDone(false, rushIn >= 0 ? "late" : q, 0, rushIn >= 0 ? $"{T("they were there before it")} · {away}" : away);
             return;
         }
-        if (q is "PERFECT" or "GOOD")
+        if (q is "perfect" or "good")
         {
             nadeWait = false;
-            var pts = (int)((q == "PERFECT" ? 150 : 100) * (attempts == 1 ? 1 : attempts == 2 ? 0.6 : 0.35) * (1 + 0.25 * drill.Level));
-            var res = (true, q.ToLower(), pts, $"{away} · throw {attempts}");
+            var pts = (int)((q == "perfect" ? 150 : 100) * (attempts == 1 ? 1 : attempts == 2 ? 0.6 : 0.35) * (1 + 0.25 * drill.Level));
+            var res = (true, q, pts, $"{away} · {F("throw {i}", "i", attempts)}");
             if (drill.Victims.Count == 0) { DrillDone(res.Item1, res.Item2, res.pts, res.Item4); return; }
-            Html($"<font color='#5ad15a'>✔ {q}</font> {away}<br>now from their side", 3);
+            Html($"<font color='#5ad15a'>✔ {Shown(q)}</font> {away}<br>{T("now from their side")}", 3);
             var g0 = sessGen;
             AddTimer(1.6f, () => { if (g0 == sessGen) Theirs(res); });   // after the camera
             return;
@@ -1525,7 +1559,7 @@ public partial class CoachReplay
         if (attempts >= 3) { nadeWait = false; DrillDone(false, "miss", 0, away); return; }
         // once more: back on the spot with a new grenade; after two misses the aim is shown
         var show = attempts >= 1 && drill.Level >= 1;   // the aim from the first miss (04/10: "it lacks cues")
-        Html($"<font color='#ff5a5a'>{q}</font> {away}<br>throw {attempts + 1}/3{(show ? " · here is the aim" : "")}", 2);
+        Html($"<font color='#ff5a5a'>{Shown(q)}</font> {away}<br>{F("throw {i}/3", "i", attempts + 1)}{(show ? $" · {T("here is the aim")}" : "")}", 2);
         nadeWait = false;
         AddTimer(1.2f, ClearNades);
         var g = sessGen;
@@ -1555,12 +1589,13 @@ public partial class CoachReplay
         bool ok;
         int pts = 0;
         string detail;
-        if (cur.Kind == "aim" && drill?.Mode == "prefire")
+        if (cur.Kind == "aim" && drill?.Mode == "crossfire") (ok, pts, detail) = CfResult();
+        else if (cur.Kind == "aim" && drill?.Mode == "prefire")
         {
             ok = outcome == "cleared" || (aimOrder.Count >= 3 && frags >= aimOrder.Count - 1 && outcome != "dead");   // all, or all but one
             var el = (Server.TickCount - t0) / 64.0;
             pts = frags * 30 + aimHs * 15 + (ok ? 100 + (int)Math.Max(0, (drill.Seconds - el) * 4) : 0);
-            detail = $"{frags}/{aimOrder.Count}{(ok ? $" in {el:F1} s" : "")} · {aimHs} HS";
+            detail = $"{frags}/{aimOrder.Count}{(ok ? $" · {el.ToString("F1", CultureInfo.InvariantCulture)} s" : "")} · {aimHs} HS";
         }
         else if (cur.Kind == "aim" && drill?.Mode == "range")
         {
@@ -1568,13 +1603,14 @@ public partial class CoachReplay
             var avg = reacts.Count > 0 ? reacts.Average() : 0;
             pts = frags * 12 + aimHs * 8 + (int)Math.Max(0, (1.5 - avg) * 4 * frags) - deaths * 20;
             pts = Math.Max(0, pts) + (ok ? 100 : 0);
-            detail = $"{frags} kills · {(reacts.Count > 0 ? $"{avg:F2} s each · " : "")}{(frags > 0 ? 100 * aimHs / frags : 0)}% HS{(deaths > 0 ? $" · {deaths} death(s)" : "")}";
+            detail = $"{Tn(frags, "{n} kill", "{n} kills")} · {(reacts.Count > 0 ? $"{F("{s} s each", "s", avg.ToString("F2", CultureInfo.InvariantCulture))} · " : "")}"
+                     + $"{(frags > 0 ? 100 * aimHs / frags : 0)}% HS{(deaths > 0 ? $" · {Tn(deaths, "{n} death", "{n} deaths")}" : "")}";
         }
         else if (cur.Kind == "aim" && drill?.Mode == "defend")
         {
             ok = frags >= drill.Goal && frags >= deaths;   // 03/10: 15 frags for 11 deaths never counted
             pts = Math.Max(0, frags * 40 + aimHs * 15 - deaths * 50 - plants * 60);
-            detail = $"{frags} frags · {deaths} death(s) · {aimHs} HS{(plants > 0 ? $" · {plants} planted" : "")}";
+            detail = $"{Tn(frags, "{n} kill", "{n} kills")} · {Tn(deaths, "{n} death", "{n} deaths")} · {aimHs} HS{(plants > 0 ? $" · {Tn(plants, "{n} plant", "{n} plants")}" : "")}";
         }
         else if (cur.Kind == "aim")
         {
@@ -1583,14 +1619,14 @@ public partial class CoachReplay
             if (drill?.Id.StartsWith("wallbang") == true) ok = reacts.Count * 2 >= n;   // half of them through the wall (06/10: no retry for playing it another way)
             foreach (var r in reacts) pts += 50 + (int)Math.Max(0, 50 * (1.2 - r) / 1.2);
             pts += aimHs * 20 + (ok ? 100 : 0);
-            detail = reacts.Count > 0 ? $"{reacts.Count}/{aimOrder.Count} · {reacts.Average():F2} s avg · {aimHs} HS" : "no kill";
+            detail = reacts.Count > 0 ? $"{reacts.Count}/{aimOrder.Count} · {F("{s} s on average", "s", reacts.Average().ToString("F2", CultureInfo.InvariantCulture))} · {aimHs} HS" : T("no kill");
         }
         else
         {
             outcome = SitOutcome(outcome);   // a kill or a trade is needed (04/10); the bomb's end is the round's
             ok = outcome is "won" or "survived" or "traded" or "kill" || BombWon(outcome);
             pts = (outcome == "won" || BombWon(outcome) ? 300 : outcome == "survived" ? 200 : outcome is "traded" or "kill" ? 120 : 0) + 25 * kills;
-            detail = $"{kills} kill(s) · {dmg} dmg · {alive:F1} s";
+            detail = SitDetail(alive);
         }
         DrillDone(ok, outcome, pts, detail);
     }
@@ -1612,14 +1648,15 @@ public partial class CoachReplay
         var rec = new Dictionary<string, object> { ["session"] = sess.Id, ["drill"] = drill.Id, ["kind"] = drill.Kind, ["map"] = drill.Map, ["ok"] = ok,
             ["outcome"] = outcome, ["points"] = pts, ["detail"] = detail, ["try"] = tries + 1, ["level"] = drill.Level, ["t"] = DateTimeOffset.UtcNow.ToUnixTimeSeconds() };
         if (drill.Kind == "nade" && nadePops.Count > 0 && drill.Target != null) { rec["pops"] = nadePops.ToList(); rec["target"] = drill.Target; }
+        if (drill.Mode == "crossfire") { rec["mode"] = drill.Mode; rec["variant"] = drill.Variant; foreach (var (k, x) in drillExtra) rec[k] = x; }
         Write(rec);
-        var st = streak >= 2 ? $" · 🔥 x{mult:F1}" : "";
-        var shown = outcome switch { "kill" => "KILL, THEN DEAD", "passive" => "NO KILL", "exploded" => "BOMB EXPLODED", _ => outcome.ToUpper() };
+        var st = streak >= 2 ? $" · 🔥 x{mult.ToString("F1", CultureInfo.InvariantCulture)}" : "";
+        var shown = Shown(outcome);
         Html(ok ? $"<font color='#5ad15a'>✔ {shown}</font> +{pts}{st}<br>{detail}<br>⭐ {points}"
                 : $"<font color='#ff5a5a'>✘ {shown}</font><br>{detail}<br>⭐ {points}", 3);
-        All($"{(ok ? "\x04✔" : "\x02✘")} {drill.Title}\x01 · {outcome} · {detail} · +{pts} (total {points}){st}");
+        All($"{(ok ? "\x04✔" : "\x02✘")} {drill.Title}\x01 · {shown.ToLower()} · {detail} · +{pts} ({F("total {n}", "n", points)}){st}");
         tries++;
-        var again = !ok && outcome != "skipped" && tries < 2 && DateTime.UtcNow < blockEnd && drill.Mode != "range";   // a miss: once more right away
+        var again = !ok && outcome != "skipped" && tries < 2 && DateTime.UtcNow < blockEnd && drill.Mode is not ("range" or "crossfire");   // a miss: once more right away (Crossfire's reps are its own)
         var g = ++sessGen;
         AddTimer(3.5f, () =>
         {
@@ -1640,15 +1677,18 @@ public partial class CoachReplay
         if (sess == null) return;
         Write(new Dictionary<string, object> { ["session"] = sess.Id, ["end"] = true, ["points"] = points, ["drills"] = doneN, ["ok"] = okN,
             ["early"] = early, ["t"] = DateTimeOffset.UtcNow.ToUnixTimeSeconds() });
-        Html($"<font color='#e0a030'>🏁 SESSION DONE</font><br><font class='fontSize-l'>{points} pts</font><br>{okN}/{doneN} drills ✔<br><font class='fontSize-s'>the recap is in the chat: !again to play some again</font>", 10);
-        All($"Session done: {points} pts · {okN}/{doneN} drills ✔ — your progress is in the app.");
+        Html($"<font color='#e0a030'>🏁 {T("SESSION DONE")}</font><br><font class='fontSize-l'>{points} pts</font><br>{F("{ok}/{n} drills ✔", "ok", okN, "n", doneN)}<br><font class='fontSize-s'>{T("the recap is in the chat: !again to play some again")}</font>", 10);
+        All($"{T("Session done")}: {points} pts · {F("{ok}/{n} drills ✔", "ok", okN, "n", doneN)} — {T("your progress is in the app.")}");
         lastSess = sess; lastDone.Clear(); lastDone.AddRange(sessDone);
         for (int i = 0; i < lastDone.Count; i++)
         {
             var (d, ok, o) = lastDone[i];
-            foreach (var h in Humans()) h.PrintToChat($" {(ok ? "\x04✔" : "\x02✘")} {i + 1}\x01 {d.Title} · {o}");
+            foreach (var h in Humans()) h.PrintToChat($" {(ok ? "\x04✔" : "\x02✘")} {i + 1}\x01 {d.Title} · {Shown(o).ToLower()}");
         }
-        if (lastDone.Count > 0) All("Again: !again <number> (one), !again missed (the missed ones), !again all (the whole session).");
+        if (lastDone.Count > 0) All(T("Again: !again and a number (one drill), !again missed (the missed ones), !again all (the whole session)."));
+        // 13/10, the focus block's recap: what comes back (the app's boxes: a miss is due at the next session there)
+        var missed = lastDone.Count(x => !x.ok && x.outcome != "skipped");
+        if (missed > 0) All(Tn(missed, "{n} missed drill comes first next time you train there", "{n} missed drills come first next time you train there"));
         ClearLine();
         if (cam != null) CamStop();
         Prac(false);

@@ -3,6 +3,7 @@
 const vTone=v=>v==null?"":v>=60?"good":v>=45?"warn":"bad";
 const vShort=s=>esc(String(s||"").split(" / ")[0].replace(/^Bombsite /,"").replace(/ Site$/,""));
 const vLetter={smoke:"S",flash:"F",molotov:"M",he:"H"};
+const NSHORT={smoke:tl("smoke"),flash:tl("flash"),molotov:tl("molly"),he:tl("HE")};   // a grenade's short name, in a line
 // the grenades you hold, each with the throw that fits this moment (same choice as the text panel), or none
 function vNadePicks(p,g){const N=(p.advice.plan||{}).nades,E=N&&((N.maps||{})[g.map]||{})[g.side];if(!E)return [];
   const w=g.bomb==="planted"?"post":g.elapsed==null?null:g.elapsed<20?"debut":g.elapsed<40?"prise":g.elapsed<70?"action":"fin",el=g.elapsed;
@@ -39,8 +40,8 @@ tag=x=>x&&Object.assign({},x,{way:way(x)});
     return noOff(all(t).filter(fit).sort((a,b)=>effW(b)-effW(a)||Math.abs((a.t_med??el)-el)-Math.abs((b.t_med??el)-el))).slice(0,2).map(tag)};
   return Object.entries(g.nades||{}).filter(([t,v])=>v>0&&E.types[t]).map(([t,v])=>{const ps=picks(t);return {type:t,n:v,x:ps[0]||null,alt:ps[1]||null,el:g.round_phase==="live"?el:null}})}
 function vNades(list){if(!list.length)return "";
-  const when=(x,el)=>x.t_med!=null&&el!=null&&x.t_med>el+3?clock(x.t_med):x.t_med!=null&&el==null?clock(x.t_med):"now";
-  return `<div class="vnades">${list.map(o=>`<span class="vnade${o.x?(o.now?" now":""):" keep"}" style="--c:${NADE_C[o.type]||"#ccc"}"><i>${vLetter[o.type]||"?"}</i>${o.x?`${vShort(o.x.to||o.x.land)}${o.x.pop?" ↯":""}<small>${when(o.x,o.el)}</small>${o.alt?`<em>${vShort(o.alt.to||o.alt.land)} ${when(o.alt,o.el)}</em>`:""}`:"<small>keep</small>"}</span>`).join("")}</div>`}
+  const when=(x,el)=>x.t_med!=null&&el!=null&&x.t_med>el+3?clock(x.t_med):x.t_med!=null&&el==null?clock(x.t_med):tl("now");
+  return `<div class="vnades">${list.map(o=>`<span class="vnade${o.x?(o.now?" now":""):" keep"}" style="--c:${NADE_C[o.type]||"#ccc"}"><i>${vLetter[o.type]||"?"}</i>${o.x?`${vShort(o.x.to||o.x.land)}${o.x.pop?" ↯":""}<small>${when(o.x,o.el)}</small>${o.alt?`<em>${vShort(o.alt.to||o.alt.land)} ${when(o.alt,o.el)}</em>`:""}`:`<small>${tl("keep")}</small>`}</span>`).join("")}</div>`}
 // a rule as icons and two numbers: what your side wins when you do it / when you don't
 const vRule=(icon,label,bad,good)=>`<div class="vrule"><i>${icon}</i><span>${label}</span><b class="bad">${bad}%</b><em>→</em><b class="good">${good}%</b></div>`;
 // T side: the round as a strip from 1:55 to 0:00, each tempo window colored by how often the Ts win with it here;
@@ -48,8 +49,9 @@ const vRule=(icon,label,bad,good)=>`<div class="vrule"><i>${icon}</i><span>${lab
 function vTimeline(p,g){const TS=(p.advice.plan||{}).tside,M=TS&&TS.maps&&TS.maps[g.map],TP=(M&&M.tplan)||{},rt=advisedType(g);
   const tp=(TP.tempo||{})[rt==="pistol"?"pistol":rt]||(TP.tempo||{}).full||{},L=RLEN(),el=g.round_phase==="live"?(g.elapsed||0):0;
   const seg=[["rush",0,30],["exec",30,75],["late",75,L]].filter(s=>s[2]>s[1]);
-  return vHead("ROUNDS WON · BY TEMPO")+`<div class="vtl">${seg.map(([k,a,b])=>{const v=(tp[k]||[])[1];
-      return `<div class="vseg ${vTone(v)}${el>b?" past":""}" style="flex:${b-a}"><span>${k} ${a===0?`›${clock(b)}`:b>=L?`‹${clock(a)}`:`${clock(a)}-${clock(b)}`}</span>${v!=null?`<b>${v}%</b>`:""}</div>`}).join("")}
+  const SEGL={rush:tl("rush"),exec:tl("exec"),late:tl("late")};
+  return vHead(tl("ROUNDS WON · BY TEMPO"))+`<div class="vtl">${seg.map(([k,a,b])=>{const v=(tp[k]||[])[1];
+      return `<div class="vseg ${vTone(v)}${el>b?" past":""}" style="flex:${b-a}"><span>${SEGL[k]} ${a===0?`›${clock(b)}`:b>=L?`‹${clock(a)}`:`${clock(a)}-${clock(b)}`}</span>${v!=null?`<b>${v}%</b>`:""}</div>`}).join("")}
     ${g.round_phase==="live"?`<i class="vcur" style="left:${Math.min(100,100*el/L)}%"></i>`:""}</div>`}
 // T: when to be on the site with your paths: rounds won by the moment the play is on the site (game clock, 1:55 on the
 // left, 0:00 on the right), path 1 filled, paths 2 and 3 as dashed lines in their colors; the band is path 1's best
@@ -65,16 +67,16 @@ function vPathCurve(p,g){const W=typeof winsRank==="function"?winsRank(p,g):null
   const r1=rows[0],c1=r1.timing.curve,t1=r1.timing,base=H-14-ub.length*7,area=`${line(r1)}L${X(c1[c1.length-1][0])} ${base}L${X(c1[0][0])} ${base}Z`;
   const now=g.round_phase==="live"?(g.elapsed||0):null,pk=c1.reduce((a,b)=>b[1]>a[1]?b:a);
   const ticks=[[25,"1:30"],[55,"1:00"],[85,"0:30"]].map(([c,t])=>`<line x1="${X(c)}" y1="${base}" x2="${X(c)}" y2="${base+4}" stroke="var(--muted)"/><text x="${X(c)}" y="${H-1}" text-anchor="middle" class="vct">${t}</text>`).join("");
-  const svg=`<svg class="vcurve" viewBox="0 0 ${Wd} ${H}" width="100%" height="${H}" role="img" aria-label="Rounds won by the moment the play is on the site">
+  const svg=`<svg class="vcurve" viewBox="0 0 ${Wd} ${H}" width="100%" height="${H}" role="img" aria-label="${tl("Rounds won by the moment the play is on the site")}">
     <line x1="0" y1="${base}" x2="${Wd}" y2="${base}" stroke="var(--line)"/>
     ${t1.win-t1.mean>=3?`<rect x="${X(t1.lo)}" y="0" width="${Math.max(2,X(t1.hi)-X(t1.lo))}" height="${base}" fill="${r1.col}" fill-opacity=".2"/>`:""}
     <path d="${area}" fill="${r1.col}" fill-opacity=".22"/><path d="${line(r1)}" fill="none" stroke="${r1.col}" stroke-width="2.4" stroke-linejoin="round"/>
     ${rows.slice(1).map(r=>`<path d="${line(r)}" fill="none" stroke="${r.col}" stroke-width="1.6" stroke-dasharray="4 3" opacity=".85"/>`).join("")}
     <text x="${Math.min(Wd-14,Math.max(14,X(pk[0])))}" y="${Math.max(10,Y(pk[1])-4)}" text-anchor="middle" class="vcv">${pk[1]}%</text>
-    ${ub.map((u,i)=>`<rect x="${X(u.t)}" y="${base+2+i*7}" width="${Math.max(3,X(u.end)-X(u.t))}" height="5" rx="2" fill="${u.type==="molotov"?"var(--molotov)":"var(--smoke)"}" opacity=".9"><title>Their ${u.type} ${u.land}: ${u.share}% of rounds, ${clock(u.t)} to ${clock(u.end)}</title></rect>`).join("")}
+    ${ub.map((u,i)=>`<rect x="${X(u.t)}" y="${base+2+i*7}" width="${Math.max(3,X(u.end)-X(u.t))}" height="5" rx="2" fill="${u.type==="molotov"?"var(--molotov)":"var(--smoke)"}" opacity=".9"><title>${esc(tl("Their {nade} {zone}: {p}% of rounds, {a} to {b}",{nade:NSHORT[u.type]||u.type,zone:u.land,p:u.share,a:clock(u.t),b:clock(u.end)}))}</title></rect>`).join("")}
     ${ticks}${now!=null?`<line x1="${X(now)}" y1="0" x2="${X(now)}" y2="${base}" stroke="#fff" stroke-width="1.6"/>`:""}</svg>`;
-  const hz=(UW&&UW.hits)||{},act=hz.active,aft=hz.spent||hz.kept,into=act&&aft&&aft[1]-act[1]>=5?vRule("⚠",`into their utility ${site1}`,act[1],aft[1]):"";
-  return vHead(`ON THE SITE AT · ROUNDS WON · PATH${rows.length>1?`S 1-${rows.length}`:" 1"}`)+svg+(ub.length?`<div class="vleg">${ub.map(u=>`<span><i style="background:${u.type==="molotov"?"var(--molotov)":"var(--smoke)"}"></i>${u.type==="molotov"?"molly":"smoke"} ${esc(vShort(u.land||"?"))} ${clock(u.t)}-${clock(u.end)}</span>`).join("")}</div>`:"")+into}
+  const hz=(UW&&UW.hits)||{},act=hz.active,aft=hz.spent||hz.kept,into=act&&aft&&aft[1]-act[1]>=5?vRule("⚠",tl("into their utility {site}",{site:site1}),act[1],aft[1]):"";
+  return vHead(rows.length>1?tl("ON THE SITE AT · ROUNDS WON · PATHS 1-{n}",{n:rows.length}):tl("ON THE SITE AT · ROUNDS WON · PATH 1"))+svg+(ub.length?`<div class="vleg">${ub.map(u=>`<span><i style="background:${u.type==="molotov"?"var(--molotov)":"var(--smoke)"}"></i>${u.type==="molotov"?NSHORT.molotov:NSHORT.smoke} ${esc(vShort(u.land||"?"))} ${clock(u.t)}-${clock(u.end)}</span>`).join("")}</div>`:"")+into}
 // the other team's economy as weights over the kinds of round of the base: their pistol, eco or force ("low"), full
 function econW(p,g){if(g.round===halfStart(g.round))return {pistol:1};const eb=enemyBuy(p,g)||{},lo=(eb.eco||0)+(eb.force||0),fu=eb.full||0,s=lo+fu;
   return s>0?{low:lo/s,full:fu/s}:{full:1}}
@@ -100,7 +102,7 @@ function vCTline(p,g,r){const M=(((p.advice.plan||{}).tside||{}).maps||{})[g.map
   const path=c=>c.map(([t,v],i)=>`${i?"L":"M"}${X(t)} ${Y(v)}`).join(""),area=c=>`${path(c)}L${X(c[c.length-1][0])} ${base}L${X(c[0][0])} ${base}Z`;
   const S=site==="A"?A:B,pk=S?S.reduce((a,b)=>b[1]>a[1]?b:a):null,now=g.round_phase==="live"?(g.elapsed||0):null;
   const ticks=[[25,"1:30"],[55,"1:00"],[85,"0:30"]].map(([c,t])=>`<line x1="${X(c)}" y1="${base}" x2="${X(c)}" y2="${base+4}" stroke="var(--muted)"/><text x="${X(c)}" y="${H-1}" text-anchor="middle" class="vct">${t}</text>`).join("");
-  const svg=`<svg class="vcurve" viewBox="0 0 ${Wd} ${H}" width="100%" height="${H}" role="img" aria-label="When the Ts are on each site">
+  const svg=`<svg class="vcurve" viewBox="0 0 ${Wd} ${H}" width="100%" height="${H}" role="img" aria-label="${tl("When the Ts are on each site")}">
     <line x1="0" y1="${base}" x2="${Wd}" y2="${base}" stroke="var(--line)"/>
     ${pk?`<rect x="${X(Math.max(0,pk[0]-6))}" y="0" width="${X(8)}" height="${base}" fill="var(--good)" fill-opacity=".22"/>`:""}
     ${[["B",B],["A",A]].filter(([,c])=>c).map(([s_,c])=>`<path d="${area(c)}" fill="${SITE_C[s_]}" fill-opacity="${s_===site?.28:.12}"/><path d="${path(c)}" fill="none" stroke="${SITE_C[s_]}" stroke-width="${s_===site?2.4:1.4}" stroke-linejoin="round" opacity="${s_===site?1:.7}"/>`).join("")}
@@ -112,27 +114,27 @@ function vCTline(p,g,r){const M=(((p.advice.plan||{}).tside||{}).maps||{})[g.map
     ${ticks}${now!=null?`<line x1="${X(now)}" y1="0" x2="${X(now)}" y2="${base}" stroke="#fff" stroke-width="1.6"/>`:""}</svg>`;
   // the one to hold (the hold card's best: your rounds won when it meets their hit, and when thrown early)
   // only the grenades you have (bought at the buy time: the best one to buy, marked so); none in the round: the window alone
-  const held=["molotov","smoke","he"].filter(t=>((g.nades||{})[t]||0)>0),live_=g.round_phase==="live",NM={molotov:"molly",smoke:"smoke",he:"HE"};
+  const held=["molotov","smoke","he"].filter(t=>((g.nades||{})[t]||0)>0),live_=g.round_phase==="live",NM=NSHORT;
   const UW=(M.util_war||{})[site],cand=((UW&&UW.util)||[]).filter(u=>u.met_t_won!=null&&(!held.length||held.includes(u.type))).sort((a,b)=>a.met_t_won-b.met_t_won);
   const h=held.length||!live_?cand[0]:null,sp=((UW&&UW.hits)||{}).spent,win=pk?`${clock(Math.max(0,pk[0]-6))}-${clock(pk[0]+2)}`:"";
-  const what=h?`${NM[h.type]||h.type} ${esc(vShort(h.land||"?"))}${held.length?"":" (buy)"}`:held.length?held.map(t=>NM[t]).join("/"):"";
-  const mine=what?`your ${what} ${win}${h?` · won ${100-h.met_t_won}%${sp?` vs ${100-sp[1]}% early`:""}`:""}`:`their arrival ${win}`;
-  return vHead(`WHEN THEY'RE ON A · B${r?` · ${Math.round(r.A)}% · ${Math.round(r.B)}%`:""}`)+svg+`<div class="vleg"><span><i style="background:var(--good)"></i>${mine}</span>${ut.map(u=>`<span><i style="background:${UCOL[u.type]||"#ccc"}"></i>their ${u.type==="molotov"?"molly":u.type} ${esc(vShort(u.land||"?"))} ${clock(u.t)}</span>`).join("")}${myU.map(u=>`<span><i style="background:${NADE_C[u.type]||"#ccc"}"></i>${vLetter[u.type]||"?"} ${esc(vShort(u.to))} ${esc(u.timer)}</span>`).join("")}</div>`}
+  const what=h?`${NM[h.type]||h.type} ${esc(vShort(h.land||"?"))}${held.length?"":" "+tl("(buy)")}`:held.length?held.map(t=>NM[t]).join("/"):"";
+  const mine=what?tl("your {nade} {t}",{nade:what,t:win})+(h?" · "+tl("won {p}%",{p:100-h.met_t_won})+(sp?" "+tl("vs {p}% early",{p:100-sp[1]}):""):""):tl("their arrival {t}",{t:win});
+  return vHead(tl("WHEN THEY'RE ON A · B")+(r?` · ${Math.round(r.A)}% · ${Math.round(r.B)}%`:""))+svg+`<div class="vleg"><span><i style="background:var(--good)"></i>${mine}</span>${ut.map(u=>`<span><i style="background:${UCOL[u.type]||"#ccc"}"></i>${tl("their {nade}",{nade:NSHORT[u.type]||u.type})} ${esc(vShort(u.land||"?"))} ${clock(u.t)}</span>`).join("")}${myU.map(u=>`<span><i style="background:${NADE_C[u.type]||"#ccc"}"></i>${vLetter[u.type]||"?"} ${esc(vShort(u.to))} ${esc(u.timer)}</span>`).join("")}</div>`}
 // CT: what to keep for their hit on the likely site: your rounds won when it meets their hit, and what thrown-early
 // utility gives
 function vHold(p,g,r){const M=(((p.advice.plan||{}).tside||{}).maps||{})[g.map]||{},site=r&&r.A!==r.B?(r.A>r.B?"A":"B"):null,UW=site&&(M.util_war||{})[site];if(!UW)return "";
   const held=["molotov","smoke","he"].filter(t=>((g.nades||{})[t]||0)>0);
   const rows=(UW.util||[]).filter(u=>u.met_t_won!=null&&(!held.length||held.includes(u.type))).sort((a,b)=>a.met_t_won-b.met_t_won).slice(0,2);   // the grenades you have
   const sp=(UW.hits||{}).spent;if(!rows.length&&!sp)return "";
-  return vHead(`⏳ HOLD FOR THEIR HIT · ${site} · WON`)+vRows([...rows.map(u=>({l:`${u.type==="molotov"?"molly":"smoke"} ${vShort(u.land||"?")}`,v:100-u.met_t_won,c:"var(--good)"})),
-    ...(sp?[{l:"thrown early",v:100-sp[1],c:"var(--bad)",o:.7}]:[])])}
+  return vHead("⏳ "+tl("HOLD FOR THEIR HIT · {site} · WON",{site}))+vRows([...rows.map(u=>({l:`${u.type==="molotov"?NSHORT.molotov:NSHORT.smoke} ${vShort(u.land||"?")}`,v:100-u.met_t_won,c:"var(--good)"})),
+    ...(sp?[{l:tl("thrown early"),v:100-sp[1],c:"var(--bad)",o:.7}]:[])])}
 function vCTdots(p,g){const TS=(p.advice.plan||{}).tside,M=TS&&TS.maps&&TS.maps[g.map],TP=(M&&M.tplan)||{},rt=advisedType(g);
   const su=(TP.setup||{})[rt==="pistol"?"pistol":rt]||(TP.setup||{}).all;if(!su||!su.top||!su.top.length)return "";const t=su.top[0];
   const dots=n=>"●".repeat(n)||"○";
-  return vHead("CT SETUP · MOST USED")+`<div class="vdots"><span>A</span><b>${dots(t[0])}</b><em>|</em><span>B</span><b>${dots(t[1])}</b>${t[2]?`<em>|</em><span>mid</span><b>${dots(t[2])}</b>`:""}<small>${t[3]}% of rounds</small></div>`}
+  return vHead(tl("CT SETUP · MOST USED"))+`<div class="vdots"><span>A</span><b>${dots(t[0])}</b><em>|</em><span>B</span><b>${dots(t[1])}</b>${t[2]?`<em>|</em><span>${tl("mid")}</span><b>${dots(t[2])}</b>`:""}<small>${tl("{p}% of rounds",{p:t[3]})}</small></div>`}
 function vTchips(p,g){const TS=(p.advice.plan||{}).tside,M=TS&&TS.maps&&TS.maps[g.map],TP=(M&&M.tplan)||{},P_=M&&M.plays,out=[];
   // a fake (first contact on one side, the hit on the other) against going straight: rounds won, both, always
-  const fk=TP.fake||{};if(fk.switch&&fk.direct){const d=fk.switch[1]-fk.direct[1];out.push(`<span class="vchip ${d>=5?"good":d<=-5?"bad":""}">FAKE ${fk.switch[1]}% won <small>direct ${fk.direct[1]}%</small></span>`)}
+  const fk=TP.fake||{};if(fk.switch&&fk.direct){const d=fk.switch[1]-fk.direct[1];out.push(`<span class="vchip ${d>=5?"good":d<=-5?"bad":""}">${tl("FAKE {p}% won",{p:fk.switch[1]})} <small>${tl("direct {p}%",{p:fk.direct[1]})}</small></span>`)}
   return out.length?`<div class="vchips">${out.join("")}</div>`:""}
 // one option per line: the label, a bar (the longest is the most likely), the number. Fixed order for the sites,
 // so the eye finds A and B at the same place every time
@@ -152,17 +154,17 @@ function vHabits(p,g){if(g.side!=="CT"||isHostage(g.map))return "";const TS=(p.a
   const kn=rows.filter(r=>r.site),nA=kn.filter(r=>r.site==="A").length,nB=kn.length-nA,top=nA>=nB?"A":"B";
   const lowR=rows.filter(r=>r.low),fullR=rows.filter(r=>!r.low),rl=lowR.filter(r=>r.rush).length,rf=fullR.filter(r=>r.rush).length,bits=[];
   if(kn.length)bits.push(`<b style="color:${SITE_C[top]}">${top} ${Math.max(nA,nB)}/${kn.length}</b>`);
-  if(rl)bits.push(`rush on eco ${rl}/${lowR.length}`);if(rf)bits.push(`rush on full buy ${rf}/${fullR.length}`);
+  if(rl)bits.push(tl("rush on eco {a}/{b}",{a:rl,b:lowR.length}));if(rf)bits.push(tl("rush on full buy {a}/{b}",{a:rf,b:fullR.length}));
   if(!bits.length)return "";
-  return `<div class="vhab"><span>THEM THIS HALF</span>${bits.join(" · ")}<em>now: ${buyLow(p,g,cur)?"eco":"full buy"}</em></div>`}
-function vOdds(r,h){return vHead(h||"WHERE THEY GO · LIKELY")+`<div class="vodds">${vRows([{l:"A",v:r.A,c:SITE_C.A},{l:"B",v:r.B,c:SITE_C.B},{l:"?",v:r.none,c:"var(--muted)"}])}</div>`}
+  return `<div class="vhab"><span>${tl("THEM THIS HALF")}</span>${bits.join(" · ")}<em>${buyLow(p,g,cur)?tl("now: eco"):tl("now: full buy")}</em></div>`}
+function vOdds(r,h){return vHead(h||tl("WHERE THEY GO · LIKELY"))+`<div class="vodds">${vRows([{l:"A",v:r.A,c:SITE_C.A},{l:"B",v:r.B,c:SITE_C.B},{l:"?",v:r.none,c:"var(--muted)"}])}</div>`}
 // a rush: how likely, and where it goes (the most likely in big, the second smaller and fainter)
 function vRush(TS,g,r){const PLs=tsidePlays(TS,g.map,g,evFor(g),r);if(!PLs)return "";
   const rn=r.live?Math.round(100*calRush(PLs.rush)):r.rush,rs=(PLs.list||[]).filter(x=>/^rush/.test(x.p)).sort((a,b)=>b.v-a.v);
   if(rn<15||!rs.length)return "";
   const lab=x=>`${x.site} · ${vShort(String(x.label||"").replace(/^Rush [AB]( through )?/,""))}`;
   const lead=rs[0].v-((rs[1]||{}).v||0)>=.1;   // where it goes: only when one destination stands out (close numbers only overload)
-  return `<div class="vbig ${rn>=40?"bad":"warn"}"><b>RUSH ${rn}%</b><span>likely · until ${clock(32)}${lead?` · ${esc(lab(rs[0]))}`:""}</span></div>`}
+  return `<div class="vbig ${rn>=40?"bad":"warn"}"><b>${tl("RUSH {p}%",{p:rn})}</b><span>${tl("likely · until {t}",{t:clock(32)})}${lead?` · ${esc(lab(rs[0]))}`:""}</span></div>`}
 // where the fights are at this moment of the round (deaths of both sides in the base, on the likely site when the
 // read leans one way): three zones, fainter as they get less likely
 function vFights(M,g,r){const D=((M&&M.evidence)||{}).deaths;if(!D)return "";const w=WIN_OF(g.elapsed||0);
@@ -170,19 +172,19 @@ function vFights(M,g,r){const D=((M&&M.evidence)||{}).deaths;if(!D)return "";con
   for(const side of ["CT","T"]){const src=((D[side]||{})[lean]||{})[w]||((D[side]||{}).all||{})[w];if(!src)continue;
     src.zones.forEach(z=>{acc[z.zone]=(acc[z.zone]||0)+z.pct*src.n});tot+=src.n}
   const top=Object.entries(acc).sort((a,b)=>b[1]-a[1]).slice(0,3);if(!top.length||!tot)return "";
-  return vHead("⚔ FIGHTS NOW · SHARE OF DUELS")+vRows(top.map(([z,v],i)=>({l:vShort(z),v:v/tot,c:"var(--ink)",o:[1,.75,.5][i]})))}
+  return vHead("⚔ "+tl("FIGHTS NOW · SHARE OF DUELS"))+vRows(top.map(([z,v],i)=>({l:vShort(z),v:v/tot,c:"var(--ink)",o:[1,.75,.5][i]})))}
 // before the round (CT): where the Ts come from, one entrance per line
 function vEntries(TS,g,r){const PLs=tsidePlays(TS,g.map,g,evFor(g),r);if(!PLs)return "";
   const top=PLs.lanes.filter(L=>L.p>=0.05).sort((a,b)=>b.p-a.p);if(!top.length||top[0].p-((top[1]||{}).p||0)<.12)return "";   // one entrance stands out, or nothing
-  return vHead("⇢ ENTRY · LIKELY")+vRows([{l:`${top[0].site} · ${vShort(top[0].name)}`,v:100*top[0].p,c:SITE_C[top[0].site]}])}
+  return vHead("⇢ "+tl("ENTRY · LIKELY"))+vRows([{l:`${top[0].site} · ${vShort(top[0].name)}`,v:100*top[0].p,c:SITE_C[top[0].site]}])}
 // the call you just made, as the coach understood it (it counts like a tap on the T read)
 function vCall(g){const c=g&&g.call;if(!c||c.round!==g.round||Date.now()/1000-c.t>12)return "";
-  const bits=[c.rush?"rush":"",c.n?String(c.n):"",c.site||"",c.zone?vShort(c.zone):"",c.bomb?"💣":""].filter(Boolean);
+  const bits=[c.rush?tl("rush"):"",c.n?String(c.n):"",c.site||"",c.zone?vShort(c.zone):"",c.bomb?"💣":""].filter(Boolean);
   return bits.length?`<span class="vchip good">🎙 ${esc(bits.join(" · "))}</span>`:""}
 // your teammates' money, seen while you watched them last round: what they'll have now (≈: their kills not counted)
 function vMates(g){const M=g.mates||{},prev=(g.round||0)-1;if(prev<1||halfStart(g.round)===g.round)return "";
   const R=((g.hist||{}).rounds||{})[prev]||{},won=R.win===g.side,L=g.losses||0,gain=won?ECON.win:ECON.bonus[Math.max(0,Math.min(L-1,4))],need=g.side==="CT"?3900:3700;
-  const xs=Object.values(M).filter(m=>m.money!=null&&m.money_round===prev).map(m=>({n:m.name||"mate",v:Math.min(ECON.cap,m.money+gain)})).slice(0,3);
+  const xs=Object.values(M).filter(m=>m.money!=null&&m.money_round===prev).map(m=>({n:m.name||tl("mate"),v:Math.min(ECON.cap,m.money+gain)})).slice(0,3);
   return xs.map(x=>`<span class="vchip ${x.v>=need?"good":"bad"}">👥 ${esc(vShort(x.n))} ≈${kMoney(x.v)} ${x.v>=need?"✓":"✕"}</span>`).join("")}
 // T: CTs pushing past a neutral zone, one line per zone (share of rounds, when); red: the push often gets a kill;
 // once its moment is past, the line fades
@@ -192,10 +194,10 @@ function vEarlyMatch(g){const H=g.hist||{},Mk=H.marks||{},R=H.rounds||{},hs=half
   for(let r=hs;r<(g.round||0);r++)if((R[r]||{}).side===g.side||!(R[r]||{}).side)n.push(r);if(n.length<3)return "";
   const c={};n.forEach(r=>((Mk[r]||{}).early||[]).forEach(z=>c[z]=(c[z]||0)+1));
   const top=Object.entries(c).filter(([,k])=>k>=2).sort((a,b)=>b[1]-a[1]).slice(0,2);if(!top.length)return "";
-  return vHead(`👁 THIS MATCH · EARLY CONTACT · ${n.length} ROUNDS`)+vRows(top.map(([z,k],i)=>({l:`${vShort(z)} · ${k}/${n.length}`,v:100*k/n.length,c:"var(--bad)",o:i?.75:1})))}
+  return vHead("👁 "+tln(n.length,"THIS MATCH · EARLY CONTACT · {n} ROUND","THIS MATCH · EARLY CONTACT · {n} ROUNDS"))+vRows(top.map(([z,k],i)=>({l:`${vShort(z)} · ${k}/${n.length}`,v:100*k/n.length,c:"var(--bad)",o:i?.75:1})))}
 function vPush(p,g){const E=typeof ctPush==="function"?ctPush(p,g):null;if(!E||!E.gates.length)return "";const el=g.round_phase==="live"?(g.elapsed||0):0;
   const rows=E.gates.map((x,i)=>({l:`${vShort(x.gate||"?")} · ${clock(x.t)}`,v:x.share,c:x.kill>=30?"var(--bad)":"var(--ct)",o:el>x.t+6?.35:[1,.85,.7,.6][i]}));
-  return vHead(`➜ CT PUSHES · ${E.label} · OF ROUNDS`)+vRows(rows)}
+  return vHead("➜ "+tl("CT PUSHES · {buy} · OF ROUNDS",{buy:E.label}))+vRows(rows)}
 // after a frustrated moment (said "coach, énervé", a shout after your death or a lost round) or two rounds lost dead
 // without a kill: one thing to do this round, from your own data (an early death: no dry peek; otherwise: the trade)
 function resetWhy(g){if(g.round_phase!=="freezetime"||!g.hist)return null;const R=g.hist.rounds||{},Mk=g.hist.marks||{},cur=g.round,prev=cur-1;if(!(prev>=1))return null;
@@ -209,71 +211,101 @@ function resetWhy(g){if(g.round_phase!=="freezetime"||!g.hist)return null;const 
 // the simple plan of the round: T, path 1 and when to be on the site; CT, your spot of the buy card
 function simplePlan(p,g){if(g.side==="T"){const W=typeof winsRank==="function"?winsRank(p,g):null,r=W&&W.rows[0];if(!r)return null;
     const ps=pathShort(p,g,r),pts=(r.route||{}).pts,end=pts&&pts[pts.length-1],tm=r.timing,win=tm&&tm.win-tm.mean>=3;
-    return {head:ps.head,via:ps.via,lo:win?tm.lo:null,hi:win?tm.hi:null,at:!win&&end&&end[3]!=null?end[3]:null}}
+    return {head:ps.head,ps,via:ps.via,lo:win?tm.lo:null,hi:win?tm.hi:null,at:!win&&end&&end[3]!=null?end[3]:null}}
   const KB=(((((p.advice.plan||{}).buys||{}).maps||{})[g.map]||{})[g.side]||{}),k=KB[advisedType(g)]||KB.full||{};
   return k.zone?{spot:k.zone.key}:null}
 function vReset(p,g){const w=resetWhy(g);if(!w)return "";
   if(w.k==="doubt"){const sp=simplePlan(p,g);if(!sp)return "";
-    return `<div class="vreset plan"><b>PLAN</b><span>${sp.spot?`📍 ${vShort(sp.spot)} · molly for their arrival`:`${esc(sp.head)}${sp.via?` via ${esc(sp.via)}`:""} · ${sp.lo!=null?`on site ${clock(sp.lo)}-${clock(sp.hi)}`:sp.at!=null?`on site ~${clock(sp.at)}`:""}`}</span></div>`}
-  if(w.k==="carry")return `<div class="vreset"><b>CALM START</b><span>👥 play the trade · ✕ no dry peek before ${clock(30)}</span><small>after a bad game · ADR rounds 2-5 ${w.C.bad.adr_first} vs ${w.C.bad.adr_rest} later</small></div>`;
+    return `<div class="vreset plan"><b>${tl("PLAN")}</b><span>${sp.spot?`📍 ${vShort(sp.spot)} · ${tl("molly for their arrival")}`:`${esc(sp.head)}${sp.via?" "+tl("via {way}",{way:esc(sp.via)}):""} · ${sp.lo!=null?tl("on site {a}-{b}",{a:clock(sp.lo),b:clock(sp.hi)}):sp.at!=null?tl("on site ~{t}",{t:clock(sp.at)}):""}`}</span></div>`}
+  if(w.k==="carry")return `<div class="vreset"><b>${tl("CALM START")}</b><span>👥 ${tl("play the trade")} · ✕ ${tl("no dry peek before {t}",{t:clock(30)})}</span><small>${tl("after a bad game · ADR rounds 2-5 {a} vs {b} later",{a:w.C.bad.adr_first,b:w.C.bad.adr_rest})}</small></div>`;
   const MS=(p.advice.plan||{}).mood,A_=MS&&MS.after,O_=MS&&MS.other;   // what a tilt costs you: rounds won first, else damage
-  const data=A_&&O_?(O_.won-A_.won>=3?`<small>after a tilt · won ${A_.won}% vs ${O_.won}%</small>`:O_.adr-A_.adr>=5?`<small>after a tilt · ADR ${A_.adr} vs ${O_.adr}</small>`:""):"";
-  return `<div class="vreset"><b>RESET</b><span>${w.early?`✕ no dry peek before ${clock(30)}`:"👥 play the trade: next to a mate"}</span>${data}</div>`}
-// ---------- the coach's voice at the buy time: a few seconds in French, once per round, when the reset or plan card
-// shows. A voice of this PC only, never a server's (Windows: Julie, Paul, Hortense; Linux: speech-dispatcher): nothing
-// leaves the PC. The browser lets a page speak only after one click on it ----------
+  const data=A_&&O_?(O_.won-A_.won>=3?`<small>${tl("after a tilt · won {a}% vs {b}%",{a:A_.won,b:O_.won})}</small>`:O_.adr-A_.adr>=5?`<small>${tl("after a tilt · ADR {a} vs {b}",{a:A_.adr,b:O_.adr})}</small>`:""):"";
+  return `<div class="vreset"><b>${tl("RESET")}</b><span>${w.early?"✕ "+tl("no dry peek before {t}",{t:clock(30)}):"👥 "+tl("play the trade: next to a mate")}</span>${data}</div>`}
+// ---------- the coach's voice at the buy time: a few seconds, once per round, when the reset or plan card shows. The
+// language chosen in Settings, else the app's language when this PC has a voice for it, else English (12/10: an
+// English Windows has no French voice, the coach stayed silent there; 13/10: every language of the app). A voice of this PC only, never a server's
+// (Windows: Julie, Paul, Hortense or an English one; Linux: speech-dispatcher): nothing leaves the PC. The browser lets
+// a page speak only after one click on it ----------
 const VOICE={said:null};
 // getVoices() is empty until the browser has loaded them and says so: read it once at start, then on every change,
 // so a call does not go silent just because it was the first thing to ask (10/10, a player on Linux: no voice at all)
 let VOICE_LIST=[];
 const SYNTH=typeof speechSynthesis!=="undefined"?speechSynthesis:null;   // typeof: this file also runs outside a browser (checks/check_maps.js)
-function loadVoices(){try{VOICE_LIST=(SYNTH&&SYNTH.getVoices())||[]}catch(e){VOICE_LIST=[]}}
+let VCACHE={};   // langVoice's answers until the voices change: the panel asks on each refresh, and Linux has thousands
+function loadVoices(){try{VOICE_LIST=(SYNTH&&SYNTH.getVoices())||[]}catch(e){VOICE_LIST=[]}VCACHE={}}
 if(SYNTH){loadVoices();try{SYNTH.addEventListener("voiceschanged",loadVoices)}catch(e){try{SYNTH.onvoiceschanged=loadVoices}catch(e2){}}}
 function voices(){if(VOICE_LIST.length)return VOICE_LIST;try{return(SYNTH&&SYNTH.getVoices())||[]}catch(e){return[]}}
 function voiceOn(){try{return localStorage.getItem("coach_voice")!=="off"}catch(e){return true}}
-// French by its tag, or by its name when the engine does not tag it (speech-dispatcher names its voices by language)
-function isFr(v){return /^fr/i.test(v.lang||"")||/fran[c\u00e7]ais|french/i.test(v.name||"")}
-// localService tells a voice of this PC from a server's, and only Windows and macOS ship remote ones. Firefox on
-// Linux answers false for every voice although they all come from speech-dispatcher, which runs espeak-ng on the PC
-// (10/10, a player's browser: 14805 voices, every one false): believing the flag there would keep the coach silent
-// for a voice that never leaves the PC. So it is believed where remote voices exist, and the platform answers elsewhere.
-function remoteVoices(){return /Windows|Mac OS X|Macintosh|iPhone|iPad/i.test(navigator.userAgent||"")}
-function frVoice(){const fr=voices().filter(isFr);
-  if(!fr.length)return null;
-  const local=fr.filter(v=>v.localService), pool=local.length?local:(remoteVoices()?[]:fr);
-  // espeak-ng crosses every language with every variant and offers no plain voice at all (10/10: 420 French ones,
-  // 3 languages x 140 variants): France before Belgium and Switzerland, and a plain or ordinary variant before one
-  // that would read a call in a whisper or as a robot grandpa
+// A language by its tag, or by its name when the engine does not tag it (speech-dispatcher names its voices by language)
+const LANG_NAME={fr:/fran[c\u00e7]ais|french/i,en:/english|anglais/i,de:/german|deutsch|allemand/i,ru:/russian|russe|русск/i,pt:/portug/i,es:/spanish|espa[nñ]ol|espagnol/i,zh:/chinese|mandarin|chinois|中文|普通话/i};
+const LANG_TAG={fr:/^fr/i,en:/^en/i,de:/^de/i,ru:/^ru/i,pt:/^pt/i,es:/^es/i,zh:/^(zh|cmn)/i};
+function isLang(v,l){return !!LANG_TAG[l]&&(LANG_TAG[l].test(v.lang||"")||LANG_NAME[l].test(v.name||""))}
+function isFr(v){return isLang(v,"fr")}
+// localService tells a voice of this PC from a server's. Firefox (and its forks: Zen...) answers false for every voice
+// on Linux although they all come from speech-dispatcher, which runs espeak-ng on the PC (10/10, a player's browser:
+// 14805 voices, every one false), and it has no remote voice at all: there the flag is not believed. Everywhere else it
+// is: Chrome and Edge offer remote voices on Linux too (Google's, Microsoft's "Online (Natural)" ones), and a sentence
+// spoken by one of those goes to their server (12/10).
+function flagUnreliable(){return /Firefox\//.test(navigator.userAgent||"")}
+// the voice of a language: espeak-ng crosses every language with every variant and offers no plain voice at all
+// (10/10: 420 French ones, 3 languages x 140 variants): the main country first, and a plain or ordinary variant before
+// one that would read a call in a whisper or as a robot grandpa
+function langVoice(l){const vs=voices(),k=l+"|"+vs.length;return k in VCACHE?VCACHE[k]:(VCACHE[k]=pickVoice(vs,l))}
+function pickVoice(vs,l){const all=vs.filter(v=>isLang(v,l));
+  if(!all.length)return null;
+  const local=all.filter(v=>v.localService), pool=local.length?local:(flagUnreliable()?all:[]);
   const odd=/whisper|croak|grandpa|grandma|klatt|robosoft|Tweaky/i;
-  const best=l=>l.find(v=>!v.name.includes("+"))||l.find(v=>!odd.test(v.name))||l[0];
-  return pool.find(v=>/Julie|Paul|Hortense/.test(v.name))
-      ||best(pool.filter(v=>/^fr-fr$/i.test(v.lang||"")))
-      ||best(pool.filter(v=>/^fr$/i.test(v.lang||"")))
+  const best=x=>x.find(v=>!v.name.includes("+"))||x.find(v=>!odd.test(v.name))||x[0];
+  // the main country first (Germany for German, Brazil for Portuguese, Latin America for Spanish, the mainland for Chinese)
+  const main={fr:[/^fr[-_]fr$/i,/^fr$/i],de:[/^de[-_]de$/i,/^de$/i,/^de[-_](at|ch)$/i],ru:[/^ru[-_]ru$/i,/^ru$/i],pt:[/^pt[-_]br$/i,/^pt$/i],es:[/^es[-_](mx|us|419)$/i,/^es$/i,/^es[-_]es$/i],
+    zh:[/^zh[-_]cn$/i,/^(zh|cmn)$/i,/^zh[-_](tw|hk)$/i]}[l]||[/^en[-_]us$/i,/^en[-_]gb$/i,/^en$/i];
+  return (l==="fr"?pool.find(v=>/Julie|Paul|Hortense/.test(v.name)):null)
+      ||main.map(re=>best(pool.filter(v=>re.test(v.lang||"")))).find(Boolean)
       ||best(pool)||null}
-function voiceHelp(){if(!SYNTH)return"This browser cannot speak (no speech synthesis).";
-  const vs=voices(),win=/Windows/i.test(navigator.userAgent||"");
-  if(!vs.length)return win?"No voice found on this PC.":"No voice found: on Linux the browser speaks through speech-dispatcher (with espeak-ng), which has to be running; a browser installed as a Flatpak or a Snap also needs the sandbox opened to it.";
-  if(!vs.some(isFr))return`No French voice among the ${vs.length} this PC offers: add one (Windows: Settings, Time & language, Speech; Linux: espeak-ng speaks French).`;
-  return"The French voices here are this browser's remote ones: the sentence would be sent to a server, so it is not spoken."}
-function coachSay(t){if(!SYNTH)return false;const v=frVoice();if(!v)return false;
-  const u=new SpeechSynthesisUtterance(t);u.voice=v;u.lang=v.lang;u.rate=1.08;SYNTH.cancel();SYNTH.speak(u);return true}
-const sayClock=t=>{const c=clock(t).split(":");return +c[0]?`${c[0]} minute ${+c[1]}`:`${+c[1]} secondes`};
+function frVoice(){return langVoice("fr")}
+// the language chosen in Settings (12/10: auto or one of the app's languages), and in auto: the app's language when a
+// voice of it is here, else English. A language chosen without a voice here: silent, and Hear it says why
+function voicePref(){try{const p=localStorage.getItem("coach_lang");return p&&Object.prototype.hasOwnProperty.call(D.langs||{en:1,fr:1},p)?p:"auto"}catch(e){return"auto"}}   // D.langs: {code: name}
+function voiceLang(){const p=voicePref();if(p!=="auto")return langVoice(p)?p:null;
+  return [LANG,"en"].find(l=>langVoice(l))||null}
+// a language's name inside a sentence of the page's language
+const LANG_IN=()=>({en:tl("English"),fr:tl("French"),de:tl("German"),ru:tl("Russian"),pt:tl("Portuguese"),es:tl("Spanish"),zh:tl("Chinese")});
+function voiceHelp(){if(!SYNTH)return tl("This browser cannot speak (no speech synthesis).");
+  const vs=voices(),win=/Windows/i.test(navigator.userAgent||""),p=voicePref(),ok=voiceLang(),N=LANG_IN();
+  if(ok)return tl("The coach speaks {lang} with {voice}.",{lang:N[ok],voice:langVoice(ok).name});
+  if(!vs.length)return win?tl("No voice found on this PC (Windows: Settings, Time & language, Speech)."):tl("No voice found: on Linux the browser speaks through speech-dispatcher (with espeak-ng), which has to be running; a browser installed as a Flatpak or a Snap also needs the sandbox opened to it.");
+  const want=p!=="auto"?[p]:[...new Set([LANG,"en"])],names=want.map(l=>N[l]).join(" / ");
+  if(!vs.some(v=>want.some(l=>isLang(v,l))))return tl("No {lang} voice among the {n} this PC offers: add one (Windows: Settings, Time & language, Speech; Linux: espeak-ng), or choose another language.",{lang:names,n:vs.length});
+  return tl("The {lang} voices here are this browser's remote ones: the sentence would be sent to a server, so it is not spoken. Add a {lang} voice to this PC (Windows: Settings, Time & language, Speech), or choose another language.",{lang:names})}
+// say(l): the line in the voice's language l (tlv / tlvn). A line not translated in that language yet: said in English
+// by an English voice when the language is the automatic one, else not said (never English words in a Russian voice)
+function coachSay(say){if(!SYNTH)return false;let l=voiceLang();if(!l)return false;
+  TLV.miss=false;let s=say(l);
+  if(l!=="en"&&TLV.miss){if(voicePref()!=="auto"||!langVoice("en"))return false;l="en";s=say(l)}
+  const v=langVoice(l),u=new SpeechSynthesisUtterance(s);u.voice=v;u.lang=v.lang;u.rate=1.08;SYNTH.cancel();SYNTH.speak(u);return true}
+const sayClock=(t,l)=>{const c=clock(t).split(":"),m=+c[0],s=+c[1];return m?tlv("{m} minute {s}",l,{m,s}):tlvn(s,"{n} second","{n} seconds",l)};
 function coachVoice(p,g){if(!voiceOn()||!g||g.practice)return;const w=resetWhy(g);if(!w)return;const key=[g.map,g.round,w.k].join("|");if(VOICE.said===key)return;
   if(navigator.userActivation&&!navigator.userActivation.hasBeenActive)return;   // no click on the page yet: the browser would refuse
-  const pick=a=>a[Math.floor(Math.random()*a.length)];
-  const instr=w.early?`pas de peek sec avant ${sayClock(30)}`:"joue le trade, à côté d'un coéquipier";
-  let t;
+  const instr=l=>w.early?tlv("no dry peek before {t}",l,{t:sayClock(30,l)}):tlv("play the trade, next to a teammate",l);
+  let say;
   if(w.k==="carry"){if(VOICE.carry===g.map)return;VOICE.carry=g.map;   // once per match
-    if(coachSay(`Nouvelle partie. La dernière était dure : on démarre calme. Joue le trade, pas de peek sec avant ${sayClock(30)}.`))VOICE.said=key;return}
-  if(w.k==="doubt"){const sp=simplePlan(p,g);if(!sp)return;
-    t=sp.spot?`Plan simple : ton spot, ${String(sp.spot).split(" / ")[0]}, et ta molly pour leur arrivée.`
-      :`Plan simple : ${sp.head}${sp.via?` par ${sp.via.replace(/ > /g,", ")}`:""}${sp.lo!=null?`, sur le site entre ${sayClock(sp.lo)} et ${sayClock(sp.hi)}`:sp.at!=null?`, sur le site vers ${sayClock(sp.at)}`:""}.`}
+    if(coachSay(l=>tlv("New game. The last one was rough: we start calm. Play the trade, no dry peek before {t}.",l,{t:sayClock(30,l)})))VOICE.said=key;return}
+  if(w.k==="doubt"){const sp=simplePlan(p,g);if(!sp)return;const via=sp.via?sp.via.replace(/ > /g,", "):"";
+    // short sentences, one idea each: easier to hear in a fight, and to translate
+    say=l=>sp.spot?tlv("Simple plan: your spot, {spot}, and your molly for when they come.",l,{spot:String(sp.spot).split(" / ")[0]})
+      :[tlv("Simple plan: {plan}.",l,{plan:psHead(sp.ps,l)}),via?tlv("Go through {way}.",l,{way:via}):"",
+        sp.lo!=null?tlv("Be on the site between {a} and {b}.",l,{a:sayClock(sp.lo,l),b:sayClock(sp.hi,l)}):sp.at!=null?tlv("Be on the site around {t}.",l,{t:sayClock(sp.at,l)}):""].filter(Boolean).join(" ")}
   else{const MS=(p.advice.plan||{}).mood,dw=MS&&MS.after&&MS.other?MS.other.won-MS.after.won:0,drop=MS&&MS.after&&MS.other&&MS.other.adr?Math.round(100*(1-MS.after.adr/MS.other.adr)):0;
-    t=w.k==="frus"?pick([`Respire. Le round d'avant est fini. Ce round, ${instr}.`,`On reset. Une info utile, puis ${instr}.`])
-      :pick([`Deux rounds compliqués, ça arrive. Ce round, ${instr}.`,`On repart simple : ${instr}.`]);
-    if(VOICE.data!==g.map&&(dw>=3||drop>=10)){t+=dw>=3?` Après un tilt, tu gagnes ${dw} rounds sur cent de moins : joue simple.`:` Après un tilt, tes dégâts baissent de ${drop} pour cent : joue simple.`;VOICE.data=g.map}}
+    const i=Math.floor(Math.random()*2);
+    const line=w.k==="frus"?[l=>tlv("Breathe. The last round is over. This round, {instr}.",l,{instr:instr(l)}),l=>tlv("Reset. One useful call, then {instr}.",l,{instr:instr(l)})][i]
+      :[l=>tlv("Two tough rounds, it happens. This round, {instr}.",l,{instr:instr(l)}),l=>tlv("Back to simple: {instr}.",l,{instr:instr(l)})][i];
+    let more=null;
+    if(VOICE.data!==g.map&&(dw>=3||drop>=10)){
+      more=dw>=3?l=>tlvn(dw,"After a tilt, you win {n} fewer round out of a hundred: keep it simple.","After a tilt, you win {n} fewer rounds out of a hundred: keep it simple.",l)
+        :l=>tlv("After a tilt, your damage drops by {p} percent: keep it simple.",l,{p:drop});VOICE.data=g.map}
+    say=l=>line(l)+(more?" "+more(l):"")}
   if(VOICE.last&&VOICE.last.map===g.map&&w.k!=="doubt"&&g.round-VOICE.last.round<3){VOICE.said=key;return}   // a reset at most every 3 rounds: not a sermon each round
-  if(coachSay(t)){VOICE.said=key;if(w.k!=="doubt")VOICE.last={map:g.map,round:g.round}}}
+  if(coachSay(say)){VOICE.said=key;if(w.k!=="doubt")VOICE.last={map:g.map,round:g.round}}}
 // T: the site left open by what you called in the last 25 s (two CTs or more on one side and none on the other, or a
 // site said clear): where the bomb should go
 function vOpen(g){if(g.side!=="T"||g.bomb==="planted"||!g.seen||g.seen.round!==g.round)return "";
@@ -284,7 +316,7 @@ function vOpen(g){if(g.side!=="T"||g.bomb==="planted"||!g.seen||g.seen.round!==g
     if(regs.length===1)n[regs[0]]+=c.n||1;else regs.forEach(x=>n[x]+=1)});
   const open=["A","B"].find(s=>{const o=s==="A"?"B":"A";return (clear[s]||(n[o]>=2&&n[s]===0))&&!clear[o]&&!n[s]});
   if(!open)return "";const o=open==="A"?"B":"A",age=Math.round(now-Math.max(...cs.map(c=>c.t)));
-  return `<div class="vbig good"><b>${open} OPEN</b><span>go ${open} · ${n[o]?`${n[o]} seen ${o}`:`${open} clear`} · ${age}s ago</span></div>`}
+  return `<div class="vbig good"><b>${tl("{site} OPEN",{site:open})}</b><span>${tl("go {site}",{site:open})} · ${n[o]?tl("{n} seen {site}",{n:n[o],site:o}):tl("{site} clear",{site:open})} · ${tl("{s}s ago",{s:age})}</span></div>`}
 // T: when the CTs push past a neutral zone, the Ts' rounds won by their answer (the site, fast or late), at equal
 // economy. Buy time: the most likely push (15% of rounds or more); in the round: the zone you just called
 function vPushAns(p,g,live){if(g.side!=="T")return "";const PA=((((p.advice.plan||{}).tside||{}).maps||{})[g.map]||{}).push_answers;if(!PA)return "";
@@ -292,7 +324,7 @@ function vPushAns(p,g,live){if(g.side!=="T")return "";const PA=((((p.advice.plan
   let A=called.length?PA.find(a=>called.some(z=>z===a.gate||String(a.gate).includes(z)||String(z).includes(a.gate))):null;
   if(!A&&!live){const E=typeof ctPush==="function"?ctPush(p,g):null,top=E&&E.gates[0];if(top&&top.share>=15)A=PA.find(a=>a.gate===top.gate)}
   if(!A)return "";
-  return vHead(`IF THEY PUSH ${vShort(A.gate)} · WON`)+vRows(A.answers.slice(0,2).map((a,i)=>({l:`${a.site} ${a.tempo==="fast"?`fast ›${clock(45)}`:`late ‹${clock(45)}`}`,v:a.won,c:SITE_C[a.site],o:i?.7:1})))}
+  return vHead(tl("IF THEY PUSH {zone} · WON",{zone:vShort(A.gate)}))+vRows(A.answers.slice(0,2).map((a,i)=>({l:`${a.site} ${a.tempo==="fast"?`${tl("fast")} ›${clock(45)}`:`${tl("late")} ‹${clock(45)}`}`,v:a.won,c:SITE_C[a.site],o:i?.7:1})))}
 // the zones to check on a path: the enemy spots within 90 px of its way (bomb maps: where the CTs stand and the angles
 // they kill from at that moment; hostage maps: where the Ts hold and the spots they kill CTs from), kill spots first
 function focusChecks(p,g,r){if(!r||!r.route||!r.route.pts)return [];const pts=r.route.pts,near=s=>s&&s.px&&pts.some(q=>Math.hypot(q[0]-s.px[0],q[1]-s.px[1])<90&&(!s.level||!q[2]||s.level===q[2]));
@@ -305,10 +337,10 @@ function focusChecks(p,g,r){if(!r||!r.route||!r.route.pts)return [];const pts=r.
 // the focus on the path you pressed: the path, when to be there, your grenades for it, the zones to check
 function vFocus(p,g){const n=focusN(g);if(!n)return "";const H=isHostage(g.map),W=H?hostageRank(p,g):typeof winsRank==="function"?winsRank(p,g):null,r=W&&W.rows.find(x=>x.rank===n);if(!r)return "";
   let head,when;
-  if(H){head=`Hostages via ${r.route.zones.slice(-2).join(" > ")}`;when=`there ~${clock(r.t_end)}`}
-  else{const ps=pathShort(p,g,r),pts=(r.route||{}).pts,end=pts&&pts[pts.length-1];head=`${ps.head}${ps.via?` via ${ps.via}`:""}`;when=onSite(r.timing,end)}
+  if(H){head=tl("Hostages via {way}",{way:r.route.zones.slice(-2).join(" > ")});when=tl("there ~{t}",{t:clock(r.t_end)})}
+  else{const ps=pathShort(p,g,r),pts=(r.route||{}).pts,end=pts&&pts[pts.length-1];head=`${ps.head}${ps.via?" "+tl("via {way}",{way:ps.via}):""}`;when=onSite(r.timing,end)}
   const nd=vNades(vNadePicks(p,g)),chk=focusChecks(p,g,r),ps=vPathStuff(p,g,r);
-  return `<div class="vfocus" style="--c:${r.col}"><b>${n}</b><div><span>${esc(head)}</span><small>${esc(when||"")}${r.wr!=null?` · ${Math.round(r.wr)}% won`:""}</small></div><em title="numpad minus drops the focus">− off</em></div>
+  return `<div class="vfocus" style="--c:${r.col}"><b>${n}</b><div><span>${esc(head)}</span><small>${esc(when||"")}${r.wr!=null?" · "+tl("{p}% won",{p:Math.round(r.wr)}):""}</small></div><em title="${tl("numpad minus drops the focus")}">− ${tl("off")}</em></div>
     ${nd}${ps}${chk.length?`<div class="vchips">${chk.map(z=>`<span class="vchip ${z.d?"bad":""}">${z.d?"⚠":"👁"} ${vShort(z.zone)}</span>`).join("")}</div>`:""}`}
 // the path you pressed: every lineup of the base that lands on its site or along it, the best first (6 at most)
 function vPathStuff(p,g,r){const E=((((p.advice.plan||{}).nades||{}).maps||{})[g.map]||{})[g.side],P=(E&&E.pool)||[];const pts=r&&r.route&&r.route.pts;if(!P.length||!pts)return "";
@@ -318,10 +350,10 @@ function vPathStuff(p,g,r){const E=((((p.advice.plan||{}).nades||{}).maps||{})[g
     if((S&&Math.hypot(x.to_px[0]-S.px[0],x.to_px[1]-S.px[1])<190&&lvOK(lv,S.level))||(end&&Math.hypot(x.to_px[0]-end[0],x.to_px[1]-end[1])<170&&lvOK(lv,end[2])))return 2;
     return near(x.to_px,60,lv)&&near(x.from_px,140,x.level)?1:0};
   const L=P.map(x=>({x,f:fit(x)})).filter(o=>o.f).sort((a,b)=>b.f-a.f||b.x.score-a.x.score).slice(0,6).map(o=>o.x);if(!L.length)return "";
-  return `<div class="vstuff">${L.map(x=>`<span style="--c:${NADE_C[x.type]||"#ccc"}"><i>${vLetter[x.type]||"?"}</i>${vShort(x.to)}<small>${esc(x.from||"")} · ${esc(x.how||"")}${x.timer?` · ${x.timer}`:""}</small></span>`).join("")}</div>`}
+  return `<div class="vstuff">${L.map(x=>`<span style="--c:${NADE_C[x.type]||"#ccc"}"><i>${vLetter[x.type]||"?"}</i>${vShort(x.to)}<small>${esc(x.from||"")} · ${esc(HOWL(x.how||""))}${x.timer?` · ${x.timer}`:""}</small></span>`).join("")}</div>`}
 // hostage maps: the CTs' ways (attack: rounds won; defense: share of the CT walks, where they come from)
 function vHostRoutes(p,g,def){const W=hostageRank(p,g);if(!W)return "";
-  return vHead(def?"THEY COME FROM · OF CT WALKS":"YOUR WAYS · ROUNDS WON")+vRows(W.rows.map((r,i)=>({l:`${r.rank} · ${vShort(r.route.zones.slice(-2).join(" > "))} · ${clock(r.t_end)}`,v:def?r.share:r.wr,c:r.col,o:[1,.8,.65][i]})))}
+  return vHead(def?tl("THEY COME FROM · OF CT WALKS"):tl("YOUR WAYS · ROUNDS WON"))+vRows(W.rows.map((r,i)=>({l:`${r.rank} · ${vShort(r.route.zones.slice(-2).join(" > "))} · ${clock(r.t_end)}`,v:def?r.share:r.wr,c:r.col,o:[1,.8,.65][i]})))}
 // a lineup book of the map (made by a player: where to stand, where to aim): the lineups of the site you go to for the
 // grenades you have (none yet at the buy time: the site's), two at most, as the aim picture and the title
 function bookFor(p,g,r){const B=((p.advice.plan||{}).lineups||{})[g.map];if(!B||!(B.lineups||[]).length)return null;let sites=[];
@@ -333,7 +365,7 @@ function bookFor(p,g,r){const B=((p.advice.plan||{}).lineups||{})[g.map];if(!B||
   const pri=g.side==="CT"?["molotov","smoke","flash","he"]:["smoke","flash","molotov","he"];   // CT: the molly first (it buys time), T: the smoke
   return L.length?{book:B,list:L.sort((a,b)=>sites.indexOf(a.site)-sites.indexOf(b.site)||pri.indexOf(a.type)-pri.indexOf(b.type)).slice(0,2)}:null}
 function vBook(p,g,r){const F=bookFor(p,g,r);if(!F)return "";
-  return vHead(`📖 LINEUPS · ${esc(F.book.author)}`)+`<div class="vbook">${F.list.map(x=>`<a href="${esc(x.link)}" target="_blank" rel="noopener" title="${esc([x.position,x.aim].filter(Boolean).join(" · "))}"><img src="${esc(x.img_aim||x.img_position||"")}" alt="" loading="lazy"><span><b style="color:${NADE_C[x.type]||"#ccc"}">${vLetter[x.type]||"?"}</b> ${esc(x.title.replace(/\s*(smoke|flash|molly)$/i,""))}${x.throw?` <em>${esc(x.throw.toLowerCase())}</em>`:""}</span><small>${esc(x.position||"")}</small></a>`).join("")}</div>`}
+  return vHead("📖 "+tl("LINEUPS · {author}",{author:esc(F.book.author)}))+`<div class="vbook">${F.list.map(x=>`<a href="${esc(x.link)}" target="_blank" rel="noopener" title="${esc([x.position,x.aim].filter(Boolean).join(" · "))}"><img src="${esc(x.img_aim||x.img_position||"")}" alt="" loading="lazy"><span><b style="color:${NADE_C[x.type]||"#ccc"}">${vLetter[x.type]||"?"}</b> ${esc(x.title.replace(/\s*(smoke|flash|molly)$/i,""))}${x.throw?` <em>${esc(HOWL(x.throw.toLowerCase()))}</em>`:""}</span><small>${esc(x.position||"")}</small></a>`).join("")}</div>`}
 // you just died: the info, now (where, how many, how hurt). Your rounds with a call before your death are won far
 // more often; a few seconds of a big reminder, and the voice once per round (setting "Say 'info' when I die")
 function deadAgo(g){const R=(((g.hist||{}).rounds||{})[g.round])||{};return g.round_phase==="live"&&R.dead!=null?(g.elapsed||0)-R.dead:null}
@@ -345,7 +377,7 @@ function vMySite(p,g,onLine){const s=mySite(g);if(!s)return "";const E=(((p.advi
   // the stuff of the site, entrance by entrance (the grenades that close each entrance of the Ts)
   const st=[];Object.entries(L).filter(([k])=>k[0]===s).forEach(([k,o])=>["smoke","molotov","flash","he"].forEach(t=>{const x=o[t];if(x&&st.length<5&&!st.some(y=>y.to===x.to&&y.type===t))st.push({...x,type:t})}));
   const holds=(((M.ct_spots||{}).early||{}).hold||[]).filter(h=>S&&Math.hypot(h.px[0]-S.px[0],h.px[1]-S.px[1])<260&&(!h.level||!S.level||h.level===S.level)).slice(0,3);
-  return `<div class="vfocus" style="--c:#5ab4ff"><b>${s}</b><div><span>You hold ${s}</span><small>numpad 7 A · 9 B</small></div></div>
+  return `<div class="vfocus" style="--c:#5ab4ff"><b>${s}</b><div><span>${tl("You hold {site}",{site:s})}</span><small>${tl("numpad 7 A · 9 B")}</small></div></div>
    ${st.length&&!onLine?`<div class="vchips">${st.map(x=>`<span class="vchip" style="border-color:${NADE_C[x.type]||"#ccc"}">${vLetter[x.type]||"?"} ${vShort(x.to)} <small>${esc(x.from||"")}${x.timer?` · ${x.timer}`:""}</small></span>`).join("")}</div>`:""}
    ${holds.length?`<div class="vchips">${holds.map(h=>`<span class="vchip">🛡 ${vShort(h.zone)}</span>`).join("")}</div>`:""}`}
 // the post-plant / retake grenades of a side that land on that site (the base's: every lineup thrown after a plant)
@@ -359,13 +391,13 @@ function postStuff(p,g,side,site){const E=((((p.advice.plan||{}).nades||{}).maps
 // your way in first); T: thrown from the site or around it, landing where the CTs come from. One place, its stack
 function postPlan(p,g,side,site,way){const TD=tdirsOf(g.map)||{},L=(TD.lineups||{})[side]||[],held=g.nades||{};if(!site||!L.length)return null;
   const S=((((((p.advice.plan||{}).tside||{}).maps||{})[g.map]||{}).geo||{}).sites||{})[site];if(!S)return null;
-  if(!Object.values(held).some(v=>v>0))return {stacks:[],why:"no grenade left",post:true};
+  if(!Object.values(held).some(v=>v>0))return {stacks:[],why:tl("no grenade left"),post:true};
   const RS=1.15*Math.max(60,...(TD.gates||[]).filter(x=>x.site===site&&!x.mid&&(!x.level||!S.level||x.level===S.level)).map(x=>Math.hypot(x.px[0]-S.px[0],x.px[1]-S.px[1])));
   const d=(xy,lv)=>!lv||!S.level||lv===S.level?Math.hypot(xy[0]-S.px[0],xy[1]-S.px[1]):1e9;
   const C=L.filter(u=>u.from_px&&u.to_px&&(held[u.type]||0)>0&&((u.w||[])[4]||0)>=4&&(u.players||0)>=3
       &&(side==="CT"?d(u.to_px,u.land_level)<RS*1.3&&d(u.from_px,u.level)>RS*.6:d(u.from_px,u.level)<RS*1.6))
     .map(u=>({...u,s:(u.w||[])[4]}));
-  if(!C.length)return {stacks:[],why:"none for your grenades",post:true};
+  if(!C.length)return {stacks:[],why:tl("none for your grenades"),post:true};
   const A=[];C.sort((a,b)=>b.s-a.s).forEach(u=>{const a=A.find(x=>x.lv===(u.level||null)&&Math.hypot(x.c[0]-u.from_px[0],x.c[1]-u.from_px[1])<55);if(a)a.L.push(u);else A.push({c:u.from_px,lv:u.level||null,L:[u]})});
   const pick=a=>{const left={...held},out=[];a.L.forEach(u=>{if((left[u.type]||0)>0&&!out.some(x=>x.type===u.type&&x.to_key===u.to_key)){left[u.type]--;out.push(u)}});return out};
   const onWay=a=>!!(way&&way.length&&way.some(q=>Math.hypot(q[0]-a.c[0],q[1]-a.c[1])<90));
@@ -378,16 +410,16 @@ function vPostPlant(p,g,site){const M=(((p.advice.plan||{}).tside||{}).maps||{})
   const P=postPlan(p,g,"T",site,null),hs=((PP||{}).holds||[]).slice(0,3);if(!hs.length&&!(P&&P.stacks.length))return "";
   // where to hold: the spots alone (07/10: their rounds won are near 100 % for every spot the Ts stay alive on, so no
   // bars; the map circles them)
-  return `${hs.length?`<div class="vchips"><span class="vchip good">⛨ HOLD ${site} · ${hs.map((h,i)=>`${vShort(h.zone||"?")}${i?"":" ★"}`).join(" · ")}</span></div>`:""}
-   ${P&&P.stacks.length?vBombLine(P,g)+vStuff(P,`POST-PLANT STUFF · ${site}`):""}`}
+  return `${hs.length?`<div class="vchips"><span class="vchip good">⛨ ${tl("HOLD {site}",{site})} · ${hs.map((h,i)=>`${vShort(h.zone||"?")}${i?"":" ★"}`).join(" · ")}</span></div>`:""}
+   ${P&&P.stacks.length?vBombLine(P,g)+vStuff(P,tl("POST-PLANT UTILITY · {site}",{site})):""}`}
 // CT after the plant: the retake. The spots to check (where Ts hold after a plant there), the way from your site, the stuff
 function vRetake(p,g,site){const TS=(p.advice.plan||{}).tside,M=((TS||{}).maps||{})[g.map]||{},PP=((M.postplant||{})[site]||{}).holds||[];
   const dir=tdirSel(g).dir||mySite(g),RX=rotFromDir(M,site,dir,g.map),rot=vRotLine(RX,dir,site,g.map);   // where you said you play this round (numpad 1-2-3, 7 / 9 before the plant)
   const P=postPlan(p,g,"CT",site,RX&&RX.routes[0]?RX.routes[0].pts:null);   // the retake stuff, from your way in first
   const zs=[...new Set(PP.slice(0,4).map(h=>h.zone).filter(Boolean))];
   return (`${rot}
-   ${zs.length?`<div class="vchips">${zs.map(z=>`<span class="vchip bad">⚠ check ${vShort(z)}</span>`).join("")}</div>`:""}
-   ${P&&P.stacks.length?vStuff(P,`RETAKE STUFF · ${site}`):""}`).trim()}
+   ${zs.length?`<div class="vchips">${zs.map(z=>`<span class="vchip bad">⚠ ${tl("check {zone}",{zone:vShort(z)})}</span>`).join("")}</div>`:""}
+   ${P&&P.stacks.length?vStuff(P,tl("RETAKE UTILITY · {site}",{site})):""}`).trim()}
 // this match's peek timings: the zones you called at the same moment (±8 s) in two rounds or more of this half and side;
 // el: now (live: only the ones still to come), null at the buy time
 function vPeekTimes(g,el){const H=g.hist||{},Mk=H.marks||{},R=H.rounds||{},hs=halfStart(g.round||1),by={};
@@ -399,13 +431,13 @@ function vPeekTimes(g,el){const H=g.hist||{},Mk=H.marks||{},R=H.rounds||{},hs=ha
   return `<div class="vchips">${out.slice(0,3).map(o=>`<span class="vchip warn">⏱ ${vShort(o.z)} ~${clock(o.t)} ×${o.n}</span>`).join("")}</div>`}
 // the round after this one, at the round's end: the buy the money calls for (the only look ahead of the panel, 05/10)
 function nextBuy(p,g){if(!g||g.round==null||!g.side||g.practice)return null;const n=g.round+1;
-  if(n===halfStart(n))return "pistol round";
+  if(n===halfStart(n))return tl("pistol round");
   const pl=econPlan(p,Object.assign({},g,{round:n,round_phase:"freezetime"}));
-  return pl&&pl.best?({eco:"eco",half:"half buy",force:"force buy",full:"full buy"}[pl.best.k]||esc(pl.best.k)):null}
-function vInfo(g){const a=deadAgo(g);return a!=null&&a>=2.5&&a<=9&&!calledSince(g,a)?`<div class="vbig warn"><b>📣 INFO</b><span>where · how many · how hurt</span></div>`:""}
+  return pl&&pl.best?({eco:tl("eco"),half:tl("half buy"),force:tl("force buy"),full:tl("full buy")}[pl.best.k]||esc(pl.best.k)):null}
+function vInfo(g){const a=deadAgo(g);return a!=null&&a>=2.5&&a<=9&&!calledSince(g,a)?`<div class="vbig warn"><b>📣 ${tl("INFO")}</b><span>${tl("where · how many · how hurt")}</span></div>`:""}
 function infoOn(){try{return localStorage.getItem("coach_info")!=="off"}catch(e){return true}}
 function coachInfo(g){if(!g||g.practice||!voiceOn()||!infoOn())return;const a=deadAgo(g);if(a==null||a<3||a>6||calledSince(g,a))return;const key=[g.map,g.round,"info"].join("|");   // 3 s after: the time to take your death in
-  if(VOICE.info===key||(navigator.userActivation&&!navigator.userActivation.hasBeenActive))return;if(coachSay("L'info !"))VOICE.info=key}
+  if(VOICE.info===key||(navigator.userActivation&&!navigator.userActivation.hasBeenActive))return;if(coachSay(l=>tlv("Call it!",l)))VOICE.info=key}
 const expOn=(p,t)=>(((((p||{}).advice||{}).plan||{}).experiments||{}).experiments||[]).some(e=>e.status==="active"&&e.template===t);
 // the panel's slots, top to bottom. One slot per kind of info: the ones that never show together share it (before the
 // plant your site, after it the retake; T plant timer / bomb down / CT rotation), the ones that can show together have
@@ -414,7 +446,7 @@ const SLOTS=["call","info","alert","reset","key","focus","read","play","hold","b
 // the height each slot reached in this phase (buy time, live, end), for this map and side: kept the whole half, so after
 // a round nothing moves any more
 const SLOTH={key:"",h:{}};
-const SLOT_EMPTY={call:"🎙 call",info:"📣 info",alert:"💣 bomb · rotation"};   // a reserved slot waiting: a faint frame
+const SLOT_EMPTY={call:"🎙 "+tl("call"),info:"📣 "+tl("info"),alert:"💣 "+tl("bomb · rotation")};   // a reserved slot waiting: a faint frame
 function slotted(g,P){const k=`${g.map}|${g.side}|${g.round_phase}`;if(SLOTH.key!==k){SLOTH.key=k;SLOTH.h={}}
   // live: the alerts keep their room from the start of the round (a call when the mic listens, l'info while alive)
   const R=g.round_phase==="live"?{alert:68,info:68,call:g.mic?40:0}:{};
@@ -426,15 +458,15 @@ function slotMeasure(root){(root?root.querySelectorAll(".vslot:not(.wait)"):[]).
   if(h>(SLOTH.h[s]||0))SLOTH.h[s]=h})}
 function nowVisual(p,g,following){
   if(!following)return nowPanel(p,g,following,{noBuy:true});
-  if(g.practice)return `<div class="vz"><div class="vsit"><span>PRACTICE</span></div></div>`;
+  if(g.practice)return `<div class="vz"><div class="vsit"><span>${tl("PRACTICE")}</span></div></div>`;
   if(g.map_phase==="warmup"&&typeof briefVisual==="function")return briefVisual(p,g);   // the map loads: the 60-second brief
   const ph=g.round_phase,ct=g.side==="CT",P={},put=(s,...h)=>{(P[s]=P[s]||[]).push(...h)};
   const TS=(p.advice.plan||{}).tside,r=ct?tsidePredict(TS,g.map,g,evFor(g)):null;
   put("call",vWily(g));   // what Wily understood (06/10)
   const WF=vWilyFocus(p,g);   // the order's card (stuff, fake, post-plant, cover, counter, fake defense, retake): the round's main card
   if(ph==="freezetime"){put("reset",vReset(p,g));put("key",vKey(p,g));
-    if(voiceOn()&&navigator.userActivation&&!navigator.userActivation.hasBeenActive)put("call",`<span class="vchip">🔊 click this page once so I can talk</span>`);
-    if(typeof antiEco==="function"&&antiEco(p,g))put("eco",`<span class="vchip bad">! eco kill spots on the map: clear them, no close duel</span>`);
+    if(voiceOn()&&navigator.userActivation&&!navigator.userActivation.hasBeenActive)put("call",`<span class="vchip">🔊 ${tl("click this page once so I can talk")}</span>`);
+    if(typeof antiEco==="function"&&antiEco(p,g))put("eco",`<span class="vchip bad">! ${tl("eco kill spots on the map: clear them, no close duel")}</span>`);
     // CT, a site said (numpad 1 or 3, 07/10): its card has its arrival curve and its stuff, the timeline and the book go
     const CD=ct&&!WF?vCTDir(p,g,r):"",CDs=!!CD&&tdirSel(g).dir!=="MID",CTL=ct&&r&&!CDs?vCTline(p,g,r):"";
     if(ct)put("focus",WF||CD||vMySite(p,g,!!CTL));
@@ -444,29 +476,29 @@ function nowVisual(p,g,following){
     if(!ct&&!HM&&!tdirsLoading(g.map)){const DV=WF||vDir(p,g);put("focus",DV||vFocus(p,g)||vPathCurve(p,g)||vTimeline(p,g));if(!DV)put("book",vBook(p,g,null));put("early",vEarlyMatch(g));   // the way's card has its stuff: no second list
       if(!tdirsOf(g.map)){put("play",vPush(p,g));put("hold",vPushAns(p,g,false));put("tchips",vTchips(p,g))}}}   // the ways' grenades in the card; the CT pushes on the map only (06/10)
   else if(ph==="live"){const el=g.elapsed||0,planted=g.bomb==="planted",dead=deadAgo(g)!=null;put("call",vCall(g));   // dead (05/10): what helps to call stays, your own path and spot go
-    put("info",vInfo(g)||(dead&&!planted?`<div class="vsit dead"><span>YOU'RE OUT</span><b>call what your teammate can't see</b></div>`:""));
+    put("info",vInfo(g)||(dead&&!planted?`<div class="vsit dead"><span>${tl("YOU'RE OUT")}</span><b>${tl("call what your teammate can't see")}</b></div>`:""));
     if(planted){const left=g.phase_left!=null?g.phase_left:Math.max(0,40-(g.since_plant||0)),as=typeof autoSite==="function"?autoSite(p,g):null;
-      put("alert",`<div class="vbig ${ct?"bad":"good"}"><b>💣 ${Math.ceil(left)}s</b><span>${ct?"retake together":"hold the bomb"}${as?` · ${as.site} site, ${as.said?"you said it":`${as.p}% sure`}`:" · numpad 7 A / 9 B"}</span></div>`);
+      put("alert",`<div class="vbig ${ct?"bad":"good"}"><b>💣 ${Math.ceil(left)}s</b><span>${ct?tl("retake together"):tl("hold the bomb")}${as?" · "+(as.said?tl("{site} site, you said it",{site:as.site}):tl("{site} site, {p}% sure",{site:as.site,p:as.p})):" · "+tl("numpad 7 A / 9 B")}</span></div>`);
       if(WF)put("focus",WF);else if(as&&(as.said||as.p>=50))put("focus",ct?vRetake(p,g,as.site):vPostPlant(p,g,as.site))}
     else if(isHostage(g.map))put("focus",ct?(vFocus(p,g)||(el<45?vHostRoutes(p,g,false):"")):(el<45?vHostRoutes(p,g,true):""));
     else if(ct){const CD=!WF&&!dead?vCTDir(p,g,r):"",CDs=!!CD&&tdirSel(g).dir!=="MID",CTL=r&&el<75&&!dead&&!CDs?vCTline(p,g,r):"";if(!dead)put("focus",WF||CD||vMySite(p,g,!!CTL));
-      const WM=g.wily_match||{};if(WM.fake||WM.rush||WM.slow)put("evid",`<span class="vchip warn">🎙 they ${[WM.fake?"fake":"",WM.rush?"rush":"",WM.slow?"play slow":""].filter(Boolean).join(", ")} · you said</span>`);
-      if(g.call&&g.call.round===g.round&&g.call.nobomb&&g.call.site)put("alert",`<div class="vbig warn"><b>${g.call.n||""} ${esc(g.call.site)} · NO BOMB</b><span>likely a fake: hold ${g.call.site==="A"?"B":"A"}, don't rotate yet</span></div>`);put("peek",vPeekTimes(g,el));if(r){put("read",el<20?vHabits(p,g):"",vOdds(r));
+      const WM=g.wily_match||{};if(WM.fake||WM.rush||WM.slow)put("evid",`<span class="vchip warn">🎙 ${tl("they {what} · you said",{what:[WM.fake?tl("fake"):"",WM.rush?tl("rush"):"",WM.slow?tl("play slow"):""].filter(Boolean).join(", ")})}</span>`);
+      if(g.call&&g.call.round===g.round&&g.call.nobomb&&g.call.site)put("alert",`<div class="vbig warn"><b>${g.call.n||""} ${esc(g.call.site)} · ${tl("NO BOMB")}</b><span>${tl("likely a fake: hold {site}, don't rotate yet",{site:g.call.site==="A"?"B":"A"})}</span></div>`);put("peek",vPeekTimes(g,el));if(r){put("read",el<20?vHabits(p,g):"",vOdds(r));
         const M=TS&&TS.maps&&TS.maps[g.map];
         put("play",(el<32?vRush(TS,g,r):"")||vFights(M,g,r));
         if(el>=15&&el<=80&&Math.max(r.A,r.B)>=70&&typeof rotationFor==="function"){const X=r.A>r.B?"A":"B",o=X==="A"?"B":"A",R=rotationFor(M,X,`${o} Site`,M.geo),rt=R&&R.routes&&R.routes[0];
           const me=mySite(g);   // where you said you are this round (numpad 7 / 9, or said)
-          if(rt&&me!==X)put("alert",`<div class="vbig warn"><b>${o} → ${X}</b><span>${me===o?`you're ${o}: rotate now`:`if you hold ${o}: rotate`} · ${rt.travel!=null?`${Math.round(rt.travel)} s · `:""}${rt.died}% die on the way</span></div>`)}   // the hit leans hard to one site
+          if(rt&&me!==X)put("alert",`<div class="vbig warn"><b>${o} → ${X}</b><span>${me===o?tl("you're {site}: rotate now",{site:o}):tl("if you hold {site}: rotate",{site:o})} · ${rt.travel!=null?`${Math.round(rt.travel)} s · `:""}${tl("{p}% die on the way",{p:rt.died})}</span></div>`)}   // the hit leans hard to one site
         if(el<75&&!dead&&!CDs)put("hold",CTL||(el<60?vHold(p,g,r):""));
-        (r.evid||[]).filter(x=>/spot/.test(x)).slice(0,2).forEach(ev=>put("evid",`<span class="vchip ${/fight/.test(ev)?"bad":""}">● ${esc(ev)}</span>`))}}
+        (r.sev||[]).slice(0,2).forEach(ev=>put("evid",`<span class="vchip ${ev.fight?"bad":""}">● ${esc(ev.t)}</span>`))}}
     else{const TDm=tdirsOf(g.map)||tdirsLoading(g.map);put("read",vOpen(g));put("peek",vPeekTimes(g,el));if(!dead&&!tdirsLoading(g.map))put("focus",WF||vDir(p,g)||vFocus(p,g)||vPathCurve(p,g)||vTimeline(p,g));
       put("play",(el<45&&!dead&&!TDm&&vPush(p,g))||vFights(TS&&TS.maps&&TS.maps[g.map],g,null));if(!dead&&!TDm)put("hold",el<50?vPushAns(p,g,true):"");
       const left=g.phase_left!=null?g.phase_left:Math.max(0,RLEN()-el);
-      if(left<=45)put("alert",`<div class="vbig bad"><b>PLANT ${Math.floor(left/60)}:${String(Math.floor(left%60)).padStart(2,"0")}</b><span>${left>20?"commit now":"plant or save"}</span></div>`);
+      if(left<=45)put("alert",`<div class="vbig bad"><b>${tl("PLANT")} ${Math.floor(left/60)}:${String(Math.floor(left%60)).padStart(2,"0")}</b><span>${left>20?tl("commit now"):tl("plant or save")}</span></div>`);
       else if(!dead&&!TDm)put("tchips",vTchips(p,g))}}
-  else if(ph==="over"){const nx=nextBuy(p,g);put("call",`<div class="vsit"><span>ROUND ${g.round}</span>${g.win_team?`<b class="${g.win_team===g.side?"good":"bad"}">${g.win_team===g.side?"WON":"LOST"}</b>`:""}</div>${nx?`<div class="vnext">Next round · <b>${nx}</b></div>`:""}`)}
+  else if(ph==="over"){const nx=nextBuy(p,g);put("call",`<div class="vsit"><span>${tl("ROUND {n}",{n:g.round})}</span>${g.win_team?`<b class="${g.win_team===g.side?"good":"bad"}">${g.win_team===g.side?tl("WON"):tl("LOST")}</b>`:""}</div>${nx?`<div class="vnext">${tl("Next round")} · <b>${nx}</b></div>`:""}`)}
   const html=slotted(g,P);
-  return `<div class="vz">${html||`<div class="vsit"><span>ROUND ${g.round||""}</span></div>`}</div>`}
+  return `<div class="vz">${html||`<div class="vsit"><span>${tl("ROUND {n}",{n:g.round||""})}</span></div>`}</div>`}
 // the buy notification of the full-screen view: one compact card, no paragraph, never scrolls
 // the grenades to buy, for the two economies. CT: molly and smoke first (a hit that meets one still burning or
 // standing costs the Ts 10 to 20 points of rounds won, every map together), the molly ahead when a rush is likely, with
@@ -475,7 +507,7 @@ function nadeCtx(p,g,E){if(!E||!E.order||!E.order.length)return {E,chip:""};
   const TS=(p.advice.plan||{}).tside||{},UE=TS.util_econ||{},ew=econW(p,g),low=(ew.pistol||0)+(ew.low||0);
   const re=first=>({...E,order:[...first.map(t=>E.order.find(o=>o.type===t)).filter(Boolean),...E.order.filter(o=>!first.includes(o.type))]});
   if(g.side==="CT"){const r=TS.maps?tsidePredict(TS,g.map,g,evFor(g)):null,rush=r?r.rush>=30:low>=.5,U=UE.rush;
-    const chip=rush&&U&&U.active&&U.kept?`<span class="vchip good">🔥 molly/smoke on the rush · won ${100-U.active[1]}% · ${100-U.kept[1]}% without</span>`:"";
+    const chip=rush&&U&&U.active&&U.kept?`<span class="vchip good">🔥 ${tl("molly/smoke on the rush · won {a}% · {b}% without",{a:100-U.active[1],b:100-U.kept[1]})}</span>`:"";
     return {E:re(rush?["molotov","smoke"]:["smoke","molotov"]),chip}}   // against a full buy, the hold card says when
   const ae=typeof antiEco==="function"&&antiEco(p,g);
   return {E:ae||(ew.low||0)>=.6?re(["flash","molotov"]):E,chip:""}}
@@ -486,15 +518,16 @@ function buyVisual(p,g){if(g.money==null||!g.side||g.practice)return "";const rt
   const plan=typeof econPlan==="function"?econPlan(p,g):null,bk=plan&&plan.best?plan.best.k:null;
   const ae=typeof antiEco==="function"&&antiEco(p,g);
   const wb=typeof wilyBuy==="function"?wilyBuy(g):null;
-  const RT=wb?({force:"FORCE",eco:"ECO · SAVE",full:"FULL BUY",pistol:"PISTOL"}[wb]+" 🎙"):ae&&bk!=="eco"?"ANTI-ECO":(bk?{eco:"ECO · SAVE",half:"HALF BUY",force:"FORCE",full:"FULL BUY"}[bk]:{pistol:"PISTOL",eco:"ECO · SAVE",force:"FORCE",full:"FULL BUY"}[rt])||"BUY";
+  const BT={force:tl("FORCE"),eco:tl("ECO · SAVE"),full:tl("FULL BUY"),pistol:tl("PISTOL"),half:tl("HALF BUY")};
+  const RT=wb?(BT[wb]+" 🎙"):ae&&bk!=="eco"?tl("ANTI-ECO"):(bk?BT[bk]:BT[rt])||tl("BUY");
   // a key round: the card's weapon (the same as the key-round card of the panel), never another one
   const ks=typeof keySit==="function"?keySit(p,g):null,kw=ks?keyWeapons(p,g,ks):null,kp=kw&&kw.list.find(w=>!DEF_PISTOL.has(w.w)&&(W_PRICE[w.w]??99999)<=(ks==="force_full"?g.money:kw.budget));
-  if(ks==="pistol"){const top=kw&&kw.list[0];tags.push(top&&!DEF_PISTOL.has(top.w)?`<span class="vtag">🔑 ${esc(W_SHORT[top.w]||top.w.toUpperCase())}</span>`:`<span class="vtag">kevlar</span>`)}
-  else if(ks&&kp&&!haveRifle)tags.push(`<span class="vtag">🔑 ${esc(W_SHORT[kp.w]||kp.w.toUpperCase())}${kp.exp?" 🧪":""}</span>`,...(ks==="force_full"?[`<span class="vtag">kevlar</span>`]:[]));
-  else if(bk==="eco")tags.push(`<span class="vtag">save: buy nothing</span>`);   // the plan says save: no weapon to tempt you
-  else if(g.side==="CT"&&rt==="full"&&!haveRifle&&expOn(p,"full_rifle_ct"))tags.push(`<span class="vtag">M4 🧪</span><span class="vtag">kevlar + helmet</span>`);   // the experiment: no MAG-7 on a full buy
-  else if(kit.kit&&!haveRifle)tags.push(...String(expSwapTxt(p,kit.kit.key)).split(" + ").filter(x=>!/grenade/i.test(x)).map(x=>`<span class="vtag">${esc(x)}</span>`));
-  else if(rt==="full"&&!haveRifle)tags.push(`<span class="vtag">rifle</span><span class="vtag">kevlar + helmet</span>`);
+  if(ks==="pistol"){const top=kw&&kw.list[0];tags.push(top&&!DEF_PISTOL.has(top.w)?`<span class="vtag">🔑 ${esc(W_SHORT[top.w]||top.w.toUpperCase())}</span>`:`<span class="vtag">${tl("kevlar")}</span>`)}
+  else if(ks&&kp&&!haveRifle)tags.push(`<span class="vtag">🔑 ${esc(W_SHORT[kp.w]||kp.w.toUpperCase())}${kp.exp?" 🧪":""}</span>`,...(ks==="force_full"?[`<span class="vtag">${tl("kevlar")}</span>`]:[]));
+  else if(bk==="eco")tags.push(`<span class="vtag">${tl("save: buy nothing")}</span>`);   // the plan says save: no weapon to tempt you
+  else if(g.side==="CT"&&rt==="full"&&!haveRifle&&expOn(p,"full_rifle_ct"))tags.push(`<span class="vtag">M4 🧪</span><span class="vtag">${tl("kevlar + helmet")}</span>`);   // the experiment: no MAG-7 on a full buy
+  else if(kit.kit&&!haveRifle)tags.push(...String(expSwapTxt(p,kit.kit.key)).split(" + ").filter(x=>!/grenade/i.test(x)).map(x=>`<span class="vtag">${esc(KIT_L(x))}</span>`));
+  else if(rt==="full"&&!haveRifle)tags.push(`<span class="vtag">${tl("rifle")}</span><span class="vtag">${tl("kevlar + helmet")}</span>`);
   if(haveRifle)tags.push(`<span class="vtag got">${esc(g.primary)} ✓</span>`);
   let nd="",left=g.money;
   if(E&&E.order&&E.order.length&&rt!=="pistol"&&rt!=="eco"){const maxN=rt==="full"?4:2,main=rt==="full"&&!haveRifle?(g.side==="T"?2700:2900)+(g.helmet?0:g.armor>0?350:1000):0;
@@ -505,6 +538,6 @@ function buyVisual(p,g){if(g.money==null||!g.side||g.practice)return "";const rt
   const T_=g.side==="T",spot=!T_&&!said&&kit.zone?`<span class="vchip">📍 ${vShort(kit.zone.key)}</span>`:"",avoid=!T_&&!said&&kit.avoid?`<span class="vchip bad">✕ ${vShort(kit.avoid.key)}</span>`:"";
   const awp=sk&&sk.endsWith("anti_eco")?`<span class="vchip bad">✕ AWP</span>`:"";
   const tc=typeof theirCash==="function"?theirCash(g):null,eb=(typeof enemyBuyW==="function"?enemyBuyW(p,g):enemyBuy(p,g))||{},ebk=["full","force","eco"].filter(k=>(eb[k]||0)>=.5)[0]||(tc&&tc.buy);
-  const them=tc?`<div class="vthem"><span>THEM</span><b>~${money(tc.cash)}</b>${ebk&&ebk!=="pistol"?`<em class="${ebk==="full"?"bad":ebk==="eco"?"good":"warn"}">${{full:"FULL BUY",force:"FORCE",eco:"ECO"}[ebk]}</em>`:""}</div>`:"";
+  const them=tc?`<div class="vthem"><span>${tl("THEM")}</span><b>~${money(tc.cash)}</b>${ebk&&ebk!=="pistol"?`<em class="${ebk==="full"?"bad":ebk==="eco"?"good":"warn"}">${{full:tl("FULL BUY"),force:tl("FORCE"),eco:tl("ECO")}[ebk]}</em>`:""}</div>`:"";
   return `<div class="vbuy"><div class="vbuy-h"><b>${RT}</b><span>${money(g.money)}</span></div>
     ${them}${tags.length?`<div class="vtags">${tags.join("")}</div>`:""}${nd}${spot||avoid||awp?`<div class="vchips">${spot}${avoid}${awp}</div>`:""}</div>`}

@@ -36,10 +36,10 @@ function nadesNow(PL,map,g,PLs,live){const E=((((PL.nades||{}).maps||{})[map])||
     Object.entries(picks).forEach(([type,x])=>{if(held&&!(held[type]>0))return;
       let why=null,score=0;
       const nm=L.name.split(" / ")[0];
-      if(x.role==="anti_rush"){if(t<=32&&L.rush>=0.05){why=`anti-rush on ${nm}: ${Math.round(100*L.rush)}% they rush through here`;score=L.rush*1.2}}
-      else if(x.role==="block"){if(L.haz>=0.1||(!live&&L.p>=0.3&&type==="smoke")){why=live?`block ${nm}: ${Math.round(100*L.haz)}% they push it in the next 15 s`:`block ${nm} (${Math.round(100*L.p)}% of attacks use it)`;score=live?L.haz:L.p*0.5}}
-      else if(x.role==="flash"){if(L.haz>=0.12){why=`flash ${nm} as they push: blinds an enemy ${x.blind}% of the time`;score=L.haz*0.7}}
-      else if(L.haz>=0.12){why=`HE on ${nm} as they push`;score=L.haz*0.6}
+      if(x.role==="anti_rush"){if(t<=32&&L.rush>=0.05){why=tl("anti-rush on {lane}: they rush through here {p}% of the time",{lane:nm,p:Math.round(100*L.rush)});score=L.rush*1.2}}
+      else if(x.role==="block"){if(L.haz>=0.1||(!live&&L.p>=0.3&&type==="smoke")){why=live?tl("block {lane}: {p}% chance they push it in the next 15 s",{lane:nm,p:Math.round(100*L.haz)}):tl("block {lane} ({p}% of attacks use it)",{lane:nm,p:Math.round(100*L.p)});score=live?L.haz:L.p*0.5}}
+      else if(x.role==="flash"){if(L.haz>=0.12){why=tl("flash {lane} as they push: blinds an enemy {p}% of the time",{lane:nm,p:x.blind});score=L.haz*0.7}}
+      else if(L.haz>=0.12){why=tl("HE on {lane} as they push",{lane:nm});score=L.haz*0.6}
       if(why)out.push(Object.assign({},x,{type,why,score,lane:L.key,laneName:L.name}))})});
   out.sort((a,b)=>b.score-a.score);
   const seen=new Set();return out.filter(x=>{const k=x.type+x.lane;if(seen.has(k))return false;seen.add(k);return true}).slice(0,4)}
@@ -74,7 +74,7 @@ function uiObstacles(ov){try{const svg=ov.ownerSVGElement,box=svg&&svg.closest("
     const a=new DOMPoint(r.left,r.top).matrixTransform(inv),c=new DOMPoint(r.right,r.bottom).matrixTransform(inv);obstacle(ov,(a.x+c.x)/2,(a.y+c.y)/2,Math.abs(c.x-a.x),Math.abs(c.y-a.y))})}catch(e){}}
 function flushLabels(ov){const q=(LQ.get(ov)||[]).sort((a,b)=>b.prio-a.prio);LQ.delete(ov);uiObstacles(ov);let L=PLACED.get(ov);if(!L){L=[];PLACED.set(ov,L)}
   const hit=b=>L.some(o=>Math.abs(o.x-b.x)<(o.w+b.w)/2+1&&Math.abs(o.y-b.y)<(o.h+b.h)/2+1);
-  q.forEach(l=>{const fs=l.tag?12:FSZ[String(l.cls).split(" ")[0]]||12,w=l.tag?6.6*l.text.length+18:l.text.length*fs*.62+4,h=l.tag?20:fs+3,r=l.r||8;
+  q.forEach(l=>{const fs=l.tag?12:FSZ[String(l.cls).split(" ")[0]]||12,w=l.tag?6.6*TLEN(l.text)+18:TLEN(l.text)*fs*.62+4,h=l.tag?20:fs+3,r=l.r||8;
     const C=l.tag?[[l.x,l.y+r+h/2+2],[l.x,l.y-r-h/2-2],[l.x+r+w/2+2,l.y],[l.x-r-w/2-2,l.y],[l.x,l.y+r+1.5*h+4],[l.x,l.y-r-1.5*h-4],[l.x+w/2,l.y+r+h/2+2],[l.x-w/2,l.y+r+h/2+2],[l.x+w/2,l.y-r-h/2-2],[l.x-w/2,l.y-r-h/2-2],[l.x+r+w/2+2,l.y+h+2],[l.x-r-w/2-2,l.y+h+2],[l.x+r+w/2+2,l.y-h-2],[l.x-r-w/2-2,l.y-h-2]]:[[l.x+r+w/2+2,l.y],[l.x-r-w/2-2,l.y],[l.x,l.y-r-h/2-2],[l.x,l.y+r+h/2+2],[l.x+r+w/2+2,l.y-h-1],[l.x+r+w/2+2,l.y+h+1],[l.x-r-w/2-2,l.y-h-1],[l.x-r-w/2-2,l.y+h+1],[l.x,l.y-r-1.5*h-4],[l.x,l.y+r+1.5*h+4],[l.x+r+w/2+2,l.y-2*h-2],[l.x-r-w/2-2,l.y-2*h-2],[l.x+r+w/2+2,l.y+2*h+2],[l.x-r-w/2-2,l.y+2*h+2],[l.x,l.y-r-2.5*h-6],[l.x,l.y+r+2.5*h+6]];
     // no free place: the one that covers the least
     const area=(cx,cy)=>L.reduce((s_,o)=>s_+Math.max(0,Math.min(o.x+o.w/2,cx+w/2)-Math.max(o.x-o.w/2,cx-w/2))*Math.max(0,Math.min(o.y+o.h/2,cy+h/2)-Math.max(o.y-o.h/2,cy-h/2)),0);
@@ -83,11 +83,11 @@ function flushLabels(ov){const q=(LQ.get(ov)||[]).sort((a,b)=>b.prio-a.prio);LQ.
       el("rect",{x:c[0]-w/2,y:c[1]-10,width:4,height:20,rx:1.5,style:`fill:${l.color}`},gg);el("text",{x:c[0]+2,y:c[1]+4,"text-anchor":"middle",class:"rtt"},gg).textContent=l.text;return}
     const t=el("text",{x:c[0],y:c[1]+fs*.36,"text-anchor":"middle",class:l.cls},ov);if(l.style)t.setAttribute("style",l.style);t.textContent=l.text})}
 // pill: entrances and sites (rounded, filled with the site's color)
-function rbadge(ov,x,y,text,fill,cls){const w=7.2*text.length+14;y=place(ov,x,y,w,22);const gg=el("g",{class:"rb"+(cls?" "+cls:"")},ov);
+function rbadge(ov,x,y,text,fill,cls){const w=7.2*TLEN(text)+14;y=place(ov,x,y,w,22);const gg=el("g",{class:"rb"+(cls?" "+cls:"")},ov);
   el("rect",{x:x-w/2,y:y-11,width:w,height:22,rx:11,style:`fill:${fill};stroke:#0b0f14;stroke-width:1.5`},gg);
   el("text",{x,y:y+4.5,"text-anchor":"middle",class:"rbt"},gg).textContent=text;return gg}
 // tag: grenades and rotations (square, dark, a color bar on the left)
-function rtag(ov,x,y,text,color,cls){const w=6.6*text.length+18;y=place(ov,x,y,w,20);const gg=el("g",{class:"rt "+(cls||"")},ov);
+function rtag(ov,x,y,text,color,cls){const w=6.6*TLEN(text)+18;y=place(ov,x,y,w,20);const gg=el("g",{class:"rt "+(cls||"")},ov);
   el("rect",{x:x-w/2,y:y-10,width:w,height:20,rx:3,style:"fill:#0b0f14;fill-opacity:.88;stroke:#ffffff33;stroke-width:1"},gg);
   el("rect",{x:x-w/2,y:y-10,width:4,height:20,rx:1.5,style:`fill:${color}`},gg);
   el("text",{x:x+2,y:y+4,"text-anchor":"middle",class:"rtt"},gg).textContent=text;return gg}
@@ -96,7 +96,7 @@ function starPath(x,y,R,r,n){let d="";for(let i=0;i<2*n;i++){const a=-Math.PI/2+
 function mkStar(ov,x,y,s){const g=el("g",{class:"mkstar"},ov);
   el("path",{d:starPath(x,y,11,4.6,5),style:"fill:#ffd24a;stroke:#5a4100;stroke-width:1.4"},g);
   el("text",{x:x+14,y:y+4.5,class:"mkt"},g).textContent=`×${s.multi2}${s.best>=3?` · ${s.best}K`:""}`;
-  return tip(g,`${s.name}: ${s.multi2} round${s.multi2>1?"s":""} with 2+ kills from here (best: ${s.best} kills)`)}
+  return tip(g,tln(s.multi2,"{zone}: {n} round with 2+ kills from here (best: {best} kills)","{zone}: {n} rounds with 2+ kills from here (best: {best} kills)",{zone:s.name,best:s.best}))}
 // the grenade's own icon where it lands
 function nadeIcon(ov,type,x,y,title){const g=el("g",{class:"nicon"},ov);
   if(type==="smoke"){el("circle",{cx:x,cy:y,r:17,style:"fill:#c9d1d9;fill-opacity:.5;stroke:#eef2f6;stroke-width:2;stroke-dasharray:4 3"},g);
@@ -130,7 +130,7 @@ function routeLine(ov,pts,col,main){const s=pts.map(p=>p.join(",")).join(" ");
 // your spots: a thin ring, colored by the duels you win there
 function spotDisc(ov,s,side){const r=8+Math.sqrt(s.presence||1)*2.6,col=s.win==null?"#8a96a3":s.win>=58?"var(--good)":s.win<=42?"var(--bad)":"#c9a227";
   tip(el("circle",{cx:s.px[0],cy:s.px[1],r,style:`fill:none;stroke:${col};stroke-width:2.5;stroke-opacity:.7`},ov),
-    `${s.name}: ${Math.round(s.presence)}% of your time as ${side}, you ${s.k}-${s.d}${s.win!=null?` (${s.win}% of duels won, others ${s.others_win??"—"}%)`:""}`);
+    tl("{zone}: {p}% of your time as {side}, you {k}-{d}",{zone:s.name,p:Math.round(s.presence),side,k:s.k,d:s.d})+(s.win!=null?" "+tl("({w}% of duels won, others {o}%)",{w:s.win,o:s.others_win??"—"}):""));
   return r}
 const SW={lane:`<svg width="26" height="12" aria-hidden="true"><path d="M1 2L20 5L25 6L20 7L1 10Z" style="fill:var(--siteA);fill-opacity:.4;stroke:var(--siteA)"/></svg>`,
   spot:`<svg width="16" height="16" aria-hidden="true"><circle cx="8" cy="8" r="6" style="fill:none;stroke:var(--good);stroke-width:3"/></svg>`,
@@ -148,7 +148,7 @@ const SW={lane:`<svg width="26" height="12" aria-hidden="true"><path d="M1 2L20 
   c4:`<svg width="20" height="14" aria-hidden="true"><rect x="1" y="1" width="18" height="12" rx="2" style="fill:var(--bad)"/></svg>`};
 // T side: the multi-kill stars on top of your zones
 function spotStars(box,spots,level){const ov=$("g",box);PLACED.set(ov,[]);(spots||[]).filter(s=>s.multi2&&s.px&&(!s.level||!level||s.level===level)).forEach(s=>mkStar(ov,s.px[0]-6,s.px[1]-24,s))}
-const RLAYERS=[["key","Key rounds"],["post","After the plant"],["paths","T paths"],["ctpos","CT spots"],["danger","CT kill angles"],["strong","Strong spots"],["multi","Multi-kills"],["nades","Grenades"],["spots","Your spots"],["rot","Rotation"]];
+const RLAYERS=[["key",tl("Key rounds")],["post",tl("After the plant")],["paths",tl("T paths")],["ctpos",tl("CT spots")],["danger",tl("CT kill angles")],["strong",tl("Strong spots")],["multi",tl("Multi-kills")],["nades",tl("Utility")],["spots",tl("Your spots")],["rot",tl("Rotation")]];
 function liveLayers(){let L=store("rlayers6");if(!Array.isArray(L))L=RLAYERS.map(x=>x[0]);return L}
 // the moment the radar is about: now in a live round, the setup during freeze time, none when you browse
 function radarT(g,o){return !o.following||!g?null:g.round_phase==="live"?(g.elapsed||0):g.round_phase==="freezetime"?0:null}
@@ -165,7 +165,7 @@ function tPath(lay,top,pts,col,ranks,level,first,pct,rot,tm){const on=q=>!q[2]||
     let acc=0;for(let i=0;i<sg.length-1;i++){const a=sg[i],b=sg[i+1],d=Math.hypot(b[0]-a[0],b[1]-a[1]);acc+=d;if(acc<110||d<4)continue;acc=0;   // a chevron every ~110 px
       const ux=(b[0]-a[0])/d,uy=(b[1]-a[1])/d,mx=b[0],my=b[1];
       el("path",{d:`M${mx-ux*5-uy*5} ${my-uy*5+ux*5}L${mx+ux*3} ${my+uy*3}L${mx-ux*5+uy*5} ${my-uy*5-ux*5}`,style:`fill:none;stroke:${col};stroke-width:2.4;stroke-linecap:round;stroke-linejoin:round`},lay)}});
-  const end=pts[pts.length-1];if(on(end)){const t=ranks.join("·")+(rot?" ↻":"")+(pct!=null?` · ${pct}% won`:""),w=7.4*t.length+12,y=place(top,end[0],end[1]-21,w,18),gg=el("g",{},top);
+  const end=pts[pts.length-1];if(on(end)){const t=ranks.join("·")+(rot?" ↻":"")+(pct!=null?" · "+tl("{p}% won",{p:pct}):""),w=7.4*TLEN(t)+12,y=place(top,end[0],end[1]-21,w,18),gg=el("g",{},top);
     el("rect",{x:end[0]-w/2,y:y-9,width:w,height:18,rx:9,style:`fill:${col};stroke:#0b0f14;stroke-width:1.5`},gg);
     el("text",{x:end[0],y:y+4,"text-anchor":"middle",class:"pbt"},gg).textContent=t;
     const os_=onSite(tm,end);if(os_)qLabel(top,end[0],y,w/2,os_,"ptt",first?5:4)}   // when to be on the site to win the most (game clock)
@@ -174,22 +174,22 @@ function tPath(lay,top,pts,col,ranks,level,first,pct,rot,tm){const on=q=>!q[2]||
 function strongMark(ov,s){const [x,y]=s.px;obstacle(ov,x,y,22,28);const g=el("g",{class:"strong",style:`opacity:${s.win>=75?1:s.win>=68?.85:.7}`},ov);
   el("path",{d:`M${x} ${y-13}L${x+11} ${y-8}L${x+10} ${y+2}Q${x+8} ${y+10} ${x} ${y+14}Q${x-8} ${y+10} ${x-10} ${y+2}L${x-11} ${y-8}Z`,style:"fill:var(--good);stroke:#0b0f14;stroke-width:1.8"},g);
   el("path",{d:`M${x-5} ${y}L${x-1} ${y+4}L${x+5} ${y-4}`,style:"fill:none;stroke:#0b0f14;stroke-width:2.4;stroke-linecap:round;stroke-linejoin:round"},g);
-  return tip(g,`${s.zone}: players win ${s.win}% of their duels from here (${s.k} kills, ${s.d} deaths)${s.t_med!=null?`, around ${clock(s.t_med)}`:""}`)}
+  return tip(g,tl("{zone}: players win {p}% of their duels from here ({k} kills, {d} deaths)",{zone:s.zone,p:s.win,k:s.k,d:s.d})+(s.t_med!=null?", "+tl("around {t}",{t:clock(s.t_med)}):""))}
 // a multi-kill spot: a gold star for yours (with your best round there: 3K, 4K), a smaller white one for the other
 // players (with how many rounds)
 function mkMark(ov,s,mine,dim){const [x,y]=s.px,R=mine?13:9,g=el("g",{class:"mkstar",style:dim?"opacity:.45":""},ov);
   el("path",{d:starPath(x,y,R,R*.42,5),style:mine?"fill:#ffd24a;stroke:#5a4100;stroke-width:1.5":"fill:#f2f5f8;stroke:#0b0f14;stroke-width:1.3"},g);
   const t=mine?(s.best>=2?`${s.best}K`:""):(s.n>=2?`×${s.n}`:"");
   obstacle(ov,x,y,2*R,2*R);if(t)qLabel(ov,x,y,R,t,"mkt"+(mine?"":" o"),mine?2:1);
-  return tip(g,mine?`${s.zone}: you got ${s.best} kills from here in one round${s.n>1?` (${s.n} rounds)`:""}`:`${s.zone}: ${s.n} rounds where a player got 2+ kills from here (best ${s.best})`)}
+  return tip(g,mine?tl("{zone}: you got {k} kills from here in one round",{zone:s.zone,k:s.best})+(s.n>1?" "+tln(s.n,"({n} round)","({n} rounds)"):""):tl("{zone}: {n} rounds where a player got 2+ kills from here (best {best})",{zone:s.zone,n:s.n,best:s.best}))}
 // the layers under one control (05/10): with all of them on, the map shows what fits the moment of the round (your
 // paths and their spots during the buy and the first 45 s, the key rounds' spots, the post-plant once the bomb is
 // down, the kill angles of the moment); open it between two rounds to hide some
 let RL_OPEN=false;
-function layerBtns(){const L=liveLayers(),H=typeof isHostage==="function"&&isHostage(S.map),HN={paths:"Your ways",ctpos:"T spots",danger:"T kill angles"};   // hostage maps: the CTs attack
+function layerBtns(){const L=liveLayers(),H=typeof isHostage==="function"&&isHostage(S.map),HN={paths:tl("Your ways"),ctpos:tl("T spots"),danger:tl("T kill angles")};   // hostage maps: the CTs attack
   const ks=RLAYERS.filter(([k])=>!H||!["key","post"].includes(k)),all=ks.every(([k])=>L.includes(k));
-  return `<details class="rlayers"${RL_OPEN?" open":""}><summary title="The map shows what fits the moment of the round by itself">Layers · ${all?"auto":`${ks.filter(([k])=>L.includes(k)).length} of ${ks.length}`}</summary>
-   <div class="btns" role="group" aria-label="What the radar shows">${ks.map(([k,t])=>`<button type="button" data-rlayer="${k}" aria-pressed="${L.includes(k)}">${H&&HN[k]||t}</button>`).join("")}${all?"":`<button type="button" data-rlayer-auto>Auto: all, by moment</button>`}</div></details>`}
+  return `<details class="rlayers"${RL_OPEN?" open":""}><summary title="${tl("The map shows what fits the moment of the round by itself")}">${tl("Layers")} · ${all?tl("auto"):tl("{a} of {b}",{a:ks.filter(([k])=>L.includes(k)).length,b:ks.length})}</summary>
+   <div class="btns" role="group" aria-label="${tl("What the radar shows")}">${ks.map(([k,t])=>`<button type="button" data-rlayer="${k}" aria-pressed="${L.includes(k)}">${H&&HN[k]||t}</button>`).join("")}${all?"":`<button type="button" data-rlayer-auto>${tl("Auto: all, by moment")}</button>`}</div></details>`}
 
 function liveRadar(box,p,map,level,g,o){
   const dead=!!(o.following&&g&&typeof deadAgo==="function"&&deadAgo(g)!=null);   // dead (05/10): the enemies' layers stay, your own go
@@ -203,18 +203,18 @@ function liveRadar(box,p,map,level,g,o){
   // your spots: thin rings
   const SP=((PL.spots||{})[map]||{})[o.side]||[];
   if(on("spots")&&SP.length){SP.filter(here).forEach(s=>spotDisc(Lspots,s,o.side));
-    legend.push(`<span>${SW.spot}your spots (green = you win your duels there, red = you lose them)</span>`)}
+    legend.push(`<span>${SW.spot}${tl("your spots (green = you win your duels there, red = you lose them)")}</span>`)}
   // strong spots: where the players of your matches win most of their duels, at this moment of the round
   const CM=typeof crossMap==="function"?crossMap(p,map):null,BS=(((CM||{}).sides||{})[o.side]||{}).best_spots||[];
   if(on("strong")&&BS.length){const pick=nearT(BS.filter(here),t,15,25,2).sort((a,b)=>b.win*Math.sqrt(b.k)-a.win*Math.sqrt(a.k)).slice(0,planted?3:5);
     if(ct)pick.splice(3);   // CT: three at most (06/10: less static noise)
-    pick.forEach(s=>strongMark(Lstrong,s));if(pick.length)legend.push(`<span>${SW.shield}strong spot${t!=null?" now":""}: players win most of their duels from there</span>`)}
+    pick.forEach(s=>strongMark(Lstrong,s));if(pick.length)legend.push(`<span>${SW.shield}${t!=null?tl("strong spot now: players win most of their duels from there"):tl("strong spot: players win most of their duels from there")}</span>`)}
   // multi-kill spots: yours (exact), and the other players' on the spots you play
   if(on("multi")){const mine=(((PL.multi||{})[map]||{})[o.side]||[]).filter(here),zones=new Set(SP.map(s=>s.name));
     const base=((((M||{}).evidence||{}).multi||{})[o.side]||[]).filter(s=>here(s)&&zones.has(s.zone)&&!mine.some(m=>Math.hypot(m.px[0]-s.px[0],m.px[1]-s.px[1])<24));
     const others=typeof keySit==="function"&&o.following&&g&&keySit(p,g)?[]:nearT(base,t,15,30,2).slice(0,4);
     others.forEach(s=>mkMark(Ltop,s,false));mine.forEach(s=>mkMark(Ltop,s,true,t!=null&&s.t_med!=null&&Math.abs(s.t_med-t)>35));
-    if(mine.length||others.length)legend.push(`<span>${SW.star}your multi-kills (2+ kills from that spot in a round)</span>${others.length?`<span>${SW.wstar}other players' multi-kills on your spots</span>`:""}`)}
+    if(mine.length||others.length)legend.push(`<span>${SW.star}${tl("your multi-kills (2+ kills from that spot in a round)")}</span>${others.length?`<span>${SW.wstar}${tl("other players' multi-kills on your spots")}</span>`:""}`)}
   // key rounds (pistol, eco or force against a full buy): the spots that pay for your weapon, a plant that wins more
   if(on("key")&&o.following&&g&&!planted&&(g.round_phase==="freezetime"||(live&&(g.elapsed||0)<45))&&typeof keyRadar==="function"){keyRadar(p,g,map,level,Lstrong,Ltop,legend,here);antiEcoRadar(p,g,map,level,Ltop,legend,here)}
   if(on("post")&&planted&&site&&typeof postplantRadar==="function")postplantRadar(p,g,map,level,Ltop,legend,here,site,ct);
@@ -223,16 +223,16 @@ function liveRadar(box,p,map,level,g,o){
   const TDR=!HMAP&&att&&o.following&&g&&typeof tdirsOf==="function"&&tdirsOf(map)?dirRank(p,g,tdirsOf(map)):null;   // 06/10: the ways in (A via Ramp...)
   const planOn=!!(TDR&&(TDR.sel.dir||TDR.sel.tempo));   // a way or a tempo said: its ways stay until the plant (09/10)
   if(TDR&&on("paths")&&!planted&&(g.round_phase==="freezetime"||(live&&((g.elapsed||0)<45||planOn)))&&TDR.rows.length){dirPaths(Lrot,Ltop,TDR,level);
-    if(!dead&&dirNades(Lnades,Ltop,TDR,level,tdirsOf(map),g,p))legend.push(`<span>the way's stuff: thrown from the white dot, lands on the icon</span>`);
-    legend.push(`<span>${SW.tpath}the way in from the spawn, % = rounds won by it this round (your buy and theirs${TDR.sel.tempo?`, ${TEMPO_EN[TDR.sel.tempo].toLowerCase()}`:""}); numpad 1-2-3 = A / mid / B, 4-5-6 = rush / slow / map control, minus drops them</span>`)}
+    if(!dead&&dirNades(Lnades,Ltop,TDR,level,tdirsOf(map),g,p))legend.push(`<span>${tl("the way's utility: thrown from the white dot, lands on the icon")}</span>`);
+    legend.push(`<span>${SW.tpath}${tl("the way in from the spawn, % = rounds won by it this round (your buy and theirs{tempo}); numpad 1-2-3 = A / mid / B, 4-5-6 = rush / slow / map control, minus drops them",{tempo:TDR.sel.tempo?", "+TEMPO_EN[TDR.sel.tempo].toLowerCase():""})}</span>`)}
   const TDx=!HMAP&&o.following&&g&&typeof tdirsOf==="function"?tdirsOf(map):null;if(TDx)pingMark(Ltop,g,TDR,level,TDx);   // A, B or mid pressed or said: a ping
   if(TDx&&typeof wilyRadar==="function")wilyRadar(p,g,level,Lnades,Ltop,legend);   // what you asked Wily, on the map
   else if(att&&on("paths")&&o.following&&g&&!planted&&(g.round_phase==="freezetime"||(live&&(g.elapsed||0)<45))){const W0=HMAP?hostageRank(p,g):winsRank(p,g),W=W0&&FN&&W0.rows.some(r=>r.rank===FN)?{...W0,rows:W0.rows.filter(r=>r.rank===FN)}:W0;
     if(W){const seen=new Map();W.rows.slice(0,3).forEach(r=>{if(!r.route)return;const k=r.route.zones.join(">");if(seen.has(k)){seen.get(k).push(r.rank);return}seen.set(k,[r.rank]);r._k=k});
       W.rows.slice(0,3).filter(r=>r._k).reverse().forEach(r=>tPath(Lrot,Ltop,r.route.pts,r.col,seen.get(r._k),level,r.rank===1,r.wr,r.rot,r.timing));   // the play's chance this round (a route alone is biased: only the ones who got there alive count)
-      if(seen.size&&W.rows.some(r=>r.rot))legend.push(`<span>${SW.tpath}↻ ranked ahead of a better %: that one lost this half or was played too often, they read you too</span>`);
-      if(seen.size&&HMAP)legend.push(`<span>${SW.tpath}your way out of the spawn toward the hostages, % won = the CTs' rounds won when one takes it, "there ~1:41": when they get to its end (game clock); numpad 1-2-3 = ${esc(W.rows.slice().sort((a,b)=>a.rank-b.rank).map(r=>r.name||r.rank).join(" / "))} (left to right from your spawn), 4-5-6 = rush / slow / map control: one line in the team chat; 7 / 9 = 1st / 2nd hostage taken (Wily only); minus drops them</span>`);
-      else if(seen.size)legend.push(`<span>${SW.tpath}your way from the spawn, % won = rounds won by its play in this situation; "on site 1:31-1:21": be on the site between these times of the game clock, when this play wins the most rounds at equal numbers alive (a fast arrival in an easy round doesn't count for more; ~1:17: no moment wins more, the usual time); numpad 1-2-3 say the path in the team chat (${esc(RT_EN[W.rt]||W.rt)}${W.eb&&W.eb.full>=.5?" vs their full buy":W.eb&&W.eb.eco>=.5?" vs their eco":""}, ${RUN_EN[W.run]})</span>`)}}
+      if(seen.size&&W.rows.some(r=>r.rot))legend.push(`<span>${SW.tpath}${tl("↻ ranked ahead of a better %: that one lost this half or was played too often, they read you too")}</span>`);
+      if(seen.size&&HMAP)legend.push(`<span>${SW.tpath}${tl("your way out of the spawn toward the hostages, % won = the CTs' rounds won when one takes it, \"there ~1:41\": when they get to its end (game clock); numpad 1-2-3 = {ways} (left to right from your spawn), 4-5-6 = rush / slow / map control: one line in the team chat; 7 / 9 = 1st / 2nd hostage taken (Wily only); minus drops them",{ways:esc(W.rows.slice().sort((a,b)=>a.rank-b.rank).map(r=>r.name||r.rank).join(" / "))})}</span>`);
+      else if(seen.size)legend.push(`<span>${SW.tpath}${tl("your way from the spawn, % won = rounds won by its play in this situation; \"on site 1:31-1:21\": be on the site between these times of the game clock, when this play wins the most rounds at equal numbers alive (a fast arrival in an easy round doesn't count for more; ~1:17: no moment wins more, the usual time); numpad 1-2-3 say the path in the team chat ({ctx})",{ctx:esc(RT_EN[W.rt]||W.rt)+(W.eb&&W.eb.full>=.5?" "+tl("vs their full buy"):W.eb&&W.eb.eco>=.5?" "+tl("vs their eco"):"")+", "+RUN_EN[W.run]})}</span>`)}}
   // T side: where the CTs stand when you get there, and the angles they kill from (! = a spot they kill a lot from for the
   // little time they spend there: the angle the Ts forget)
   // T, the first moments (buy time, then up to 1:10): CTs pushing past a neutral zone, for their buy this round: an
@@ -246,32 +246,32 @@ function liveRadar(box,p,map,level,g,o){
         el("path",{d:`M${x1} ${y1}L${x1-ux*11-uy*6} ${y1-uy*11+ux*6}L${x1-ux*11+uy*6} ${y1-uy*11-ux*6}Z`,style:`fill:${col};stroke:#0b0f14;stroke-width:1`},gg);
         el("circle",{cx:x0,cy:y0,r:4.5,style:"fill:#fff;stroke:#0b0f14;stroke-width:1.5"},gg);obstacle(Ltop,x1,y1,16,16);
         qLabel(Ltop,x1,y1,9,clock(x.t),"kwt",3);
-        tip(gg,`${x.gate||"Neutral zone"}: a CT pushes past it in ${Math.round(x.share)}% of rounds (${CP.label.toLowerCase()}), around ${clock(x.t)}; the pushing CT gets a kill ${x.kill}% of the time`)});
-      legend.push(`<span>${SW.push}a CT pushing past a neutral zone (white dot: where both sides arrive at the same time), for their buy this round; the time is when, red: the push often gets a kill</span>`);earlyDone=true}}
+        tip(gg,tl("{zone}: a CT pushes past it in {p}% of rounds ({buy}), around {t}; the pushing CT gets a kill {k}% of the time",{zone:x.gate||tl("Neutral zone"),p:Math.round(x.share),buy:CP.label.toLowerCase(),t:clock(x.t),k:x.kill}))});
+      legend.push(`<span>${SW.push}${tl("a CT pushing past a neutral zone (white dot: where both sides arrive at the same time), for their buy this round; the time is when, red: the push often gets a kill")}</span>`);earlyDone=true}}
   const FR=FN&&!HMAP?((winsRank(p,g)||{rows:[]}).rows.find(r=>r.rank===FN)||{}).route:null,nearF=s=>!FR||FR.pts.some(q=>Math.hypot(q[0]-s.px[0],q[1]-s.px[1])<90);   // focus: only the spots along your path
   // hostage maps, CT: where the Ts hold 20 to 40 s in, and the spots they kill CTs from (along the path you pressed)
   const HS=HMAP&&ct?((PL.hostage||{})[map]):null;
   if(HS&&o.following&&g&&(g.round_phase==="freezetime"||(live&&(g.elapsed||0)<60))){const FRh=FN?((hostageRank(p,g)||{rows:[]}).rows.find(r=>r.rank===FN)||{}).route:null,nr=s=>!FRh||FRh.pts.some(q=>Math.hypot(q[0]-s.px[0],q[1]-s.px[1])<90);
     if(on("ctpos")){const hs=(HS.holds||[]).filter(h=>here(h)&&nr(h)&&!/spawn/i.test(h.zone||"")).slice(0,6),mx=Math.max(...hs.map(h=>h.share),1);
-      hs.forEach(h=>tip(el("circle",{cx:h.px[0],cy:h.px[1],r:7+9*h.share/mx,style:"fill:var(--t);fill-opacity:.32;stroke:var(--t);stroke-width:2;stroke-opacity:.8"},Lstrong),`${h.zone||"T spot"}: ${h.share}% of the Ts' time 20 to 40 s in`));
-      if(hs.length)legend.push(`<span>${SW.ctpos}where the Ts hold 20 to 40 s in (bigger = more often)</span>`)}
+      hs.forEach(h=>tip(el("circle",{cx:h.px[0],cy:h.px[1],r:7+9*h.share/mx,style:"fill:var(--t);fill-opacity:.32;stroke:var(--t);stroke-width:2;stroke-opacity:.8"},Lstrong),tl("{zone}: {p}% of the Ts' time 20 to 40 s in",{zone:h.zone||tl("T spot"),p:h.share})));
+      if(hs.length)legend.push(`<span>${SW.ctpos}${tl("where the Ts hold 20 to 40 s in (bigger = more often)")}</span>`)}
     if(on("danger")){const ds=(HS.danger||[]).filter(h=>here(h)&&nr(h)).slice(0,5);
       ds.forEach(z=>{const gg=el("g",{},Ltop),r=8+Math.min(6,z.share/3);
         el("circle",{cx:z.px[0],cy:z.px[1],r,style:"fill:none;stroke:var(--bad);stroke-width:2.4"},gg);
         el("path",{d:`M${z.px[0]-r-4} ${z.px[1]}H${z.px[0]-r+4}M${z.px[0]+r-4} ${z.px[1]}H${z.px[0]+r+4}M${z.px[0]} ${z.px[1]-r-4}V${z.px[1]-r+4}M${z.px[0]} ${z.px[1]+r-4}V${z.px[1]+r+4}`,style:"stroke:var(--bad);stroke-width:2.4;stroke-linecap:round"},gg);
-        tip(gg,`${z.zone||"T angle"}: ${z.kills} CTs killed from here in the first minute`)});
-      if(ds.length)legend.push(`<span>${SW.danger}spots the Ts kill CTs from in the first minute</span>`)}}
+        tip(gg,tl("{zone}: {n} CTs killed from here in the first minute",{zone:z.zone||tl("T angle"),n:z.kills}))});
+      if(ds.length)legend.push(`<span>${SW.danger}${tl("spots the Ts kill CTs from in the first minute")}</span>`)}}
   // hostage maps, a hostage taken (numpad 7 / 9, 10/10): the way back to the rescue (CT: from where you pressed) and
   // where the Ts cut it, with when on the game clock; both sides
   const HC=HMAP&&o.following&&g&&live&&typeof hostageCarry==="function"?hostageCarry(p,g):null;
   if(HC&&HC.rows.length){const col=ct?"var(--ct)":"var(--t)";
-    HC.rows.forEach(s=>{tPathLabel(Lrot,Ltop,s.pts,col,level,`${s.to||"rescue"}${s.back!=null?` ~${clock(s.back)}`:` ~${Math.round(s.s)} s`}`);
+    HC.rows.forEach(s=>{tPathLabel(Lrot,Ltop,s.pts,col,level,`${s.to||tl("rescue")}${s.back!=null?` ~${clock(s.back)}`:` ~${Math.round(s.s)} s`}`);
       s.cut.forEach(c=>{const q=s.pts.find(q=>q[3]>=c.after)||s.pts[s.pts.length-1];if(!here({px:q,level:q[2]}))return;const gg=el("g",{},Ltop);
         el("circle",{cx:q[0],cy:q[1],r:10,style:"fill:none;stroke:var(--bad);stroke-width:2.6;stroke-dasharray:4 3"},gg);
         if(c.by!=null)qLabel(Ltop,q[0],q[1],10,clock(c.by),"kwt",3);
-        tip(gg,`${c.zone}: ${c.share}% of the ways back from ${s.zone} cross it, ${Math.round(c.after)} s after the pick-up${c.by!=null?` (here ~${clock(c.by)})`:""}`)})});
-    legend.push(ct?`<span>${SW.tpath}hostage ${HC.n} taken: your way back to the rescue from ${esc(HC.rows[0].zone)} (~${Math.round(HC.rows[0].s)} s carrying), dashed: where the Ts cut it and when you get there - smoke or clear it first</span>`
-      :`<span>${SW.tpath}hostage ${HC.n} taken: their ways back to the rescue, dashed: where to cut them, the time is when the carrier gets there - be there before</span>`)}
+        tip(gg,tl("{zone}: {p}% of the ways back from {from} cross it, {s} s after the pick-up",{zone:c.zone,p:c.share,from:s.zone,s:Math.round(c.after)})+(c.by!=null?` (${tl("here ~{t}",{t:clock(c.by)})})`:""))})});
+    legend.push(ct?`<span>${SW.tpath}${tl("hostage {n} taken: your way back to the rescue from {zone} (~{s} s carrying), dashed: where the Ts cut it and when you get there - smoke or clear it first",{n:HC.n,zone:esc(HC.rows[0].zone),s:Math.round(HC.rows[0].s)})}</span>`
+      :`<span>${SW.tpath}${tl("hostage {n} taken: their ways back to the rescue, dashed: where to cut them, the time is when the carrier gets there - be there before",{n:HC.n})}</span>`)}
   // hostage maps, T (the defense, 10/10: as the CT of a bomb map): the CTs' ways, numpad 1-2-3 the one you play against
   // (Wily only), and along it the spots the Ts kill CTs from in the first minute
   const HT=HMAP&&!ct&&!HC?((PL.hostage||{})[map]):null;
@@ -279,13 +279,13 @@ function liveRadar(box,p,map,level,g,o){
     if(W){const rows=W.rows.filter(r=>!f||r.rank===f),FRt=f&&rows[0]?rows[0].route:null,nr=s=>!FRt||FRt.pts.some(q=>Math.hypot(q[0]-s.px[0],q[1]-s.px[1])<90);
       rows.forEach(r=>tPathLabel(Lrot,Ltop,r.route.pts,"var(--ct)",level,`${r.rank} ${r.name||""} ~${clock(r.t_end)}`.trim()));
       const ds=(HT.danger||[]).filter(h=>here(h)&&nr(h)).slice(0,4);
-      ds.forEach(h=>tip(el("circle",{cx:h.px[0],cy:h.px[1],r:8+Math.min(6,h.share/3),style:"fill:var(--t);fill-opacity:.3;stroke:var(--t);stroke-width:2.4"},Lstrong),`${h.zone||"T spot"}: ${h.kills} CTs killed from here in the first minute`));
-      legend.push(`<span>${SW.tpath}the CTs' ways toward the hostages (numpad 1-2-3: the one you play against, left to right from their spawn; the time: when they get to its end)${ds.length?", filled: the spots the Ts kill CTs from in the first minute":""}; 7 / 9 = 1st / 2nd hostage taken</span>`)}}
+      ds.forEach(h=>tip(el("circle",{cx:h.px[0],cy:h.px[1],r:8+Math.min(6,h.share/3),style:"fill:var(--t);fill-opacity:.3;stroke:var(--t);stroke-width:2.4"},Lstrong),tl("{zone}: {n} CTs killed from here in the first minute",{zone:h.zone||tl("T spot"),n:h.kills})));
+      legend.push(`<span>${SW.tpath}${ds.length?tl("the CTs' ways toward the hostages (numpad 1-2-3: the one you play against, left to right from their spawn; the time: when they get to its end), filled: the spots the Ts kill CTs from in the first minute; 7 / 9 = 1st / 2nd hostage taken"):tl("the CTs' ways toward the hostages (numpad 1-2-3: the one you play against, left to right from their spawn; the time: when they get to its end); 7 / 9 = 1st / 2nd hostage taken")}</span>`)}}
   const CS=!ct&&M&&M.ct_spots;
   if(CS&&!earlyDone&&(on("ctpos")||on("danger"))){const tt=t==null?25:Math.max(t+15,20),wn=tt<20?"early":tt<40?"setup":tt<70?"hit":"late",W_=CS[wn]||CS.setup;
     if(W_&&on("ctpos")){const hs=W_.hold.filter(h=>here(h)&&nearF(h)&&h.zone!=="CT Spawn").slice(0,6),mx=Math.max(...hs.map(h=>h.share),1);
-      hs.forEach(h=>tip(el("circle",{cx:h.px[0],cy:h.px[1],r:7+9*h.share/mx,style:"fill:var(--ct);fill-opacity:.32;stroke:var(--ct);stroke-width:2;stroke-opacity:.8"},Lstrong),`${h.zone||"CT spot"}: ${h.share}% of the CTs' time at this moment`));
-      if(hs.length)legend.push(`<span>${SW.ctpos}where the CTs stand when you get there (bigger = more often)</span>`)}
+      hs.forEach(h=>tip(el("circle",{cx:h.px[0],cy:h.px[1],r:7+9*h.share/mx,style:"fill:var(--ct);fill-opacity:.32;stroke:var(--ct);stroke-width:2;stroke-opacity:.8"},Lstrong),tl("{zone}: {p}% of the CTs' time at this moment",{zone:h.zone||tl("CT spot"),p:h.share})));
+      if(hs.length)legend.push(`<span>${SW.ctpos}${tl("where the CTs stand when you get there (bigger = more often)")}</span>`)}
     if(W_&&on("danger")){const ds=W_.danger.filter(z=>here(z)&&nearF(z)).slice(0,5);
       ds.forEach(z=>{const gg=el("g",{},Ltop),r=8+Math.min(6,z.share/3);
         el("circle",{cx:z.px[0],cy:z.px[1],r,style:"fill:none;stroke:var(--bad);stroke-width:2.4"},gg);
@@ -294,16 +294,16 @@ function liveRadar(box,p,map,level,g,o){
           const spot=[[r+3,-r-3],[-r-3,-r-3],[r+3,r+3],[-r-3,r+3]].map(([dx,dy])=>[z.px[0]+dx,z.px[1]+dy]).find(([x,y])=>free(x,y));
           if(spot){const [bx,by]=spot;   // no free corner: the target stays, the "!" goes (a label is never covered)
             el("circle",{cx:bx,cy:by,r:7,style:"fill:var(--bad);stroke:#0b0f14;stroke-width:1.2"},gg);el("text",{x:bx,y:by+4,"text-anchor":"middle",class:"pbt",style:"fill:#fff"},gg).textContent="!";obstacle(Ltop,bx,by,14,14)}}
-        tip(gg,`${z.zone||"CT angle"}: ${z.kills} T killed from here at this moment of the round${z.sneaky?" — they kill a lot from here for the little time they spend there: check it":""}`)});
-      if(ds.length)legend.push(`<span>${SW.danger}angles the CTs kill from (! = often forgotten)</span>`)}}
+        tip(gg,tln(z.kills,"{zone}: {n} T killed from here at this moment of the round","{zone}: {n} Ts killed from here at this moment of the round",{zone:z.zone||tl("CT angle")})+(z.sneaky?" — "+tl("they kill a lot from here for the little time they spend there: check it"):""))});
+      if(ds.length)legend.push(`<span>${SW.danger}${tl("angles the CTs kill from (! = often forgotten)")}</span>`)}}
   // the Ts' plays (CT): not drawn, the side panel shows the odds; they choose the grenades below
   let PLs=null;
   if(ct&&M&&M.plays&&!planted){const ev=o.following?evFor(g):{},r=o.read||(o.following?tsidePredict(TS,map,g,ev):{A:M.all.A,B:M.all.B,none:M.all.none,rush:Math.round(100*(M.rush_p??.2)),live:false});PLs=r&&tsidePlays(TS,map,o.following?g:{},ev,r)}
   const PLT=site&&M&&M.evidence&&M.evidence.plants&&M.evidence.plants[site];
   if(PLT&&planted){(PLT.spots||[]).filter(s=>!s.level||s.level===level).forEach(s=>{const gg=el("g",{},Ltop);obstacle(Ltop,s.px[0],s.px[1],26,18);
       el("rect",{x:s.px[0]-13,y:s.px[1]-9,width:26,height:18,rx:3,style:"fill:var(--bad);stroke:#fff;stroke-width:1.6"},gg);
-      el("text",{x:s.px[0],y:s.px[1]+4,"text-anchor":"middle",class:"c4t"},gg).textContent="C4";tip(gg,`Plant spot: ${s.share}% of plants, Ts win ${s.t_win}% after it`)});
-    legend.push(`<span>${SW.c4}where the bomb usually is</span>`)}
+      el("text",{x:s.px[0],y:s.px[1]+4,"text-anchor":"middle",class:"c4t"},gg).textContent="C4";tip(gg,tl("Plant spot: {p}% of plants, Ts win {w}% after it",{p:s.share,w:s.t_win}))});
+    legend.push(`<span>${SW.c4}${tl("where the bomb usually is")}</span>`)}
   // grenades: now (live), the plan (before the round), the retake ones (after the plant)
   const landed=[];   // grenades landing on the same spot: icons side by side
   const drawNade=(x,label,title)=>{if(!x.to_px||!x.from_px)return;if(!here({px:x.to_px,level:x.land_level||x.level})&&!here({px:x.from_px,level:x.level}))return;
@@ -312,24 +312,24 @@ function liveRadar(box,p,map,level,g,o){
     nadeArc(Lnades,x.from_px[0],x.from_px[1],tx,ty,x.type);obstacle(Ltop,tx,ty,34,34);nadeIcon(Ltop,x.type,tx,ty,title);
     qTag(Ltop,tx,ty,17,label,`var(--${x.type})`,4)};
   if(on("nades")&&planted&&site&&o.following&&g&&typeof postPlan==="function"){const RX=ct&&M?rotFromDir(M,site,tdirSel(g).dir||mySite(g),map):null;
-    if(stuffArcs(Lnades,Ltop,postPlan(p,g,ct?"CT":"T",site,RX&&RX.routes[0]?RX.routes[0].pts:null),level))legend.push(`<span>${SW.nade}${ct?"retake":"post-plant"} grenade you hold: from the white dot to its icon</span>`)}
+    if(stuffArcs(Lnades,Ltop,postPlan(p,g,ct?"CT":"T",site,RX&&RX.routes[0]?RX.routes[0].pts:null),level))legend.push(`<span>${SW.nade}${ct?tl("retake grenade you hold: from the white dot to its icon"):tl("post-plant grenade you hold: from the white dot to its icon")}</span>`)}
   const CDs_=ct&&!planted&&o.following&&g&&typeof ctDirStuff==="function"?(tdirSel(g).dir||(typeof ctLikely==="function"?ctLikely(o.read||(M&&M.plays?tsidePredict(TS,map,g,evFor(g)):null)):null)):null;
   const CDP=CDs_?ctDirStuff(p,g,CDs_):null;   // a site said (numpad 1-3, 07/10), else the likely one (09/10): the card's stuff
-  if(CDP&&on("nades")&&stuffArcs(Lnades,Ltop,CDP,level))legend.push(`<span>${SW.nade}your stuff for ${tdirSel(g).dir?"the site you said":"the likely site"}: from the white dot to its icon</span>`);
+  if(CDP&&on("nades")&&stuffArcs(Lnades,Ltop,CDP,level))legend.push(`<span>${SW.nade}${tdirSel(g).dir?tl("your utility for the site you said: from the white dot to its icon"):tl("your utility for the likely site: from the white dot to its icon")}</span>`);
   if(ct&&!planted&&o.following&&g&&g.round_phase==="freezetime"&&tdirSel(g).dir&&typeof ctBoostPick==="function"){const b=ctBoostPick(p,g,tdirSel(g).dir);
     if(b&&b.px&&(!b.level||!level||b.level===level)){const gg=el("g",{},Ltop);el("circle",{cx:b.px[0],cy:b.px[1],r:11,style:"fill:var(--good);fill-opacity:.35;stroke:var(--good);stroke-width:2.4"},gg);
       el("text",{x:b.px[0],y:b.px[1]+5,"text-anchor":"middle",class:"pbt"},gg).textContent="⤴";obstacle(Ltop,b.px[0],b.px[1],24,24);
-      tip(gg,`Boost ${b.place||""}: you trained it; ${b.kills} kills from up there in the base`);legend.push(`<span>⤴ a boost you trained</span>`)}}
+      tip(gg,tl("Boost {place}: you trained it; {k} kills from up there in the base",{place:b.place||"",k:b.kills}));legend.push(`<span>⤴ ${tl("a boost you trained")}</span>`)}}
   if(ct&&on("nades")&&PLs&&!CDP){const NN=nadesNow(PL,map,g,PLs,live);
-    NN.forEach(x=>drawNade(x,`${nadeName(x.type,"CT")} → ${vShort(x.to||"?")}${/jump|run/i.test(x.how||"")?` · ${String(x.how).match(/jump|run/i)[0].toLowerCase()}`:""}${x.role==="anti_rush"?" · anti-rush":x.role==="block"?" · block":x.role==="flash"?" · as they push":""}`,
-      `${nadeName(x.type,"CT")} ${x.from} → ${x.to}: ${x.why}. ${x.how||""}${x.click?`, ${x.click} click`:""}${x.yours?"":" (from a spot you don't play)"}`));
+    NN.forEach(x=>drawNade(x,`${nadeName(x.type,"CT")} → ${vShort(x.to||"?")}${/jump|run/i.test(x.how||"")?` · ${String(x.how).match(/jump|run/i)[0].toLowerCase()}`:""}${x.role==="anti_rush"?" · "+tl("anti-rush"):x.role==="block"?" · "+tl("block"):x.role==="flash"?" · "+tl("as they push"):""}`,
+      `${nadeName(x.type,"CT")} ${x.from} → ${x.to}: ${x.why}. ${HOWL(x.how||"")}${x.click?", "+HOWL(x.click):""}${x.yours?"":" "+tl("(from a spot you don't play)")}`));
     o.nadesOut&&o.nadesOut(NN);
-    if(NN.length)legend.push(`<span>${SW.nade}grenade worth throwing ${live?"now":"this round"}: from the white dot to its icon (cloud smoke, flame molotov, burst flash, HE)</span>`)}
+    if(NN.length)legend.push(`<span>${SW.nade}${live?tl("grenade worth throwing now: from the white dot to its icon (cloud smoke, flame molotov, burst flash, HE)"):tl("grenade worth throwing this round: from the white dot to its icon (cloud smoke, flame molotov, burst flash, HE)")}</span>`)}
   if(att&&on("nades")&&o.following&&typeof vNadePicks==="function"&&!(TDR&&TDR.rows.length)){const NP=vNadePicks(p,g).filter(x=>x.x);   // the ways' card draws its own stuff
-    NP.forEach(n=>drawNade({...n.x,type:n.type},`${nadeName(n.type,"T")} → ${vShort(n.x.to||"?")}${n.x.pop?" · pop":""}`+(/jump|run/i.test(n.x.how||"")?` · ${String(n.x.how).match(/jump|run/i)[0].toLowerCase()}`:"")+({site:` · site ${FN||1}`,way:` · path ${FN||1}`}[n.x.way]||""),`${nadeName(n.type,"T")} ${n.x.from} → ${n.x.to}${n.x.how?`. ${n.x.how}`:""}`));
+    NP.forEach(n=>drawNade({...n.x,type:n.type},`${nadeName(n.type,"T")} → ${vShort(n.x.to||"?")}${n.x.pop?" · pop":""}`+(/jump|run/i.test(n.x.how||"")?` · ${String(n.x.how).match(/jump|run/i)[0].toLowerCase()}`:"")+({site:" · "+tl("site {n}",{n:FN||1}),way:" · "+tl("path {n}",{n:FN||1})}[n.x.way]||""),`${nadeName(n.type,"T")} ${n.x.from} → ${n.x.to}${n.x.how?`. ${HOWL(n.x.how)}`:""}`));
     NP.filter(n=>n.alt&&n.alt.to_px&&n.alt.from_px&&here({px:n.alt.to_px,level:n.alt.land_level||n.alt.level})).forEach(n=>{const a=n.alt,gg=el("g",{style:"opacity:.45"},Lnades);   // the other good throw, faint
-      nadeArc(gg,a.from_px[0],a.from_px[1],a.to_px[0],a.to_px[1],n.type);tip(el("circle",{cx:a.to_px[0],cy:a.to_px[1],r:9,style:`fill:var(--${n.type});fill-opacity:.6;stroke:#0b0f14`},gg),`Other ${nadeName(n.type,"T")}: ${a.from} → ${a.to}`)});
-    if(NP.length)legend.push(`<span>${SW.nade}your grenades for this moment: from the white dot to its icon</span>`)}
+      nadeArc(gg,a.from_px[0],a.from_px[1],a.to_px[0],a.to_px[1],n.type);tip(el("circle",{cx:a.to_px[0],cy:a.to_px[1],r:9,style:`fill:var(--${n.type});fill-opacity:.6;stroke:#0b0f14`},gg),tl("Other {nade}: {from} → {to}",{nade:nadeName(n.type,"T"),from:a.from,to:a.to}))});
+    if(NP.length)legend.push(`<span>${SW.nade}${tl("your grenades for this moment: from the white dot to its icon")}</span>`)}
   // after the plant: the way to the site from where you are, and where the bomb usually is
   const you=o.following&&g&&g.pos&&GEO?worldPx(GEO,g.pos):null;
   // before the plant, when the read leans hard to one site (70%+): the rotation from the other one (you may be holding it)
@@ -346,8 +346,8 @@ function liveRadar(box,p,map,level,g,o){
           const lng=sg.reduce((a,b)=>b.length>a.length?b:a);m_=lng[Math.floor(lng.length/2)]}
         else{const pts=[GEO.zones[R.from],...rt.route.map(z=>GEO.zones[z]),GEO.sites[site]].filter(Boolean).map(z=>z.px);
           if(you&&i===0&&!said)pts.unshift(you.px);if(pts.length<2)return;rotPath(Lrot,pts.map(q=>[q[0],q[1],null]),col,i===0,null);m_=pts[Math.floor(pts.length/2)]}
-        tip(rtag(Ltop,m_[0],m_[1]-18,`⏱ ${rt.travel!=null?`${Math.round(rt.travel)} s · `:""}${rt.died}% die`,col,"rot"),`From ${R.from} to ${site}: ${rt.route.join(" > ")} (${rt.n} rotations in the base, ${rt.died}% died on the way)`)});
-      legend.push(`<span>${SW.route}rotation to ${site} from ${esc(R.from)} (green = safe, red = players often die on the way; dashed = the other way)</span>`)}}
+        tip(rtag(Ltop,m_[0],m_[1]-18,`⏱ ${rt.travel!=null?`${Math.round(rt.travel)} s · `:""}${tl("{p}% die",{p:rt.died})}`,col,"rot"),tl("From {from} to {site}: {route} ({n} rotations in the base, {p}% died on the way)",{from:R.from,site,route:rt.route.join(" > "),n:rt.n,p:rt.died}))});
+      legend.push(`<span>${SW.route}${tl("rotation to {site} from {from} (green = safe, red = players often die on the way; dashed = the other way)",{site,from:esc(R.from)})}</span>`)}}
   cap.innerHTML=legend.join("");flushLabels(Ltop);   // the legend first: its box is known when the labels are placed
   if(you&&you.level===level){el("circle",{cx:you.px[0],cy:you.px[1],r:16,class:"you-pulse",style:"fill:none;stroke:#fff;stroke-width:2"},Ltop);
     el("circle",{cx:you.px[0],cy:you.px[1],r:7,style:"fill:#fff;stroke:#0b0f14;stroke-width:2"},Ltop)}

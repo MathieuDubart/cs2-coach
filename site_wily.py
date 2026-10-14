@@ -15,6 +15,7 @@ import sys
 import time
 
 import config
+import site_wily_langs
 
 HERE = config.HERE
 OUT = os.path.join(HERE, "dist", "site_wily")
@@ -22,7 +23,14 @@ SITE = "https://wily.valentingassend.com"
 PUBLISHER = "Valentin Gassend"
 CONTACT = "contact@valentingassend.com"
 GITHUB = "https://github.com/ValentinGassend/cs2-coach"   # 10/10: the code is public (Apache 2.0)
-UPDATED = {"en": "8 October 2026", "fr": "8 octobre 2026"}
+UPDATED = {"en": "13 October 2026", "fr": "13 octobre 2026"}
+# 13/10: the site in the app's seven languages (site_wily_langs: German, Russian, Portuguese, Spanish, Chinese). The English and
+# French pages keep their addresses; the others are <lang>.html, <lang>-privacy.html, <lang>-terms.html.
+LANGS = ("en", "fr", "de", "ru", "pt", "es", "zh")
+LANG_NAME = {"en": "English", "fr": "Français", "de": "Deutsch", "ru": "Русский", "pt": "Português", "es": "Español", "zh": "中文"}
+FILES = {"home": {"en": "index.html", "fr": "fr.html", **{l: f"{l}.html" for l in ("de", "ru", "pt", "es", "zh")}},
+         "privacy": {"en": "privacy.html", "fr": "confidentialite.html", **{l: f"{l}-privacy.html" for l in ("de", "ru", "pt", "es", "zh")}},
+         "terms": {"en": "terms.html", "fr": "conditions.html", **{l: f"{l}-terms.html" for l in ("de", "ru", "pt", "es", "zh")}}}
 HOST = ("Infomaniak Network SA, Rue Eugène-Marziano 25, 1227 Les Acacias (GE), Switzerland · +41 22 820 35 44 · "
         "https://www.infomaniak.com")
 
@@ -55,6 +63,11 @@ pre.notices{white-space:pre-wrap;font:13px/1.55 var(--f-mono);background:var(--p
 footer{border-top:1px solid var(--line);margin-top:64px;padding:26px 0 40px;color:var(--muted);font-size:14px}footer a{color:var(--muted)}
 footer .wrap{display:flex;gap:18px;flex-wrap:wrap;justify-content:space-between}
 @media (max-width:600px){h1{margin-top:36px}nav.top{margin-left:0}}
+:root:lang(zh){--f-display:"Barlow Condensed","Microsoft YaHei","PingFang SC","Noto Sans CJK SC","Source Han Sans SC",sans-serif;--f-body:"IBM Plex Sans","Microsoft YaHei","PingFang SC","Noto Sans CJK SC","Source Han Sans SC",system-ui,sans-serif}
+details.langs{position:relative}details.langs summary{cursor:pointer;color:var(--muted);font-weight:500;list-style:none}details.langs summary::-webkit-details-marker{display:none}
+details.langs[open] summary{color:var(--ink)}details.langs ul{position:absolute;right:0;top:28px;z-index:5;margin:0;padding:6px 0;list-style:none;background:var(--panel);border:1px solid var(--line);border-radius:6px;min-width:140px}
+details.langs li a{display:block;padding:5px 14px;color:var(--ink);text-decoration:none}details.langs li a:hover{background:var(--line)}details.langs li a[aria-current]{color:var(--t)}
+@media (max-width:600px){details.langs ul{left:0;right:auto}}
 """
 
 
@@ -68,29 +81,37 @@ def fonts_css():
         for w in weights:
             out.append(f"@font-face{{font-family:'{family}';font-style:normal;font-weight:{w};font-display:swap;"
                        f"src:url(fonts/{fid}-latin-{w}-normal.woff2) format('woff2')}}")
+            out.append(f"@font-face{{font-family:'{family}';font-style:normal;font-weight:{w};font-display:swap;"
+                       f"src:url(fonts/{m.CYRILLIC[family]}-cyrillic-{w}-normal.woff2) format('woff2');unicode-range:{m.CYR_RANGE}}}")
     return "".join(out)
 
 
+UI = {"en": {"dl": "Download", "how": "How it works", "priv": "Privacy", "terms": "Terms", "lic": "Licenses",
+             "valve": "Not affiliated with Valve Corporation.", "soon": "Coming soon", "lang": "Language"},
+      "fr": {"dl": "Télécharger", "how": "Comment ça marche", "priv": "Confidentialité", "terms": "Conditions", "lic": "Licences",
+             "valve": "Non affilié à Valve Corporation.", "soon": "Bientôt disponible", "lang": "Langue"},
+      **site_wily_langs.UI}
+
+
 def page(lang, title, body, here, desc):
-    other = {"index.html": "fr.html", "fr.html": "index.html", "privacy.html": "confidentialite.html",
-             "confidentialite.html": "privacy.html", "terms.html": "conditions.html", "conditions.html": "terms.html",
-             "licenses.html": "fr.html"}.get(here, "index.html")
-    t = {"en": {"dl": "Download", "how": "How it works", "priv": "Privacy", "terms": "Terms", "lic": "Licenses", "home": "index.html",
-                "pp": "privacy.html", "tt": "terms.html", "switch": "Français"},
-         "fr": {"dl": "Télécharger", "how": "Comment ça marche", "priv": "Confidentialité", "terms": "Conditions", "lic": "Licences",
-                "home": "fr.html", "pp": "confidentialite.html", "tt": "conditions.html", "switch": "English"}}[lang]
+    t = UI[lang]
+    kind = next((k for k, fs in FILES.items() if here in fs.values()), None)   # None: the licenses page (English only)
+    home, pp, tt = FILES["home"][lang], FILES["privacy"][lang], FILES["terms"][lang]
     cur = lambda f: ' aria-current="page"' if f == here else ""
+    alts = "".join(f'<link rel="alternate" hreflang="{l}" href="{SITE}/{FILES[kind][l]}">' for l in LANGS) if kind else ""
+    menu = "".join(f'<li><a href="{FILES[kind or "home"][l]}" hreflang="{l}" lang="{l}"{cur(FILES[kind or "home"][l])}>{LANG_NAME[l]}</a></li>' for l in LANGS)
     return f"""<!doctype html>
 <html lang="{lang}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>{html.escape(title)}</title><meta name="description" content="{html.escape(desc)}">
+<title>{html.escape(title)}</title><meta name="description" content="{html.escape(desc)}">{alts}
 <link rel="icon" href="assets/icon.svg" type="image/svg+xml"><link rel="stylesheet" href="assets/site.css"></head>
-<body><header class="top"><div class="wrap"><a class="brand" href="{t['home']}">Wily</a>
-<nav class="top" aria-label="Site"><a href="{t['home']}#download">{t['dl']}</a><a href="{t['home']}#how">{t['how']}</a>
-<a href="{t['pp']}"{cur(t['pp'])}>{t['priv']}</a><a href="{t['tt']}"{cur(t['tt'])}>{t['terms']}</a><a href="{other}" hreflang="{'fr' if lang == 'en' else 'en'}">{t['switch']}</a></nav></div></header>
+<body><header class="top"><div class="wrap"><a class="brand" href="{home}">Wily</a>
+<nav class="top" aria-label="Site"><a href="{home}#download">{t['dl']}</a><a href="{home}#how">{t['how']}</a>
+<a href="{pp}"{cur(pp)}>{t['priv']}</a><a href="{tt}"{cur(tt)}>{t['terms']}</a>
+<details class="langs"><summary aria-label="{t['lang']}">🌐 {LANG_NAME[lang]}</summary><ul>{menu}</ul></details></nav></div></header>
 <main class="wrap">{body}</main>
 <footer><div class="wrap"><span>Wily · {PUBLISHER} · <a href="mailto:{CONTACT}">{CONTACT}</a></span>
-<span><a href="{t['pp']}">{t['priv']}</a> · <a href="{t['tt']}">{t['terms']}</a> · <a href="licenses.html">{t['lic']}</a></span>
-<span>{'Not affiliated with Valve Corporation.' if lang == 'en' else 'Non affilié à Valve Corporation.'}</span></div></footer>
+<span><a href="{pp}">{t['priv']}</a> · <a href="{tt}">{t['terms']}</a> · <a href="licenses.html">{t['lic']}</a></span>
+<span>{t['valve']}</span></div></footer>
 </body></html>
 """
 
@@ -104,10 +125,23 @@ def _release():
 
 def download_block(lang, rel):
     if not rel:
-        return (f'<div class="cta"><span class="btn soon">{"Coming soon" if lang == "en" else "Bientôt disponible"}</span></div>')
+        return f'<div class="cta"><span class="btn soon">{UI[lang]["soon"]}</span></div>'
     s, ins = rel["setup"], rel.get("installer")
     mb = s["size"] / 2 ** 20
     parts = sum(rel[k]["size"] for k in ("runtime", "code", "base") if isinstance(rel.get(k), dict)) / 2 ** 20
+    if lang in site_wily_langs.DL:   # 13/10: German, Russian, Portuguese, Spanish, Chinese
+        d = site_wily_langs.DL[lang]
+        n = f'{rel["base"]["matches"]:,}'.replace(",", d["sep"])
+        when = time.strftime(d["date"], time.localtime(rel["released"]))
+        ver = d["ver"].format(app=html.escape(rel["app"]), when=when, n=n)
+        if not ins:
+            return (f'<div class="cta"><a class="btn" href="releases/{s["file"]}" download>{d["zip_btn"].format(mb=f"{mb:.0f}")}</a>'
+                    f'<span class="note">{ver}</span></div><p class="note">SHA-256: <span class="mono">{s["sha256"]}</span></p>')
+        return (f'<div class="cta"><a class="btn" href="releases/{ins["file"]}" download>{d["btn"]}</a>'
+                f'<span class="note">{ver} · {d["parts"].format(mb=f"{parts:.0f}")}</span></div>'
+                f'<p class="note">{d["smart"]}</p>'
+                f'<p class="note">{d["sha_setup"]}: <span class="mono">{ins["sha256"]}</span> · {d["or_zip"].format(href="releases/" + s["file"], mb=f"{mb:.0f}")}</p>'
+                + linux_note(rel, lang))
     when = time.strftime("%d/%m/%Y", time.localtime(rel["released"]))
     if not ins:   # a release made before the installer (08/10): the zip alone
         if lang == "en":
@@ -137,11 +171,13 @@ def linux_note(rel, lang):
     lx = rel.get("installer_linux")
     if not lx:
         return ""
+    if lang in site_wily_langs.DL:
+        return f'<p class="note">{site_wily_langs.DL[lang]["linux"].format(href="releases/" + lx["file"], sha=lx["sha256"])}</p>'
     if lang == "en":
         return (f'<p class="note"><b>Linux</b> (match review and Live; the training server is experimental there, to turn on in Settings): download '
                 f'<a href="releases/{lx["file"]}" download>wily-linux.sh</a>, then in a terminal <code>sh wily-linux.sh</code> '
                 f'(Python 3.11 or newer). SHA-256: <span class="mono">{lx["sha256"]}</span></p>')
-    return (f'<p class="note"><b>Linux</b> (revue des matchs et Live ; le serveur d\'entraînement y est expérimental, à activer dans les Settings) : '
+    return (f'<p class="note"><b>Linux</b> (revue des matchs et Live ; le serveur d\'entraînement y est expérimental, à activer dans les Réglages) : '
             f'télécharge <a href="releases/{lx["file"]}" download>wily-linux.sh</a>, puis dans un terminal <code>sh wily-linux.sh</code> '
             f'(Python 3.11 ou plus récent). SHA-256 : <span class="mono">{lx["sha256"]}</span></p>')
 HOME = {
@@ -167,7 +203,7 @@ HOME = {
  <li>At my first launch, three steps: your Steam account (I find it), CS2 connected (one launch option to paste), your match history code (no Steam key to create). Then your matches are analyzed on your PC, a few minutes each.</li>
  <li>Prepare → <b>Warm-up</b>: the training server installs itself the first time (a separate copy of CS2 next to the game, links to its files, no extra space).</li>
 </ol>
-<p class="note">Needs Windows 10 or 11 (64-bit) or Linux (Python 3.11+), CS2 on Steam, 8 GB of RAM, and disk space for your demos (about 250 MB per match).</p>
+<p class="note">Needs Windows 10 or 11 (64-bit) or Linux (Python 3.11+), CS2 on Steam, 8 GB of RAM, and disk space for your demos (about 250 MB per match). The app speaks English, French, German, Russian, Portuguese, Spanish and Chinese.</p>
 <h2>Fair play and privacy</h2>
 <div class="grid">
  <article class="card"><h3>Only what Valve provides</h3><p>Game State Integration (the game's official feature for HUDs and RGB keyboards), the console log CS2 writes, the Steam Web API, the demos of your matches. I never read the game's memory or network traffic and I never play for you. The training server is a local copy of the game that only you join. You can check all of it: <a href="{GITHUB}">the code is public</a>.</p></article>
@@ -181,27 +217,27 @@ HOME = {
 <section id="download">{download_block("fr", rel)}<p class="note"><b>Open source</b> (Apache 2.0) : tout le code de l'app est sur <a href="{GITHUB}">GitHub</a>. Chaque version y est aussi publiée, avec le même SHA-256 que sur cette page, liée au commit exact dont elle est construite : <a href="{GITHUB}/releases">les versions</a>.</p></section>
 <div class="grid">
  <article class="card"><span class="eyebrow">Live</span><h3>Pendant le match</h3><ul><li>Quoi acheter pour ce round et le suivant</li><li>Où les T vont probablement aller, mis à jour avec le chrono et ce que tu vois</li><li>Tes chemins et tes bons spots sur le radar, les grenades à lancer maintenant</li></ul></article>
- <article class="card"><span class="eyebrow">Prepare</span><h3>Avant de jouer</h3><ul><li>Un échauffement chronométré construit sur tes points faibles (5 à 45 min)</li><li>Un serveur d'entraînement avec des bots qui rejouent tes vraies morts et tes clutchs</li></ul></article>
- <article class="card"><span class="eyebrow">Review</span><h3>Après la session</h3><ul><li>Ce qui a changé par rapport à tes matchs précédents, et pourquoi</li><li>Ton focus de la semaine et les expériences à tenter</li><li>Chaque match round par round</li></ul></article>
+ <article class="card"><span class="eyebrow">Préparer</span><h3>Avant de jouer</h3><ul><li>Un échauffement chronométré construit sur tes points faibles (5 à 45 min)</li><li>Un serveur d'entraînement avec des bots qui rejouent tes vraies morts et tes clutchs</li></ul></article>
+ <article class="card"><span class="eyebrow">Bilan</span><h3>Après la session</h3><ul><li>Ce qui a changé par rapport à tes matchs précédents, et pourquoi</li><li>Ton focus de la semaine et les expériences à tenter</li><li>Chaque match round par round</li></ul></article>
 </div>
 <h2 id="see">En images</h2>
 <div class="shots">
  <figure><video src="media/deaths.mp4" poster="media/deaths.jpg" autoplay muted loop playsinline preload="metadata"></video><figcaption><b>Tes propres morts, rejouées.</b> Les bots reviennent exactement là où ils t'ont tué dans ton vrai match (ici le round 3 sur Nuke, Hut Roof, ton chemin en bleu) : reprends le duel jusqu'à le gagner.</figcaption></figure>
  <figure><video src="media/live.mp4" poster="media/live.jpg" autoplay muted loop playsinline preload="metadata"></video><figcaption><b>Live</b> sur le deuxième écran, un round sur Nuke (×6) : après le plant, puis le plan du round suivant avec ses chances, les chemins et les grenades sur le radar.</figcaption></figure>
  <figure><video src="media/training.mp4" poster="media/training.jpg" autoplay muted loop playsinline preload="metadata"></video><figcaption><b>Serveur d'entraînement</b>, un exercice de grenade sur Mirage : où se placer, où viser, et si elle est arrivée à temps.</figcaption></figure>
- <figure><img src="media/prepare.jpg" alt="La page Prepare : les maps à travailler, les rounds que tu perds en ce moment, les blocs d'échauffement et ton niveau" loading="lazy"><figcaption><b>Prepare</b> : l'échauffement commence là où tu perds des rounds en ce moment.</figcaption></figure>
+ <figure><img src="media/prepare.jpg" alt="La page Préparer : les maps à travailler, les rounds que tu perds en ce moment, les blocs d'échauffement et ton niveau" loading="lazy"><figcaption><b>Préparer</b> : l'échauffement commence là où tu perds des rounds en ce moment.</figcaption></figure>
 </div>
 <h2 id="how">Comment ça marche</h2>
 <ol class="steps">
  <li>Ouvre <b>WilySetup.exe</b>, puis <b>Installer</b> : il me télécharge, vérifie chaque partie et m'installe pour ton compte Windows (sans droits administrateur). Je démarre avec Windows et j'ouvre Live tout seul quand CS2 démarre.</li>
  <li>À mon premier lancement, trois étapes : ton compte Steam (je le trouve), CS2 connecté (une option de lancement à coller), ton code d'historique des matchs (aucune clé Steam à créer). Ensuite tes matchs sont analysés sur ton PC, quelques minutes chacun.</li>
- <li>Prepare → <b>Warm-up</b> : le serveur d'entraînement s'installe tout seul la première fois (une copie séparée de CS2 à côté du jeu, des liens vers ses fichiers, sans espace en plus).</li>
+ <li>Préparer → <b>Échauffement</b> : le serveur d'entraînement s'installe tout seul la première fois (une copie séparée de CS2 à côté du jeu, des liens vers ses fichiers, sans espace en plus).</li>
 </ol>
-<p class="note">Il faut Windows 10 ou 11 (64 bits) ou Linux (Python 3.11+), CS2 sur Steam, 8 Go de RAM et de la place pour tes démos (environ 250 Mo par match). L'app est en anglais.</p>
+<p class="note">Il faut Windows 10 ou 11 (64 bits) ou Linux (Python 3.11+), CS2 sur Steam, 8 Go de RAM et de la place pour tes démos (environ 250 Mo par match). L'app parle français, anglais, allemand, russe, portugais, espagnol et chinois.</p>
 <h2>Fair-play et vie privée</h2>
 <div class="grid">
  <article class="card"><h3>Seulement ce que Valve fournit</h3><p>Le Game State Integration (la fonction officielle du jeu pour les HUD et les claviers RGB), le journal de console que CS2 écrit, l'API Steam, les démos de tes matchs. Je ne lis jamais la mémoire du jeu ni son trafic réseau, et je ne joue jamais à ta place. Le serveur d'entraînement est une copie locale du jeu que toi seul rejoins. Tu peux tout vérifier : <a href="{GITHUB}">le code est public</a>.</p></article>
- <article class="card"><h3>Ce qui reste ici, ce qui est partagé</h3><p>Tes démos, ton profil, tes codes Steam et ta voix ne quittent jamais ton PC (sans ta propre clé Steam, ta liste de matchs passe par ce site jusqu'à Steam, rien n'est gardé). <b>Partagé par défaut, anonymisé :</b> les tables que j'extrais de tes nouveaux matchs (positions, duels, grenades, achats, rounds ; chaque SteamID remplacé par un identifiant aléatoire, sans pseudo, sans identifiant de match), pour enrichir la base, et des compteurs d'usage anonymes. Mon premier lancement te le dit, et un clic coupe les deux (ou plus tard dans les Settings). <a href="confidentialite.html">Politique de confidentialité</a></p></article>
+ <article class="card"><h3>Ce qui reste ici, ce qui est partagé</h3><p>Tes démos, ton profil, tes codes Steam et ta voix ne quittent jamais ton PC (sans ta propre clé Steam, ta liste de matchs passe par ce site jusqu'à Steam, rien n'est gardé). <b>Partagé par défaut, anonymisé :</b> les tables que j'extrais de tes nouveaux matchs (positions, duels, grenades, achats, rounds ; chaque SteamID remplacé par un identifiant aléatoire, sans pseudo, sans identifiant de match), pour enrichir la base, et des compteurs d'usage anonymes. Mon premier lancement te le dit, et un clic coupe les deux (ou plus tard dans les Réglages). <a href="confidentialite.html">Politique de confidentialité</a></p></article>
  <article class="card"><h3>Alpha gratuite</h3><p>Gratuite pendant les tests. C'est la première version ouverte à tous les joueurs : dis-moi ce qui casse avec l'étiquette <b>alpha · report</b> en haut de ma page (tu vois ce qui est envoyé), ou par e-mail. Mes mises à jour sont signées par mon auteur, et je les vérifie avant d'installer quoi que ce soit. Questions ou bugs : <a href="mailto:{CONTACT}">{CONTACT}</a>.</p></article>
 </div>
 """,
@@ -216,15 +252,15 @@ PRIVACY = {
 <h2>2. Update checks</h2>
 <p>The app downloads <code>releases/latest.json</code> from this site at start-up and every few hours, and the update files when you choose to install them. These requests carry no identifier; like any web request, they show your IP address to the host (see 1).</p>
 <h2>3. Sharing your matches (on by default, you can turn it off)</h2>
-<p>Unless you turn it off (in the notice shown at the first launch, or at any time in Settings → <i>Share my matches</i>), the app sends, once you have seen that notice, for each new match analyzed on your PC, the tables it extracted from the demo (player positions every half second, duels, grenades, purchases, rounds), after anonymizing them on your PC:</p>
+<p>Unless you turn it off (in the notice shown at the first launch, or at any time in Settings → <i>Share my matches with the base</i>), the app sends, once you have seen that notice, for each new match analyzed on your PC, the tables it extracted from the demo (player positions every half second, duels, grenades, purchases, rounds), after anonymizing them on your PC:</p>
 <ul><li>every SteamID is replaced by an identifier drawn with a random key used for that match only and never kept: no one, including us, can link it back to an account or link a player across two matches;</li>
 <li>every player name is removed;</li><li>the match's Valve identifier is replaced by a random number.</li></ul>
-<p>With them: a random identifier of your installation (made by the app, not linked to your Steam account), the app's version, each match's map and a fingerprint of its rounds (a match shared twice is kept once). Never your demos, your voice, your settings, your keys, your profile or your name.</p>
+<p>With them: a random identifier of your installation (made by the app, not linked to your Steam account), the app's version and build, the version of the first-launch notice you saw, each match's map and a fingerprint of its rounds (a match shared twice is kept once). Never your demos, your voice, your settings, your keys, your profile or your name.</p>
 <ul><li><b>Purpose:</b> improve the reference base the app compares players with.</li>
 <li><b>Legal basis:</b> our legitimate interest in improving the app with anonymized data (Article 6(1)(f) GDPR): what is sent cannot be linked to you or to the other players. <b>You can object at any time</b> by turning the option off: nothing more is sent.</li>
 <li><b>On the server:</b> the upload script does not store your IP address. It keeps, for two days at most, a hash of it with a daily salt, to limit uploads per day. The files wait on the host until the publisher's computer retrieves them (usually within an hour), then they are deleted from the host.</li>
 <li><b>In the base:</b> the matches are then anonymous data. They cannot be linked to you or to the other players, and are kept as long as the base exists.</li>
-<li><b>Before that:</b> you can ask us to delete what your installation sent, with your installation identifier (Settings → Share my matches).</li></ul>
+<li><b>Before that:</b> you can ask us to delete what your installation sent, with your installation identifier (Settings → Share my matches with the base).</li></ul>
 <h2>4. Bug reports and feedback (only when you send them)</h2>
 <p>The <i>alpha · report</i> button of the app sends what you write, your email address only if you give it (to answer you), the app's version, your installation identifier, and, if you leave the box ticked, technical details: versions, Windows version, the page you were on and its last errors, and the end of the app's log with SteamIDs, email addresses, in-game names it knows and your Windows user name removed. You see all of it before sending. The short "how was it?" asked after a warm-up or a match sends, only if you press Send, the face, the tags and the words you chose, with what it was about (the warm-up's score, or the map and score of the match). The <i>!report</i> command of the training server sends what you type with the drill you were on and where you stood on the map.</p>
 <ul><li><b>Purpose:</b> fixing and improving the app. <b>Legal basis:</b> your consent, given by sending.</li>
@@ -259,29 +295,29 @@ PRIVACY = {
 <h2>2. Vérifications de mise à jour</h2>
 <p>L'application télécharge <code>releases/latest.json</code> depuis ce site au démarrage puis toutes les quelques heures, et les fichiers de mise à jour quand tu choisis de les installer. Ces requêtes ne portent aucun identifiant ; comme toute requête web, elles montrent ton adresse IP à l'hébergeur (voir 1).</p>
 <h2>3. Partage de tes matchs (activé par défaut, tu peux le désactiver)</h2>
-<p>Sauf si tu le désactives (dans l'avis affiché au premier lancement, ou à tout moment dans Settings → <i>Share my matches</i>), l'application envoie, une fois que tu as vu cet avis, pour chaque nouveau match analysé sur ton PC, les tables extraites de la démo (positions des joueurs toutes les demi-secondes, duels, grenades, achats, rounds), après les avoir anonymisées sur ton PC :</p>
+<p>Sauf si tu le désactives (dans l'avis affiché au premier lancement, ou à tout moment dans Réglages → <i>Partager mes matchs avec la base</i>), l'application envoie, une fois que tu as vu cet avis, pour chaque nouveau match analysé sur ton PC, les tables extraites de la démo (positions des joueurs toutes les demi-secondes, duels, grenades, achats, rounds), après les avoir anonymisées sur ton PC :</p>
 <ul><li>chaque SteamID est remplacé par un identifiant tiré avec une clé aléatoire propre à ce match et jamais conservée : personne, nous compris, ne peut remonter à un compte ni relier un joueur d'un match à l'autre ;</li>
 <li>chaque pseudo est supprimé ;</li><li>l'identifiant Valve du match est remplacé par un nombre aléatoire.</li></ul>
-<p>Avec elles : un identifiant aléatoire de ton installation (créé par l'application, sans lien avec ton compte Steam), la version de l'application, la map de chaque match et une empreinte de ses rounds (un match partagé deux fois n'est gardé qu'une fois). Jamais tes démos, ta voix, tes réglages, tes clés, ton profil ni ton nom.</p>
+<p>Avec elles : un identifiant aléatoire de ton installation (créé par l'application, sans lien avec ton compte Steam), la version et le build de l'application, la version de l'avis de premier lancement que tu as vu, la map de chaque match et une empreinte de ses rounds (un match partagé deux fois n'est gardé qu'une fois). Jamais tes démos, ta voix, tes réglages, tes clés, ton profil ni ton nom.</p>
 <ul><li><b>Finalité :</b> améliorer la base de référence à laquelle l'application compare les joueurs.</li>
 <li><b>Base légale :</b> notre intérêt légitime à améliorer l'application avec des données anonymisées (article 6.1.f du RGPD) : ce qui est envoyé ne peut être relié ni à toi ni aux autres joueurs. <b>Tu peux t'y opposer à tout moment</b> en désactivant l'option : plus rien n'est envoyé.</li>
 <li><b>Sur le serveur :</b> le script de réception ne conserve pas ton adresse IP. Il garde, deux jours au plus, une empreinte de celle-ci avec un sel du jour, pour limiter les envois par jour. Les fichiers attendent chez l'hébergeur que l'ordinateur de l'éditeur les récupère (en général dans l'heure), puis ils y sont supprimés.</li>
 <li><b>Dans la base :</b> les matchs sont alors des données anonymes. Ils ne peuvent être reliés ni à toi ni aux autres joueurs, et sont conservés tant que la base existe.</li>
-<li><b>Avant cela :</b> tu peux nous demander de supprimer ce que ton installation a envoyé, avec son identifiant (Settings → Share my matches).</li></ul>
+<li><b>Avant cela :</b> tu peux nous demander de supprimer ce que ton installation a envoyé, avec son identifiant (Réglages → Partager mes matchs avec la base).</li></ul>
 <h2>4. Signalements de bug et avis (seulement quand tu les envoies)</h2>
-<p>Le bouton <i>alpha · report</i> de l'application envoie ce que tu écris, ton adresse e-mail seulement si tu la donnes (pour te répondre), la version de l'application, l'identifiant de ton installation et, si tu laisses la case cochée, des détails techniques : versions, version de Windows, la page où tu étais et ses dernières erreurs, et la fin du journal de l'application dont sont retirés les SteamID, les adresses e-mail, les pseudos connus de l'application et ton nom d'utilisateur Windows. Tu vois tout avant d'envoyer. Le court « comment c'était ? » proposé après un échauffement ou un match envoie, seulement si tu appuies sur Send, le visage, les étiquettes et les mots que tu as choisis, avec ce dont il s'agit (le score de l'échauffement, ou la carte et le score du match). La commande <i>!report</i> du serveur d'entraînement envoie ce que tu tapes avec l'exercice en cours et l'endroit où tu étais sur la carte.</p>
+<p>Le bouton <i>alpha · report</i> de l'application envoie ce que tu écris, ton adresse e-mail seulement si tu la donnes (pour te répondre), la version de l'application, l'identifiant de ton installation et, si tu laisses la case cochée, des détails techniques : versions, version de Windows, la page où tu étais et ses dernières erreurs, et la fin du journal de l'application dont sont retirés les SteamID, les adresses e-mail, les pseudos connus de l'application et ton nom d'utilisateur Windows. Tu vois tout avant d'envoyer. Le court « comment c'était ? » proposé après un échauffement ou un match envoie, seulement si tu appuies sur Envoyer, le visage, les étiquettes et les mots que tu as choisis, avec ce dont il s'agit (le score de l'échauffement, ou la carte et le score du match). La commande <i>!report</i> du serveur d'entraînement envoie ce que tu tapes avec l'exercice en cours et l'endroit où tu étais sur la carte.</p>
 <ul><li><b>Finalité :</b> corriger et améliorer l'application. <b>Base légale :</b> ton consentement, donné en envoyant.</li>
 <li><b>Conservation :</b> le signalement attend chez l'hébergeur que l'ordinateur de l'éditeur le récupère (en général dans l'heure), puis y est supprimé ; l'éditeur le garde jusqu'à ce que le problème soit réglé, un an au plus.</li>
 <li>Pour faire supprimer un signalement ou savoir ce que nous gardons : écris-nous.</li></ul>
 <h2>5. Statistiques d'usage anonymes (tu peux les désactiver)</h2>
 <p>Pour savoir quelles parties de l'application servent et lesquelles ne servent pas, et la retravailler sur cette base, l'application compte, par jour : les pages ouvertes et le temps passé sur chacune (seulement quand la page est affichée), les boutons utilisés (désignés par la page et l'élément, jamais par ce qui y est écrit), le nombre d'erreurs rencontrées par la page, le temps où Live tourne pendant un match, ainsi que la version de l'application et une classe de taille d'écran. Rien d'autre : aucun identifiant (pas même celui de l'installation), aucun SteamID, aucun pseudo, rien de ce que tu écris, aucune donnée de match.</p>
 <ul><li>Une journée terminée est envoyée à ce site, ajoutée aux totaux de ce jour pour tous les joueurs, et le rapport lui-même est jeté : ne restent que des sommes par jour, qui ne peuvent être reliées à personne. Ton adresse IP n'est pas conservée (voir 3 pour l'empreinte salée du jour qui limite les envois).</li>
-<li><b>Base légale :</b> notre intérêt légitime à mesurer l'usage de l'application, dans les conditions fixées par la CNIL pour la mesure d'audience exemptée de consentement (statistiques anonymes, pour l'éditeur seul). <b>Tu peux t'y opposer à tout moment</b> : Settings → Usage statistics → Turn it off ; plus rien n'est compté ni envoyé. L'application te le signale à sa première ouverture.</li>
+<li><b>Base légale :</b> notre intérêt légitime à mesurer l'usage de l'application, dans les conditions fixées par la CNIL pour la mesure d'audience exemptée de consentement (statistiques anonymes, pour l'éditeur seul). <b>Tu peux t'y opposer à tout moment</b> : Réglages → Statistiques d'utilisation → Désactiver ; plus rien n'est compté ni envoyé. L'application te le signale à sa première ouverture.</li>
 <li><b>Conservation :</b> les totaux par jour, 25 mois au plus ; les compteurs gardés sur ton PC, 30 jours.</li></ul>
 <h2>6. La liste de tes matchs par ce site (quand tu n'as pas ta propre clé Steam)</h2>
 <p>Pour trouver tes nouveaux matchs, l'application demande à l'API Steam de Valve le match suivant de ton historique. Il faut pour cela une clé Steam Web API : si tu as ajouté la tienne dans l'application, elle interroge Valve directement. Sinon, elle envoie à ce site, dans le corps d'une requête chiffrée, ton SteamID, ton code d'historique des matchs et le code du dernier match qu'elle connaît ; le site les transmet à Valve avec sa propre clé et renvoie la réponse de Valve. De la même façon, l'application peut demander les pseudos Steam publics de SteamID et une liste d'amis publique (pour reconnaître ton groupe).</p>
 <ul><li><b>Rien n'est conservé :</b> les codes servent à cette requête seulement, le site ne les écrit ni dans un fichier ni dans un journal. Seul un compteur par jour limite le volume (ton adresse sous forme d'empreinte avec un sel du jour, supprimée après deux jours, voir 3).</li>
-<li><b>Base légale :</b> l'exécution du service que tu demandes (article 6(1)(b) du RGPD). Pour l'éviter complètement, ajoute ta propre clé dans Settings.</li></ul>
+<li><b>Base légale :</b> l'exécution du service que tu demandes (article 6(1)(b) du RGPD). Pour l'éviter complètement, ajoute ta propre clé dans les Réglages.</li></ul>
 <h2>7. Ce que l'application fait sur ton PC (rien ne nous est envoyé)</h2>
 <ul><li><b>Code d'historique des matchs (et ta propre clé Steam Web API, si tu en ajoutes une) :</b> enregistrés dans <code>out/settings.json</code> sur ton PC, envoyés à l'API Steam de Valve pour lister tes matchs, directement avec ta clé ou par ce site (voir 6).</li>
 <li><b>Les démos de tes matchs</b> (téléchargées depuis les serveurs de Valve via ton client Steam) et ce que l'application en extrait, y compris les autres joueurs de tes matchs (leurs SteamID et pseudos, comme dans toute démo) : traités sur ton PC pour te coacher, conservés sur ton PC.</li>
@@ -298,7 +334,7 @@ PRIVACY = {
 
 TERMS = {
 "en": f"""<div class="doc"><h1>Terms of use and legal notice</h1><p class="note">Last updated: {UPDATED['en']}</p>
-<h2>1. The app</h2><p>Wily is a free Windows app that analyzes your Counter-Strike 2 matches on your PC and coaches you during, before and after them. It is an alpha, the first version open to all: features can change, break or stop.</p>
+<h2>1. The app</h2><p>Wily is a free app for Windows and Linux that analyzes your Counter-Strike 2 matches on your PC and coaches you during, before and after them. It is an alpha, the first version open to all: features can change, break or stop.</p>
 <h2>2. Free, as is</h2><p>The app is provided free of charge and "as is", without warranty that it is accurate, uninterrupted or fit for a particular purpose. Its advice comes from statistics and can be wrong.</p>
 <h2>3. Your use</h2><p>You may use the app for your own, non-commercial use. You may not sell it or distribute modified versions of it. You are responsible for using it lawfully: recording other people's voices needs their consent (in France, article 226-1 of the Penal Code), and the app records your teammates only after you confirm they agreed.</p>
 <h2>4. Fair play</h2><p>The app only uses what Valve provides for third-party tools: Game State Integration, the console log the game writes, the Steam Web API and your matches' demos. It never reads the game's memory or network traffic and never acts in the game for you. The training server is a separate local copy of the game that only you join. Valve alone decides how its rules apply.</p>
@@ -308,7 +344,7 @@ TERMS = {
 <h2>8. Law</h2><p>These terms are governed by French law. If you are a consumer, you keep the protection of the mandatory rules of your country.</p>
 <h2>9. Legal notice</h2><p><b>Publisher and director of publication:</b> {PUBLISHER}, <a href="mailto:{CONTACT}">{CONTACT}</a>.<br><b>Host:</b> {HOST}.</p></div>""",
 "fr": f"""<div class="doc"><h1>Conditions d'utilisation et mentions légales</h1><p class="note">Dernière mise à jour : {UPDATED['fr']}</p>
-<h2>1. L'application</h2><p>Wily est une application Windows gratuite qui analyse tes matchs de Counter-Strike 2 sur ton PC et te coache pendant, avant et après. C'est une alpha, la première version ouverte à tous : ses fonctions peuvent changer, casser ou s'arrêter.</p>
+<h2>1. L'application</h2><p>Wily est une application gratuite pour Windows et Linux qui analyse tes matchs de Counter-Strike 2 sur ton PC et te coache pendant, avant et après. C'est une alpha, la première version ouverte à tous : ses fonctions peuvent changer, casser ou s'arrêter.</p>
 <h2>2. Gratuite, en l'état</h2><p>L'application est fournie gratuitement et « en l'état », sans garantie d'exactitude, de continuité ou d'adéquation à un usage particulier. Ses conseils viennent de statistiques et peuvent se tromper.</p>
 <h2>3. Ton usage</h2><p>Tu peux utiliser l'application pour ton usage personnel et non commercial. Tu ne peux ni la vendre ni en distribuer des versions modifiées. Tu es responsable d'un usage conforme à la loi : enregistrer la parole d'autrui exige son consentement (article 226-1 du Code pénal), et l'application n'enregistre tes coéquipiers qu'après ta confirmation de leur accord.</p>
 <h2>4. Fair-play</h2><p>L'application n'utilise que ce que Valve fournit aux outils tiers : le Game State Integration, le journal de console écrit par le jeu, l'API Steam et les démos de tes matchs. Wily ne lit jamais la mémoire du jeu ni son trafic réseau et n'agit jamais en jeu à ta place. Le serveur d'entraînement est une copie locale séparée du jeu que toi seul rejoins. Valve reste seul juge de l'application de ses règles.</p>
@@ -374,13 +410,20 @@ def build():
     if os.path.isdir(os.path.join(HERE, "docs", "media")):   # 10/10: pictures and short muted clips of the app, from the user's recordings
         shutil.copytree(os.path.join(HERE, "docs", "media"), os.path.join(OUT, "media"), dirs_exist_ok=True)
     desc = {"en": "Wily, your CS2 coach: live advice on your second screen, a warm-up with bots on your own situations, and a review of your matches.",
-            "fr": "Wily, ton coach CS2 : des conseils en direct sur ton deuxième écran, un échauffement avec des bots sur tes situations, et la revue de tes matchs."}
+            "fr": "Wily, ton coach CS2 : des conseils en direct sur ton deuxième écran, un échauffement avec des bots sur tes situations, et la revue de tes matchs.",
+            **site_wily_langs.DESC}
     pages = {"index.html": ("en", "Wily · your CS2 coach on your second screen", HOME["en"](rel)),
              "fr.html": ("fr", "Wily · ton coach CS2 sur ton deuxième écran", HOME["fr"](rel)),
              "privacy.html": ("en", "Privacy policy · Wily", PRIVACY["en"]),
              "confidentialite.html": ("fr", "Politique de confidentialité · Wily", PRIVACY["fr"]),
              "terms.html": ("en", "Terms of use · Wily", TERMS["en"]),
              "conditions.html": ("fr", "Conditions d'utilisation · Wily", TERMS["fr"])}
+    C = {"publisher": PUBLISHER, "contact": CONTACT, "github": GITHUB, "host": HOST}
+    for l in site_wily_langs.HOME:   # 13/10: German, Russian, Portuguese, Spanish, Chinese
+        th, tp, tt = site_wily_langs.TITLE[l]
+        pages[FILES["home"][l]] = (l, th, site_wily_langs.HOME[l](C, download_block(l, rel)))
+        pages[FILES["privacy"][l]] = (l, tp, site_wily_langs.PRIVACY[l](C))
+        pages[FILES["terms"][l]] = (l, tt, site_wily_langs.TERMS[l](C))
     notices = html.escape(open(os.path.join(HERE, "legal", "THIRD_PARTY_NOTICES.txt"), encoding="utf-8").read())
     lic_links = " · ".join(f'<a href="licenses/{f}">{f[:-4]}</a>' for f in sorted(os.listdir(os.path.join(OUT, "licenses"))))
     pages["licenses.html"] = ("en", "Licenses · Wily", f'<div class="doc"><h1>Licenses</h1><p>{lic_links}</p></div><pre class="notices">{notices}</pre>')

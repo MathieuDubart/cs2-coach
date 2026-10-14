@@ -17,6 +17,7 @@ import numpy as np
 import pandas as pd
 
 import config
+from i18n import N_
 
 OUT = os.path.join(config.OUT, "lineups", "clips.json")
 POS_R, POS_Z, ANG, LAND_R = 40.0, 40.0, 2.5, 150.0
@@ -25,35 +26,35 @@ POS_R, POS_Z, ANG, LAND_R = 40.0, 40.0, 2.5, 150.0
 # probe is a real throw of a pro demo (the clip's own player or another pro the same way), kept as it is
 CLIPS = [
     {"id": "x2107287958634275182", "url": "https://x.com/NadesOutHere/status/2107287958634275182", "author": "Nades Out Here",
-     "handle": "NadesOutHere", "date": "2026-10-06", "map": "de_anubis", "side": "T", "title": "ZywOo's A execute from Canal",
-     "text": "ZywOo's Anubis A-site utility combo: he smokes Heaven, molotovs Broken Wall, then follows it with the A-site flashes.",
-     "seen": "ZywOo throws it from the same spot in two of the base's pro demos (Vitality); in the clip at 1:25, 1:20 and 1:18",
+     "handle": "NadesOutHere", "date": "2026-10-06", "map": "de_anubis", "side": "T", "title": N_("ZywOo's A execute from Canal"),
+     "text": N_("ZywOo's Anubis A-site utility combo: he smokes Heaven, molotovs Broken Wall, then follows it with the A-site flashes."),
+     "seen": N_("ZywOo throws it from the same spot in two of the base's pro demos (Vitality); in the clip at 1:25, 1:20 and 1:18"),
      "throws": [
          {"type": "smoke", "label": "Heaven", "pos": [744.0, 626.0, -152.0], "ang": [-2.38, 79.32], "land": [1046, 2242, -38], "t": 30, "how": "standing still", "exact": True},
          {"type": "molotov", "label": "Broken Wall", "pos": [744.0, 626.0, -152.0], "ang": [-0.84, 73.47], "land": [798, 1500, -88], "t": 35, "how": "jumpthrow", "exact": True},
          {"type": "flash", "label": "A site", "pos": [744.0, 626.0, -152.0], "ang": [0.48, 54.68], "land": [1233, 1443, 150], "t": 37, "how": "jumpthrow", "exact": True},
      ]},
     {"id": "x2107093457420632194", "url": "https://x.com/NadesOutHere/status/2107093457420632194", "author": "Nades Out Here",
-     "handle": "NadesOutHere", "date": "2026-10-05", "map": "de_mirage", "side": "T", "title": "kyxsan's Connector smoke + Short molotov",
-     "text": "kyxsan's Mirage Connector smoke + Short molotov combo, from Top of Mid.",
-     "seen": "the same two grenades from the same spot, 2 s apart, in a pro demo (biguzera); in the clip at 1:41 and 1:39; the smoke is the base's usual one",
+     "handle": "NadesOutHere", "date": "2026-10-05", "map": "de_mirage", "side": "T", "title": N_("kyxsan's Connector smoke + Short molotov"),
+     "text": N_("kyxsan's Mirage Connector smoke + Short molotov combo, from Top of Mid."),
+     "seen": N_("the same two grenades from the same spot, 2 s apart, in a pro demo (biguzera); in the clip at 1:41 and 1:39; the smoke is the base's usual one"),
      "throws": [
          {"type": "smoke", "label": "Connector", "pos": [503.0, -64.0, -160.0], "ang": [-13.92, -147.16], "land": [-667, -899, -246], "t": 14, "how": "standing still", "exact": True},
          {"type": "molotov", "label": "Short", "pos": [503.0, -64.0, -160.0], "ang": [-0.53, 176.49], "land": [-880, 17, -38], "t": 16, "how": "jumpthrow", "exact": True},
      ]},
     {"id": "x2106987750364741874", "url": "https://x.com/goldcsnades/status/2106987750364741874", "author": "Gold CS Nades",
-     "handle": "goldcsnades", "date": "2026-10-05", "map": "de_mirage", "side": "T", "title": "Giant smoke: CT from T spawn",
-     "text": "New GIANT SMOKE lineup: from spawn, left click + jumpthrow, it flies over the roofs to the CT gate.",
-     "seen": "matched by the clip's look (T spawn, the aim on a rooftop, the gate it lands at): the base's CT smoke from T spawn",
-     "check": "the clip shows no map: check the spot in game (Dust 2's mid doors smoke from T spawn looks alike)",
+     "handle": "goldcsnades", "date": "2026-10-05", "map": "de_mirage", "side": "T", "title": N_("Giant smoke: CT from T spawn"),
+     "text": N_("New GIANT SMOKE lineup: from spawn, left click + jumpthrow, it flies over the roofs to the CT gate."),
+     "seen": N_("matched by the clip's look (T spawn, the aim on a rooftop, the gate it lands at): the base's CT smoke from T spawn"),
+     "check": N_("the clip shows no map: check the spot in game (Dust 2's mid doors smoke from T spawn looks alike)"),
      "throws": [
          {"type": "smoke", "label": "CT", "pos": [1258.0, -872.0, -138.0], "ang": [-21.4, -144.0], "land": [-849, -2422, -170], "t": 2, "how": "jumpthrow"},
      ]},
     {"id": "x2107184046346559830", "url": "https://x.com/goldcsnades/status/2107184046346559830", "author": "Gold CS Nades",
-     "handle": "goldcsnades", "date": "2026-10-05", "map": "de_ancient", "side": "T", "title": "All A entry smokes from one spot",
-     "text": "All A site entry smokes from ONE position, each a left click + jumpthrow.",
-     "seen": "the spot pros use outside A Main for the same smokes (each a jumpthrow), from the base's pro demos",
-     "check": "the clip's spot could also be the one 250 u further up the stairs (the base's matchmaking players' spot)",
+     "handle": "goldcsnades", "date": "2026-10-05", "map": "de_ancient", "side": "T", "title": N_("All A entry smokes from one spot"),
+     "text": N_("All A site entry smokes from ONE position, each a left click + jumpthrow."),
+     "seen": N_("the spot pros use outside A Main for the same smokes (each a jumpthrow), from the base's pro demos"),
+     "check": N_("the clip's spot could also be the one 250 u further up the stairs (the base's matchmaking players' spot)"),
      "throws": [
          {"type": "smoke", "label": "Donut exit", "pos": [-2144.0, -1004.0, 0.0], "ang": [-37.9, 71.9], "land": [-1334, 354, 89], "how": "jumpthrow"},
          {"type": "smoke", "label": "A site", "pos": [-2144.0, -1004.0, 0.0], "ang": [-29.8, 66.1], "land": [-1192, 918, 54], "how": "jumpthrow"},

@@ -10,11 +10,13 @@ Everything comes back by Leitner boxes: a miss comes back at the next session, a
 each block is drawn at random among the important ones. Each drill scores points (streaks multiply them): XP, levels.
 
 Maps: one map, a random one (weighted by what you play), or a mix of up to 3 (one changelevel per map)."""
+import copy
 import json
 import math
 import os
 import random
 import re
+import threading
 import time
 from collections import Counter
 
@@ -22,6 +24,8 @@ import numpy as np
 import pandas as pd
 
 import config
+import crossfire
+import i18n   # i18n.tr: train.py's own tr is a rifle
 import replay
 
 STATE_F = os.path.join(config.OUT, "train_progress.json")
@@ -92,6 +96,10 @@ def parts_for(minutes, chosen, has=lambda mp, k: True, first=None):
         out.append((mp, [(k, int(secs[k])) for k in ORDER if k in secs]))
     return aim, out
 WARMUP_MIN = 5
+# Prepare's focus block (13/10, the user: "pouvoir jouer intensivement certains blocs, 10 min de stuff only, 10 min de
+# défense de bombsite only"): one module for the whole time, on one map
+FOCUS = ("crossfire", "defend", "push", "nade", "wallbang", "situation")
+FOCUS_REPEAT = 3   # a focus block plays each drill three times at most
 EST = {"defend": 110, "push": 75, "aim": 85, "nade": 40, "situation": 45, "wallbang": 60}   # seconds a drill takes, about (with a retry)
 RIFLE = {2: "weapon_ak47", 3: "weapon_m4a1"}
 PRIMARY = {"AK-47": "ak47", "M4A4": "m4a1", "M4A1-S": "m4a1_silencer", "AWP": "awp", "Galil AR": "galilar",
@@ -275,7 +283,7 @@ def aim_drills(sid, mp):
         wp = PRIMARY.get(w.mode().iloc[0]) if len(w) else None
         died = int(near.died.sum())
         out.append({"id": f"aim:{mp}:{side}:{zone}", "kind": "aim", "map": mp, "title": f"{replay_zone(zone, mp)} ({side})",
-                    "tip": f"{len(enemies)} enemies, one by one, where they were when you fought here" + (f" · you died here {died}×" if died else ""),
+                    "tip": i18n.tr("{n} enemies, one by one, where they were when you fought here", n=len(enemies)) + (" · " + i18n.tr("you died here {n}×", n=died) if died else ""),
                     "team": team, "me": {"pos": [round(float(v), 1) for v in mine], "ang": _angle(mine, enemies[0]["pos"])},
                     "weapons": ["weapon_knife", f"weapon_{wp}" if wp else RIFLE[team]],
                     "bot_weapons": ["weapon_knife", RIFLE[5 - team]],
@@ -335,16 +343,16 @@ def aim_range_drills(sid, secs):
     menu = [
         # 09/10, his warm-up: "j'aimerais bien avoir plus de bots pour l'aim": twice as many targets out at once
         {"variant": "flick", "gun": tr, "secs": 60, "count": 6, "goal": 30,
-         "tip": "still targets across the map: flick to the head, one bullet · they don't shoot"},
+         "tip": i18n.tr("still targets across the map: flick to the head, one bullet · they don't shoot")},
         {"variant": "strafe", "gun": cr, "secs": 50, "count": 4, "goal": 16,
-         "tip": "strafing targets: stop, then shoot (counter-strafe) · they don't shoot"},
+         "tip": i18n.tr("strafing targets: stop, then shoot (counter-strafe) · they don't shoot")},
         {"variant": "duel", "gun": tr, "secs": 60, "count": 3, "goal": 14,
-         "tip": "duels: they shoot back once they've seen you a player's reaction time · you respawn"},
+         "tip": i18n.tr("duels: they shoot back once they've seen you a player's reaction time · you respawn")},
         {"variant": "flick", "gun": pi, "secs": 45, "count": 5, "goal": 18,
-         "tip": "pistol: still targets, head only · they don't shoot"},
+         "tip": i18n.tr("pistol: still targets, head only · they don't shoot")},
     ]
     out, used, k = [], 0, 0
-    while used < secs - 20 and k < 8:
+    while used < secs - 20 and k < max(8, secs // 50):   # a focus block: as many as its time holds
         m = menu[k % len(menu)]
         k += 1
         name = {"flick": "FLICKS", "strafe": "STRAFE", "duel": "DUELS"}[m["variant"]]
@@ -939,6 +947,18 @@ def real_boost(mp, b):
     return not (up > b.get("kills", 0) + b.get("deaths", 0) + 3 and up > 0.2 * down)
 
 
+def boost_top(b):
+    """Where the top player of a boost goes (13/10, a tester: "22 boost didn't work"): right on the teammate's head, its
+    height 54 u crouched or 72 u standing (the demo's 63 u on Anubis put you 9 u into a standing mate, pushed off), at
+    most 8 u off its axis (15 u in some demos: on the edge of a 32 u wide head). -> (pos, crouched mate)."""
+    base, top = b["base"], b["pos"]
+    duck = b.get("dz", 72) < 63
+    dx, dy = top[0] - base[0], top[1] - base[1]
+    r = math.hypot(dx, dy)
+    k = min(1.0, 8.0 / r) if r > 0 else 0.0
+    return [round(base[0] + dx * k, 1), round(base[1] + dy * k, 1), round(base[2] + (54 if duck else 72) + 0.5, 1)], duck
+
+
 def _prefire_boost(mp, S, P, line):
     """A CT boost of the base near this site whose top player killed Ts on this way: [top, base] as prefire holds (fs:
     the way's first point near one of its victims), or None."""
@@ -957,10 +977,10 @@ def _prefire_boost(mp, S, P, line):
         fs = int(np.argmax(near.any(1)))
         w = W[fs]
         li = int(np.argmin([math.dist(w[:2], q[:2]) for q in line])) if line else 0
-        top, base = list(b["pos"]), list(b["base"])
+        (top, duck), base = boost_top(b), list(b["base"])
         ang = _angle([top[0], top[1], top[2] + 64], [w[0], w[1], w[2] + 56])
         return [{"pos": top, "ang": ang, "zone": f"{b['place']} (boost)", "n": b["kills"], "fs": fs, "li": li, "unc": False, "t": float(b.get("t_med") or 60)},
-                {"pos": base, "ang": [0, ang[1]], "zone": f"{b['place']} (boost, below)", "crouch": 1.0 if b.get("dz", 72) < 63 else 0.0,
+                {"pos": base, "ang": [0, ang[1]], "zone": f"{b['place']} (boost, below)", "crouch": 1.0 if duck else 0.0,
                  "n": b["kills"], "fs": fs, "li": li, "unc": False, "t": float(b.get("t_med") or 60)}]
     return None
 
@@ -1038,10 +1058,10 @@ def practice_drills(sid, mp):
                     ats[id(h)] = at
                 keep = sorted(keep + boost, key=lambda h: (h["fs"], ats[id(h)]))
             out.append({"id": f"prefire:{mp}:{z}:{e['zone']}", "kind": "aim", "mode": "prefire", "map": mp,
-                        "title": f"PREFIRE {site} via {frm}", "team": 2, "route": route, "line": line,
-                        "tip": f"follow the gold line: {' → '.join(route)} · the angles CTs hold there, at their real timings"
-                               + (f" · {sum(h['unc'] for h in keep)} you rarely check in your matches" if any(h["unc"] for h in keep) else "")
-                               + " · they don't move, they don't shoot",
+                        "title": i18n.tr("PREFIRE {site} via {way}", site=site, way=frm), "team": 2, "route": route, "line": line,
+                        "tip": i18n.tr("follow the gold line: {route} · the angles CTs hold there, at their real timings", route=' → '.join(route))
+                               + (" · " + i18n.tr("{n} you rarely check in your matches", n=sum(h['unc'] for h in keep)) if any(h["unc"] for h in keep) else "")
+                               + " · " + i18n.tr("they don't move, they don't shoot"),
                         "me": {"pos": start, "ang": _angle(start, line[1] if len(line) > 1 else first["pos"])},
                         "weapons": ["weapon_knife", RIFLE[2]], "bot_weapons": ["weapon_knife", RIFLE[3]],
                         "bots": [{"pos": h["pos"], "ang": h["ang"], "zone": h.get("zone") or site, "at": ats[id(h)], "duck": h.get("crouch", 0) >= 0.35,
@@ -1083,8 +1103,8 @@ def practice_drills(sid, mp):
         site_at = _plant_spot(mp, letter, S) or S["defend"]   # free: you back on the plant zone itself
         for kit in _defense_kits(sid):
             out.append({"id": f"defend:{mp}:{z}:{kit['cls']}", "kind": "aim", "mode": "defend", "map": mp,
-                        "title": f"DEFEND {site} · {kit['name']}", "team": 3,
-                        "tip": f"{kit['seconds']} s · {kit['alive']} at a time, the ways real hits come: {froms} · {kit['goal']} frags · you respawn",
+                        "title": i18n.tr("DEFEND {site} · {kit}", site=site, kit=kit['name']), "team": 3,
+                        "tip": i18n.tr("{s} s · {n} at a time, the ways real hits come: {ways} · {goal} frags · you respawn", s=kit['seconds'], n=kit['alive'], ways=froms, goal=kit['goal']),
                         "me": {"pos": site_at, "ang": _angle(site_at, spawns[0]["pos"] if spawns else tracks[0]["path"][:3])},
                         "weapons": kit["weapons"], "bot_weapons": kit["bot_weapons"], "armor": 100, "helmet": kit["helmet"],
                         "bots": spawns, "tracks": tracks, "seconds": kit["seconds"], "alive": kit["alive"], "goal": kit["goal"],
@@ -1597,13 +1617,13 @@ def nade_drills(sid, mp):
             item =NADE_ITEM[typ][team] if typ == "molotov" else NADE_ITEM.get(typ)
             if not item or not x.get("to_px"):
                 continue
-            name = {"smoke": "Smoke", "flash": "Flash", "he": "HE", "molotov": "Molotov"}[typ]
+            name = {"smoke": i18n.tr("Smoke"), "flash": i18n.tr("Flash"), "he": "HE", "molotov": i18n.tr("Molotov")}[typ]
             land = _land(mp, typ, pos) or _world(mp, *x["to_px"])
             mine = x["from_key"] in top
             if side in based:   # the base's spots, not yours
-                why = f"from {x['from']}, a spot the base throws it from" if mine else f"onto {x['to']}, where they come from"
+                why = i18n.tr("from {zone}, a spot the base throws it from", zone=x['from']) if mine else i18n.tr("onto {zone}, where they come from", zone=x['to'])
             else:
-                why = f"from {x['from']}, your spot" if mine else f"onto {x['to']}, where they come at you from your spot"
+                why = i18n.tr("from {zone}, your spot", zone=x['from']) if mine else i18n.tr("onto {zone}, where they come at you from your spot", zone=x['to'])
             out.append({"id": did, "kind": "nade", "map": mp,
                         "title": f"{name} → {x['to']}", "tip": f"{why} · {x.get('timer') or ''}".strip(" ·"),
                         "team": team, "type": typ, "item": item, "how": config.key_free(x.get("how")) or "standing still",
@@ -1627,8 +1647,8 @@ def nade_drills(sid, mp):
                 if R:
                     at = max(0.0, 115 - R["at"])
                     out[-1].update(tracks=R["tracks"], step=RUSH_STEP, clock=R["clock"], rush_at=R["at"], weight=out[-1]["weight"] * 1.5,
-                                   title=f"ANTI-RUSH {name} → {x['to']}",
-                                   tip=f"{why} · a real rush gets there at {int(at // 60)}:{int(at % 60):02d}: up before it")
+                                   title=i18n.tr("ANTI-RUSH {nade} → {zone}", nade=name, zone=x['to']),
+                                   tip=f"{why} · " + i18n.tr("a real rush gets there at {t}: up before it", t=f"{int(at // 60)}:{int(at % 60):02d}"))
     return out
 
 
@@ -1725,11 +1745,11 @@ def clip_drills(sid, mp):
             item = NADE_ITEM[typ][team] if typ == "molotov" else NADE_ITEM.get(typ)
             if not item or not x.get("pos") or not x.get("land"):
                 continue
-            name = {"smoke": "Smoke", "flash": "Flash", "he": "HE", "molotov": "Molotov"}[typ]
-            seen = f"{x['uses']} throws in the base, {x['pro_uses']} by pros" if x.get("uses") else "not in the base yet"
+            name = {"smoke": i18n.tr("Smoke"), "flash": i18n.tr("Flash"), "he": "HE", "molotov": i18n.tr("Molotov")}[typ]
+            seen = i18n.tr("{n} throws in the base, {p} by pros", n=x['uses'], p=x['pro_uses']) if x.get("uses") else i18n.tr("not in the base yet")
             out.append({"id": f"clip:{c['id']}:{i}", "kind": "nade", "map": mp, "clip": c["id"], "step": i,
                         "title": f"{name} → {x['to']}" + (f" ({i + 1}/{n})" if n > 1 else ""),
-                        "tip": f"{c['title']} · @{c['handle']}'s clip · {seen}",
+                        "tip": f"{i18n.tr(c['title'])} · " + i18n.tr("@{handle}'s clip", handle=c['handle']) + f" · {seen}",
                         "team": team, "type": typ, "item": item, "how": config.key_free(x.get("how")) or "standing still", "click": x.get("click") or "left click",
                         "me": {"pos": x["pos"], "ang": x["ang"]}, "target": x["land"], "victims": [], "_vic": [c["side"], x.get("t")],
                         "clock": round(max(10.0, 115 - float(x["t"]) + 3), 1) if x.get("t") is not None else 0,
@@ -1753,7 +1773,7 @@ def _whole_clips(picked, cands):
 
 # ---------------------------------------------------------------- where you struggle lately (06/10)
 
-KIND_EN = {"exec": "executes", "rush": "rushes", "hit": "hits"}
+KIND_EN = {"exec": i18n.N_("executes"), "rush": i18n.N_("rushes"), "hit": i18n.N_("hits")}
 _STRUG = {"t": 0, "sid": None, "v": []}
 
 
@@ -1807,9 +1827,9 @@ def struggles(sid, n=20):
         if e["lost"] >= 2 and e["lost"] / e["n"] >= 0.55:
             out.append({"map": mp, "side": side, "site": site, "kind": kind, "lost": e["lost"], "n": e["n"],
                         "score": round(e["w"] * e["lost"] / e["n"], 3), "rounds": e["rounds"],
-                        "last": time.strftime("%d/%m", time.localtime(e["last"])) if e["last"] else None,
-                        "text": f"{side} on {site}: {e['lost']} of {e['n']} rounds lost to {KIND_EN[kind]}" if side == "CT"
-                                else f"T on {site}: {e['lost']} of {e['n']} {KIND_EN[kind]} lost"})
+                        "last": i18n.day_month(e["last"]) if e["last"] else None,
+                        "text": i18n.tr("{side} on {site}: {a} of {b} rounds lost to {kind}", side=side, site=site, a=e['lost'], b=e['n'], kind=i18n.tr(KIND_EN[kind])) if side == "CT"
+                                else i18n.tr("T on {site}: {a} of {b} {kind} lost", site=site, a=e['lost'], b=e['n'], kind=i18n.tr(KIND_EN[kind]))})
     out.sort(key=lambda x: -x["score"])
     _STRUG.update(t=time.time(), sid=sid, v=out)
     return out
@@ -1844,8 +1864,9 @@ def wallbang_drills(sid, mp):
         if not vic:
             continue
         out.append({"id": f"wallbang:{mp}:{w['side']}:{w.get('from_key')}>{w.get('to_key')}", "kind": "aim", "map": mp,
-                    "title": f"WALLBANG {w['from']} → {w['to']} ({w['side']}{', AWP line' if wp in ('weapon_awp', 'weapon_ssg08') else ''})",
-                    "tip": f"through the wall with the {name}: {w['n']} kills from here in my base, {round(100 * w.get('wall', 1))}% through the wall · they stand still behind it, they don't shoot · a few bullets where they stand",
+                    "title": i18n.tr("WALLBANG {from} → {to}", **{"from": w['from']}, to=w['to']) + f" ({w['side']}{', ' + i18n.tr('AWP line') if wp in ('weapon_awp', 'weapon_ssg08') else ''})",
+                    "tip": i18n.tr("through the wall with the {weapon}: {n} kills from here in my base, {p}% through the wall · they stand still behind it, they don't shoot · a few bullets where they stand",
+                                   weapon=name, n=w['n'], p=round(100 * w.get('wall', 1))),
                     "team": team, "me": {"pos": w["pos"], "ang": _angle(w["pos"], vic[0])}, "weapons": ["weapon_knife", wp],
                     "bot_weapons": ["weapon_knife", RIFLE[5 - team]],
                     "bots": [{"pos": v, "ang": _angle(v, w["pos"]), "zone": replay_zone(w.get("to_key") or "", mp)} for v in vic],
@@ -1864,13 +1885,13 @@ def boost_drills(sid, mp):
         if b["kills"] < 2 or not b.get("victims") or not real_boost(mp, b):
             continue
         team = 2 if b["side"] == "T" else 3
-        top, base = b["pos"], b["base"]
+        (top, duck), base = boost_top(b), b["base"]
         wp = next((WB_WEAPON[k] for k in (b.get("weapons") or {}) if k in WB_WEAPON), RIFLE[team])
         out.append({"id": f"boost:{mp}:{b['side']}:{round(top[0])}:{round(top[1])}", "kind": "aim", "map": mp,
-                    "title": f"BOOST {b['place']} ({b['side']})",
-                    "tip": f"on a teammate's head: {b['n']}× in my base, {b['kills']} kills from up there for {b['deaths']} deaths · they stand still where those players stood",
+                    "title": i18n.tr("BOOST {place}", place=b['place']) + f" ({b['side']})",
+                    "tip": i18n.tr("on a teammate's head: {n}× in my base, {k} kills from up there for {d} deaths · they stand still where those players stood", n=b['n'], k=b['kills'], d=b['deaths']),
                     "team": team, "me": {"pos": top, "ang": [b.get("pitch") or 0, b.get("yaw") or 0]},
-                    "mate": {"pos": base, "ang": [0, b.get("yaw") or 0], "zone": "your boost", "duck": b.get("dz", 72) < 63},
+                    "mate": {"pos": base, "ang": [0, b.get("yaw") or 0], "zone": "your boost", "duck": duck},
                     "weapons": ["weapon_knife", wp], "bot_weapons": ["weapon_knife", RIFLE[5 - team]],
                     "bots": [{"pos": v, "ang": _angle(v, top), "zone": b["victim_places"][0] if b.get("victim_places") else b["place"]} for v in b["victims"][:3]],
                     "clock": round(max(10.0, 115 - float(b["t_med"]) + 3), 1) if b.get("t_med") is not None else 0,
@@ -1880,18 +1901,19 @@ def boost_drills(sid, mp):
 
 def situation_drills(sid, mp, all_sc=None):
     return [{"id": s["id"], "kind": "situation", "map": s["map"], "title": f"R{s['round']} · " + (
-                f"1v{s['vs']} clutch" if s["kind"] == "clutch" else "death") + (f" · {replay_zone(s['zone'], mp)}" if s.get("zone") else ""),
-             "tip": (f"you died to {s['by']} ({s.get('weapon')})" if s.get("by") else "you lost it") +
-                    ("" if s["kind"] == "clutch" else (" · first death" if s.get("opening") else "") + ("" if s.get("traded") else " · not traded")),
+                i18n.tr("1v{n} clutch", n=s['vs']) if s["kind"] == "clutch" else i18n.tr("death")) + (f" · {replay_zone(s['zone'], mp)}" if s.get("zone") else ""),
+             "tip": (i18n.tr("you died to {who} ({weapon})", who=s['by'], weapon=s.get('weapon')) if s.get("by") else i18n.tr("you lost it")) +
+                    ("" if s["kind"] == "clutch" else (" · " + i18n.tr("first death") if s.get("opening") else "") + ("" if s.get("traded") else " · " + i18n.tr("not traded"))),
              "mid": s["mid"], "round": s["round"], "sk": s["kind"], "t": s["t"], "weight": s["score"]}
             for s in (all_sc if all_sc is not None else replay.scenarios(sid, n=40)) if s["map"] == mp]
 
 
 # ---------------------------------------------------------------- the session
 
-def build(sid, minutes=20, where="random", difficulty=2):
+def build(sid, minutes=20, where="random", difficulty=2, focus=None):
     """The plan of a session: blocks of each map, drills picked (due first, then at random by importance), the
-    situations' scenario files built. Written to the server's coach/sessions folder."""
+    situations' scenario files built. Written to the server's coach/sessions folder. focus: one module of FOCUS for
+    the whole time, on the first map (a focus block), its drills again until the time is full."""
     sid = str(sid)
     p = ingest()
     nsess = len(p["sessions"])
@@ -1917,15 +1939,33 @@ def build(sid, minutes=20, where="random", difficulty=2):
     else:
         w = np.array([mine[m] * (1 + 2 * hard[m]) for m in names], float)
         chosen = [str(np.random.choice(names, p=w / w.sum()))]
-    warm = minutes <= WARMUP_MIN   # a quick warm-up before a game: no aim, one map (07/10), its defense, prefire and stuff
+    focus = focus if focus in FOCUS else None
+    sc_all = replay.scenarios(sid, n=40)   # your situations to play again: their maps only get a situations part
+    sit = {x["map"] for x in sc_all}
+    warm = minutes <= WARMUP_MIN and not focus   # a quick warm-up before a game: no aim, one map (07/10), its defense, prefire and stuff
     first = lambda mp: next(("defend" if x["side"] == "CT" else "push" for x in S if x["map"] == mp), None)   # your weak side there first
-    aim_s, parts = parts_for(minutes, chosen, lambda mp, k: not (k in ("defend", "push") and mp.startswith("cs_")) and not (k == "situation" and mp not in mine), first)
+    if focus:   # a focus block: that module only, on the first map
+        chosen = chosen[:1]
+        if not _has(chosen[0], focus, mine, sit):
+            raise ValueError(i18n.tr("nothing of this module on this map yet"))
+        aim_s, parts = (int(minutes * 60), []) if focus == "crossfire" else (0, [(chosen[0], [(focus, int(minutes * 60))])])
+    else:
+        aim_s, parts = parts_for(minutes, chosen, lambda mp, k: _has(mp, k, mine, sit), first)   # the preview's rule: what it shows is what you get
     plan_of = dict(parts)
+    cf_from = list(chosen) if focus == "crossfire" else [mp for mp, _ in parts]   # Crossfire's map: the session's first with its data
     chosen = [mp for mp, _ in parts]   # a short warm-up keeps the first maps only
-    all_sc = [] if not any(k == "situation" for ps in plan_of.values() for k, _ in ps) else replay.scenarios(sid, n=40)
+    all_sc = sc_all if any(k == "situation" for ps in plan_of.values() for k, _ in ps) else []
     blocks, todo = [], []
-    if aim_s:   # the aim first, on the aim map, for all the maps' share (06/10); none in 5 min
-        blocks.append({"map": aim_map(), "kind": "aim", "seconds": aim_s, "drills": aim_range_drills(sid, aim_s)})
+    if aim_s:   # the aim first, for all the maps' share (06/10); none in 5 min
+        # 13/10, Crossfire replaces the aim map: real duels on the first map of the session that has them (it goes
+        # first: no map change between the two); the aim map stays for a session whose maps have none yet
+        cf_map = next((m for m in cf_from if (crossfire.load(m, build=False) or {}).get("spots")), None)
+        cfd = crossfire.drills(sid, cf_map, aim_s, _my_guns(sid), RIFLE, p["items"], nsess) if cf_map else []
+        if cfd:
+            chosen = [cf_map] + [m for m in chosen if m != cf_map]
+            blocks.append({"map": cf_map, "kind": "crossfire", "seconds": aim_s, "drills": cfd})
+        else:
+            blocks.append({"map": aim_map(), "kind": "aim", "seconds": aim_s, "drills": aim_range_drills(sid, aim_s)})
     for mp in chosen:
         pr = practice_drills(sid, mp)
         fns = {"defend": lambda s_, m_: [d for d in pr if d.get("mode") == "defend"],
@@ -1956,7 +1996,8 @@ def build(sid, minutes=20, where="random", difficulty=2):
                         c["weight"] = c.get("weight", 1.0) * b
                         why = next((x for x in S if x["map"] == mp and x["site"] == site and x["side"] == ("CT" if c.get("mode") == "defend" else "T")), None)
                         if why:
-                            c["tip"] = f"{c.get('tip', '')} · priority: {why['text']} lately".strip(" ·")
+                            c["tip"] = f"{c.get('tip', '')} · " + i18n.tr("priority: {why} lately", why=why['text'])
+                            c["tip"] = c["tip"].strip(" ·")
                 if kind == "situation" and (str(c.get("mid")), int(c.get("round") or 0)) in bad:
                     c["weight"] = c.get("weight", 1.0) * 3
             n = max(1, int(secs / EST[kind]) + 1)
@@ -1979,14 +2020,20 @@ def build(sid, minutes=20, where="random", difficulty=2):
                     todo.append(d)
                 d.pop("weight", None)
                 drills.append(d)
+            if focus and drills:   # a focus block: its drills again until its time is full, each once before any twice,
+                k0 = len(drills)   # three times at most (one wallbang 24 times is no training: the block is shorter)
+                while len(drills) * EST[kind] < secs * 1.2 and len(drills) < k0 * FOCUS_REPEAT:
+                    drills.append(copy.deepcopy(drills[len(drills) % k0]))
             if drills:
                 blocks.append({"map": mp, "kind": kind, "seconds": int(secs), "drills": drills})
     if not blocks:
-        raise ValueError("nothing to train on these maps yet")
+        raise ValueError(i18n.tr("nothing of this module on this map yet") if focus else "nothing to train on these maps yet")
+    chosen = chosen or list(dict.fromkeys(b["map"] for b in blocks))   # a focus Crossfire on the aim map
     sid_ = time.strftime("s%Y%m%d_%H%M%S")
     sess = {"id": sid_, "minutes": minutes, "where": where, "maps": chosen, "difficulty": int(difficulty),
-            "level": level(p["xp"]), "warmup": warm, "blocks": blocks}
+            "level": level(p["xp"]), "warmup": warm, "focus": focus, "blocks": blocks}
     os.makedirs(SESS, exist_ok=True)
+    replay.write_ui()   # the server's words in the app's language, read with the session (13/10)
     first = [d for d in blocks[0]["drills"] if blocks[0]["kind"] == "situation"][:1]
     for d in first:   # a session that starts with a situation: that one now
         _scenario(sid, d)
@@ -1995,35 +2042,122 @@ def build(sid, minutes=20, where="random", difficulty=2):
     if rest:   # the others while you play the first blocks (demo parsing: about 2 s each), one after the other: two
         import threading   # demos parsed at once crashed a player's app in polars (08/10, replay.PARSE)
         threading.Thread(target=lambda: [_scenario(sid, d) for d in rest], daemon=True).start()
-    p["sessions"].append({"id": sid_, "t": time.time(), "minutes": minutes, "maps": chosen, "done": False, "difficulty": int(difficulty)})
+    p["sessions"].append({"id": sid_, "t": time.time(), "minutes": minutes, "maps": chosen, "done": False, "difficulty": int(difficulty),
+                          "focus": focus})
     _save(p)
     return sess
 
 
-def preview(sid, minutes=20, where="random"):
+def _sit_maps(sid):
+    """The maps of your situations to play again (your recent matches': a map you played long ago has none)."""
+    try:
+        return {x["map"] for x in replay.scenarios(str(sid), n=40)} if str(sid).isdigit() else set()
+    except Exception as e:
+        print("situations:", e, flush=True)
+        return set()
+
+
+def _why_not(mp, k, mine, sit=None):
+    """Why that part has nothing on that map (None: it has): a hostage map has no site, a map of the base only no
+    situation (they are your demos'), nor one without a recent match of yours (sit: _sit_maps), a map without a
+    wallbang or a boost that kills none of those."""
+    if k in ("defend", "push") and mp.startswith("cs_"):
+        return i18n.tr("no bombsite on this map")
+    if k == "situation" and mp != "random" and mp not in mine:
+        return i18n.tr("needs your own matches on this map")
+    if k == "situation" and mp != "random" and sit is not None and mp not in sit:
+        return i18n.tr("none found on this map yet")
+    if k == "wallbang" and mp != "random":
+        import boosts
+        import wallbangs
+        if not (wallbangs.load(mp) or any(x["kills"] >= 2 and real_boost(mp, x) for x in boosts.load(mp))):
+            return i18n.tr("none found on this map yet")
+    return None
+
+
+def _has(mp, k, mine, sit=None):
+    return _why_not(mp, k, mine, sit) is None
+
+
+def modules(sid, mp):
+    """Prepare's focus block on that map: each module, whether it has something there (and why not); Crossfire without
+    its data there runs on the aim map."""
+    sid = str(sid)
+    mine = maps(sid) if sid.isdigit() else {}
+    cf = mp != "random" and bool((crossfire.load(mp, build=False) or {}).get("spots"))
+    sit = _sit_maps(sid)
+    out = []
+    for k in FOCUS:
+        why = None if k == "crossfire" else _why_not(mp, k, mine, sit)
+        out.append({"kind": k, "ok": why is None, "why": why,
+                    "note": None if k != "crossfire" or cf else i18n.tr("on the aim map: no real duels of this map yet")})
+    return out
+
+
+COUNTS_F = os.path.join(config.OUT, "train_counts.json")
+_COUNTS_LOCK = threading.Lock()
+
+
+def module_counts(sid, mp):
+    """How many drills each module has on that map (Prepare's focus tiles), None where it can't be told; Crossfire's:
+    its spots there (0: it runs on the aim map). The defense's, the prefire's, the stuff's and the wallbang's are kept a
+    day on the disk (a map's first count builds its drills: 10 s to a minute while the PC works); Crossfire's and the
+    situations' are read each time (a second)."""
+    sid = str(sid)
+    mine = maps(sid) if sid.isdigit() else {}
+
+    def n(fn):
+        try:
+            return fn()
+        except Exception as e:
+            print("module count", mp, e, flush=True)
+            return None
+    key = f"{sid}:{mp}"
+    with _COUNTS_LOCK:   # one count at a time: two tiles' requests never build the same drills twice
+        disk = config.read_json(COUNTS_F, {}) or {}
+        hit = disk.get(key)
+        if not hit or time.time() - hit.get("t", 0) > 86400:
+            pr = n(lambda: practice_drills(sid, mp) if _has(mp, "defend", mine) else []) or []
+            hit = {"t": time.time(), "n": {"defend": sum(d.get("mode") == "defend" for d in pr), "push": sum(d.get("mode") == "prefire" for d in pr),
+                                           "nade": n(lambda: len({d["id"] for d in nade_drills(sid, mp) + clip_drills(sid, mp)})),
+                                           "wallbang": n(lambda: len(wallbang_drills(sid, mp) + boost_drills(sid, mp)))}}
+            disk[key] = hit
+            try:
+                config.write_json(COUNTS_F, disk)
+            except OSError as e:
+                print("module counts:", e, flush=True)
+    return {"crossfire": len((crossfire.load(mp, build=False) or {}).get("spots") or []), **hit["n"],
+            "situation": n(lambda: len(situation_drills(sid, mp, replay.scenarios(sid, n=40))) if mp in mine else 0)}
+
+
+def preview(sid, minutes=20, where="random", focus=None):
     """What a warm-up will be, before it's built (Prepare shows it under its button): each part's minutes, map by map;
-    a part without data on a map (no wallbang found there yet) gives its time to the next one."""
-    import boosts
-    import wallbangs
+    a part without data on a map (no wallbang found there yet) gives its time to the next one. focus: a focus block,
+    that module only on the first map ([] when it has nothing there)."""
     sid = str(sid)
     mine = maps(sid) if sid.isdigit() else {}
     base = base_maps()
     chosen = [m for m in str(where).split(",") if m in mine or m in base][:3] or [where if where in mine else "random"]
-    def has(mp, k):
-        if k in ("defend", "push") and mp.startswith("cs_"):   # a hostage map: no site
-            return False
-        if k == "situation" and mp != "random" and mp not in mine:   # a map of the base only: its situations are your demos'
-            return False
-        if k == "wallbang" and mp != "random":   # no wallbang, no boost that kills
-            return bool(wallbangs.load(mp)) or any(x["kills"] >= 2 and real_boost(mp, x) for x in boosts.load(mp))
-        return True
+    sit = _sit_maps(sid)
+    if focus in FOCUS:
+        mp = chosen[0]
+        if focus == "crossfire":
+            cf = mp != "random" and (crossfire.load(mp, build=False) or {}).get("spots")
+            return [{"map": mp if cf else aim_map(), "kind": "crossfire" if cf else "aim", "seconds": int(minutes * 60)}]
+        return [{"map": mp, "kind": focus, "seconds": int(minutes * 60)}] if _has(mp, focus, mine, sit) else []
+    has = lambda mp, k: _has(mp, k, mine, sit)   # noqa: E731
     try:
         S = struggles(sid) if sid.isdigit() else []
     except Exception:
         S = []
     first = lambda mp: next(("defend" if x["side"] == "CT" else "push" for x in S if x["map"] == mp), None)
     aim, parts = parts_for(minutes, chosen, has, first)
-    out = [{"map": aim_map(), "kind": "aim", "seconds": aim}] if aim else []   # the aim first, on the aim map (06/10)
+    out = []
+    if aim:   # the aim first: Crossfire on the first map that has it (13/10), it then comes first; else the aim map (06/10)
+        cf_map = next((mp for mp, _ in parts if mp != "random" and (crossfire.load(mp, build=False) or {}).get("spots")), None)
+        if cf_map:
+            parts = sorted(parts, key=lambda p: p[0] != cf_map)
+        out.append({"map": cf_map or aim_map(), "kind": "crossfire" if cf_map else "aim", "seconds": aim})
     for mp, ps in parts:
         out += [{"map": mp, "kind": k, "seconds": secs} for k, secs in ps]
     return out
@@ -2052,11 +2186,11 @@ def suggest(sid, p=None):
         except (OSError, ValueError):
             d = None
     rate = sum(x.get("ok", 0) for x in done) / max(1, sum(x.get("drills", 0) for x in done)) if done else None
-    diff, why = (2 if d is None else d), "your last level"
+    diff, why = (2 if d is None else d), i18n.tr("your last level")
     if d is not None and rate is not None and rate >= 0.85 and d < 3:
-        diff, why = d + 1, f"{round(100 * rate)} % of your last drills ✔: one level up"
+        diff, why = d + 1, i18n.tr("{p} % of your last drills ✔: one level up", p=round(100 * rate))
     elif d is not None and rate is not None and rate <= 0.5 and d > 0:
-        diff, why = d - 1, f"{round(100 * rate)} % of your last drills ✔: one level down"
+        diff, why = d - 1, i18n.tr("{p} % of your last drills ✔: one level down", p=round(100 * rate))
     warm, wwhy = False, ""
     try:   # your last match: the match list (start + length), you among its players
         acc = int(sid) - 76561197960265728
@@ -2065,12 +2199,12 @@ def suggest(sid, p=None):
         ends = [time.mktime(time.strptime(m["time"][:16], "%Y-%m-%dT%H:%M")) + (m.get("duration_s") or 2400)
                 for m in reg.values() if acc in (m.get("accounts") or []) and m.get("time")]
         if ends and time.time() - max(ends) < 2 * 3600:
-            warm, wwhy = True, "you played a match less than two hours ago"
+            warm, wwhy = True, i18n.tr("you played a match less than two hours ago")
     except (OSError, ValueError, TypeError, KeyError):
         pass
     nade = [v for k, v in p["items"].items() if k.startswith("nade:")]
     if not warm and len(nade) >= 8 and sum(v["box"] >= 2 for v in nade) >= 0.7 * len(nade):
-        warm, wwhy = True, "you master most of your lineups"
+        warm, wwhy = True, i18n.tr("you master most of your lineups")
     return {"diff": diff, "why": why, "warmup": warm, "warm_why": wwhy}
 
 
@@ -2084,7 +2218,43 @@ def summary(sid=None):
         kinds[k.split(":")[0] if ":" in k else "situation"] = kinds.get(k.split(":")[0] if ":" in k else "situation", 0) + 1
     stars = {k: v["box"] for k, v in p["items"].items()}
     return {**level(p["xp"]), "sessions": p["sessions"][-5:], "due": kinds, "mastered": sum(1 for v in stars.values() if v >= 3),
-            "items": len(stars), "suggest": suggest(sid, p) if sid and str(sid).isdigit() else None}
+            "items": len(stars), "suggest": suggest(sid, p) if sid and str(sid).isdigit() else None, "last": last_session(p)}
+
+
+def last_session(p=None):
+    """The last session's recap for Prepare (13/10, a focus block's "bilan": what worked, its measures, what comes back
+    next time): each drill's last try (its title from the session's file), the missed ones that come back."""
+    p = p or progress()
+    if not p["sessions"]:
+        return None
+    s = p["sessions"][-1]
+    titles = {}
+    try:
+        for b in json.load(open(os.path.join(SESS, f"{s['id']}.json"), encoding="utf-8"))["blocks"]:
+            for d in b["drills"]:
+                titles[d["id"]] = (d.get("title") or d["id"], b["kind"])
+    except (OSError, ValueError, KeyError):
+        pass
+    last = {}
+    try:
+        with open(os.path.join(replay.COACH, "results.jsonl"), encoding="utf-8") as f:
+            for ln in f:
+                if s["id"] not in ln:
+                    continue
+                try:
+                    r = json.loads(ln)
+                except ValueError:
+                    continue
+                if r.get("session") == s["id"] and r.get("drill"):
+                    last[r["drill"]] = r
+    except OSError:
+        pass
+    drills = [{"title": titles.get(k, (k, ""))[0], "kind": titles.get(k, ("", r.get("kind") or ""))[1], "ok": bool(r.get("ok")),
+               "outcome": r.get("outcome") or "", "detail": r.get("detail") or ""} for k, r in last.items()]
+    again = sum(1 for k, r in last.items() if not r.get("ok") and r.get("outcome") != "skipped")
+    return {"id": s["id"], "t": s.get("t"), "minutes": s.get("minutes"), "maps": s.get("maps") or [], "focus": s.get("focus"),
+            "done": bool(s.get("done")), "points": s.get("points") if s.get("done") else sum(int(r.get("points") or 0) for r in last.values()),
+            "ok": sum(1 for d in drills if d["ok"]), "n": len(drills), "drills": drills, "again": again}
 
 
 def _game_running():
@@ -2145,8 +2315,8 @@ def _refused_since(start_size):
         return None
     sig = re.search(r"Signature failed for [^\r\n]*?([\w.-]+\.vpk)", t)
     if sig:
-        return f"CS2 refused the map file {sig.group(1)} (not signed by Valve) and went back to its menu"
-    return f"CS2 left the server while loading the map ({m.group(2)} at {m.group(1)})"
+        return i18n.tr("CS2 refused the map file {file} (not signed by Valve) and went back to its menu", file=sig.group(1))
+    return i18n.tr("CS2 left the server while loading the map ({what} at {when})", what=m.group(2), when=m.group(1))
 
 
 _LAUNCH = {}
@@ -2216,9 +2386,9 @@ def _connect():
                 print("training join:", why, flush=True)
                 return False
         if loading:
-            replay.JOIN.update(state="failed", why="CS2 reached the server but did not get into the game", t=time.time())
+            replay.JOIN.update(state="failed", why=i18n.tr("CS2 reached the server but did not get into the game"), t=time.time())
             return False   # it got to the server but not in the game: no second connect (Prepare's Rejoin is there)
-    replay.JOIN.update(state="failed", why="CS2 did not reach the training server", t=time.time())
+    replay.JOIN.update(state="failed", why=i18n.tr("CS2 did not reach the training server"), t=time.time())
     return False
 
 
@@ -2229,11 +2399,10 @@ def _quiet_start(mp):
         print("training server early start:", e, flush=True)
 
 
-def play(sid, minutes=20, where="random", difficulty=2):
+def play(sid, minutes=20, where="random", difficulty=2, focus=None):
     """One Play: the session built, the server on its first map, the plugin told, and the game sent to the server
     (started first if it is closed). You only follow what the game shows."""
     import ctypes
-    import threading
     if not replay.claim("a warm-up"):
         raise RuntimeError(f"{replay.busy()} is starting on the training server: wait for it")
     try:
@@ -2242,7 +2411,7 @@ def play(sid, minutes=20, where="random", difficulty=2):
     except Exception:
         pass
     try:
-        return _play(sid, minutes, where, difficulty)
+        return _play(sid, minutes, where, difficulty, focus)
     finally:
         try:
             ctypes.windll.kernel32.SetThreadPriority(ctypes.windll.kernel32.GetCurrentThread(), 0)
@@ -2251,15 +2420,22 @@ def play(sid, minutes=20, where="random", difficulty=2):
         replay.release()
 
 
-def _play(sid, minutes, where, difficulty):
+def _play(sid, minutes, where, difficulty, focus=None):
     import threading
-    first = aim_map() if aim_seconds(minutes) else next((m for m in str(where).split(",") if m in maps(sid)), None)   # 5 min: no aim, straight to the map
+    named = [m for m in str(where).split(",") if m in maps(sid) or m in base_maps()]
+    if focus in FOCUS:   # a focus block: one map
+        named = named[:1]
+    cf = next((m for m in named if (crossfire.load(m, build=False) or {}).get("spots")), None)   # Crossfire's map (13/10)
+    if focus in FOCUS and focus != "crossfire":
+        first = next(iter(named), None)
+    else:   # 5 min: no aim, straight to the map
+        first = (cf or aim_map()) if focus == "crossfire" or aim_seconds(minutes) else next(iter(named), None)
     if not _game_running():   # CS2 comes up while the session is built (its menu is needed before a connect)
         _launch_game()
     pre = threading.Thread(target=lambda: _quiet_start(first), daemon=True) if first else None
     if pre:   # the server starts while the session is built (06/10: a minute and a half before anything happened)
         pre.start()
-    sess = build(sid, minutes, where, difficulty)
+    sess = build(sid, minutes, where, difficulty, focus)
     if pre:
         pre.join(timeout=150)   # never an RCON before its map runs: the server would then refuse 127.0.0.1
     replay.start(sess["blocks"][0]["map"])

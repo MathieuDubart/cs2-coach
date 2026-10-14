@@ -8,6 +8,12 @@
   --f-body:"IBM Plex Sans",system-ui,sans-serif;
   --f-mono:"JetBrains Mono",ui-monospace,Consolas,monospace;
 }
+/* Chinese: the system's CJK font after ours (the Latin letters and digits stay in our fonts) */
+:root:lang(zh){
+  --f-display:"Barlow Condensed","Microsoft YaHei","PingFang SC","Noto Sans CJK SC","Source Han Sans SC",sans-serif;
+  --f-body:"IBM Plex Sans","Microsoft YaHei","PingFang SC","Noto Sans CJK SC","Source Han Sans SC",system-ui,sans-serif;
+  --f-mono:"JetBrains Mono","Microsoft YaHei","PingFang SC","Noto Sans CJK SC",ui-monospace,Consolas,monospace;
+}
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
   --bg:#0b1017; --panel:#121a25; --ink:#e8edf4; --muted:#8d99ab; --line:#223044;
   --ct:#4d9aff; --t:#f2a93b; --good:#2ecc87; --bad:#ff5d6c; --warn:#f0b54a; --chip:#1a2433; color-scheme:dark}}

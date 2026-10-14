@@ -17,6 +17,7 @@ import os
 
 import build_app
 import config
+import i18n
 import cs2coach
 
 PORT = int(os.environ.get("COACH_PORT", 8765))
@@ -38,6 +39,11 @@ def grow_alive():
         return bool(pid) and any("grow.py" in a for a in psutil.Process(pid).cmdline())
     except Exception:
         return False
+
+
+# "Pull now" of the shared matches (12/10): it runs in the background (download, checks, the base's tables after), the
+# page follows it until the end to say what it did, or why it failed
+PULL = {"running": False, "error": None}
 
 
 def grow_start():
@@ -63,7 +69,8 @@ def grow_status():
             "n": st.get("n"), "codes": len(st.get("codes") or []), "players": len(st.get("players") or []),
             "looked": len(st.get("looked") or {}), "counts": st.get("counts") or {}, "updated": st.get("updated"),
             "free_gb": round(shutil.disk_usage(config.CACHE).free / 2 ** 30), "log": tail,
-            "client": config.role() == "client", "pack": config.read_json(os.path.join(config.OUT, "base_pack.json"), None)}
+            "client": config.role() == "client", "pack": config.read_json(os.path.join(config.OUT, "base_pack.json"), None),
+            "min_free_gb": c.get("min_free_gb") or 50}   # grow.MIN_FREE_GB: the disk floor the loop stops at
 
 
 REFRESH = os.path.join(config.OUT, "refresh.json")
@@ -211,11 +218,14 @@ class Handler(BaseHTTPRequestHandler):
         u = urlparse(self.path)
         q = parse_qs(u.query)
         if self.foreign(write=u.path == "/api/analyze"):   # the only GET that starts something
-            return self.send(403, {"error": "request from another site refused"})
+            return self.send(403, {"error": i18n.tr("request from another site refused")})
         if u.path in ("/", "/index.html") or APP_PAGES.fullmatch(u.path):
             # standards mode (the claude.ai host adds this wrapper itself when publishing)
-            head = '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head><body style="margin:0">'
-            return self.send(200, head + build_app.shell_html(load_index(), local=True) + "</body></html>", "text/html; charset=utf-8")
+            import i18n   # 13/10: the page in the player's language (Settings, else the browser's)
+            lang = i18n.page_lang(self.headers.get("Accept-Language"))
+            relang_if_needed()
+            head = f'<!doctype html><html lang="{lang}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head><body style="margin:0">'
+            return self.send(200, head + build_app.shell_html(load_index(), local=True, lang=lang, relang=bool(RELANG["t"])) + "</body></html>", "text/html; charset=utf-8")
         if u.path == "/api/voice/status":
             return self.send(200, voice_status())
         if u.path == "/api/coach/status":
@@ -299,7 +309,21 @@ class Handler(BaseHTTPRequestHandler):
             where = (q.get("where") or ["random"])[0]
             if not re.fullmatch(r"random|mix|(?:(?:de|cs|ar)_\w+)(?:,(?:de|cs|ar)_\w+){0,2}", where):
                 return self.send(400, {"error": "invalid map"})
-            return self.send(200, {"blocks": train.preview(sid, mins, where)})
+            focus = (q.get("focus") or [""])[0] or None   # a focus block (13/10): one module, one map
+            if focus is not None and focus not in train.FOCUS:
+                return self.send(400, {"error": "invalid module"})
+            out = {"blocks": train.preview(sid, mins, where, focus)}
+            if focus:   # each module's tile: what it has on that map
+                out["modules"] = train.modules(sid, where.split(",")[0])
+            return self.send(200, out)
+        if u.path == "/api/train/modules":   # a focus block's tiles: each module's drills on that map (13/10)
+            import train
+            sid = (q.get("sid") or [""])[0] or str(config.settings().get("own_steamid") or "")
+            mp = (q.get("map") or [""])[0]
+            if not re.fullmatch(r"(?:de|cs|ar)_\w+", mp):
+                return self.send(400, {"error": "invalid map"})
+            return self.send(200, {"map": mp, "counts": train.module_counts(sid, mp), "est": {k: train.EST[k] for k in train.FOCUS if k in train.EST},
+                                   "repeat": train.FOCUS_REPEAT})
         if u.path == "/api/train/struggles":   # where you lose rounds lately: what the training puts first (06/10)
             import train
             sid = (q.get("sid") or [""])[0] or str(config.settings().get("own_steamid") or "")
@@ -344,7 +368,9 @@ class Handler(BaseHTTPRequestHandler):
             return self.send(404, {"error": "not found"})
         if u.path == "/api/match":   # an address /match/<match id or share code>
             m = match_info((q.get("code") or [""])[0].strip())
-            return self.send(200, m) if m else self.send(404, {"error": "not a match id or share code"})
+            return self.send(200, m) if m else self.send(404, {"error": i18n.tr("not a match id or share code")})
+        if u.path == "/api/relang":   # your analysis being written again in the app's new language (13/10)
+            return self.send(200, {"running": RELANG["t"] is not None, "lang": RELANG["lang"]})
         if u.path == "/api/grow":   # the base-growing loop: its state (Settings)
             return self.send(200, grow_status())
         if u.path == "/api/update":   # a player's copy: the app's and the base's new versions (Settings, 05/10)
@@ -364,7 +390,7 @@ class Handler(BaseHTTPRequestHandler):
                 import contrib
                 return self.send(200, dict(contrib.status(), client=True))
             import contributions
-            return self.send(200, dict(contributions.status(), client=False))
+            return self.send(200, dict(contributions.status(), client=False, pulling=PULL["running"], pull_error=PULL["error"]))
         if u.path == "/api/refresh":   # everything the app shows computed again from the base (Settings)
             return self.send(200, refresh_status())
         if u.path == "/api/codes":   # the share code of each match (the addresses /match/<share code>)
@@ -376,7 +402,7 @@ class Handler(BaseHTTPRequestHandler):
             if not query:
                 return self.send(400, {"error": "Empty search"})
             if not LOCK.acquire(blocking=False):
-                return self.send(409, {"error": "An analysis is already running", "query": JOB["query"]})
+                return self.send(409, {"error": i18n.tr("An analysis is already running"), "query": JOB["query"]})
             threading.Thread(target=run_job, args=(query,), daemon=True).start()
             return self.send(200, {"started": True})
         if u.path == "/api/job":
@@ -421,7 +447,7 @@ class Handler(BaseHTTPRequestHandler):
         """Journal check-ins and experiments: saved in out/, then the player's plan and page are rebuilt."""
         u = urlparse(self.path)
         if self.foreign(write=True):
-            return self.send(403, {"error": "request from another site refused"})
+            return self.send(403, {"error": i18n.tr("request from another site refused")})
         try:
             n = int(self.headers.get("Content-Length") or 0)
             body = json.loads(self.rfile.read(n) or b"{}")
@@ -461,11 +487,11 @@ class Handler(BaseHTTPRequestHandler):
                     else:
                         g = gsi.state()
                         if not g.get("map") or g.get("practice"):
-                            return self.send(409, {"error": "No match loaded."})
+                            return self.send(409, {"error": i18n.tr("No match loaded.")})
                         voice.TEAM.start("your team agreed: the In game page's button", g.get("map"))
                 elif act == "transcribe":
                     if not voice.start_transcription(str(body.get("id") or "")):
-                        return self.send(409, {"error": "A transcription is already running."})
+                        return self.send(409, {"error": i18n.tr("A transcription is already running.")})
                 elif act == "delete":
                     rid = str(body.get("id") or "")
                     if re.fullmatch(r"[\w-]+", rid):
@@ -483,34 +509,34 @@ class Handler(BaseHTTPRequestHandler):
             if u.path.endswith("stop"):
                 return self.send(200, lineshots.stop())
             if config.in_match():
-                return self.send(409, {"error": "A match is running: the photos after it."})
+                return self.send(409, {"error": i18n.tr("A match is running: the photos after it.")})
             mp = str(body.get("map") or "")
             if not re.fullmatch(r"(de|cs|ar)_\w+", mp):
                 return self.send(400, {"error": "invalid map"})
             try:
                 return self.send(200, lineshots.start(mp))
             except (OSError, RuntimeError, ValueError) as e:
-                return self.send(400, {"error": str(e) or "training server error"})
+                return self.send(400, {"error": str(e) or i18n.tr("training server error")})
         if u.path.startswith("/api/train/"):   # the training server (separate copy of the game, 127.0.0.1 only)
             import replay
             act = u.path.rsplit("/", 1)[-1]
             try:
                 if act == "play":
                     if config.in_match() and not replay.on_server():
-                        return self.send(409, {"error": "A match is running: training after it."})
+                        return self.send(409, {"error": i18n.tr("A match is running: training after it.")})
                     mid, kind, mode = str(body.get("mid") or ""), body.get("kind") or "death", body.get("mode") or "actor"
                     if not mid.isdigit() or kind not in ("death", "clutch") or mode not in ("actor", "spec"):
                         return self.send(400, {"error": "invalid situation"})
                     sid = str(body.get("sid") or config.settings().get("own_steamid") or "")
                     if not replay.claim("a situation"):
-                        return self.send(409, {"error": f"{replay.busy()} is starting on the training server: wait for it"})
+                        return self.send(409, {"error": i18n.tr("{what} is starting on the training server: wait for it", what=replay.busy())})
                     try:
                         return self.send(200, replay.play(sid, mid, int(body.get("round")), kind, mode, int(body["diff"]) if body.get("diff") is not None else 2))
                     finally:
                         replay.release()
                 if act == "session":   # one Play: the whole training (server, session, the game sent to it)
                     if config.in_match() and not replay.on_server():
-                        return self.send(409, {"error": "A match is running: training after it."})
+                        return self.send(409, {"error": i18n.tr("A match is running: training after it.")})
                     import train
                     sid = str(body.get("sid") or config.settings().get("own_steamid") or "")
                     minutes = max(5, min(90, int(body.get("minutes") or 20)))
@@ -518,24 +544,27 @@ class Handler(BaseHTTPRequestHandler):
                     if not re.fullmatch(r"random|mix|(?:(?:de|cs|ar)_\w+)(?:,(?:de|cs|ar)_\w+){0,2}", where):   # Prepare: up to three maps
                         return self.send(400, {"error": "invalid map"})
                     diff = int(body["diff"]) if body.get("diff") is not None else 2
+                    focus = body.get("focus") or None   # a focus block (13/10): one module for the whole time, one map
+                    if focus is not None and (focus not in train.FOCUS or where in ("random", "mix")):
+                        return self.send(400, {"error": "invalid module"})
                     try:
-                        return self.send(200, train.play(sid, minutes, where, diff))
+                        return self.send(200, train.play(sid, minutes, where, diff, focus))
                     except RuntimeError as e:   # another start on the server meanwhile
                         return self.send(409, {"error": str(e)})
                 if act == "install":   # a player's PC: CS2's files linked next to the game, Metamod, CounterStrikeSharp, the plugin
                     if config.in_match():
-                        return self.send(409, {"error": "A match is running: install after it."})
+                        return self.send(409, {"error": i18n.tr("A match is running: install after it.")})
                     return self.send(200, replay.install())
                 if act == "stop":
                     return self.send(200, replay.stop())
                 if act in ("pause", "resume"):   # 09/10: "il faudrait pouvoir la mettre en pause, et la reprendre"
                     if not replay.status().get("running"):
-                        return self.send(409, {"error": "The training server is not running."})
+                        return self.send(409, {"error": i18n.tr("The training server is not running.")})
                     replay.rcon(f"css_{act}")
                     return self.send(200, {"ok": True})
                 if act == "join":   # the game back on the session's server (it crashed or was closed meanwhile, 04/10)
                     if not replay.status().get("running"):
-                        return self.send(409, {"error": "The training server is not running."})
+                        return self.send(409, {"error": i18n.tr("The training server is not running.")})
                     import train   # threading is the module's (a local import made it local to the whole handler: Update failed, 05/10)
                     threading.Thread(target=train._connect, daemon=True).start()
                     return self.send(200, replay.status())
@@ -546,7 +575,7 @@ class Handler(BaseHTTPRequestHandler):
                     replay.rcon(f"css_{c}")
                     return self.send(200, replay.status())
             except (OSError, RuntimeError, ValueError, StopIteration) as e:
-                return self.send(400, {"error": str(e) or "training server error"})
+                return self.send(400, {"error": str(e) or i18n.tr("training server error")})
             return self.send(404, {"error": "not found"})
         if u.path in ("/api/refresh/start", "/api/refresh/stop"):   # the app's update with the base: started or stopped
             if u.path.endswith("stop"):
@@ -560,6 +589,9 @@ class Handler(BaseHTTPRequestHandler):
                                  creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0) | getattr(subprocess, "BELOW_NORMAL_PRIORITY_CLASS", 0))
                 time.sleep(1)
             return self.send(200, refresh_status())
+        if u.path == "/api/update/dismiss":   # a player's copy: a message of the coach closed (14/10)
+            import updater
+            return self.send(200, {"notices": updater.dismiss(str(body.get("id") or ""))})
         if u.path in ("/api/update/check", "/api/update/apply"):   # a player's copy: updates signed by the coach (05/10)
             import updater
             try:
@@ -577,7 +609,7 @@ class Handler(BaseHTTPRequestHandler):
             if u.path.endswith("set"):
                 return self.send(200, usage.set_options(body.get("on"), body.get("noticed")))
             if config.role() == "client":
-                return self.send(403, {"error": "the coach's PC only"})
+                return self.send(403, {"error": i18n.tr("the coach's PC only")})
             import contributions
             try:
                 contributions.pull_usage(days=int(body.get("days") or 10))
@@ -599,7 +631,7 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send(400, {"error": str(e)})
         if u.path in ("/api/reports/pull", "/api/reports/done"):   # the coach's PC: the bug reports
             if config.role() == "client":
-                return self.send(403, {"error": "the coach's PC only"})
+                return self.send(403, {"error": i18n.tr("the coach's PC only")})
             import contributions
             try:
                 if u.path.endswith("pull"):
@@ -614,19 +646,25 @@ class Handler(BaseHTTPRequestHandler):
         if u.path in ("/api/contrib/set", "/api/contrib/send", "/api/contrib/pull"):   # the matches shared with the base
             if u.path.endswith("pull"):   # the coach's PC: what players shared, now
                 if config.role() == "client":
-                    return self.send(403, {"error": "the coach's PC only"})
+                    return self.send(403, {"error": i18n.tr("the coach's PC only")})
                 import contributions
 
                 def pull_now():
+                    PULL.update(running=True, error=None)
                     try:
                         contributions.pull()
                         contributions.ingest()
                     except BaseException as e:
+                        PULL["error"] = f"{type(e).__name__}: {str(e)[:200]}"
                         print("shared matches:", e, flush=True)
-                threading.Thread(target=pull_now, daemon=True).start()
-                return self.send(200, dict(contributions.status(), client=False))
+                    finally:
+                        PULL["running"] = False
+                if not PULL["running"]:   # one pull at a time (a second click while one runs only follows it)
+                    PULL.update(running=True, error=None)   # the last pull's error, gone at once
+                    threading.Thread(target=pull_now, daemon=True).start()
+                return self.send(200, dict(contributions.status(), client=False, pulling=True))
             if config.role() != "client":
-                return self.send(403, {"error": "a player's copy only"})
+                return self.send(403, {"error": i18n.tr("a player's copy only")})
             import contrib
             if u.path.endswith("set"):
                 return self.send(200, dict(contrib.set_on(bool(body.get("on"))), client=True))
@@ -639,7 +677,7 @@ class Handler(BaseHTTPRequestHandler):
             except (TypeError, ValueError):
                 return self.send(400, {"error": "invalid target"})
             if on and config.role() == "client":
-                return self.send(403, {"error": "My base grows on my author's PC: it comes to you with my updates."})
+                return self.send(403, {"error": i18n.tr("My base grows on the developer's PC: it comes to you with my updates.")})
             # then: the app's update once the target is reached (07/10): "refresh" every profile, "refresh_mine" yours and your team's
             then = body.get("then") if on and body.get("then") in ("refresh", "refresh_mine") else None
             keep = {k: v for k, v in (config.read_json(GROW_CTL, {}) or {}).items() if k == "min_free_gb"}   # the disk floor stays
@@ -665,7 +703,7 @@ class Handler(BaseHTTPRequestHandler):
             if not sid.isdigit() or not mid.isdigit():
                 return self.send(400, {"error": "invalid match"})
             if not LOCK.acquire(blocking=False):
-                return self.send(409, {"error": "An analysis is already running", "query": JOB["query"]})
+                return self.send(409, {"error": i18n.tr("An analysis is already running"), "query": JOB["query"]})
             threading.Thread(target=run_job, args=("re-analysis of the match", lambda: cs2coach.reanalyze_match(sid, mid)),
                              kwargs={"extra": {"view": "matches", "match": mid}}, daemon=True).start()
             return self.send(200, {"started": True})
@@ -689,6 +727,12 @@ class Handler(BaseHTTPRequestHandler):
                 s["open_on_cs2"] = bool(body["open_on_cs2"])
             if "feedback_prompts" in body:
                 s["feedback_prompts"] = bool(body["feedback_prompts"])
+            lang0 = i18n.current()
+            if "ui_lang" in body:   # the app's language (13/10): one of i18n.LANGS, or "auto" (the browser's)
+                if body["ui_lang"] in i18n.LANGS:
+                    s["ui_lang"] = body["ui_lang"]
+                else:
+                    s.pop("ui_lang", None)
             if "linux_training" in body:   # Linux (10/10): the training server, experimental there
                 s["linux_training"] = bool(body["linux_training"])
             if "setup_done" in body:   # the setup guide, done or skipped (08/10)
@@ -696,7 +740,9 @@ class Handler(BaseHTTPRequestHandler):
             if "auto_update" in body:   # automatic updates (08/10), on by default
                 s["auto_update"] = bool(body["auto_update"])
             config.save_settings(s)
-            return self.send(200, {"ok": True, "open_on_cs2": bool(s.get("open_on_cs2", True)), "feedback_prompts": s.get("feedback_prompts", True) is not False})
+            relang = "ui_lang" in body and i18n.current() != lang0 and relang_own()
+            return self.send(200, {"ok": True, "open_on_cs2": bool(s.get("open_on_cs2", True)), "feedback_prompts": s.get("feedback_prompts", True) is not False,
+                                   "relang": relang})
         if u.path in ("/api/gsi/install", "/api/gsi/uninstall"):
             import gsi
             try:
@@ -761,7 +807,7 @@ class Handler(BaseHTTPRequestHandler):
                         return self.send(200, {"ok": True, "status": steamlink.status(sid)})
                     if act == "sync":
                         if not LOCK.acquire(blocking=False):
-                            return self.send(409, {"error": "An analysis is already running", "query": JOB["query"]})
+                            return self.send(409, {"error": i18n.tr("An analysis is already running"), "query": JOB["query"]})
                         threading.Thread(target=run_job, args=("Steam sync", lambda: cs2coach.sync_steam(sid)), daemon=True).start()
                         return self.send(200, {"started": True})
                 except steamlink.SteamError as e:
@@ -777,6 +823,71 @@ class Handler(BaseHTTPRequestHandler):
 def refresh_plan(sid):
     cs2coach.attach_plan(sid)
     build_app.write_player(sid)
+
+
+RELANG = {"t": None, "lang": None, "tried": None}
+_WL = {"key": None, "v": None}
+
+
+def written_lang(own):
+    """The language your advice.json was written in (13/10; English before), read again only when it changes: the
+    file is megabytes. None: no analysis yet."""
+    p = os.path.join(config.player_dir(own), "advice.json")
+    try:
+        key = (p, os.path.getmtime(p))
+    except OSError:
+        return None
+    if _WL["key"] != key:
+        try:
+            with open(p, "rb") as fh:
+                m = re.search(rb'"written_lang":\s*"(\w+)"', fh.read())
+        except OSError:
+            return None
+        _WL.update(key=key, v=m.group(1).decode() if m else "en")
+    return _WL["v"]
+
+
+def relang_if_needed():
+    """The page opens in a language your analysis isn't written in (13/10: after the update that brought the languages,
+    or a new browser language): written again in it once, in the background (relang_own; tried again 10 minutes
+    later at most, when a match or a job stopped it)."""
+    if os.environ.get("COACH_TEST"):   # a test copy leaves the main app's analysis alone
+        return
+    try:
+        own = str(config.settings().get("own_steamid") or "")
+        if not own.isdigit() or RELANG["t"]:
+            return
+        cur, wl = i18n.current(), written_lang(own)
+        if wl is None or wl == cur:
+            return
+        tried = RELANG["tried"]
+        if tried and tried[0] == (own, cur) and time.time() - tried[1] < 600:
+            return
+        RELANG["tried"] = ((own, cur), time.time())
+        relang_own()
+    except Exception as e:
+        print("relang:", e, flush=True)
+
+
+def relang_own():
+    """The app's language changed (13/10): your own analysis written again in it, in the background, from what is
+    already analyzed (no demo read again; a minute or so). Not during a match, not while a job runs: then the next
+    update writes it. -> True when it started."""
+    own = str(config.settings().get("own_steamid") or "")
+    if not own.isdigit() or JOB["running"] or config.in_match() or not os.path.exists(os.path.join(config.player_dir(own), "advice.json")):
+        return False
+    RELANG.update(t=time.time(), lang=i18n.current())
+
+    def go():
+        try:
+            cs2coach.rebuild_advice(own)
+            refresh_plan(own)
+        except Exception as e:
+            print("relang:", e, flush=True)
+        finally:
+            RELANG["t"] = None
+    threading.Thread(target=go, daemon=True).start()
+    return True
 
 
 def account():
@@ -848,20 +959,20 @@ def app_busy():
     try:
         import psutil
         if any(config.is_cs2(p.info.get("name")) for p in psutil.process_iter(["name"])):
-            return "CS2 is open"
+            return i18n.tr("CS2 is open")
     except Exception:
         pass
     if LOCK.locked():
-        return "an analysis is running"
+        return i18n.tr("an analysis is running")
     try:
         v = voice_status()
         if v.get("recording") or v.get("transcribing"):
-            return "a recording or a transcription"
+            return i18n.tr("a recording or a transcription")
     except Exception:
         pass
     r = config.read_json(os.path.join(config.OUT, "refresh.json"), {}) or {}
     if r.get("running") and time.time() - (r.get("updated") or 0) < 3600:
-        return "the references are being updated"
+        return i18n.tr("the references are being updated")
     return None
 
 
