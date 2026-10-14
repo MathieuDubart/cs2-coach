@@ -3280,5 +3280,80 @@
  },
  "Restart Wily to use focus blocks.": "重启 Wily 才能使用专项练习。",
  "From Wily's author": "来自 Wily 作者",
- "More": "了解更多"
+ "More": "了解更多",
+ "CT spawn": "CT出生点",
+ "T spawn": "T出生点",
+ "DEAD STOP": "急停到位",
+ "HEARD": "被听到了",
+ "JUMP · {zone}": "跳点 · {zone}",
+ "LANDED": "跳上去了",
+ "MOMENTUM": "MOMENTUM",
+ "NOT HEARD": "没被听到",
+ "OFF THE WAY": "偏离路线",
+ "READY": "准备",
+ "ROTATE · {a} → {b}": "回防 · {a} → {b}",
+ "RUN · {a} → {b}": "跑图 · {a} → {b}",
+ "SILENT · into {site}": "静步 · 进{site}点",
+ "STOP": "停",
+ "STOP DEAD · {zone}": "急停 · {zone}",
+ "a key let go only: tap the other one": "只是松开了按键：要点一下反方向键",
+ "base {s} s": "数据库 {s}秒",
+ "best run {s} s": "最佳一次 {s}秒",
+ "checkpoint {i}/{n}": "检查点 {i}/{n}",
+ "crouch in the air: the base's jumpers do": "空中要蹲：数据库里的玩家都这么跳",
+ "crouch-jump": "蹲跳",
+ "fell": "掉下去了",
+ "from the green ring": "从绿色圆圈起跳",
+ "from the green ring, land in the blue one": "从绿色圆圈起跳，落在蓝色圆圈里",
+ "heard": "被听到",
+ "its fastest {s} s": "最快 {s}秒",
+ "jump heard": "跳跃被听到",
+ "knife out, through every ring: the base runs it in {base} s, its fastest in {best} s": "切刀，穿过每个圆圈：数据库平均{base}秒跑完，最快{best}秒",
+ "moving on the map: timed ways, real jumps, dead stops, silent walks": "地图移动：计时路线、真实跳点、急停、静步",
+ "no jump from the green ring": "没有从绿色圆圈起跳",
+ "no run": "没有跑完",
+ "no run through every ring, in order": "没有按顺序穿过所有圆圈",
+ "no stop": "没有停下",
+ "no walk": "没有走完",
+ "not heard": "没被听到",
+ "off the way": "偏离路线",
+ "on top, but off the blue ring": "上去了，但不在蓝色圆圈里",
+ "pros {s} s": "职业选手 {s}秒",
+ "run left and right (A, D)": "左右来回跑（A、D）",
+ "run left and right (A, D) at full speed; on STOP, stop dead: tap the other key (counter-strafe)": "全速左右来回跑（A、D）；出现“停”时立刻急停：点一下反方向键（急停）",
+ "run {i}/{n}": "第{i}/{n}次",
+ "running crouch-jump": "助跑蹲跳",
+ "running jump": "助跑跳",
+ "short of the top: jump at the edge of the green ring": "没跳上去：在绿色圆圈边缘起跳",
+ "stop {i}/{n}": "急停 {i}/{n}",
+ "the base jumps it in {n} matches": {
+  "other": "数据库里{n}场比赛有人跳"
+ },
+ "the other key held too long: you went the other way": "反方向键按太久：你往另一边跑了",
+ "the pros: {pro} s": "职业选手：{pro}秒",
+ "try {i}/{n}": "第{i}/{n}次尝试",
+ "via {via}": "经{via}",
+ "walk in (Shift), not one footstep heard: {s} s at most": "静步进点（Shift），不能有一步被听到：最多{s}秒",
+ "{a}/{b} dead stops": "{a}/{b}次急停到位",
+ "{a}/{b} landed": "{a}/{b}次跳上去",
+ "{ms} ms to react": "反应{ms}毫秒",
+ "{ms} ms to stop": "{ms}毫秒停下",
+ "{n} checkpoints missed": {
+  "other": "漏了{n}个检查点"
+ },
+ "{n} footsteps": {
+  "other": "{n}步"
+ },
+ "{n} jumps": {
+  "other": "{n}次跳跃"
+ },
+ "{n} kills from up there": {
+  "other": "上面拿到{n}杀"
+ },
+ "{n} runs off the way": {
+  "other": "{n}次偏离路线"
+ },
+ "{n} sounds heard": {
+  "other": "被听到{n}次"
+ }
 }

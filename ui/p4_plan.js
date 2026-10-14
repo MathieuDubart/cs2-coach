@@ -222,7 +222,7 @@ const DIFF=[tl("Easy"),tl("Normal"),tl("Hard"),tl("Expert")];
 function trainDiff(){try{return +(localStorage.getItem("coach_diff")??2)}catch(e){return 2}}
 function tPref(k,d){try{return localStorage.getItem("coach_t"+k)??d}catch(e){return d}}
 function tSet(k,v){try{localStorage.setItem("coach_t"+k,v)}catch(e){}}
-const BLOCK={defend:"🛡 "+tl("Defense"),push:"🚶 "+tl("Push"),aim:"🎯 "+tl("Aim"),crossfire:"🎯 Crossfire",nade:"💨 "+tl("Utility"),wallbang:"🧱 "+tl("Wallbang"),situation:"🔁 "+tl("Situations")};
+const BLOCK={defend:"🛡 "+tl("Defense"),push:"🚶 "+tl("Push"),aim:"🎯 "+tl("Aim"),crossfire:"🎯 Crossfire",nade:"💨 "+tl("Utility"),wallbang:"🧱 "+tl("Wallbang"),situation:"🔁 "+tl("Situations"),momentum:"🏃 Momentum"};
 // not on this PC yet (a player's copy of the app, 05/10): made from the app, CS2's files linked next to the game
 // again: what to show once the install started (13/10: from Prepare, its warm-up card, not the older training panel)
 function trainInstall(box,sid,st,again){const ins=st.install||{},next=again||(()=>trainLoad(box,sid));

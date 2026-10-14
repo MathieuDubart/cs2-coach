@@ -63,6 +63,11 @@ public class Drill
     [JsonPropertyName("mate")] public Spot? Mate { get; set; }   // a boost: the teammate you stand on (06/10)
     [JsonPropertyName("step")] public int Step { get; set; } = 2;   // its tracks' ticks per frame (a rush, from the 0.5 s samples: 32)
     [JsonPropertyName("rush_at")] public float RushAt { get; set; }   // a timing smoke: the round's time (s) the real rush gets to its spot (07/10)
+    [JsonPropertyName("marks")] public List<float[]> Marks { get; set; } = new();   // momentum: a way's checkpoints (x, y, z, its share of the way)
+    [JsonPropertyName("par")] public float Par { get; set; }   // momentum: the base's time on that way (s); a silent walk's time allowed
+    [JsonPropertyName("best")] public float Best { get; set; }   // momentum: the base's fastest runs of it (their 10th percentile)
+    [JsonPropertyName("pro")] public float Pro { get; set; }   // momentum: the pros' time (0: no pro run of it)
+    [JsonPropertyName("from")] public float[]? From { get; set; }   // momentum: a jump's takeoff
     [JsonIgnore] public bool Rush => Kind == "nade" && Tracks.Count > 0;
 }
 
@@ -124,14 +129,14 @@ public partial class CoachReplay
     string introHtml = "";
     // the blocks: defending a site (CT), the push routes (T), aim on hostage maps, the stuff, the situations
     static readonly Dictionary<string, string> KindName = new() { ["defend"] = N("DEFENSE"), ["push"] = N("PUSH"), ["aim"] = N("AIM"), ["nade"] = N("STUFF"),
-        ["situation"] = N("SITUATION"), ["wallbang"] = N("WALLBANG"), ["crossfire"] = N("CROSSFIRE") };
+        ["situation"] = N("SITUATION"), ["wallbang"] = N("WALLBANG"), ["crossfire"] = N("CROSSFIRE"), ["momentum"] = N("MOMENTUM") };
     // a drill's end as the screen and the chat say it (the results keep the English word: the app reads them)
     static readonly Dictionary<string, string> OutcomeName = new() { ["cleared"] = N("CLEARED"), ["done"] = N("DONE"), ["timeout"] = N("TIME'S UP"),
         ["dead"] = N("DEAD"), ["won"] = N("WON"), ["survived"] = N("SURVIVED"), ["traded"] = N("TRADED"), ["kill"] = N("KILL, THEN DEAD"),
         ["passive"] = N("NO KILL"), ["defused"] = N("DEFUSED"), ["exploded"] = N("BOMB EXPLODED"), ["late"] = N("LATE"), ["in time"] = N("IN TIME"),
         ["perfect"] = N("PERFECT"), ["good"] = N("GOOD"), ["miss"] = N("MISS"), ["no throw"] = N("NO THROW"), ["skipped"] = N("SKIPPED") };
     string Shown(string outcome) => OutcomeName.TryGetValue(outcome, out var s) ? T(s) : outcome.ToUpper();
-    static readonly Dictionary<string, string> KindColor = new() { ["defend"] = "#4fc3a1", ["push"] = "#ff8a3d", ["aim"] = "#ff8a3d", ["nade"] = "#5ab4ff", ["situation"] = "#e0a030", ["wallbang"] = "#c792ea", ["crossfire"] = "#ff8a3d" };
+    static readonly Dictionary<string, string> KindColor = new() { ["defend"] = "#4fc3a1", ["push"] = "#ff8a3d", ["aim"] = "#ff8a3d", ["nade"] = "#5ab4ff", ["situation"] = "#e0a030", ["wallbang"] = "#c792ea", ["crossfire"] = "#ff8a3d", ["momentum"] = "#56d4c8" };
     int postIdx = -1;   // a defense: the spot you hold now (Posts), Posts.Count: free
     // a defense's attackers come in waves, all of them at once (09/10): the wave's number, its first death (tick), the
     // next one called
@@ -170,6 +175,7 @@ public partial class CoachReplay
         AddCommand("css_again", "the last session's drills again: !again <number>[,<number>], missed or all", (p, c) => Again(p, c.ArgString));
         RegisterWorkshopGuard();
         RegisterCrossfire();
+        RegisterMomentum();
         RegisterEventHandler<EventSmokegrenadeDetonate>((e, _) => { NadeHit(e.Userid, e.X, e.Y); return HookResult.Continue; });
         RegisterEventHandler<EventFlashbangDetonate>((e, _) => { NadeHit(e.Userid, e.X, e.Y); return HookResult.Continue; });
         RegisterEventHandler<EventHegrenadeDetonate>((e, _) => { NadeHit(e.Userid, e.X, e.Y); return HookResult.Continue; });
@@ -705,7 +711,7 @@ public partial class CoachReplay
         sessGen++;
         var pending = false;
         var s = d.Kind switch { "situation" => d.Scenario != null ? PeekSoon(d.Scenario, out pending) : null, "aim" => d.Mode == "range" ? RangeScenario(d) : d.Mode == "crossfire" ? CrossfireScenario(d) : AimScenario(d),
-            "nade" => NadeScenario(d), _ => null };
+            "nade" => NadeScenario(d), "momentum" => MomentumScenario(d), _ => null };
         if (pending)
         {
             var gp = sessGen;
@@ -733,6 +739,7 @@ public partial class CoachReplay
         // an aim drill's own time on the game's clock (09/10, his defense: "le temps d'en haut finit avant le temps de la
         // situation", 10 s before): the round's clock ends with the drill; a stuff drill keeps its throw's real moment
         if (d.Kind == "aim" && d.Seconds > 0) cur.Clock = d.Seconds;
+        else if (d.Kind == "momentum" && d.Seconds > 0) cur.Clock = d.Seconds * 1.5f;   // its last rep starts before 1.5 times its time
         else if (d.Kind != "situation" && d.Clock > 0) cur.Clock = d.Clock + (d.Rush ? rushDelay : 0);   // a rush's wait: its arrival stays on the real clock
         rushIn = -1;
         mode = "actor";
@@ -992,7 +999,8 @@ public partial class CoachReplay
             foreach (var x in cur.Dead.Where(x => x.Team == cur.Team && x.Pos.Length >= 3)) DrawX(new Vector3(x.Pos[0], x.Pos[1], x.Pos[2]));
         if (sess == null || cur == null) return;
         if (drill?.Mode == "prefire" && drill.Line.Count > 1) DrawLine(drill.Line);
-        if (cur.Kind == "aim" && drill?.Mode == "crossfire") CfPlaced();
+        if (cur.Kind == "momentum") MoPlaced();
+        else if (cur.Kind == "aim" && drill?.Mode == "crossfire") CfPlaced();
         else if (cur.Kind == "aim" && drill?.Mode == "range")
         {
             aimOrder.Clear();
@@ -1066,6 +1074,7 @@ public partial class CoachReplay
         if (drill?.Mode == "prefire") { Html($"<font color='#ff8a3d'>{T("GO")}</font> · {F("clear {n}", "n", aimOrder.Count)} · {drill.Seconds} s", 2); preKillAt = Server.TickCount; }
         if (drill?.Mode == "range") { Html($"<font color='#ff8a3d'>{T("GO")}</font> · {Tn(drill.Goal, "{n} kill", "{n} kills")} · {drill.Seconds} s", 2); lastKill = Server.TickCount; foreach (var sl in bots.Keys) cameAt[sl] = Server.TickCount; }
         if (drill?.Mode == "crossfire") CfGo();
+        if (drill?.Mode == "momentum") MoGo();
         if (drill?.Mode == "defend") { postIdx = -1; Html($"<font color='#ff8a3d'>{T("HOLD")}</font> · {drill.Seconds} s · {T("they are coming")}", 2); }
         if (drill is { Rush: true })
         {
@@ -1180,9 +1189,10 @@ public partial class CoachReplay
         if (sess == null || cur == null || phase != "live") return;
         // dead without the drill knowing it (killed before GO: OnDeath only counts live deaths; 06/10, a minute on the
         // floor while the aim drill's targets came and went): the drill ends as dead, its retry puts you back on your spot
-        if (drill?.Mode is not ("defend" or "range" or "crossfire") && !humanDead && Humans().Any() && Humans().All(h => !h.PawnIsAlive)) { Finish("dead"); return; }
+        if (drill?.Mode is not ("defend" or "range" or "crossfire" or "momentum") && !humanDead && Humans().Any() && Humans().All(h => !h.PawnIsAlive)) { Finish("dead"); return; }
         var el = (Server.TickCount - t0) / 64f;
         if (drill?.Mode == "crossfire") { CfTick(el); return; }
+        if (drill?.Mode == "momentum") { MoTick(el); return; }
         if (drill?.Mode == "range")
         {
             if (el >= drill.Seconds || frags >= drill.Goal * 2) { Finish(frags >= drill.Goal ? "cleared" : "done"); return; }
@@ -1589,7 +1599,8 @@ public partial class CoachReplay
         bool ok;
         int pts = 0;
         string detail;
-        if (cur.Kind == "aim" && drill?.Mode == "crossfire") (ok, pts, detail) = CfResult();
+        if (cur.Kind == "momentum") (ok, pts, detail) = MoResult();
+        else if (cur.Kind == "aim" && drill?.Mode == "crossfire") (ok, pts, detail) = CfResult();
         else if (cur.Kind == "aim" && drill?.Mode == "prefire")
         {
             ok = outcome == "cleared" || (aimOrder.Count >= 3 && frags >= aimOrder.Count - 1 && outcome != "dead");   // all, or all but one
@@ -1648,7 +1659,7 @@ public partial class CoachReplay
         var rec = new Dictionary<string, object> { ["session"] = sess.Id, ["drill"] = drill.Id, ["kind"] = drill.Kind, ["map"] = drill.Map, ["ok"] = ok,
             ["outcome"] = outcome, ["points"] = pts, ["detail"] = detail, ["try"] = tries + 1, ["level"] = drill.Level, ["t"] = DateTimeOffset.UtcNow.ToUnixTimeSeconds() };
         if (drill.Kind == "nade" && nadePops.Count > 0 && drill.Target != null) { rec["pops"] = nadePops.ToList(); rec["target"] = drill.Target; }
-        if (drill.Mode == "crossfire") { rec["mode"] = drill.Mode; rec["variant"] = drill.Variant; foreach (var (k, x) in drillExtra) rec[k] = x; }
+        if (drill.Mode is "crossfire" or "momentum") { rec["mode"] = drill.Mode; rec["variant"] = drill.Variant; foreach (var (k, x) in drillExtra) rec[k] = x; }
         Write(rec);
         var st = streak >= 2 ? $" · 🔥 x{mult.ToString("F1", CultureInfo.InvariantCulture)}" : "";
         var shown = Shown(outcome);
@@ -1656,7 +1667,7 @@ public partial class CoachReplay
                 : $"<font color='#ff5a5a'>✘ {shown}</font><br>{detail}<br>⭐ {points}", 3);
         All($"{(ok ? "\x04✔" : "\x02✘")} {drill.Title}\x01 · {shown.ToLower()} · {detail} · +{pts} ({F("total {n}", "n", points)}){st}");
         tries++;
-        var again = !ok && outcome != "skipped" && tries < 2 && DateTime.UtcNow < blockEnd && drill.Mode is not ("range" or "crossfire");   // a miss: once more right away (Crossfire's reps are its own)
+        var again = !ok && outcome != "skipped" && tries < 2 && DateTime.UtcNow < blockEnd && drill.Mode is not ("range" or "crossfire" or "momentum");   // a miss: once more right away (Crossfire's and Momentum's reps are their own)
         var g = ++sessGen;
         AddTimer(3.5f, () =>
         {

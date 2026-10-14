@@ -25,6 +25,7 @@ import pandas as pd
 
 from wily.core import config
 from wily.training import crossfire
+from wily.training import momentum
 from wily.core import i18n   # i18n.tr: train.py's own tr is a rifle
 from wily.training import replay
 
@@ -37,7 +38,7 @@ SPLIT = {"defend": 0.17, "push": 0.17, "aim": 0.34, "nade": 0.2, "situation": 0.
 # the warm-up (06/10, the user: "tout l'entraînement sur le même serveur comme avant, le bouton warmup pour tout lancer:
 # de l'aim, de la défense de bomb site, du chemin de prefire, du stuff, du wallbang"): one session in that order, each
 # part's share of the time by the session's length (5 min: the hands only)
-ORDER = ["aim", "defend", "push", "nade", "wallbang", "situation"]
+ORDER = ["aim", "defend", "push", "nade", "wallbang", "situation", "momentum"]   # momentum: a focus block only (14/10)
 
 
 def splits(minutes):
@@ -98,9 +99,11 @@ def parts_for(minutes, chosen, has=lambda mp, k: True, first=None):
 WARMUP_MIN = 5
 # Prepare's focus block (13/10, the user: "pouvoir jouer intensivement certains blocs, 10 min de stuff only, 10 min de
 # défense de bombsite only"): one module for the whole time, on one map
-FOCUS = ("crossfire", "defend", "push", "nade", "wallbang", "situation")
+# 14/10, Momentum (rework_entrainement.md, section 9: "a dedicated movement training mode"): moving on the real maps,
+# a focus block of its own, not in the full session until the training level shares its time out
+FOCUS = ("crossfire", "defend", "push", "nade", "wallbang", "situation", "momentum")
 FOCUS_REPEAT = 3   # a focus block plays each drill three times at most
-EST = {"defend": 110, "push": 75, "aim": 85, "nade": 40, "situation": 45, "wallbang": 60}   # seconds a drill takes, about (with a retry)
+EST = {"defend": 110, "push": 75, "aim": 85, "nade": 40, "situation": 45, "wallbang": 60, "momentum": 65}   # seconds a drill takes, about (with a retry)
 RIFLE = {2: "weapon_ak47", 3: "weapon_m4a1"}
 PRIMARY = {"AK-47": "ak47", "M4A4": "m4a1", "M4A1-S": "m4a1_silencer", "AWP": "awp", "Galil AR": "galilar",
            "FAMAS": "famas", "SG 553": "sg556", "AUG": "aug", "SSG 08": "ssg08", "MP9": "mp9", "MAC-10": "mac10"}
@@ -1967,18 +1970,25 @@ def build(sid, minutes=20, where="random", difficulty=2, focus=None):
         else:
             blocks.append({"map": aim_map(), "kind": "aim", "seconds": aim_s, "drills": aim_range_drills(sid, aim_s)})
     for mp in chosen:
-        pr = practice_drills(sid, mp)
+        secs_of = dict(plan_of.get(mp) or [])
+        pr = practice_drills(sid, mp) if {"defend", "push"} & set(secs_of) else []   # a focus block of another module: not built
         fns = {"defend": lambda s_, m_: [d for d in pr if d.get("mode") == "defend"],
                "push": lambda s_, m_: [d for d in pr if d.get("mode") == "prefire"], "nade": lambda s_, m_: nade_drills(s_, m_) + clip_drills(s_, m_),
-               "wallbang": lambda s_, m_: wallbang_drills(s_, m_) + boost_drills(s_, m_), "situation": lambda s_, m_: situation_drills(s_, m_, all_sc)}
-        secs_of = dict(plan_of.get(mp) or [])
-        if not pr:   # a hostage map with no site: the situations take the defense's and the prefire's time
+               "wallbang": lambda s_, m_: wallbang_drills(s_, m_) + boost_drills(s_, m_), "situation": lambda s_, m_: situation_drills(s_, m_, all_sc),
+               "momentum": lambda s_, m_: []}
+        if not pr:   # no site's drills (a hostage map): the situations take the defense's and the prefire's time
             secs_of["situation"] = secs_of.get("situation", 0) + secs_of.pop("defend", 0) + secs_of.pop("push", 0)
         kinds = [(k, fns[k]) for k in ORDER if secs_of.get(k)]
         bad = {(m_, r_) for x in S if x["map"] == mp for m_, r_ in x["rounds"]}   # the rounds you struggled in
         spare = 0.0   # a part with nothing to train on this map gives its time to the next ones
         for kind, fn in kinds:
             secs = secs_of[kind] + spare
+            if kind == "momentum":   # its own picks: the level's order, each variant's drills in a row, as many as its time holds
+                md = momentum.drills(sid, mp, secs, _my_guns(sid), RIFLE, p["items"], nsess)
+                if md:
+                    blocks.append({"map": mp, "kind": kind, "seconds": int(secs), "drills": md})
+                spare = 0.0 if md else secs
+                continue
             cands = fn(sid, mp)
             if not cands:
                 spare = secs
@@ -2060,12 +2070,14 @@ def _sit_maps(sid):
 def _why_not(mp, k, mine, sit=None):
     """Why that part has nothing on that map (None: it has): a hostage map has no site, a map of the base only no
     situation (they are your demos'), nor one without a recent match of yours (sit: _sit_maps), a map without a
-    wallbang or a boost that kills none of those."""
+    wallbang or a boost that kills none of those, nor Momentum one without the base's ways and jumps."""
     if k in ("defend", "push") and mp.startswith("cs_"):
         return i18n.tr("no bombsite on this map")
     if k == "situation" and mp != "random" and mp not in mine:
         return i18n.tr("needs your own matches on this map")
     if k == "situation" and mp != "random" and sit is not None and mp not in sit:
+        return i18n.tr("none found on this map yet")
+    if k == "momentum" and mp != "random" and not momentum.has(mp):   # its ways and jumps come with the base
         return i18n.tr("none found on this map yet")
     if k == "wallbang" and mp != "random":
         from wily.insights import boosts
@@ -2102,7 +2114,7 @@ def module_counts(sid, mp):
     """How many drills each module has on that map (Prepare's focus tiles), None where it can't be told; Crossfire's:
     its spots there (0: it runs on the aim map). The defense's, the prefire's, the stuff's and the wallbang's are kept a
     day on the disk (a map's first count builds its drills: 10 s to a minute while the PC works); Crossfire's and the
-    situations' are read each time (a second)."""
+    situations' are read each time (a second), and Momentum's (its ways, jumps, stops and silent walks there)."""
     sid = str(sid)
     mine = maps(sid) if sid.isdigit() else {}
 
@@ -2127,7 +2139,8 @@ def module_counts(sid, mp):
             except OSError as e:
                 print("module counts:", e, flush=True)
     return {"crossfire": len((crossfire.load(mp, build=False) or {}).get("spots") or []), **hit["n"],
-            "situation": n(lambda: len(situation_drills(sid, mp, replay.scenarios(sid, n=40))) if mp in mine else 0)}
+            "situation": n(lambda: len(situation_drills(sid, mp, replay.scenarios(sid, n=40))) if mp in mine else 0),
+            "momentum": n(lambda: momentum.count(mp))}
 
 
 def preview(sid, minutes=20, where="random", focus=None):

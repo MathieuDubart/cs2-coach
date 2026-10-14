@@ -72,7 +72,7 @@ PER_MATCH = [os.path.join("population"), os.path.join("population", "buys"), os.
 PUBLIC = [os.path.join("population", "midround_pro"), os.path.join("population", "routes_pro"), "style_pro", "deep_pro"]
 BASE_FILES = ["train_sites.json", "train_spots.json", "train_zones.json", "hostage.json", "cross.json", "cross_notes.json",
               os.path.join("pro", "matches.json")]
-BASE_DIRS = ["train_entries", "train_crossfire", os.path.join("site", "radars")]
+BASE_DIRS = ["train_entries", "train_crossfire", "train_momentum", os.path.join("site", "radars")]
 DAILYCSNADES = [os.path.join("site", "nadecat")]   # + out/lineups/*_dailycsnades.json
 FRESH = 120   # a file the base loop wrote in the last 2 minutes may be half-written: left for the next package
 SITUATIONS = 20   # situations to replay built per map of the player

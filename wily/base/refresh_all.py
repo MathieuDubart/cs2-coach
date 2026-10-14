@@ -128,6 +128,8 @@ def _training():
         except OSError:
             pass
         train.entries(mp)
+        from wily.training import momentum
+        momentum.load(mp)   # Momentum's ways and jumps (14/10): built once, again with a new version of them
         log(f"training: {mp}")
 
 
