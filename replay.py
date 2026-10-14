@@ -754,15 +754,21 @@ def _linux_pid(pr, secs=30):
 def _running_pid():
     """A training server of this app's own already up on this PC, whose pid it does not have: the app was restarted, or
     an older one left it behind (before 13/10 its pid was its launcher's on Linux, so stop() never reached it). Taken
-    over instead of starting a second one on the same port, which would only crash. -> its pid, or None."""
+    over instead of starting a second one on the same port, which would only crash. Known as ours by the RCON password
+    this app gave it (random, kept in its state): a CS2 server of the player's own on that port is never taken over,
+    so never stopped by start() either. Not by its folder: on Linux the training server's files are links to the
+    game's, the process's executable is the game's own. -> its pid, or None."""
     try:
         import psutil
     except ImportError:
         return None
+    pw = _state().get("rcon")
+    if not pw:   # no password given yet: no server of ours ever started
+        return None
     for p in psutil.process_iter(["name", "cmdline"]):
         try:
             cmd = p.info.get("cmdline") or []
-            if config.is_cs2(p.info.get("name")) and "-dedicated" in cmd and str(PORT) in cmd:
+            if config.is_cs2(p.info.get("name")) and "-dedicated" in cmd and str(PORT) in cmd and pw in cmd:
                 return p.pid
         except psutil.Error:
             continue
