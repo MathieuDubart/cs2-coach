@@ -2,7 +2,7 @@
 # Wily for Linux (10/10): installs the app into ~/.local/share/wily (no root) from the same release as Windows: the
 # code and the base, checked against the release's signature, and a Python environment of its own (venv) with the
 # libraries the code asks for. Run it again to repair or update the install. Usage: sh wily-linux.sh
-# Works on Linux: the match review and Live (second screen). Not yet: the training server.
+# Works on Linux: the match review and Live (second screen), and the training server (Settings: Training server on Linux).
 set -e
 RELEASES="${WILY_RELEASES:-https://wily.valentingassend.com/releases/}"
 DEST="${WILY_HOME:-$HOME/.local/share/wily}"
